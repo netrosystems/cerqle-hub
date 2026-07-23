@@ -13,14 +13,14 @@ class LicenseVerificationTypeTest extends TestCase
         parent::setUp();
 
         config([
-            'app.url' => 'http://old-wisperbot.test',
+            'app.url' => 'http://license-domain.test',
             'app.installed' => false,
             'license.verify' => true,
             'license.server_url' => 'https://license.test',
             'license.api_key' => 'test-api-key',
             'license.product_id' => 'test-product',
-            'license.verify_type' => 'non_envato',
-            'license.verify_types' => ['non_envato'],
+            'license.verify_type' => 'envato',
+            'license.verify_types' => ['envato', 'non_envato'],
         ]);
 
         $this->clearStoredLicense();
@@ -33,15 +33,15 @@ class LicenseVerificationTypeTest extends TestCase
         parent::tearDown();
     }
 
-    public function test_shop_license_mode_is_the_only_configured_activation_type(): void
+    public function test_envato_is_the_default_but_both_license_types_are_available(): void
     {
         $license = app(LicenseManager::class);
 
-        $this->assertSame('non_envato', $license->defaultVerifyType());
-        $this->assertSame(['non_envato'], $license->verifyTypes());
+        $this->assertSame('envato', $license->defaultVerifyType());
+        $this->assertSame(['envato', 'non_envato'], $license->verifyTypes());
     }
 
-    public function test_license_manager_coerces_unoffered_activation_types_to_shop_license_mode(): void
+    public function test_license_manager_sends_the_selected_activation_type(): void
     {
         Http::fake([
             'license.test/api/external/license/activate' => Http::response([
@@ -57,25 +57,10 @@ class LicenseVerificationTypeTest extends TestCase
         Http::assertSent(fn ($request) => $request->url() === 'https://license.test/api/external/license/activate'
             && $request['product_id'] === 'test-product'
             && $request['license_code'] === 'SHOP-LICENSE-CODE'
-            && $request['verify_type'] === 'non_envato');
+            && $request['verify_type'] === 'envato');
     }
 
-    public function test_installer_license_activation_rejects_unconfigured_envato_mode(): void
-    {
-        Http::fake();
-
-        $response = $this->postJson(route('install.activate-license'), [
-            'license_code' => 'ENVATO-CODE',
-            'client_name' => 'Envato Buyer',
-            'verify_type' => 'envato',
-        ]);
-
-        $response->assertUnprocessable();
-        $response->assertJsonValidationErrors('verify_type');
-        Http::assertNothingSent();
-    }
-
-    public function test_installer_license_activation_identifies_the_current_install_host(): void
+    public function test_installer_license_activation_accepts_non_envato_mode(): void
     {
         Http::fake([
             'license.test/api/external/license/activate' => Http::response([
@@ -85,15 +70,14 @@ class LicenseVerificationTypeTest extends TestCase
             ]),
         ]);
 
-        $response = $this->postJson('http://162.62.232.209/install/activate-license', [
+        $response = $this->postJson(route('install.activate-license'), [
             'license_code' => 'SHOP-LICENSE-CODE',
             'client_name' => 'Cerqle',
             'verify_type' => 'non_envato',
         ]);
 
         $response->assertOk();
-        Http::assertSent(fn ($request) => $request->header('X-API-URL')[0] === 'http://162.62.232.209'
-            && $request['verify_type'] === 'non_envato');
+        Http::assertSent(fn ($request) => $request['verify_type'] === 'non_envato');
     }
 
     private function clearStoredLicense(): void

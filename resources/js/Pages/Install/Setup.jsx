@@ -85,7 +85,6 @@ export default function Setup({ requirements, defaults, licensing = { enabled: f
             current={step}
             title={current.title}
             subtitle={current.subtitle}
-            appName={defaults.app_name || 'Cerqle'}
         >
             <Head title="Install" />
 

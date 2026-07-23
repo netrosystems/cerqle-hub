@@ -1,3 +1,5 @@
+import ApplicationLogo from '@/Components/ApplicationLogo';
+import { usePage } from '@inertiajs/react';
 import { useTheme } from '@/context/ThemeContext';
 import { Sun, Moon, Check } from 'lucide-react';
 
@@ -18,7 +20,7 @@ import { Sun, Moon, Check } from 'lucide-react';
  *   children – the active step's content
  */
 
-const BRAND_BG = '#2b2621';
+const BRAND_BG = '#283f24';
 
 function ThemeToggle() {
     const { theme, setTheme } = useTheme();
@@ -46,7 +48,7 @@ function LeftPane({ steps, current, appName }) {
                 className="pointer-events-none absolute inset-0"
                 style={{
                     background:
-                        'radial-gradient(ellipse 80% 65% at 65% 50%, rgba(255,118,46,0.30) 0%, rgba(255,118,46,0.10) 45%, transparent 70%)',
+                        'radial-gradient(ellipse 80% 65% at 65% 50%, rgba(118,168,78,0.30) 0%, rgba(118,168,78,0.10) 45%, transparent 70%)',
                 }}
             />
             {/* Subtle grid overlay */}
@@ -62,7 +64,8 @@ function LeftPane({ steps, current, appName }) {
 
             {/* Logo + brand */}
             <div className="relative flex items-center gap-3">
-                <img src="/cerqle-logo-white.svg" alt={appName} className="h-9 w-auto max-w-[220px] object-contain" />
+                <ApplicationLogo className="h-9 w-9 fill-current text-white/90" />
+                <span className="text-xl font-bold tracking-tight">{appName}</span>
                 <span className="inline-flex items-center rounded-full bg-white/15 px-2 py-0.5 text-xs font-medium text-white/90">
                     Setup
                 </span>
@@ -173,7 +176,12 @@ function MobileProgress({ steps, current }) {
     );
 }
 
-export default function InstallLayout({ steps = [], current = 0, title, subtitle, appName = 'Cerqle', children }) {
+export default function InstallLayout({ steps = [], current = 0, title, subtitle, children }) {
+    // The installer runs before the database exists, so useBranding() has nothing to
+    // read. InstallController shares defaults.app_name (from .env APP_NAME), which is
+    // server-side and therefore still correct for a buyer's fresh copy — unlike
+    // VITE_APP_NAME, which Vite bakes into the bundle at the vendor's build time.
+    const appName = usePage().props.defaults?.app_name || 'your app';
     const Icon = steps[current]?.icon;
 
     return (
@@ -185,16 +193,10 @@ export default function InstallLayout({ steps = [], current = 0, title, subtitle
                 {/* Top bar */}
                 <div className="flex items-center justify-between px-6 py-4">
                     <div className="flex items-center gap-2 lg:invisible">
-                        <img
-                            src="/cerqle-logo-purple.svg"
-                            alt={appName}
-                            className="h-7 w-auto max-w-[170px] object-contain dark:hidden"
-                        />
-                        <img
-                            src="/cerqle-logo-white.svg"
-                            alt={appName}
-                            className="hidden h-7 w-auto max-w-[170px] object-contain dark:block"
-                        />
+                        <ApplicationLogo className="h-7 w-7 fill-current text-brand-600 dark:text-brand-400" />
+                        <span className="text-sm font-semibold text-neutral-900 dark:text-white">
+                            {appName}
+                        </span>
                     </div>
                     <ThemeToggle />
                 </div>

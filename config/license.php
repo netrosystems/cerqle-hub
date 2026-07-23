@@ -44,14 +44,14 @@ return [
     'product_id' => env('LICENSE_PRODUCT_ID') ?: $d('dQJoIlkOX24='),
 
     // Default verification type for the activate call: envato | non_envato |
-    // gumroad. Cerqle distributions sold through the author's Spagreen shop use
-    // the License Manager's direct/non-Envato license-code verification.
-    'verify_type' => env('LICENSE_VERIFY_TYPE', 'non_envato'),
+    // gumroad. 'envato' means buyers enter their Envato/CodeCanyon purchase
+    // code, which the License Manager validates against Envato for this product.
+    'verify_type' => env('LICENSE_VERIFY_TYPE', 'envato'),
 
     // Code types offered in the installer/activation UI — the buyer picks which
     // kind of code they have. The default selection is 'verify_type' above.
     // Set to a single value to lock the installer to one type (no chooser).
-    'verify_types' => ['non_envato'],
+    'verify_types' => ['envato', 'non_envato'],
 
     // Current product version, reported when checking for updates.
     'current_version' => env('APP_VERSION', '1.0.0'),

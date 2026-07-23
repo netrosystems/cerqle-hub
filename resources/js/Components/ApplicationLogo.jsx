@@ -27,7 +27,6 @@ export default function ApplicationLogo({ className, style, alt }) {
             alt={alt ?? 'App Logo'}
             className={className}
             style={{ objectFit: 'contain', ...style }}
-        >
         />
     );
 }

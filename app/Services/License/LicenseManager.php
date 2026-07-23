@@ -148,8 +148,7 @@ class LicenseManager
             return ['ok' => true, 'message' => 'License verification is disabled.'];
         }
 
-        $allowedTypes = $this->verifyTypes();
-        $type = in_array($verifyType, $allowedTypes, true) ? $verifyType : $this->defaultVerifyType();
+        $type = in_array($verifyType, self::TYPES, true) ? $verifyType : $this->verifyType();
 
         try {
             $res = $this->http()->post($this->url('/api/external/license/activate'), [
@@ -368,23 +367,10 @@ class LicenseManager
     {
         return [
             'X-API-KEY' => (string) config('license.api_key'),
-            'X-API-URL' => $this->installationUrl(),
+            'X-API-URL' => (string) config('app.url'),
             'X-API-IP' => $this->serverIp(),
             'X-API-LANGUAGE' => app()->getLocale() ?: 'en',
         ];
-    }
-
-    private function installationUrl(): string
-    {
-        $request = request();
-        if ($request && $request->route()) {
-            $host = $request->getSchemeAndHttpHost();
-            if (is_string($host) && $host !== '') {
-                return rtrim($host, '/');
-            }
-        }
-
-        return rtrim((string) config('app.url'), '/');
     }
 
     private function serverIp(): string
