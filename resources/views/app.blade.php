@@ -26,14 +26,15 @@
         <meta name="csrf-token" content="{{ csrf_token() }}">
         <meta name="vapid-public-key" content="{{ config('webpush.vapid_public_key') }}">
 
-        <title inertia>{{ config('app.name', 'Cerqle') }}</title>
         @php
+            $isInstallRoute = request()->is('install', 'install/*');
+            $documentTitle = $isInstallRoute ? 'Cerqle' : config('app.name', 'Cerqle');
             try {
-                $faviconPath = \App\Models\SystemSetting::get('app_favicon_path');
+                $faviconPath = $isInstallRoute ? null : \App\Models\SystemSetting::get('app_favicon_path');
                 // Honor the disk the favicon was actually saved to (may be a cloud
                 // provider). Hardcoding 'public' produced a wrong/404 URL whenever
                 // the active storage disk was not the local public one.
-                $faviconDisk = \App\Models\SystemSetting::get('app_favicon_disk', 'public');
+                $faviconDisk = $isInstallRoute ? 'public' : \App\Models\SystemSetting::get('app_favicon_disk', 'public');
                 if ($faviconPath) {
                     app(\App\Services\StorageManager::class)->ensureDiskReady($faviconDisk);
                     $faviconUrl = \Illuminate\Support\Facades\Storage::disk($faviconDisk)->url($faviconPath);
@@ -44,6 +45,7 @@
                 $faviconUrl = null;
             }
         @endphp
+        <title inertia>{{ $documentTitle }}</title>
         @if($faviconUrl)
             <link rel="icon" href="{{ $faviconUrl }}">
             <link rel="apple-touch-icon" href="{{ $faviconUrl }}">
