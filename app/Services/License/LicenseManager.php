@@ -148,7 +148,8 @@ class LicenseManager
             return ['ok' => true, 'message' => 'License verification is disabled.'];
         }
 
-        $type = in_array($verifyType, self::TYPES, true) ? $verifyType : $this->verifyType();
+        $allowedTypes = $this->verifyTypes();
+        $type = in_array($verifyType, $allowedTypes, true) ? $verifyType : $this->defaultVerifyType();
 
         try {
             $res = $this->http()->post($this->url('/api/external/license/activate'), [

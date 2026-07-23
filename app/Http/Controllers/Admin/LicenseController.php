@@ -48,7 +48,7 @@ class LicenseController extends Controller
 
         $data = $request->validate([
             'license_code' => ['required', 'string'],
-            'verify_type' => ['nullable', Rule::in(LicenseManager::TYPES)],
+            'verify_type' => ['nullable', Rule::in($this->license->verifyTypes())],
             'client_name' => [Rule::requiredIf($isEnvato), 'nullable', 'string', 'max:255'],
         ], [], ['client_name' => 'Envato buyer name']);
 

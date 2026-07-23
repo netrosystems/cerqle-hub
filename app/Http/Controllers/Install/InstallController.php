@@ -75,7 +75,7 @@ class InstallController extends Controller
 
         $data = $request->validate([
             'license_code' => ['required', 'string'],
-            'verify_type' => ['nullable', Rule::in(LicenseManager::TYPES)],
+            'verify_type' => ['nullable', Rule::in($this->license->verifyTypes())],
             'client_name' => [Rule::requiredIf($isEnvato), 'nullable', 'string', 'max:255'],
         ], [], ['client_name' => 'Envato buyer name']);
 
@@ -97,7 +97,7 @@ class InstallController extends Controller
 
         $data = $request->validate([
             'license_code' => [Rule::requiredIf($this->license->enabled()), 'nullable', 'string'],
-            'verify_type' => ['nullable', Rule::in(LicenseManager::TYPES)],
+            'verify_type' => ['nullable', Rule::in($this->license->verifyTypes())],
             'client_name' => [Rule::requiredIf($this->license->enabled() && $licenseIsEnvato), 'nullable', 'string', 'max:255'],
             'app_name' => ['required', 'string', 'max:255'],
             'app_url' => ['required', 'url'],
