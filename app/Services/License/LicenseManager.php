@@ -368,10 +368,23 @@ class LicenseManager
     {
         return [
             'X-API-KEY' => (string) config('license.api_key'),
-            'X-API-URL' => (string) config('app.url'),
+            'X-API-URL' => $this->installationUrl(),
             'X-API-IP' => $this->serverIp(),
             'X-API-LANGUAGE' => app()->getLocale() ?: 'en',
         ];
+    }
+
+    private function installationUrl(): string
+    {
+        $request = request();
+        if ($request && $request->route()) {
+            $host = $request->getSchemeAndHttpHost();
+            if (is_string($host) && $host !== '') {
+                return rtrim($host, '/');
+            }
+        }
+
+        return rtrim((string) config('app.url'), '/');
     }
 
     private function serverIp(): string

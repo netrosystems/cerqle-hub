@@ -13,6 +13,7 @@ class LicenseVerificationTypeTest extends TestCase
         parent::setUp();
 
         config([
+            'app.url' => 'http://old-wisperbot.test',
             'app.installed' => false,
             'license.verify' => true,
             'license.server_url' => 'https://license.test',
@@ -72,6 +73,27 @@ class LicenseVerificationTypeTest extends TestCase
         $response->assertUnprocessable();
         $response->assertJsonValidationErrors('verify_type');
         Http::assertNothingSent();
+    }
+
+    public function test_installer_license_activation_identifies_the_current_install_host(): void
+    {
+        Http::fake([
+            'license.test/api/external/license/activate' => Http::response([
+                'is_active' => true,
+                'lic_response' => 'signed-license-data',
+                'message' => 'License activated.',
+            ]),
+        ]);
+
+        $response = $this->postJson('http://162.62.232.209/install/activate-license', [
+            'license_code' => 'SHOP-LICENSE-CODE',
+            'client_name' => 'Cerqle',
+            'verify_type' => 'non_envato',
+        ]);
+
+        $response->assertOk();
+        Http::assertSent(fn ($request) => $request->header('X-API-URL')[0] === 'http://162.62.232.209'
+            && $request['verify_type'] === 'non_envato');
     }
 
     private function clearStoredLicense(): void
