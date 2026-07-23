@@ -1024,7 +1024,7 @@
     },
     "open_menu": "メニューを開く",
     "app": {
-        "name": "WisperBot"
+        "name": "Cerqle"
     },
     "impersonation": {
         "return_to_admin": "管理者に戻る",
@@ -1634,7 +1634,7 @@
         "step2_title": "2. キューワーカーを実行",
         "step2_desc": "キャンペーン、メッセージ、ソーシャル投稿などのバックグラウンドジョブはキューで実行されます。常駐ワーカーを起動し、本番環境ではSupervisorを使って自動再起動と常時稼働を維持してください。",
         "supervisor_title": "Supervisor設定",
-        "supervisor_desc": "\/etc\/supervisor\/conf.d\/wisperbot-worker.confとして保存し、supervisorctl reread && supervisorctl updateを実行してください。",
+        "supervisor_desc": "\/etc\/supervisor\/conf.d\/cerqle-worker.confとして保存し、supervisorctl reread && supervisorctl updateを実行してください。",
         "step3_title": "3. 動作確認",
         "step3_desc": "以下のコマンドを実行して、スケジューラーとキューが正しく連携しているか確認します。",
         "verify_run": "期限が来たスケジュールタスクをすべて即時実行：",
@@ -4045,7 +4045,7 @@
     "37": {
         "4220": "4220"
     },
-    "wisperbot": {
+    "cerqle": {
         "sidebar": {
             "scroll": {
                 "admin": "Admin",

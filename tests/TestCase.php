@@ -4,11 +4,13 @@ namespace Tests;
 
 use App\Models\AdminUser;
 use App\Models\Client;
+use App\Models\ClientAddonSubscription;
 use App\Models\ClientSubscription;
 use App\Models\Permission;
 use App\Models\Plan;
 use App\Models\Role;
 use App\Models\User;
+use App\Services\AddonEntitlementService;
 use Illuminate\Foundation\Testing\TestCase as BaseTestCase;
 
 abstract class TestCase extends BaseTestCase
@@ -84,6 +86,27 @@ abstract class TestCase extends BaseTestCase
         }
 
         return ['user' => $user, 'workspace' => $workspace, 'client' => $client];
+    }
+
+    protected function grantDeveloperToolsAddon(Client|User $subject): ClientAddonSubscription
+    {
+        $client = $subject instanceof User ? $subject->client : $subject;
+        $user = $subject instanceof User ? $subject : User::where('client_id', $client->id)->first();
+
+        return ClientAddonSubscription::updateOrCreate(
+            [
+                'client_id' => $client->id,
+                'addon_key' => AddonEntitlementService::DEVELOPER_TOOLS,
+            ],
+            [
+                'purchased_by_user_id' => $user?->id,
+                'status' => ClientAddonSubscription::STATUS_ACTIVE,
+                'gateway' => 'manual',
+                'gateway_subscription_id' => 'sub_devtools_test_'.$client->id,
+                'starts_at' => now(),
+                'ends_at' => null,
+            ]
+        );
     }
 
     /**

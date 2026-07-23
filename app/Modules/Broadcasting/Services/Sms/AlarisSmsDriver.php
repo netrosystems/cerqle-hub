@@ -5,7 +5,7 @@ namespace App\Modules\Broadcasting\Services\Sms;
 use Illuminate\Support\Facades\Http;
 
 /**
- * Alaris SMS Platform HTTP API.
+ * PROSMS HTTP API.
  *
  * The platform accepts credentials with each request. We use HTTPS and HTTP
  * Basic authentication rather than placing credentials in the query string.
@@ -25,7 +25,7 @@ class AlarisSmsDriver implements SmsDriverInterface
     {
         $payload = array_filter([
             'ani' => $opts['from'] ?? $this->senderId,
-            // Alaris documents E.164 digits. WisperBot stores numbers with a
+            // PROSMS documents E.164 digits. Cerqle stores numbers with a
             // leading plus, so normalise without changing the contact record.
             'dnis' => ltrim($to, '+'),
             'message' => $body,
@@ -42,7 +42,7 @@ class AlarisSmsDriver implements SmsDriverInterface
 
         return $messageId
             ? new SmsSendResult(true, $messageId)
-            : new SmsSendResult(false, '', 'Alaris SMS error: '.$this->errorMessage($response));
+            : new SmsSendResult(false, '', 'PROSMS error: '.$this->errorMessage($response));
     }
 
     public function status(string $providerId): SmsStatus
@@ -90,7 +90,7 @@ class AlarisSmsDriver implements SmsDriverInterface
             }
         }
 
-        // Alaris may return an array of result objects. Campaign jobs submit one
+        // PROSMS may return an array of result objects. Campaign jobs submit one
         // recipient at a time, so the first returned message ID is the one to track.
         foreach ($payload as $item) {
             $messageId = $this->messageId($item);

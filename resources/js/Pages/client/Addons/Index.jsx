@@ -34,7 +34,7 @@ export default function AddonsIndex({ addon, subscription, gateways = [], can_ma
                 <div>
                     <h1 className="text-2xl font-bold text-neutral-900 dark:text-white">Add-ons</h1>
                     <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">
-                        Add optional capabilities without changing your main WisperBot plan.
+                        Add optional capabilities without changing your main Cerqle plan.
                     </p>
                 </div>
 

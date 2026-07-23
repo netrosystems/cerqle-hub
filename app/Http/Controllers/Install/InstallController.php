@@ -35,7 +35,7 @@ class InstallController extends Controller
                 'verify_types' => $this->license->verifyTypes(),
             ],
             'defaults' => [
-                'app_name' => config('app.name', 'WisperBot'),
+                'app_name' => config('app.name', 'Cerqle'),
                 'app_url' => config('app.url', 'http://localhost'),
                 'app_env' => config('app.env', 'production'),
                 'db_host' => (string) config('database.connections.mysql.host', '127.0.0.1'),

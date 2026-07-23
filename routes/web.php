@@ -38,11 +38,78 @@ Route::get('/use-cases', [LandingController::class, 'useCases'])->name('use-case
 Route::get('/about', [LandingController::class, 'about'])->name('about');
 Route::get('/integrations', [LandingController::class, 'integrations'])->name('integrations');
 
+$cerqleMarketingSlugs = [
+    'resources',
+    'about-us',
+    'api-reference',
+    'customers-stories',
+    'product-updates',
+    'product-updates-2',
+    'guides',
+    'features-and-functionality',
+    'conversational-use-cases',
+    'chatbot-building',
+    'customer-engagement',
+    'contact-center',
+    'email',
+    'sms',
+    'voice',
+    'whatsapp-business',
+    'instagram',
+    'facebook',
+    'messenger',
+    'business-type',
+    'industry',
+    'department',
+    'services',
+    'company-values',
+    'meet-the-team',
+    'careers',
+    'job-openings',
+    'open-jobs',
+    'digital-marketing-agencies',
+    'b2b-startups',
+    'telco-partnerships',
+    'system-integrators',
+    'distributors-resellers',
+    'partners',
+    'policies',
+    'privacy',
+    'authentication-verification-api',
+    'number-lookup',
+    'cx-assessment',
+    'cx-assessment-2',
+    'cx-assessment-3',
+    'ask-an-industry-expert',
+    'marketing',
+    'sales',
+    'customer-serviceand-support',
+    'enterprise',
+    'wholesale',
+    'finance-banking',
+    'retail-e-commerce',
+    'healthcare',
+    'travel-hospitality',
+    'insurance',
+    'logistics-transportation',
+    'conversational-experiences',
+    'channels',
+    'products',
+    'solutions',
+    'offices',
+    'survey',
+    'live-chat-support-requests',
+];
+
+Route::get('/{slug}', [LandingController::class, 'cerqlePage'])
+    ->whereIn('slug', $cerqleMarketingSlugs)
+    ->name('cerqle-page.show');
+
 // CMS pages (e.g. /p/privacy, /p/terms)
 Route::get('/p/{slug}', [CmsPageController::class, 'show'])->name('cms-page.show');
 
 // Sitemap & robots.txt
-Route::get('/sitemap.xml', function () {
+Route::get('/sitemap.xml', function () use ($cerqleMarketingSlugs) {
     $landingEnabled = true;
     try {
         $landingEnabled = \App\Models\SystemSetting::get('landing.page_enabled', '1') === '1';
@@ -52,6 +119,11 @@ Route::get('/sitemap.xml', function () {
     $urls = $landingEnabled
         ? [url('/'), url('/pricing'), url('/faq'), url('/use-cases'), url('/about'), url('/integrations'), url('/contact'), route('login'), route('register')]
         : [route('login'), route('register')];
+    if ($landingEnabled) {
+        foreach ($cerqleMarketingSlugs as $slug) {
+            $urls[] = url('/'.$slug);
+        }
+    }
     try {
         $cmsPages = CmsPage::where('published', true)->get();
         foreach ($cmsPages as $page) {

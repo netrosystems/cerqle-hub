@@ -19,12 +19,12 @@ function Badge({ text }) {
 }
 
 const inputClass =
-    'w-full rounded-xl border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-900 px-4 py-2.5 text-sm text-neutral-900 dark:text-white placeholder:text-neutral-400 dark:placeholder:text-neutral-500 transition-colors focus:border-[#ff762e] focus:outline-none focus:ring-2 focus:ring-[#ff762e]/30';
+    'w-full rounded-xl border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-900 px-4 py-2.5 text-sm text-neutral-900 dark:text-white placeholder:text-neutral-400 dark:placeholder:text-neutral-500 transition-colors focus:border-[#8f5fa7] focus:outline-none focus:ring-2 focus:ring-[#8f5fa7]/30';
 
 export default function Contact({ landing = {} }) {
     const { t } = useTranslation();
     const { flash } = usePage().props;
-    const appName = import.meta.env.VITE_APP_NAME || 'WisperBot';
+    const appName = import.meta.env.VITE_APP_NAME || 'Cerqle';
     const contactEmail = landing['landing.contact_email'] || `support@${appName.toLowerCase().replace(/\s+/g, '')}.com`;
 
     const { data, setData, post, processing, errors, recentlySuccessful } = useForm({
@@ -69,7 +69,7 @@ export default function Contact({ landing = {} }) {
             {/* Hero */}
             <section
                 className="relative overflow-hidden"
-                style={{ background: 'radial-gradient(ellipse 70% 65% at 50% 0%, rgba(255,118,46,0.18) 0%, transparent 60%), #14100c' }}
+                style={{ background: 'radial-gradient(ellipse 70% 65% at 50% 0%, rgba(143,95,167,0.18) 0%, transparent 60%), #281a31' }}
             >
                 <div className="pointer-events-none absolute -left-24 top-6 h-72 w-72 rounded-full bg-brand-500/20 blur-3xl animate-float-slow" />
                 <div className="pointer-events-none absolute -right-16 top-24 h-80 w-80 rounded-full bg-brand-600/15 blur-3xl animate-float" />
@@ -100,8 +100,8 @@ export default function Contact({ landing = {} }) {
                                     const Icon = card.icon;
                                     const inner = (
                                         <>
-                                            <div className="inline-flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl" style={{ background: 'rgba(255,118,46,0.12)' }}>
-                                                <Icon className="h-5 w-5" style={{ color: '#ff762e' }} />
+                                            <div className="inline-flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl" style={{ background: 'rgba(143,95,167,0.12)' }}>
+                                                <Icon className="h-5 w-5" style={{ color: '#8f5fa7' }} />
                                             </div>
                                             <div>
                                                 <h3 className="text-sm font-semibold text-neutral-900 dark:text-white">{card.label}</h3>
@@ -132,7 +132,7 @@ export default function Contact({ landing = {} }) {
                                 </h2>
 
                                 {(flash?.success || recentlySuccessful) && (
-                                    <div className="mb-6 flex items-start gap-2.5 rounded-xl bg-[#ff762e]/10 border border-[#ff762e]/30 px-4 py-3 text-sm text-neutral-800 dark:text-neutral-100">
+                                    <div className="mb-6 flex items-start gap-2.5 rounded-xl bg-[#8f5fa7]/10 border border-[#8f5fa7]/30 px-4 py-3 text-sm text-neutral-800 dark:text-neutral-100">
                                         <CheckCircle2 className="h-5 w-5 flex-shrink-0" style={{ color: '#65A30D' }} />
                                         <span>{flash?.success || t('contact_page.title')}</span>
                                     </div>
@@ -191,7 +191,7 @@ export default function Contact({ landing = {} }) {
                                     <button
                                         type="submit"
                                         disabled={processing}
-                                        className="group inline-flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-b from-brand-500 to-brand-600 px-7 py-3 text-base font-bold text-white shadow-[0_10px_30px_-6px_rgba(255,118,46,0.55)] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_16px_40px_-6px_rgba(255,118,46,0.7)] disabled:opacity-50 disabled:translate-y-0 sm:w-auto"
+                                        className="group inline-flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-b from-brand-500 to-brand-600 px-7 py-3 text-base font-bold text-white shadow-[0_10px_30px_-6px_rgba(143,95,167,0.55)] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_16px_40px_-6px_rgba(143,95,167,0.7)] disabled:opacity-50 disabled:translate-y-0 sm:w-auto"
                                     >
                                         <Send className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-0.5" />
                                         {processing ? t('contact_page.sending', { defaultValue: 'Sending…' }) : t('contact_page.send_message')}

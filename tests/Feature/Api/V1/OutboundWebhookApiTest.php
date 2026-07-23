@@ -19,6 +19,7 @@ class OutboundWebhookApiTest extends TestCase
     public function test_wrong_scope_returns_403(): void
     {
         ['user' => $user] = $this->createWorkspaceContext();
+        $this->grantDeveloperToolsAddon($user);
         $token = $user->createToken('t', [ApiAbilities::CONTACTS_READ])->plainTextToken;
 
         $this->withToken($token)->getJson('/api/v1/webhooks')->assertStatus(403);
@@ -27,6 +28,7 @@ class OutboundWebhookApiTest extends TestCase
     public function test_list_webhooks_returns_200(): void
     {
         ['user' => $user] = $this->createWorkspaceContext();
+        $this->grantDeveloperToolsAddon($user);
         $token = $user->createToken('t', ['*'])->plainTextToken;
 
         WebhookEndpoint::create([
@@ -47,6 +49,7 @@ class OutboundWebhookApiTest extends TestCase
     public function test_register_webhook_returns_201_with_secret(): void
     {
         ['user' => $user] = $this->createWorkspaceContext();
+        $this->grantDeveloperToolsAddon($user);
         $token = $user->createToken('t', [ApiAbilities::WEBHOOKS_WRITE])->plainTextToken;
 
         $res = $this->withToken($token)
@@ -63,6 +66,7 @@ class OutboundWebhookApiTest extends TestCase
     public function test_register_webhook_invalid_url_returns_422(): void
     {
         ['user' => $user] = $this->createWorkspaceContext();
+        $this->grantDeveloperToolsAddon($user);
         $token = $user->createToken('t', ['*'])->plainTextToken;
 
         $this->withToken($token)
@@ -73,6 +77,7 @@ class OutboundWebhookApiTest extends TestCase
     public function test_register_webhook_invalid_event_returns_422(): void
     {
         ['user' => $user] = $this->createWorkspaceContext();
+        $this->grantDeveloperToolsAddon($user);
         $token = $user->createToken('t', ['*'])->plainTextToken;
 
         $this->withToken($token)
@@ -86,6 +91,7 @@ class OutboundWebhookApiTest extends TestCase
     public function test_delete_webhook_returns_ok(): void
     {
         ['user' => $user] = $this->createWorkspaceContext();
+        $this->grantDeveloperToolsAddon($user);
         $token = $user->createToken('t', ['*'])->plainTextToken;
 
         $ep = WebhookEndpoint::create([
@@ -107,6 +113,7 @@ class OutboundWebhookApiTest extends TestCase
     public function test_delete_other_users_webhook_returns_404(): void
     {
         ['user' => $user] = $this->createWorkspaceContext();
+        $this->grantDeveloperToolsAddon($user);
         ['user' => $otherUser] = $this->createWorkspaceContext();
         $token = $user->createToken('t', ['*'])->plainTextToken;
 

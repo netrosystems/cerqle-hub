@@ -62,7 +62,7 @@ function LeftPane({ steps, current, appName }) {
 
             {/* Logo + brand */}
             <div className="relative flex items-center gap-3">
-                <img src="/wisperbot-logo-white.svg" alt={appName} className="h-9 w-auto max-w-[220px] object-contain" />
+                <img src="/cerqle-logo-white.svg" alt={appName} className="h-9 w-auto max-w-[220px] object-contain" />
                 <span className="inline-flex items-center rounded-full bg-white/15 px-2 py-0.5 text-xs font-medium text-white/90">
                     Setup
                 </span>
@@ -174,7 +174,7 @@ function MobileProgress({ steps, current }) {
 }
 
 export default function InstallLayout({ steps = [], current = 0, title, subtitle, children }) {
-    const appName = import.meta.env.VITE_APP_NAME || 'WisperBot';
+    const appName = import.meta.env.VITE_APP_NAME || 'Cerqle';
     const Icon = steps[current]?.icon;
 
     return (
@@ -187,12 +187,12 @@ export default function InstallLayout({ steps = [], current = 0, title, subtitle
                 <div className="flex items-center justify-between px-6 py-4">
                     <div className="flex items-center gap-2 lg:invisible">
                         <img
-                            src="/wisperbot-logo-with-title.svg"
+                            src="/cerqle-logo-purple.svg"
                             alt={appName}
                             className="h-7 w-auto max-w-[170px] object-contain dark:hidden"
                         />
                         <img
-                            src="/wisperbot-logo-white.svg"
+                            src="/cerqle-logo-white.svg"
                             alt={appName}
                             className="hidden h-7 w-auto max-w-[170px] object-contain dark:block"
                         />

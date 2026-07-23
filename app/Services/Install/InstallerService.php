@@ -13,6 +13,7 @@ use Database\Seeders\PaymentGatewayConfigSeeder;
 use Database\Seeders\PermissionSeeder;
 use Database\Seeders\PlanSeeder;
 use Database\Seeders\RoleSeeder;
+use Database\Seeders\SystemBrandingSeeder;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -44,6 +45,7 @@ class InstallerService
         PaymentGatewayConfigSeeder::class,
         EmailTemplateSeeder::class,
         IntegrationConfigSeeder::class,
+        SystemBrandingSeeder::class,
         LandingPageSeeder::class,
         CmsPageSeeder::class,
     ];
@@ -159,8 +161,8 @@ class InstallerService
     }
 
     /**
-     * Seed sample/demo content: one fully-populated demo client (SpaGreen
-     * Wellness — client@spagreen.net) covering every module, plus a couple of
+     * Seed sample/demo content: one fully-populated demo client (Cerqle Demo
+     * Wellness — client@cerqle.net) covering every module, plus a couple of
      * lighter secondary clients. DatabaseSeeder runs DemoSeeder as its final
      * step, so a single call covers everything.
      */

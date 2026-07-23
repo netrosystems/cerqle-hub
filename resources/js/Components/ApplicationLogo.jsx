@@ -20,10 +20,10 @@ export default function ApplicationLogo({ className, style, alt }) {
         );
     }
 
-    // Default brand mark supplied by the current WisperBot identity.
+    // Default brand mark supplied by the current Cerqle identity.
     return (
         <img
-            src="/wisperbot-icon-512.png"
+            src="/cerqle-icon.svg"
             alt={alt ?? 'App Logo'}
             className={className}
             style={{ objectFit: 'contain', ...style }}

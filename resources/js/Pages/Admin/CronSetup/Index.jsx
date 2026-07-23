@@ -86,7 +86,7 @@ export default function CronSetupIndex({
 
     const queueCommand = `${phpBinary} ${basePath}/artisan queue:work ${queueConnection} --queue=${queueList} --sleep=3 --tries=3 --timeout=120 --max-time=3600`;
 
-    const supervisorConfig = `[program:wisperbot-worker]
+    const supervisorConfig = `[program:cerqle-worker]
 command=${phpBinary} ${basePath}/artisan queue:work ${queueConnection} --queue=${queueList} --sleep=3 --tries=3 --timeout=120 --max-time=3600
 directory=${basePath}
 user=www-data

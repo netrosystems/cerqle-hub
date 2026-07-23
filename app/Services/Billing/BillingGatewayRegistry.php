@@ -8,7 +8,7 @@ use App\Models\PaymentGatewayConfig;
 class BillingGatewayRegistry
 {
     /**
-     * The only billing gateways offered by WisperBot.
+     * The only billing gateways offered by Cerqle.
      *
      * Keep this allowlist at the registry boundary so legacy database rows or
      * environment variables cannot silently reactivate a retired gateway.

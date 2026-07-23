@@ -101,7 +101,12 @@ const GeminiLogo = () => (
 );
 
 const PROVIDER_INFO = {
-    openai:    { label: 'OpenAI',    Icon: OpenAILogo,    models: ['gpt-4o-mini', 'gpt-4o'], embedModels: ['text-embedding-3-small', 'text-embedding-3-large'] },
+    openai:    {
+        label: 'OpenAI',
+        Icon: OpenAILogo,
+        models: ['gpt-4o-mini-2024-07-18', 'gpt-4o', 'gpt-4o-mini', 'chatgpt-4o-latest'],
+        embedModels: ['text-embedding-3-large', 'text-embedding-3-small'],
+    },
     anthropic: { label: 'Anthropic', Icon: AnthropicLogo, models: ['claude-haiku-4-5-20251001', 'claude-sonnet-4-6', 'claude-opus-4-8'] },
     gemini:    { label: 'Gemini',    Icon: GeminiLogo,    models: ['gemini-3.5-flash', 'gemini-3.1-flash-lite', 'gemini-3.1-pro-preview'], embedModels: ['gemini-embedding-2'] },
 };

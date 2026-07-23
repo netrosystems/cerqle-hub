@@ -49,7 +49,7 @@ export default function Faq({ landing = {}, canRegister }) {
             {/* ── Page hero ── */}
             <section
                 className="relative overflow-hidden py-20 text-center"
-                style={{ background: 'radial-gradient(ellipse 60% 60% at 50% 0%, rgba(255,118,46,0.18) 0%, transparent 70%), #14100c' }}
+                style={{ background: 'radial-gradient(ellipse 60% 60% at 50% 0%, rgba(143,95,167,0.18) 0%, transparent 70%), #281a31' }}
             >
                 <div className="pointer-events-none absolute -left-20 top-0 h-72 w-72 rounded-full bg-brand-500/20 blur-3xl animate-float-slow" />
                 <div className="pointer-events-none absolute -right-16 top-10 h-72 w-72 rounded-full bg-brand-600/15 blur-3xl animate-float" />
@@ -78,7 +78,7 @@ export default function Faq({ landing = {}, canRegister }) {
                             onClick={() => setCat(c.key)}
                             className={`flex-shrink-0 rounded-full px-4 py-1.5 text-sm font-medium transition-all duration-200 ${
                                 cat === c.key
-                                    ? 'text-white font-bold bg-gradient-to-b from-brand-500 to-brand-600 shadow-[0_4px_14px_-2px_rgba(255,118,46,0.5)]'
+                                    ? 'text-white font-bold bg-gradient-to-b from-brand-500 to-brand-600 shadow-[0_4px_14px_-2px_rgba(143,95,167,0.5)]'
                                     : 'text-neutral-500 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-200 bg-neutral-100 dark:bg-neutral-800'
                             }`}
                         >
@@ -129,13 +129,13 @@ export default function Faq({ landing = {}, canRegister }) {
                     {/* Still have questions? */}
                     <Reveal
                         className="mt-12 rounded-2xl p-8 text-center"
-                        style={{ background: 'rgba(255,118,46,0.08)', border: '1px solid rgba(255,118,46,0.25)' }}
+                        style={{ background: 'rgba(143,95,167,0.08)', border: '1px solid rgba(143,95,167,0.25)' }}
                     >
                         <h3 className="text-lg font-bold text-neutral-900 dark:text-white mb-2">{t('faq.still_have_questions')}</h3>
                         <p className="text-sm text-neutral-600 dark:text-neutral-400 mb-5">{t('faq.still_have_questions_desc')}</p>
                         <Link
                             href="/contact"
-                            className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-b from-brand-500 to-brand-600 px-6 py-2.5 text-sm font-bold text-white shadow-[0_6px_20px_-4px_rgba(255,118,46,0.5)] transition-all hover:-translate-y-0.5"
+                            className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-b from-brand-500 to-brand-600 px-6 py-2.5 text-sm font-bold text-white shadow-[0_6px_20px_-4px_rgba(143,95,167,0.5)] transition-all hover:-translate-y-0.5"
                         >
                             {t('faq.contact_support')}
                         </Link>
@@ -152,7 +152,7 @@ export default function Faq({ landing = {}, canRegister }) {
                         <Reveal delay={160}>
                             <Link
                                 href={route('register')}
-                                className="mt-6 group inline-flex items-center gap-2 rounded-xl bg-gradient-to-b from-brand-500 to-brand-600 px-7 py-3.5 text-base font-bold text-white shadow-[0_10px_30px_-6px_rgba(255,118,46,0.55)] transition-all duration-200 hover:-translate-y-0.5"
+                                className="mt-6 group inline-flex items-center gap-2 rounded-xl bg-gradient-to-b from-brand-500 to-brand-600 px-7 py-3.5 text-base font-bold text-white shadow-[0_10px_30px_-6px_rgba(143,95,167,0.55)] transition-all duration-200 hover:-translate-y-0.5"
                             >
                                 {t('welcome.get_started_free')}
                                 <svg className="h-5 w-5 transition-transform duration-200 group-hover:translate-x-1" fill="none" stroke="currentColor" strokeWidth={2.2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" /></svg>

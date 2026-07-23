@@ -109,8 +109,8 @@ export default function Topbar({
                 {showLogo && (
                     <Link href={logoHref} className="shrink-0">
                         <img
-                            src={configuredLogoUrl || (theme === 'dark' ? '/wisperbot-logo-white.svg' : '/wisperbot-logo-with-title.svg')}
-                            alt={page.props.branding?.app_name || 'WisperBot'}
+                            src={configuredLogoUrl || (theme === 'dark' ? '/cerqle-logo-white.svg' : '/cerqle-logo-purple.svg')}
+                            alt={page.props.branding?.app_name || 'Cerqle'}
                             className="h-8 w-auto max-w-[190px] object-contain"
                         />
                     </Link>

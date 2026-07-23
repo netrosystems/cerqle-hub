@@ -1024,7 +1024,7 @@
     },
     "open_menu": "Menü öffnen",
     "app": {
-        "name": "WisperBot"
+        "name": "Cerqle"
     },
     "impersonation": {
         "return_to_admin": "Zurück zum Admin",
@@ -1634,7 +1634,7 @@
         "step2_title": "2. Queue-Worker starten",
         "step2_desc": "Hintergrund-Jobs — Kampagnen, Nachrichten, Social-Media-Beiträge — laufen über Warteschlangen. Starten Sie einen dauerhaften Worker und verwenden Sie in der Produktion Supervisor, um ihn am Laufen zu halten und automatisch neu zu starten.",
         "supervisor_title": "Supervisor-Konfiguration",
-        "supervisor_desc": "Speichern Sie die Datei als \/etc\/supervisor\/conf.d\/wisperbot-worker.conf und führen Sie dann aus: supervisorctl reread && supervisorctl update.",
+        "supervisor_desc": "Speichern Sie die Datei als \/etc\/supervisor\/conf.d\/cerqle-worker.conf und führen Sie dann aus: supervisorctl reread && supervisorctl update.",
         "step3_title": "3. Überprüfen",
         "step3_desc": "Führen Sie diese Befehle aus, um zu bestätigen, dass Scheduler und Warteschlange korrekt eingerichtet sind.",
         "verify_run": "Alle fälligen geplanten Aufgaben sofort auslösen:",
@@ -4045,7 +4045,7 @@
     "37": {
         "4220": "4220"
     },
-    "wisperbot": {
+    "cerqle": {
         "sidebar": {
             "scroll": {
                 "admin": "Admin",

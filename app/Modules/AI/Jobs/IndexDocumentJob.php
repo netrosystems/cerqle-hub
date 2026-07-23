@@ -42,6 +42,14 @@ class IndexDocumentJob implements ShouldQueue
             $text = $this->extractText($doc, $storage);
             $chunks = $this->chunk($text);
 
+            if (empty($chunks) && $doc->source_type !== 'sitemap') {
+                throw new \RuntimeException(match ($doc->source_type) {
+                    'url' => 'URL indexing failed: no readable text was found on this page.',
+                    'file' => 'Document indexing failed: the uploaded file could not be read or contained no extractable text.',
+                    default => 'Document indexing failed: no readable text was found.',
+                });
+            }
+
             // Remove old vectors before deleting the relational chunks. Without
             // this, re-indexing leaves stale Qdrant points that can be returned
             // for a knowledge base even though their document no longer exists.
@@ -127,6 +135,12 @@ class IndexDocumentJob implements ShouldQueue
         }
 
         $message = strtolower($exception->getMessage());
+        foreach (['url indexing failed', 'document indexing failed'] as $safeMarker) {
+            if (str_contains($message, $safeMarker)) {
+                return $exception->getMessage();
+            }
+        }
+
         foreach (['openai', 'anthropic', 'gemini', 'embedding', 'ai provider'] as $providerMarker) {
             if (str_contains($message, $providerMarker)) {
                 return $presented['message'];
@@ -170,19 +184,22 @@ class IndexDocumentJob implements ShouldQueue
         if (empty($url)) {
             return '';
         }
-        $resp = Http::retry(2, 500)->timeout(30)->get($url);
+        $resp = Http::withHeaders([
+            'User-Agent' => 'CerqleKnowledgeIndexer/1.0 (+https://cerqle.ai)',
+            'Accept' => 'text/html,application/xhtml+xml,application/xml;q=0.9,text/plain;q=0.8,*/*;q=0.7',
+        ])->retry(2, 500)->timeout(30)->get($url);
         if (! $resp->successful()) {
-            return '';
+            throw new \RuntimeException('URL indexing failed: '.$url.' returned HTTP '.$resp->status().'.');
         }
         $html = $resp->body();
         // Convert HTML to Markdown using league/html-to-markdown, then strip remaining tags
         if (class_exists(HtmlConverter::class)) {
             $converter = new HtmlConverter(['strip_tags' => true]);
 
-            return $converter->convert($html);
+            return trim($converter->convert($html));
         }
 
-        return strip_tags($html);
+        return trim(strip_tags($html));
     }
 
     /**

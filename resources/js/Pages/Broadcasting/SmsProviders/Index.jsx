@@ -55,10 +55,10 @@ const SETUP_GUIDES = {
     },
     alaris: {
         steps: [
-            'Request your HTTPS API base URL, username, password, and approved Sender ID (ANI) from Alaris.',
-            'Enter the credentials below. WisperBot sends campaigns through command=submit using secure HTTP Basic authentication.',
-            'Use E.164 destination numbers. WisperBot sends one contact at a time, which is compatible with long SMS handling.',
-            'Ask Alaris to configure delivery reports to your WisperBot callback URL after saving this gateway.',
+            'Request your HTTPS API base URL, username, password, and approved Sender ID (ANI) from PROSMS.',
+            'Enter the credentials below. Cerqle sends campaigns through command=submit using secure HTTP Basic authentication.',
+            'Use E.164 destination numbers. Cerqle sends one contact at a time, which is compatible with long SMS handling.',
+            'Ask PROSMS to configure delivery reports to your Cerqle callback URL after saving this gateway.',
         ],
     },
     bulksmsbd: {

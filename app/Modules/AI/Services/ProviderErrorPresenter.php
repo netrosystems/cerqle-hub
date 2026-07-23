@@ -26,17 +26,17 @@ class ProviderErrorPresenter
                 'code' => 'embeddings_not_supported',
                 'message' => 'Knowledge bases require an enabled OpenAI or Gemini provider because Anthropic does not create embeddings.',
             ],
-            self::containsAny($message, ['401', '403', 'unauthorized', 'forbidden', 'invalid api key', 'invalid_api_key', 'authentication']) => [
-                'code' => 'provider_authentication_failed',
-                'message' => 'The AI provider rejected the credentials. Check the API key and provider access, then test again.',
-            ],
             self::containsAny($message, ['429', 'quota', 'rate limit', 'rate_limit', 'insufficient_quota', 'billing']) => [
                 'code' => 'provider_quota_exceeded',
                 'message' => 'The AI provider quota or rate limit was reached. Check billing and usage limits, then try again.',
             ],
-            self::containsAny($message, ['model_not_found', 'model not found', 'does not exist', 'unsupported model', 'invalid model']) => [
+            self::containsAny($message, ['model_not_found', 'model not found', 'does not exist', 'unsupported model', 'invalid model', 'does not have access to model']) => [
                 'code' => 'provider_model_unavailable',
-                'message' => 'The selected AI model is unavailable for this account. Choose a supported model and test again.',
+                'message' => 'The selected AI model is unavailable for this API project. Choose a model allowed in the provider project settings, then test again.',
+            ],
+            self::containsAny($message, ['401', '403', 'unauthorized', 'forbidden', 'invalid api key', 'invalid_api_key', 'authentication']) => [
+                'code' => 'provider_authentication_failed',
+                'message' => 'The AI provider rejected the credentials. Check the API key and provider access, then test again.',
             ],
             self::containsAny($message, ['timed out', 'timeout', 'connection refused', 'could not resolve', 'couldn\'t resolve', 'network is unreachable', 'could not connect']) => [
                 'code' => 'provider_unreachable',

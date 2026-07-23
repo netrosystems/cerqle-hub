@@ -22,6 +22,7 @@ class AutomationApiTest extends TestCase
     public function test_wrong_scope_returns_403(): void
     {
         ['user' => $user] = $this->createWorkspaceContext();
+        $this->grantDeveloperToolsAddon($user);
         $token = $user->createToken('t', [ApiAbilities::CONTACTS_READ])->plainTextToken;
 
         $this->withToken($token)->getJson('/api/v1/automations')->assertStatus(403);
@@ -30,6 +31,7 @@ class AutomationApiTest extends TestCase
     public function test_list_automations_returns_200(): void
     {
         ['user' => $user, 'workspace' => $workspace] = $this->createWorkspaceContext();
+        $this->grantDeveloperToolsAddon($user);
         $token = $user->createToken('t', ['*'])->plainTextToken;
 
         Automation::create([
@@ -54,6 +56,7 @@ class AutomationApiTest extends TestCase
         Queue::fake();
 
         ['user' => $user, 'workspace' => $workspace] = $this->createWorkspaceContext();
+        $this->grantDeveloperToolsAddon($user);
         $token = $user->createToken('t', [ApiAbilities::AUTOMATIONS_WRITE])->plainTextToken;
 
         $automation = Automation::create([
@@ -88,6 +91,7 @@ class AutomationApiTest extends TestCase
     public function test_trigger_automation_invalid_contact_returns_404(): void
     {
         ['user' => $user, 'workspace' => $workspace] = $this->createWorkspaceContext();
+        $this->grantDeveloperToolsAddon($user);
         $token = $user->createToken('t', ['*'])->plainTextToken;
 
         $automation = Automation::create([

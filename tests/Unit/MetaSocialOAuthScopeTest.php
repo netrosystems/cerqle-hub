@@ -43,7 +43,7 @@ class MetaSocialOAuthScopeTest extends TestCase
         $url = (new OAuthManager($resolver))->getAuthUrl(
             $network,
             1,
-            'https://wisperbot.test/app/social/accounts/callback/'.$network,
+            'https://cerqle.test/app/social/accounts/callback/'.$network,
         );
 
         $query = [];

@@ -1,8 +1,8 @@
 {
     "$schema": "https://getcomposer.org/schema.json",
-    "name": "wisperbot/wisperbot",
+    "name": "cerqle/cerqle",
     "type": "project",
-    "description": "WisperBot — multi-channel customer messaging, AI chatbots, broadcasting and automation platform.",
+    "description": "Cerqle — multi-channel customer messaging, AI chatbots, broadcasting and automation platform.",
     "keywords": ["whatsapp", "messaging", "saas", "inbox", "automation"],
     "license": "proprietary",
     "require": {

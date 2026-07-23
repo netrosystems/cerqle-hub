@@ -1026,7 +1026,7 @@
     },
     "open_menu": "Ouvrir le menu",
     "app": {
-        "name": "WisperBot"
+        "name": "Cerqle"
     },
     "impersonation": {
         "return_to_admin": "Revenir à l'administration",
@@ -1636,7 +1636,7 @@
         "step2_title": "2. Lancer les workers de file d'attente",
         "step2_desc": "Les tâches en arrière-plan — campagnes, messages, publications sociales — s'exécutent dans des files d'attente. Démarrez un worker persistant et utilisez Supervisor en production pour le maintenir actif et le redémarrer automatiquement.",
         "supervisor_title": "Configuration de Supervisor",
-        "supervisor_desc": "Enregistrez sous \/etc\/supervisor\/conf.d\/wisperbot-worker.conf, puis exécutez : supervisorctl reread && supervisorctl update.",
+        "supervisor_desc": "Enregistrez sous \/etc\/supervisor\/conf.d\/cerqle-worker.conf, puis exécutez : supervisorctl reread && supervisorctl update.",
         "step3_title": "3. Vérifier",
         "step3_desc": "Exécutez ces commandes pour confirmer que le planificateur et la file d'attente sont correctement configurés.",
         "verify_run": "Déclencher immédiatement toutes les tâches planifiées dues :",
@@ -4047,7 +4047,7 @@
     "37": {
         "4220": "4220"
     },
-    "wisperbot": {
+    "cerqle": {
         "sidebar": {
             "scroll": {
                 "admin": "Admin",

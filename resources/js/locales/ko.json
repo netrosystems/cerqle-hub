@@ -1024,7 +1024,7 @@
     },
     "open_menu": "메뉴 열기",
     "app": {
-        "name": "WisperBot"
+        "name": "Cerqle"
     },
     "impersonation": {
         "return_to_admin": "관리자로 돌아가기",
@@ -1634,7 +1634,7 @@
         "step2_title": "2. 큐 워커 실행",
         "step2_desc": "캠페인, 메시지, 소셜 게시물 같은 백그라운드 작업은 큐에서 실행됩니다. 상시 실행되는 워커를 시작하고, 운영 환경에서는 Supervisor를 사용해 워커를 유지하고 자동으로 재시작하세요.",
         "supervisor_title": "Supervisor 구성",
-        "supervisor_desc": "\/etc\/supervisor\/conf.d\/wisperbot-worker.conf로 저장한 다음 supervisorctl reread && supervisorctl update를 실행하세요.",
+        "supervisor_desc": "\/etc\/supervisor\/conf.d\/cerqle-worker.conf로 저장한 다음 supervisorctl reread && supervisorctl update를 실행하세요.",
         "step3_title": "3. 확인",
         "step3_desc": "다음 명령어를 실행하여 스케줄러와 큐가 올바르게 연결되었는지 확인하세요.",
         "verify_run": "기한이 된 모든 예약 작업을 즉시 실행:",
@@ -4045,7 +4045,7 @@
     "37": {
         "4220": "4220"
     },
-    "wisperbot": {
+    "cerqle": {
         "sidebar": {
             "scroll": {
                 "admin": "Admin",

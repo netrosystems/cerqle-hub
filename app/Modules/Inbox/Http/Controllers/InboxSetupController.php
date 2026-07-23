@@ -13,6 +13,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -90,7 +91,9 @@ class InboxSetupController extends Controller
     public function embeddedSignupInstagram(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'code' => ['required', 'string', 'max:2048'],
+            'code' => ['nullable', 'required_without:selection_token', 'string', 'max:2048'],
+            'selection_token' => ['nullable', 'required_without:code', 'string', 'max:96'],
+            'selected_instagram_account_id' => ['nullable', 'string', 'max:64'],
         ]);
 
         $workspaceId = $request->user()->current_workspace_id ?? $request->user()->workspace_id;
@@ -99,46 +102,97 @@ class InboxSetupController extends Controller
             return response()->json(['message' => 'Meta App credentials are not configured. Please ask your administrator to configure them in Admin → Integrations → Meta App.'], 422);
         }
 
-        // Ensure the Meta App delivers `instagram` webhook events to our endpoint.
-        // Without this app-level subscription Meta has no callback URL for the
-        // instagram object, so inbound Instagram messages never reach the server.
-        if (! $this->registerInstagramAppWebhook()) {
-            return response()->json([
-                'message' => 'Meta authorization succeeded, but WisperBot could not register the Instagram webhook. Check the app secret, verify token, public HTTPS callback URL, and Meta app permissions.',
-            ], 422);
-        }
+        if (! empty($validated['selection_token'])) {
+            $pending = $request->session()->pull('instagram_connect_selection.'.$validated['selection_token']);
+            if (! is_array($pending) || (int) ($pending['workspace_id'] ?? 0) !== (int) $workspaceId) {
+                return response()->json(['message' => 'Instagram selection expired. Please reconnect with Meta and choose the account again.'], 422);
+            }
 
-        $accessToken = $this->exchangeCodeForToken($validated['code']);
-        if (! $accessToken) {
-            return response()->json(['message' => 'Failed to exchange authorization code with Meta.'], 422);
-        }
+            $selectedIgId = (string) ($validated['selected_instagram_account_id'] ?? '');
+            $selectedPage = collect($pending['pages'] ?? [])->first(function (array $page) use ($selectedIgId): bool {
+                return (string) ($page['instagram_business_account']['id'] ?? '') === $selectedIgId;
+            });
 
-        $longToken = $this->exchangeForLongLivedToken($accessToken);
-        if (! $longToken) {
-            return response()->json(['message' => 'Meta authorization succeeded, but the long-lived token exchange failed. Reconnect and try again.'], 422);
-        }
+            if (! $selectedPage) {
+                return response()->json(['message' => 'Choose one Instagram account to connect.'], 422);
+            }
 
-        // Include classic Page roles plus Business Portfolio owned/client Pages.
-        // A successful but empty /me/accounts response is common for New Pages
-        // Experience assets assigned only through a Business Portfolio.
-        $discovery = $this->metaPages->discover(
-            $longToken,
-            'id,name,access_token,instagram_business_account{id,name,username}',
-        );
-        $pages = $discovery['pages'];
+            $pages = [$selectedPage];
+        } else {
+            // Ensure the Meta App delivers `instagram` webhook events to our endpoint.
+            // Without this app-level subscription Meta has no callback URL for the
+            // instagram object, so inbound Instagram messages never reach the server.
+            if (! $this->registerInstagramAppWebhook()) {
+                return response()->json([
+                    'message' => 'Meta authorization succeeded, but Cerqle could not register the Instagram webhook. Check the app secret, verify token, public HTTPS callback URL, and Meta app permissions.',
+                ], 422);
+            }
 
-        if ($discovery['errors'] !== []) {
-            Log::warning('Instagram embedded signup: some Page discovery sources failed', [
-                'workspace_id' => $workspaceId,
-                'errors' => $discovery['errors'],
-                'successful_sources' => $discovery['successful_sources'],
-            ]);
-        }
+            $accessToken = $this->exchangeCodeForToken($validated['code']);
+            if (! $accessToken) {
+                return response()->json(['message' => 'Failed to exchange authorization code with Meta.'], 422);
+            }
 
-        if ($pages === [] && $discovery['successful_sources'] === []) {
-            return response()->json([
-                'message' => 'Could not fetch your Facebook pages: '.($discovery['errors'][0]['message'] ?? 'unknown error'),
-            ], 422);
+            $longToken = $this->exchangeForLongLivedToken($accessToken);
+            if (! $longToken) {
+                return response()->json(['message' => 'Meta authorization succeeded, but the long-lived token exchange failed. Reconnect and try again.'], 422);
+            }
+
+            // Include classic Page roles plus Business Portfolio owned/client Pages.
+            // A successful but empty /me/accounts response is common for New Pages
+            // Experience assets assigned only through a Business Portfolio.
+            $discovery = $this->metaPages->discover(
+                $longToken,
+                'id,name,access_token,instagram_business_account{id,name,username}',
+            );
+            $pages = $discovery['pages'];
+            $selectedPageIds = $this->selectedMetaTargetIds($longToken, ['pages_show_list']);
+            $selectedInstagramIds = $this->selectedMetaTargetIds($longToken, ['instagram_basic']);
+
+            // Facebook Login for Business can expose every Page discoverable via a
+            // Business Portfolio. Respect the assets selected in the Meta popup so
+            // connecting Instagram does not unexpectedly connect unrelated Pages.
+            if ($selectedPageIds !== [] || $selectedInstagramIds !== []) {
+                $pages = $this->filterPagesToSelectedTargets($pages, $selectedPageIds, $selectedInstagramIds);
+            }
+
+            if ($discovery['errors'] !== []) {
+                Log::warning('Instagram embedded signup: some Page discovery sources failed', [
+                    'workspace_id' => $workspaceId,
+                    'errors' => $discovery['errors'],
+                    'successful_sources' => $discovery['successful_sources'],
+                ]);
+            }
+
+            if ($pages === [] && $discovery['successful_sources'] === []) {
+                return response()->json([
+                    'message' => 'Could not fetch your Facebook pages: '.($discovery['errors'][0]['message'] ?? 'unknown error'),
+                ], 422);
+            }
+
+            $connectablePages = $this->instagramConnectablePages($pages);
+            if (count($connectablePages) > 1) {
+                $selectionToken = Str::random(48);
+                $request->session()->put('instagram_connect_selection.'.$selectionToken, [
+                    'workspace_id' => $workspaceId,
+                    'pages' => $connectablePages,
+                ]);
+
+                return response()->json([
+                    'requires_selection' => true,
+                    'selection_token' => $selectionToken,
+                    'message' => 'Choose the Instagram account you want to connect.',
+                    'accounts' => collect($connectablePages)->map(fn (array $page) => [
+                        'instagram_account_id' => (string) ($page['instagram_business_account']['id'] ?? ''),
+                        'name' => (string) ($page['instagram_business_account']['username']
+                            ?? $page['instagram_business_account']['name']
+                            ?? $page['name']
+                            ?? $page['instagram_business_account']['id']),
+                        'facebook_page_id' => (string) ($page['id'] ?? ''),
+                        'facebook_page_name' => (string) ($page['name'] ?? ''),
+                    ])->values()->all(),
+                ], 409);
+            }
         }
 
         $connected = 0;
@@ -174,18 +228,21 @@ class InboxSetupController extends Controller
                 continue;
             }
 
-            // Inbound routing is keyed by Meta's global Instagram account ID. It
-            // cannot safely select a tenant if the same account is attached to two
-            // workspaces, so reject that configuration instead of routing to the
-            // first database match.
-            $belongsToAnotherWorkspace = ChannelAccount::where('channel', 'instagram')
-                ->where('workspace_id', '!=', $workspaceId)
+            // Inbound routing is keyed by Meta's global Instagram account ID. If
+            // the same client reconnects from another workspace they can access,
+            // move/update the row instead of leaving a stale hidden connection.
+            // Still block accounts that belong to a workspace this user cannot
+            // access, because routing would be unsafe across tenants.
+            $existingAnyWorkspace = ChannelAccount::where('channel', 'instagram')
                 ->whereJsonContains('meta_json->instagram_page_id', $igId)
-                ->exists();
-            if ($belongsToAnotherWorkspace) {
+                ->first();
+            if ($existingAnyWorkspace
+                && (int) $existingAnyWorkspace->workspace_id !== (int) $workspaceId
+                && ! in_array((int) $existingAnyWorkspace->workspace_id, $this->accessibleWorkspaceIds($request), true)) {
                 $workspaceConflicts++;
                 Log::warning('Instagram embedded signup: account already belongs to another workspace', [
                     'workspace_id' => $workspaceId,
+                    'existing_workspace_id' => $existingAnyWorkspace->workspace_id,
                     'instagram_account_id' => $igId,
                 ]);
                 continue;
@@ -208,20 +265,18 @@ class InboxSetupController extends Controller
                 'facebook_page_id'     => $pageId,
             ];
 
-            $alreadyExists = ChannelAccount::where('workspace_id', $workspaceId)
+            $existing = $existingAnyWorkspace ?: ChannelAccount::where('workspace_id', $workspaceId)
                 ->where('channel', 'instagram')
                 ->whereJsonContains('meta_json->instagram_page_id', $igId)
-                ->exists();
+                ->first();
+            $alreadyExists = $existing !== null;
 
-            if ($alreadyExists) {
+            if ($existing) {
                 // Update the token on re-connect (preserve any extra meta_json keys
                 // such as an assigned ai_chatbot_id by merging rather than replacing).
-                $existing = ChannelAccount::where('workspace_id', $workspaceId)
-                    ->where('channel', 'instagram')
-                    ->whereJsonContains('meta_json->instagram_page_id', $igId)
-                    ->first();
-
-                $existing?->update([
+                $existing->update([
+                    'workspace_id' => $workspaceId,
+                    'display_name' => mb_substr((string) $name, 0, 128),
                     'credentials' => $credentials,
                     'meta_json'   => array_merge($existing->meta_json ?? [], $metaJson),
                     'status'      => 'active',
@@ -269,7 +324,9 @@ class InboxSetupController extends Controller
     public function embeddedSignupMessenger(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'code' => ['required', 'string', 'max:2048'],
+            'code' => ['nullable', 'required_without:selection_token', 'string', 'max:2048'],
+            'selection_token' => ['nullable', 'required_without:code', 'string', 'max:96'],
+            'selected_facebook_page_id' => ['nullable', 'string', 'max:64'],
         ]);
 
         $workspaceId = $request->user()->current_workspace_id ?? $request->user()->workspace_id;
@@ -278,40 +335,85 @@ class InboxSetupController extends Controller
             return response()->json(['message' => 'Meta App credentials are not configured. Please ask your administrator to configure them in Admin → Integrations → Meta App.'], 422);
         }
 
-        // Ensure the Meta App delivers `page` (Messenger) webhook events to our
-        // endpoint. Without this app-level subscription Meta has no callback URL for
-        // the page object, so inbound Messenger messages never reach the server.
-        if (! $this->registerMessengerAppWebhook()) {
-            return response()->json([
-                'message' => 'Meta authorization succeeded, but WisperBot could not register the Messenger webhook. Check the app secret, verify token, public HTTPS callback URL, and Meta app permissions.',
-            ], 422);
-        }
+        if (! empty($validated['selection_token'])) {
+            $pending = $request->session()->pull('messenger_connect_selection.'.$validated['selection_token']);
+            if (! is_array($pending) || (int) ($pending['workspace_id'] ?? 0) !== (int) $workspaceId) {
+                return response()->json(['message' => 'Facebook Page selection expired. Please reconnect with Meta and choose the Page again.'], 422);
+            }
 
-        $accessToken = $this->exchangeCodeForToken($validated['code']);
-        if (! $accessToken) {
-            return response()->json(['message' => 'Failed to exchange authorization code with Meta.'], 422);
-        }
+            $selectedPageId = (string) ($validated['selected_facebook_page_id'] ?? '');
+            $selectedPage = collect($pending['pages'] ?? [])->first(function (array $page) use ($selectedPageId): bool {
+                return (string) ($page['id'] ?? '') === $selectedPageId;
+            });
 
-        $longToken = $this->exchangeForLongLivedToken($accessToken);
-        if (! $longToken) {
-            return response()->json(['message' => 'Meta authorization succeeded, but the long-lived token exchange failed. Reconnect and try again.'], 422);
-        }
+            if (! $selectedPage) {
+                return response()->json(['message' => 'Choose one Facebook Page to connect.'], 422);
+            }
 
-        $discovery = $this->metaPages->discover($longToken, 'id,name,access_token');
-        $pages = $discovery['pages'];
+            $pages = [$selectedPage];
+        } else {
+            // Ensure the Meta App delivers `page` (Messenger) webhook events to our
+            // endpoint. Without this app-level subscription Meta has no callback URL for
+            // the page object, so inbound Messenger messages never reach the server.
+            if (! $this->registerMessengerAppWebhook()) {
+                return response()->json([
+                    'message' => 'Meta authorization succeeded, but Cerqle could not register the Messenger webhook. Check the app secret, verify token, public HTTPS callback URL, and Meta app permissions.',
+                ], 422);
+            }
 
-        if ($discovery['errors'] !== []) {
-            Log::warning('Messenger embedded signup: some Page discovery sources failed', [
-                'workspace_id' => $workspaceId,
-                'errors' => $discovery['errors'],
-                'successful_sources' => $discovery['successful_sources'],
-            ]);
-        }
+            $accessToken = $this->exchangeCodeForToken($validated['code']);
+            if (! $accessToken) {
+                return response()->json(['message' => 'Failed to exchange authorization code with Meta.'], 422);
+            }
 
-        if ($pages === [] && $discovery['successful_sources'] === []) {
-            return response()->json([
-                'message' => 'Could not fetch your Facebook pages: '.($discovery['errors'][0]['message'] ?? 'unknown error'),
-            ], 422);
+            $longToken = $this->exchangeForLongLivedToken($accessToken);
+            if (! $longToken) {
+                return response()->json(['message' => 'Meta authorization succeeded, but the long-lived token exchange failed. Reconnect and try again.'], 422);
+            }
+
+            $discovery = $this->metaPages->discover($longToken, 'id,name,access_token');
+            $pages = $discovery['pages'];
+            $selectedPageIds = $this->selectedMetaTargetIds($longToken, ['pages_show_list']);
+
+            // Avoid auto-connecting every Page the user/business can discover. Meta's
+            // debug_token response tells us which Page assets were selected in the
+            // OAuth dialog; use that as the source of truth when present.
+            if ($selectedPageIds !== []) {
+                $pages = $this->filterPagesToSelectedTargets($pages, $selectedPageIds);
+            }
+
+            if ($discovery['errors'] !== []) {
+                Log::warning('Messenger embedded signup: some Page discovery sources failed', [
+                    'workspace_id' => $workspaceId,
+                    'errors' => $discovery['errors'],
+                    'successful_sources' => $discovery['successful_sources'],
+                ]);
+            }
+
+            if ($pages === [] && $discovery['successful_sources'] === []) {
+                return response()->json([
+                    'message' => 'Could not fetch your Facebook pages: '.($discovery['errors'][0]['message'] ?? 'unknown error'),
+                ], 422);
+            }
+
+            $connectablePages = $this->messengerConnectablePages($pages);
+            if (count($connectablePages) > 1) {
+                $selectionToken = Str::random(48);
+                $request->session()->put('messenger_connect_selection.'.$selectionToken, [
+                    'workspace_id' => $workspaceId,
+                    'pages' => $connectablePages,
+                ]);
+
+                return response()->json([
+                    'requires_selection' => true,
+                    'selection_token' => $selectionToken,
+                    'message' => 'Choose the Facebook Page you want to connect.',
+                    'accounts' => collect($connectablePages)->map(fn (array $page) => [
+                        'facebook_page_id' => (string) ($page['id'] ?? ''),
+                        'name' => (string) ($page['name'] ?? $page['id']),
+                    ])->values()->all(),
+                ], 409);
+            }
         }
 
         $connected = 0;
@@ -355,14 +457,16 @@ class InboxSetupController extends Controller
                 continue;
             }
 
-            $belongsToAnotherWorkspace = ChannelAccount::where('channel', 'messenger')
-                ->where('workspace_id', '!=', $workspaceId)
+            $existingAnyWorkspace = ChannelAccount::where('channel', 'messenger')
                 ->whereJsonContains('meta_json->page_id', $pageId)
-                ->exists();
-            if ($belongsToAnotherWorkspace) {
+                ->first();
+            if ($existingAnyWorkspace
+                && (int) $existingAnyWorkspace->workspace_id !== (int) $workspaceId
+                && ! in_array((int) $existingAnyWorkspace->workspace_id, $this->accessibleWorkspaceIds($request), true)) {
                 $workspaceConflicts++;
                 Log::warning('Messenger embedded signup: Page already belongs to another workspace', [
                     'workspace_id' => $workspaceId,
+                    'existing_workspace_id' => $existingAnyWorkspace->workspace_id,
                     'page_id' => $pageId,
                 ]);
                 continue;
@@ -375,7 +479,7 @@ class InboxSetupController extends Controller
                 continue;
             }
 
-            $existing = ChannelAccount::where('workspace_id', $workspaceId)
+            $existing = $existingAnyWorkspace ?: ChannelAccount::where('workspace_id', $workspaceId)
                 ->where('channel', 'messenger')
                 ->whereJsonContains('meta_json->page_id', $pageId)
                 ->first();
@@ -388,6 +492,8 @@ class InboxSetupController extends Controller
                 // which then fail to decrypt — breaking send() and the profile fetch.
                 // Merge meta_json so an assigned ai_chatbot_id is preserved.
                 $existing->update([
+                    'workspace_id' => $workspaceId,
+                    'display_name' => mb_substr((string) $pageName, 0, 128),
                     'credentials' => ['page_access_token' => $pageToken],
                     'meta_json'   => array_merge($existing->meta_json ?? [], ['page_id' => $pageId]),
                     'status'      => 'active',
@@ -467,6 +573,124 @@ class InboxSetupController extends Controller
         ]);
 
         return ($res->successful() && $res->json('access_token')) ? $res->json('access_token') : null;
+    }
+
+    /**
+     * Return asset IDs Meta says were selected for one or more granular scopes.
+     * If Meta does not include target_ids, callers keep their existing fallback
+     * discovery behaviour so older/quirky responses do not hard-fail connects.
+     *
+     * @param  list<string>  $scopes
+     * @return list<string>
+     */
+    private function selectedMetaTargetIds(string $accessToken, array $scopes): array
+    {
+        $meta = CredentialResolver::system()->meta();
+        if (! $meta?->appId() || ! $meta?->appSecret()) {
+            return [];
+        }
+
+        try {
+            $response = Http::get('https://graph.facebook.com/v25.0/debug_token', [
+                'input_token' => $accessToken,
+                'access_token' => $meta->appId().'|'.$meta->appSecret(),
+            ]);
+
+            if (! $response->successful()) {
+                Log::warning('Meta embedded signup: token inspection failed', [
+                    'response' => $response->json(),
+                ]);
+
+                return [];
+            }
+
+            $targetIds = [];
+            foreach ((array) $response->json('data.granular_scopes', []) as $scope) {
+                if (! in_array((string) ($scope['scope'] ?? ''), $scopes, true)) {
+                    continue;
+                }
+
+                foreach ((array) ($scope['target_ids'] ?? []) as $targetId) {
+                    if (is_string($targetId) || is_int($targetId)) {
+                        $targetIds[] = (string) $targetId;
+                    }
+                }
+            }
+
+            return array_values(array_unique($targetIds));
+        } catch (\Throwable $e) {
+            Log::warning('Meta embedded signup: token inspection exception', [
+                'error' => $e->getMessage(),
+            ]);
+
+            return [];
+        }
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $pages
+     * @param  list<string>  $selectedPageIds
+     * @param  list<string>  $selectedInstagramIds
+     * @return list<array<string, mixed>>
+     */
+    private function filterPagesToSelectedTargets(array $pages, array $selectedPageIds, array $selectedInstagramIds = []): array
+    {
+        return array_values(array_filter($pages, function (array $page) use ($selectedPageIds, $selectedInstagramIds): bool {
+            $pageId = (string) ($page['id'] ?? '');
+            $igId = (string) ($page['instagram_business_account']['id'] ?? '');
+
+            return ($pageId !== '' && in_array($pageId, $selectedPageIds, true))
+                || ($igId !== '' && in_array($igId, $selectedInstagramIds, true));
+        }));
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $pages
+     * @return list<array<string, mixed>>
+     */
+    private function instagramConnectablePages(array $pages): array
+    {
+        return array_values(array_filter($pages, function (array $page): bool {
+            return ! empty($page['access_token'])
+                && ! empty($page['id'])
+                && ! empty($page['instagram_business_account']['id']);
+        }));
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $pages
+     * @return list<array<string, mixed>>
+     */
+    private function messengerConnectablePages(array $pages): array
+    {
+        return array_values(array_filter($pages, function (array $page): bool {
+            return ! empty($page['id']);
+        }));
+    }
+
+    /** @return list<int> */
+    private function accessibleWorkspaceIds(Request $request): array
+    {
+        $user = $request->user();
+        if (! $user) {
+            return [];
+        }
+
+        $ids = collect([
+            $user->workspace_id ?? null,
+            $user->current_workspace_id ?? null,
+        ]);
+
+        if (method_exists($user, 'accessibleWorkspaces')) {
+            $ids = $ids->merge($user->accessibleWorkspaces()->pluck('id'));
+        }
+
+        return $ids
+            ->filter(fn ($id) => $id !== null && $id !== '')
+            ->map(fn ($id) => (int) $id)
+            ->unique()
+            ->values()
+            ->all();
     }
 
     /**
@@ -756,8 +980,33 @@ class InboxSetupController extends Controller
         abort_unless((int) $channelAccount->workspace_id === (int) $workspaceId, 403);
         abort_unless(in_array($channelAccount->channel, ['instagram', 'messenger'], true), 403);
 
+        $this->unsubscribeMetaPageBestEffort($channelAccount);
         $channelAccount->delete();
 
         return back()->with('success', 'Account disconnected.');
+    }
+
+    private function unsubscribeMetaPageBestEffort(ChannelAccount $channelAccount): void
+    {
+        $meta = $channelAccount->meta_json ?? [];
+        $pageId = $channelAccount->channel === 'instagram'
+            ? (string) ($meta['facebook_page_id'] ?? '')
+            : (string) ($meta['page_id'] ?? '');
+        $pageToken = (string) (($channelAccount->credentials ?? [])['page_access_token'] ?? '');
+
+        if ($pageId === '' || $pageToken === '') {
+            return;
+        }
+
+        try {
+            Http::withToken($pageToken)->delete("https://graph.facebook.com/v25.0/{$pageId}/subscribed_apps");
+        } catch (\Throwable $e) {
+            Log::warning('Meta Page unsubscribe failed while disconnecting channel account', [
+                'channel_account_id' => $channelAccount->id,
+                'channel' => $channelAccount->channel,
+                'page_id' => $pageId,
+                'error' => $e->getMessage(),
+            ]);
+        }
     }
 }

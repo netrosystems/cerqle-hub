@@ -374,7 +374,7 @@ class DefaultTranslations
             'open_menu' => 'Open menu',
             'head.welcome' => 'Welcome',
             'head.admin' => 'Admin',
-            'app.name' => config('app.name', 'WisperBot'),
+            'app.name' => config('app.name', 'Cerqle'),
             'impersonation.impersonating' => 'Impersonating: {{name}}',
             'impersonation.return_to_admin' => 'Return to Admin',
         ];

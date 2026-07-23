@@ -19,6 +19,7 @@ class CampaignApiTest extends TestCase
     public function test_wrong_scope_returns_403(): void
     {
         ['user' => $user] = $this->createWorkspaceContext();
+        $this->grantDeveloperToolsAddon($user);
         $token = $user->createToken('t', [ApiAbilities::CONTACTS_READ])->plainTextToken;
 
         $this->withToken($token)->getJson('/api/v1/campaigns')->assertStatus(403);
@@ -27,6 +28,7 @@ class CampaignApiTest extends TestCase
     public function test_list_campaigns_returns_200(): void
     {
         ['user' => $user, 'workspace' => $workspace] = $this->createWorkspaceContext();
+        $this->grantDeveloperToolsAddon($user);
         $token = $user->createToken('t', ['*'])->plainTextToken;
 
         Campaign::factory()->count(2)->create(['workspace_id' => $workspace->id]);
@@ -40,6 +42,7 @@ class CampaignApiTest extends TestCase
     public function test_create_campaign_returns_201(): void
     {
         ['user' => $user, 'workspace' => $workspace] = $this->createWorkspaceContext();
+        $this->grantDeveloperToolsAddon($user);
         $token = $user->createToken('t', [ApiAbilities::CAMPAIGNS_WRITE])->plainTextToken;
 
         $this->withToken($token)
@@ -55,6 +58,7 @@ class CampaignApiTest extends TestCase
     public function test_create_campaign_validation_fails_with_422(): void
     {
         ['user' => $user] = $this->createWorkspaceContext();
+        $this->grantDeveloperToolsAddon($user);
         $token = $user->createToken('t', ['*'])->plainTextToken;
 
         $this->withToken($token)
@@ -65,6 +69,7 @@ class CampaignApiTest extends TestCase
     public function test_show_campaign_with_fresh_stats(): void
     {
         ['user' => $user, 'workspace' => $workspace] = $this->createWorkspaceContext();
+        $this->grantDeveloperToolsAddon($user);
         $token = $user->createToken('t', ['*'])->plainTextToken;
         $campaign = Campaign::factory()->create(['workspace_id' => $workspace->id]);
 
@@ -78,6 +83,7 @@ class CampaignApiTest extends TestCase
     public function test_launch_campaign_returns_ok(): void
     {
         ['user' => $user, 'workspace' => $workspace] = $this->createWorkspaceContext();
+        $this->grantDeveloperToolsAddon($user);
         $token = $user->createToken('t', [ApiAbilities::CAMPAIGNS_WRITE])->plainTextToken;
         $campaign = Campaign::factory()->create(['workspace_id' => $workspace->id, 'status' => 'draft']);
 
@@ -90,6 +96,7 @@ class CampaignApiTest extends TestCase
     public function test_recipients_returns_paginated_list(): void
     {
         ['user' => $user, 'workspace' => $workspace] = $this->createWorkspaceContext();
+        $this->grantDeveloperToolsAddon($user);
         $token = $user->createToken('t', ['*'])->plainTextToken;
         $campaign = Campaign::factory()->create(['workspace_id' => $workspace->id]);
 

@@ -1024,7 +1024,7 @@
     },
     "open_menu": "Abrir menú",
     "app": {
-        "name": "WisperBot"
+        "name": "Cerqle"
     },
     "impersonation": {
         "return_to_admin": "Volver al administrador",
@@ -1634,7 +1634,7 @@
         "step2_title": "2. Ejecuta los workers de la cola",
         "step2_desc": "Los trabajos en segundo plano — campañas, mensajes, publicaciones sociales — se ejecutan en colas. Inicia un worker persistente y usa Supervisor en producción para mantenerlo activo y reiniciarlo automáticamente.",
         "supervisor_title": "Configuración de Supervisor",
-        "supervisor_desc": "Guárdalo como \/etc\/supervisor\/conf.d\/wisperbot-worker.conf y luego ejecuta: supervisorctl reread && supervisorctl update.",
+        "supervisor_desc": "Guárdalo como \/etc\/supervisor\/conf.d\/cerqle-worker.conf y luego ejecuta: supervisorctl reread && supervisorctl update.",
         "step3_title": "3. Verifica",
         "step3_desc": "Ejecuta estos comandos para confirmar que el programador y la cola están conectados correctamente.",
         "verify_run": "Activa inmediatamente todas las tareas programadas pendientes:",
@@ -4045,7 +4045,7 @@
     "37": {
         "4220": "4220"
     },
-    "wisperbot": {
+    "cerqle": {
         "sidebar": {
             "scroll": {
                 "admin": "Admin",

@@ -20,7 +20,7 @@ function Badge({ text }) {
 
 export default function Integrations({ canRegister, landing = {} }) {
     const { t } = useTranslation();
-    const appName = import.meta.env.VITE_APP_NAME || 'WisperBot';
+    const appName = import.meta.env.VITE_APP_NAME || 'Cerqle';
     const s = (key, def = '') => landing[`landing.${key}`] ?? def;
 
     const categories = [1, 2, 3, 4, 5, 6, 7].map((i) => ({
@@ -38,7 +38,7 @@ export default function Integrations({ canRegister, landing = {} }) {
             {/* Hero */}
             <section
                 className="relative overflow-hidden"
-                style={{ background: 'radial-gradient(ellipse 70% 65% at 50% 0%, rgba(255,118,46,0.18) 0%, transparent 60%), #14100c' }}
+                style={{ background: 'radial-gradient(ellipse 70% 65% at 50% 0%, rgba(143,95,167,0.18) 0%, transparent 60%), #281a31' }}
             >
                 <div className="pointer-events-none absolute -left-24 top-6 h-72 w-72 rounded-full bg-brand-500/20 blur-3xl animate-float-slow" />
                 <div className="pointer-events-none absolute -right-16 top-24 h-80 w-80 rounded-full bg-brand-600/15 blur-3xl animate-float" />
@@ -84,11 +84,11 @@ export default function Integrations({ canRegister, landing = {} }) {
                         {t('integrations_page.cta_title', { defaultValue: 'Need a custom integration?' })}
                     </Reveal>
                     <Reveal as="p" delay={90} className="mt-4 text-lg text-neutral-600 dark:text-neutral-400">
-                        {t('integrations_page.cta_subtitle', { defaultValue: 'Use our REST API and webhooks to connect WisperBot to anything, or talk to our team.' })}
+                        {t('integrations_page.cta_subtitle', { defaultValue: 'Use our REST API and webhooks to connect Cerqle to anything, or talk to our team.' })}
                     </Reveal>
                     <Reveal delay={180} className="mt-8 flex flex-wrap items-center justify-center gap-4">
                         {canRegister && (
-                            <Link href={route('register')} className="group inline-flex items-center gap-2 rounded-xl bg-gradient-to-b from-brand-500 to-brand-600 px-7 py-3.5 text-base font-bold text-white shadow-[0_10px_30px_-6px_rgba(255,118,46,0.55)] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_16px_40px_-6px_rgba(255,118,46,0.7)]">
+                            <Link href={route('register')} className="group inline-flex items-center gap-2 rounded-xl bg-gradient-to-b from-brand-500 to-brand-600 px-7 py-3.5 text-base font-bold text-white shadow-[0_10px_30px_-6px_rgba(143,95,167,0.55)] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_16px_40px_-6px_rgba(143,95,167,0.7)]">
                                 {t('welcome.get_started_free', { defaultValue: 'Get Started Free' })}
                                 <svg className="h-5 w-5 transition-transform duration-200 group-hover:translate-x-1" fill="none" stroke="currentColor" strokeWidth={2.2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" /></svg>
                             </Link>

@@ -27,11 +27,12 @@ class DatabaseSeeder extends Seeder
             EmailTemplateSeeder::class,
             IntegrationConfigSeeder::class,
             SmtpConfigurationSeeder::class,
+            SystemBrandingSeeder::class,
             LandingPageSeeder::class,
             CmsPageSeeder::class,
 
             // Comprehensive demo content: one fully-populated client
-            // (SpaGreen Wellness) across every module, plus light secondaries.
+            // (Cerqle Demo) across every module, plus light secondaries.
             DemoSeeder::class,
         ]);
 

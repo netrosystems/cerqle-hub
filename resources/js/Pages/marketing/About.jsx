@@ -30,7 +30,7 @@ function StatItem({ value, label, delay }) {
 
 export default function About({ canRegister, landing = {} }) {
     const { t } = useTranslation();
-    const appName = import.meta.env.VITE_APP_NAME || 'WisperBot';
+    const appName = import.meta.env.VITE_APP_NAME || 'Cerqle';
     const s = (key, def = '') => landing[`landing.${key}`] ?? def;
 
     const values = [1, 2, 3, 4].map((i) => ({
@@ -56,7 +56,7 @@ export default function About({ canRegister, landing = {} }) {
             {/* Hero */}
             <section
                 className="relative overflow-hidden"
-                style={{ background: 'radial-gradient(ellipse 70% 65% at 50% 0%, rgba(255,118,46,0.18) 0%, transparent 60%), #14100c' }}
+                style={{ background: 'radial-gradient(ellipse 70% 65% at 50% 0%, rgba(143,95,167,0.18) 0%, transparent 60%), #281a31' }}
             >
                 <div className="pointer-events-none absolute -left-24 top-6 h-72 w-72 rounded-full bg-brand-500/20 blur-3xl animate-float-slow" />
                 <div className="pointer-events-none absolute -right-16 top-24 h-80 w-80 rounded-full bg-brand-600/15 blur-3xl animate-float" />
@@ -133,7 +133,7 @@ export default function About({ canRegister, landing = {} }) {
                 <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
                     <Reveal
                         className="relative overflow-hidden rounded-3xl px-8 py-16 text-center"
-                        style={{ background: 'radial-gradient(ellipse 60% 80% at 50% 50%, rgba(255,118,46,0.15) 0%, transparent 70%), #14100c', border: '1px solid rgba(255,118,46,0.2)' }}
+                        style={{ background: 'radial-gradient(ellipse 60% 80% at 50% 50%, rgba(143,95,167,0.15) 0%, transparent 70%), #281a31', border: '1px solid rgba(143,95,167,0.2)' }}
                     >
                         <div className="pointer-events-none absolute -right-10 -top-10 h-56 w-56 rounded-full bg-brand-500/20 blur-3xl animate-float" />
                         <h2 className="relative text-3xl sm:text-4xl font-bold text-white tracking-tight max-w-2xl mx-auto">
@@ -144,7 +144,7 @@ export default function About({ canRegister, landing = {} }) {
                         )}
                         <div className="relative mt-10 flex flex-wrap items-center justify-center gap-4">
                             {canRegister && (
-                                <Link href={route('register')} className="group inline-flex items-center gap-2 rounded-xl bg-gradient-to-b from-brand-500 to-brand-600 px-7 py-3.5 text-base font-bold text-white shadow-[0_10px_30px_-6px_rgba(255,118,46,0.55)] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_16px_40px_-6px_rgba(255,118,46,0.7)]">
+                                <Link href={route('register')} className="group inline-flex items-center gap-2 rounded-xl bg-gradient-to-b from-brand-500 to-brand-600 px-7 py-3.5 text-base font-bold text-white shadow-[0_10px_30px_-6px_rgba(143,95,167,0.55)] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_16px_40px_-6px_rgba(143,95,167,0.7)]">
                                     {t('welcome.get_started_free', { defaultValue: 'Get Started Free' })}
                                     <svg className="h-5 w-5 transition-transform duration-200 group-hover:translate-x-1" fill="none" stroke="currentColor" strokeWidth={2.2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" /></svg>
                                 </Link>

@@ -92,8 +92,8 @@ class ChatWidgetCrudTest extends TestCase
             'position' => 'bottom_right',
         ]);
 
-        $this->assertSame('WisperBot', $widget->publicConfig()['footer_company_name']);
-        $this->assertStringContainsString('wisperbot-icon-white.svg', $widget->publicConfig()['launcher_logo_url']);
+        $this->assertSame('Cerqle', $widget->publicConfig()['footer_company_name']);
+        $this->assertStringContainsString('cerqle-icon-white-bg.svg', $widget->publicConfig()['launcher_logo_url']);
 
         $widget->update(['footer_company_name' => 'Netro Systems']);
 

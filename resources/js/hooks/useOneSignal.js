@@ -62,7 +62,7 @@ export function isOnInboxOrDashboard() {
  * Shows an OS-level browser notification.
  * Works as long as the user has granted push permission (via OneSignal or natively).
  */
-export function showBrowserNotification(title, body, url, icon = '/wisperbot-icon-512.png') {
+export function showBrowserNotification(title, body, url, icon = '/cerqle-icon.svg') {
     if (typeof Notification === 'undefined') return;
     if (Notification.permission !== 'granted') return;
 

@@ -46,7 +46,7 @@ class CheckoutController extends Controller
         }
 
         // The legacy SDK checkout branch (used by Cashfree) is intentionally
-        // disabled while WisperBot supports only Stripe, PayPal, and Paddle.
+        // disabled while Cerqle supports only Stripe, PayPal, and Paddle.
 
         return back()->with('error', __('Checkout could not be started.'));
     }

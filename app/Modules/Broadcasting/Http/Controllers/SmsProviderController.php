@@ -78,7 +78,7 @@ class SmsProviderController extends Controller
         'messagebird' => 'MessageBird',
         'smsbd'       => 'SMSBD',
         'reve'        => 'REVE SMS',
-        'alaris'      => 'Alaris SMS Platform',
+        'alaris'      => 'PROSMS',
         'bulksmsbd'   => 'BulkSMS BD',
         'sms_dot_bd'  => 'SMS.BD (sms.net.bd)',
         'mimsms'      => 'MimSMS',
@@ -119,7 +119,7 @@ class SmsProviderController extends Controller
         }
         if ($provider === 'alaris') {
             // The guide also documents plain HTTP, but credentials must never be
-            // sent unencrypted from a production WisperBot installation.
+            // sent unencrypted from a production Cerqle installation.
             $rules['credentials.base_url'] = ['required', 'url', 'starts_with:https://', 'max:512'];
         }
 
