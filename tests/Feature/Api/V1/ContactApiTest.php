@@ -21,6 +21,7 @@ class ContactApiTest extends TestCase
     public function test_wrong_scope_returns_403(): void
     {
         ['user' => $user] = $this->createWorkspaceContext();
+        $this->grantDeveloperToolsAddon($user);
         $token = $user->createToken('test', [ApiAbilities::CAMPAIGNS_READ])->plainTextToken;
 
         $this->withToken($token)->getJson('/api/v1/contacts')->assertStatus(403);
@@ -31,6 +32,7 @@ class ContactApiTest extends TestCase
     public function test_list_contacts_returns_200(): void
     {
         ['user' => $user, 'workspace' => $workspace] = $this->createWorkspaceContext();
+        $this->grantDeveloperToolsAddon($user);
         $token = $user->createToken('t', [ApiAbilities::CONTACTS_READ])->plainTextToken;
 
         Contact::factory()->count(3)->create(['workspace_id' => $workspace->id]);
@@ -44,6 +46,7 @@ class ContactApiTest extends TestCase
     public function test_list_contacts_search_filter(): void
     {
         ['user' => $user, 'workspace' => $workspace] = $this->createWorkspaceContext();
+        $this->grantDeveloperToolsAddon($user);
         $token = $user->createToken('t', ['*'])->plainTextToken;
 
         Contact::factory()->create(['workspace_id' => $workspace->id, 'first_name' => 'Unique']);
@@ -61,6 +64,7 @@ class ContactApiTest extends TestCase
     public function test_create_contact_returns_201(): void
     {
         ['user' => $user, 'workspace' => $workspace] = $this->createWorkspaceContext();
+        $this->grantDeveloperToolsAddon($user);
         $token = $user->createToken('t', [ApiAbilities::CONTACTS_WRITE])->plainTextToken;
 
         $this->withToken($token)
@@ -78,6 +82,7 @@ class ContactApiTest extends TestCase
     public function test_create_contact_invalid_phone_returns_422(): void
     {
         ['user' => $user] = $this->createWorkspaceContext();
+        $this->grantDeveloperToolsAddon($user);
         $token = $user->createToken('t', [ApiAbilities::CONTACTS_WRITE])->plainTextToken;
 
         $this->withToken($token)
@@ -90,6 +95,7 @@ class ContactApiTest extends TestCase
     public function test_show_contact_returns_200(): void
     {
         ['user' => $user, 'workspace' => $workspace] = $this->createWorkspaceContext();
+        $this->grantDeveloperToolsAddon($user);
         $token = $user->createToken('t', ['*'])->plainTextToken;
         $contact = Contact::factory()->create(['workspace_id' => $workspace->id]);
 
@@ -102,6 +108,7 @@ class ContactApiTest extends TestCase
     public function test_show_contact_from_other_workspace_returns_404(): void
     {
         ['user' => $user] = $this->createWorkspaceContext();
+        $this->grantDeveloperToolsAddon($user);
         ['workspace' => $otherWs] = $this->createWorkspaceContext();
         $token = $user->createToken('t', ['*'])->plainTextToken;
         $contact = Contact::factory()->create(['workspace_id' => $otherWs->id]);
@@ -116,6 +123,7 @@ class ContactApiTest extends TestCase
     public function test_update_contact_returns_200(): void
     {
         ['user' => $user, 'workspace' => $workspace] = $this->createWorkspaceContext();
+        $this->grantDeveloperToolsAddon($user);
         $token = $user->createToken('t', ['*'])->plainTextToken;
         $contact = Contact::factory()->create(['workspace_id' => $workspace->id]);
 
@@ -130,6 +138,7 @@ class ContactApiTest extends TestCase
     public function test_delete_contact_returns_200(): void
     {
         ['user' => $user, 'workspace' => $workspace] = $this->createWorkspaceContext();
+        $this->grantDeveloperToolsAddon($user);
         $token = $user->createToken('t', ['*'])->plainTextToken;
         $contact = Contact::factory()->create(['workspace_id' => $workspace->id]);
 

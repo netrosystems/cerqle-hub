@@ -5,7 +5,7 @@ import { useLocale } from '@/hooks/useLocale';
 import { Sun, Moon, ShieldCheck, Zap, Users, Bot, TrendingUp } from 'lucide-react';
 
 /**
- * Split-pane auth layout — WisperBot editorial design language.
+ * Split-pane auth layout — Cerqle editorial design language.
  *
  * - Left pane (desktop only): warm cream brand panel with editorial serif
  *   copy, the same Eyebrow badge + sparkles used on the marketing landing,
@@ -95,7 +95,7 @@ function AccentHeading({ text, className = '' }) {
 function LeftPane({ variant, logoUrl }) {
     const { t } = useTranslation();
     const features = variant === 'admin' ? ADMIN_FEATURES : CLIENT_FEATURES;
-    const appName = import.meta.env.VITE_APP_NAME || 'WisperBot';
+    const appName = import.meta.env.VITE_APP_NAME || 'Cerqle';
     const tagline = variant === 'admin'
         ? (t('auth.admin_tagline') || 'Manage your platform with confidence')
         : (t('auth.tagline') || 'Turn conversations into revenue — on autopilot');
@@ -131,7 +131,7 @@ function LeftPane({ variant, logoUrl }) {
 
             {/* Logo + brand name */}
             <div className="relative flex items-center gap-3">
-                <img src={logoUrl || '/wisperbot-logo-with-title.svg'} alt={appName} className="h-9 w-auto max-w-[220px] object-contain" />
+                <img src={logoUrl || '/cerqle-logo-purple.svg'} alt={appName} className="h-9 w-auto max-w-[220px] object-contain" />
                 {variant === 'admin' && (
                     <span className="inline-flex items-center gap-1 rounded-full bg-brand-500/10 px-2 py-0.5 text-xs font-semibold text-brand-700">
                         <ShieldCheck className="h-3 w-3" />
@@ -255,7 +255,7 @@ export default function AuthLayout({
                 <div className="relative flex items-center justify-between px-6 py-5">
                     {/* Mobile logo */}
                     <Link href={route('home')} className="flex items-center gap-2 lg:hidden">
-                        <img src={branding?.logo_url || '/wisperbot-logo-with-title.svg'} alt={branding?.app_name || import.meta.env.VITE_APP_NAME || 'WisperBot'} className="h-7 w-auto max-w-[170px] object-contain" />
+                        <img src={branding?.logo_url || '/cerqle-logo-purple.svg'} alt={branding?.app_name || import.meta.env.VITE_APP_NAME || 'Cerqle'} className="h-7 w-auto max-w-[170px] object-contain" />
                     </Link>
                     <span className="hidden lg:block" />
                     <div className="flex items-center gap-2">

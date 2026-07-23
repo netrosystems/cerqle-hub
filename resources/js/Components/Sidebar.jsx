@@ -3,7 +3,7 @@ import { useLayoutEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ChevronDown, Plus, X } from 'lucide-react';
 
-const SIDEBAR_SCROLL_STORAGE_PREFIX = 'wisperbot.sidebar.scroll.';
+const SIDEBAR_SCROLL_STORAGE_PREFIX = 'cerqle.sidebar.scroll.';
 
 function readScrollPosition(storageKey) {
     if (typeof window === 'undefined') return 0;
@@ -102,7 +102,7 @@ export default function Sidebar({
     scrollKey = 'default',
 }) {
     const { t } = useTranslation();
-    const appName = import.meta.env.VITE_APP_NAME || 'WisperBot';
+    const appName = import.meta.env.VITE_APP_NAME || 'Cerqle';
     const { branding } = usePage().props;
     const logoUrl = branding?.logo_url;
     const desktopNavRef = useRef(null);
@@ -131,7 +131,7 @@ export default function Sidebar({
                 ) : logo ? (
                     logo
                 ) : (
-                    <img src="/wisperbot-logo-white.svg" alt={appName} className="h-10 w-auto max-w-[200px] object-contain" />
+                    <img src="/cerqle-logo-white.svg" alt={appName} className="h-10 w-auto max-w-[200px] object-contain" />
                 )}
             </div>
 

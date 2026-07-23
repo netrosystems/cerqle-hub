@@ -10,8 +10,8 @@ self.addEventListener('push', function (event) {
 
     const options = {
         body: data.body || '',
-        icon: '/wisperbot-icon-512.png',
-        badge: '/wisperbot-icon-512.png',
+        icon: '/cerqle-icon.svg',
+        badge: '/cerqle-icon.svg',
         data: { url: data.url || '/' },
     };
 

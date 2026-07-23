@@ -97,11 +97,11 @@ class ChatWidget extends Model
             'position' => $this->position ?: 'bottom_right',
             'launcher_text' => $this->launcher_text,
             // Every plan can use its own brand in the embedded widget. Existing
-            // widgets retain the familiar WisperBot fallback until edited.
-            'footer_company_name' => $this->footer_company_name ?: 'WisperBot',
+            // widgets retain the familiar Cerqle fallback until edited.
+            'footer_company_name' => $this->footer_company_name ?: 'Cerqle',
             // The product icon remains the default for every free widget.
             // A custom launcher mark is only exposed for white-label plans.
-            'launcher_logo_url' => $this->launcher_logo_url ?: url('/wisperbot-icon-white.svg'),
+            'launcher_logo_url' => $this->launcher_logo_url ?: url('/cerqle-icon-white-bg.svg'),
             'require_prechat' => (bool) $this->require_prechat,
             'prechat_fields' => $this->prechat_fields ?: ['name', 'email'],
             'offline_message' => $this->offline_message,

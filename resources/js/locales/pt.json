@@ -1024,7 +1024,7 @@
     },
     "open_menu": "Abrir menu",
     "app": {
-        "name": "WisperBot"
+        "name": "Cerqle"
     },
     "impersonation": {
         "return_to_admin": "Voltar ao Admin",
@@ -1634,7 +1634,7 @@
         "step2_title": "2. Execute os workers de fila",
         "step2_desc": "Trabalhos em segundo plano — campanhas, mensagens, publicações sociais — rodam em filas. Inicie um worker persistente e use o Supervisor em produção para mantê-lo ativo e reiniciá-lo automaticamente.",
         "supervisor_title": "Configuração do Supervisor",
-        "supervisor_desc": "Salve como \/etc\/supervisor\/conf.d\/wisperbot-worker.conf e execute: supervisorctl reread && supervisorctl update.",
+        "supervisor_desc": "Salve como \/etc\/supervisor\/conf.d\/cerqle-worker.conf e execute: supervisorctl reread && supervisorctl update.",
         "step3_title": "3. Verifique",
         "step3_desc": "Execute estes comandos para confirmar que o agendador e a fila estão configurados corretamente.",
         "verify_run": "Acione imediatamente todas as tarefas agendadas pendentes:",
@@ -4045,7 +4045,7 @@
     "37": {
         "4220": "4220"
     },
-    "wisperbot": {
+    "cerqle": {
         "sidebar": {
             "scroll": {
                 "admin": "Admin",

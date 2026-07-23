@@ -1016,7 +1016,7 @@
     },
     "open_menu": "মেনু খুলুন",
     "app": {
-        "name": "WisperBot"
+        "name": "Cerqle"
     },
     "impersonation": {
         "return_to_admin": "অ্যাডমিনে ফিরে যান",
@@ -1626,7 +1626,7 @@
         "step2_title": "২. কিউ ওয়ার্কার চালান",
         "step2_desc": "ব্যাকগ্রাউন্ড জব — ক্যাম্পেইন, মেসেজ, সোশ্যাল পোস্ট — কিউতে চলে। একটি স্থায়ী ওয়ার্কার চালু করুন এবং প্রোডাকশনে এটিকে সচল রাখতে ও স্বয়ংক্রিয়ভাবে পুনরায় চালু করতে Supervisor ব্যবহার করুন।",
         "supervisor_title": "Supervisor কনফিগারেশন",
-        "supervisor_desc": "\/etc\/supervisor\/conf.d\/wisperbot-worker.conf হিসেবে সেভ করুন, তারপর চালান: supervisorctl reread && supervisorctl update।",
+        "supervisor_desc": "\/etc\/supervisor\/conf.d\/cerqle-worker.conf হিসেবে সেভ করুন, তারপর চালান: supervisorctl reread && supervisorctl update।",
         "step3_title": "৩. যাচাই করুন",
         "step3_desc": "শিডিউলার ও কিউ সঠিকভাবে সংযুক্ত হয়েছে কিনা নিশ্চিত করতে এই কমান্ডগুলো চালান।",
         "verify_run": "এখনই সব বকেয়া নির্ধারিত কাজ চালু করুন:",
@@ -4036,7 +4036,7 @@
     "37": {
         "4220": "4220"
     },
-    "wisperbot": {
+    "cerqle": {
         "sidebar": {
             "scroll": {
                 "admin": "Admin",

@@ -21,6 +21,7 @@ class MessageSendApiTest extends TestCase
     public function test_wrong_scope_returns_403(): void
     {
         ['user' => $user] = $this->createWorkspaceContext();
+        $this->grantDeveloperToolsAddon($user);
         $token = $user->createToken('t', [ApiAbilities::CONTACTS_READ])->plainTextToken;
 
         $this->withToken($token)
@@ -31,6 +32,7 @@ class MessageSendApiTest extends TestCase
     public function test_missing_contact_returns_422_via_validation(): void
     {
         ['user' => $user] = $this->createWorkspaceContext();
+        $this->grantDeveloperToolsAddon($user);
         $token = $user->createToken('t', ['*'])->plainTextToken;
 
         // Missing required fields
@@ -42,6 +44,7 @@ class MessageSendApiTest extends TestCase
     public function test_contact_not_found_returns_404(): void
     {
         ['user' => $user] = $this->createWorkspaceContext();
+        $this->grantDeveloperToolsAddon($user);
         $token = $user->createToken('t', [ApiAbilities::MESSAGES_WRITE])->plainTextToken;
 
         $this->withToken($token)
@@ -56,6 +59,7 @@ class MessageSendApiTest extends TestCase
     public function test_no_active_channel_returns_422(): void
     {
         ['user' => $user, 'workspace' => $workspace] = $this->createWorkspaceContext();
+        $this->grantDeveloperToolsAddon($user);
         $token = $user->createToken('t', [ApiAbilities::MESSAGES_WRITE])->plainTextToken;
         $contact = Contact::factory()->create(['workspace_id' => $workspace->id, 'phone_e164' => '+8801700000001']);
 
@@ -72,6 +76,7 @@ class MessageSendApiTest extends TestCase
     public function test_sms_send_happy_path(): void
     {
         ['user' => $user, 'workspace' => $workspace] = $this->createWorkspaceContext();
+        $this->grantDeveloperToolsAddon($user);
         $token = $user->createToken('t', ['*'])->plainTextToken;
         $contact = Contact::factory()->create(['workspace_id' => $workspace->id, 'phone_e164' => '+8801700000002']);
 

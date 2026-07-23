@@ -89,7 +89,7 @@
         "sign_out": "Sign Out",
         "light_mode": "Light mode",
         "dark_mode": "Dark mode",
-        "all_rights_reserved": "WisperBot(A Netro Systems Limited Company) All rights reserved.",
+        "all_rights_reserved": "Cerqle.ai. All rights reserved.",
         "settings": "Settings",
         "team": "Team",
         "audit_log": "Audit Log",
@@ -161,7 +161,7 @@
         "feature3Title": "Publish & export",
         "feature3Desc": "Go live on our hosting or download static HTML.",
         "free": "Free",
-        "get_started_free": "Get WisperBot free",
+        "get_started_free": "Get Cerqle free",
         "view_all_integrations": "View all integrations",
         "upgrade": "Upgrade",
         "get_started_plan": "Get Started",
@@ -1051,7 +1051,7 @@
     },
     "open_menu": "Open menu",
     "app": {
-        "name": "WisperBot"
+        "name": "Cerqle"
     },
     "impersonation": {
         "return_to_admin": "Return to Admin",
@@ -1662,7 +1662,7 @@
         "step2_desc": "Background jobs — including knowledge-base indexing, campaigns, messages, social posts, leads, and automations — use named queues. Start the complete worker below, and use Supervisor in production to keep it running.",
         "worker_queues": "Queues covered by this worker",
         "supervisor_title": "Supervisor configuration",
-        "supervisor_desc": "Save as \/etc\/supervisor\/conf.d\/wisperbot-worker.conf, then run: supervisorctl reread && supervisorctl update.",
+        "supervisor_desc": "Save as \/etc\/supervisor\/conf.d\/cerqle-worker.conf, then run: supervisorctl reread && supervisorctl update.",
         "step3_title": "3. Verify",
         "step3_desc": "Run these commands to confirm the scheduler and queue are wired up correctly.",
         "verify_run": "Trigger all due scheduled tasks immediately:",
@@ -2369,7 +2369,7 @@
         "pricing_faq": "Pricing questions",
         "ready_to_start": "Ready to jump in?",
         "ready_to_start_desc": "No card required, and a free plan to start on.",
-        "start_free_trial": "Get WisperBot free",
+        "start_free_trial": "Get Cerqle free",
         "talk_to_sales": "Talk to sales",
         "checkout_unavailable": "Checkout Unavailable",
         "checkout_failed": "Checkout Failed",
@@ -3960,18 +3960,18 @@
         "ready_to_try_desc": "Kick off your free trial — no card required."
     },
     "use_cases": {
-        "head_title": "Use Cases — WisperBot for Every Industry",
-        "meta_desc": "From online stores to clinics and classrooms, see how teams use WisperBot to automate conversations, win more sales and keep customers close.",
+        "head_title": "Use Cases — Cerqle for Every Industry",
+        "meta_desc": "From online stores to clinics and classrooms, see how teams use Cerqle to automate conversations, win more sales and keep customers close.",
         "hero_title": "Built for the way your industry actually talks",
-        "hero_subtitle": "See how teams in every sector put WisperBot to work — automating conversations, driving sales and keeping customers for the long haul.",
-        "start_free_trial": "Get WisperBot free",
+        "hero_subtitle": "See how teams in every sector put Cerqle to work — automating conversations, driving sales and keeping customers for the long haul.",
+        "start_free_trial": "Get Cerqle free",
         "show_less": "Show less",
         "see_details": "See details",
         "how_it_works": "How it works",
         "up_and_running": "Live in minutes, whatever you sell",
         "view_pricing": "See pricing",
         "cta_title": "Put your industry on autopilot",
-        "cta_subtitle": "Thousands of teams already grow faster on WisperBot conversations. You are next.",
+        "cta_subtitle": "Thousands of teams already grow faster on Cerqle conversations. You are next.",
         "stat_open_rate": "Chat open rate",
         "stat_more_replies": "More replies than email",
         "stat_response_time": "Average first reply",
@@ -4036,7 +4036,7 @@
     },
     "integrations_page": {
         "cta_title": "Need something custom?",
-        "cta_subtitle": "Tap our REST API and webhooks to wire WisperBot into anything — or just talk to our team."
+        "cta_subtitle": "Tap our REST API and webhooks to wire Cerqle into anything — or just talk to our team."
     },
     "install": {
         "run": "Run"
@@ -4047,7 +4047,7 @@
     "branding": {
         "favicon_url": "Favicon Url"
     },
-    "wisperbot": {
+    "cerqle": {
         "sidebar": {
             "scroll": {
                 "admin": "Admin",

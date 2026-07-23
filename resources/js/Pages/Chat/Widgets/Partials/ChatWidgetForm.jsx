@@ -57,7 +57,7 @@ export default function ChatWidgetForm({ widget = null, chatbots = [], canUseCus
         primary_color: widget?.primary_color ?? '#ff762e',
         position: widget?.position ?? 'bottom_right',
         launcher_text: widget?.launcher_text ?? '',
-        footer_company_name: widget?.footer_company_name ?? 'WisperBot',
+        footer_company_name: widget?.footer_company_name ?? 'Cerqle',
         launcher_logo: null,
         remove_launcher_logo: false,
         launcher_logo_url: widget?.launcher_logo_url ?? null,
@@ -129,14 +129,14 @@ export default function ChatWidgetForm({ widget = null, chatbots = [], canUseCus
                         <Field label="Launcher label" hint="Optional text next to the bubble.">
                             <input className={inputCls} value={data.launcher_text} onChange={(e) => setData('launcher_text', e.target.value)} placeholder="Chat with us" />
                         </Field>
-                        <Field label="Footer company name" hint="Shown to visitors as “Powered by {Company name}”. Leave as WisperBot to use the default.">
+                        <Field label="Footer company name" hint="Shown to visitors as “Powered by {Company name}”. Leave as Cerqle to use the default.">
                             <input className={inputCls} value={data.footer_company_name} onChange={(e) => setData('footer_company_name', e.target.value)} placeholder="Your company name" />
                         </Field>
                         <Field
                             label="Custom launcher icon — Pro feature"
                             hint={canUseCustomLauncherLogo
                                 ? 'Optional. Upload a square PNG, JPG, WebP or GIF (max 2 MB).'
-                                : 'Free workspaces use the default WisperBot icon. Upgrade to Pro to use your own launcher icon.'}
+                                : 'Free workspaces use the default Cerqle icon. Upgrade to Pro to use your own launcher icon.'}
                         >
                             {canUseCustomLauncherLogo ? (
                                 <>
@@ -151,7 +151,7 @@ export default function ChatWidgetForm({ widget = null, chatbots = [], canUseCus
                             ) : (
                                 <div className="flex min-h-10 items-center gap-2 rounded-lg border border-dashed border-neutral-300 bg-neutral-50 px-3 text-sm text-neutral-500 dark:border-neutral-700 dark:bg-neutral-800/50 dark:text-neutral-400">
                                     <Lock className="h-4 w-4 shrink-0" />
-                                    Upgrade to Pro to replace the default WisperBot icon
+                                    Upgrade to Pro to replace the default Cerqle icon
                                 </div>
                             )}
                         </Field>
@@ -266,7 +266,7 @@ function WidgetPreview({ data }) {
                 <span className="flex-1 text-[13px] text-neutral-400">Type your message…</span>
                 <span className="flex h-8 w-8 items-center justify-center rounded-full text-white" style={{ background: color }}><Send className="h-4 w-4" /></span>
             </div>
-            <div className="border-t border-neutral-100 bg-white py-1.5 text-center text-[10px] text-neutral-400">Powered by <b className="font-semibold text-neutral-600">{data.footer_company_name || 'WisperBot'}</b></div>
+            <div className="border-t border-neutral-100 bg-white py-1.5 text-center text-[10px] text-neutral-400">Powered by <b className="font-semibold text-neutral-600">{data.footer_company_name || 'Cerqle'}</b></div>
         </div>
     );
 }

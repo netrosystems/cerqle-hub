@@ -1026,7 +1026,7 @@
     },
     "open_menu": "Открыть меню",
     "app": {
-        "name": "WisperBot"
+        "name": "Cerqle"
     },
     "impersonation": {
         "return_to_admin": "Вернуться в панель администратора",
@@ -1636,7 +1636,7 @@
         "step2_title": "2. Запустите обработчики очередей",
         "step2_desc": "Фоновые задания — кампании, сообщения, публикации в соцсетях — выполняются через очереди. Запустите постоянный воркер, а в продакшене используйте Supervisor, чтобы он поддерживал процесс и автоматически перезапускал его.",
         "supervisor_title": "Конфигурация Supervisor",
-        "supervisor_desc": "Сохраните как \/etc\/supervisor\/conf.d\/wisperbot-worker.conf, затем выполните: supervisorctl reread && supervisorctl update.",
+        "supervisor_desc": "Сохраните как \/etc\/supervisor\/conf.d\/cerqle-worker.conf, затем выполните: supervisorctl reread && supervisorctl update.",
         "step3_title": "3. Проверьте",
         "step3_desc": "Выполните эти команды, чтобы убедиться, что планировщик и очередь настроены правильно.",
         "verify_run": "Немедленно запустить все задачи, срок которых наступил:",
@@ -4047,7 +4047,7 @@
     "37": {
         "4220": "4220"
     },
-    "wisperbot": {
+    "cerqle": {
         "sidebar": {
             "scroll": {
                 "admin": "Admin",

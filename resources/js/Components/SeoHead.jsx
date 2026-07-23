@@ -15,7 +15,7 @@ import { Head } from '@inertiajs/react';
  *  - jsonLd       object|array  one or more JSON-LD graphs (optional)
  */
 export default function SeoHead({ title, description, keywords, image, canonical, jsonLd }) {
-    const appName = import.meta.env.VITE_APP_NAME || 'WisperBot';
+    const appName = import.meta.env.VITE_APP_NAME || 'Cerqle';
     const fullTitle = title || appName;
     const origin = typeof window !== 'undefined' ? window.location.origin : '';
     const url =
@@ -25,7 +25,7 @@ export default function SeoHead({ title, description, keywords, image, canonical
     // Fall back to the brand icon when a page doesn't supply its own og:image.
     // A page-provided `image` is assumed wide (2:1), so it gets a large card;
     // the square brand fallback uses the standard summary card.
-    const ogImage = image || `${origin}/wisperbot-icon-512.png`;
+    const ogImage = image || `${origin}/cerqle-icon.svg`;
     const twitterCard = image ? 'summary_large_image' : 'summary';
 
     const graphs = jsonLd ? (Array.isArray(jsonLd) ? jsonLd : [jsonLd]) : [];

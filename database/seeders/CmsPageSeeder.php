@@ -17,7 +17,7 @@ class CmsPageSeeder extends Seeder
      */
     public function run(): void
     {
-        $app = config('app.name', 'WisperBot');
+        $app = config('app.name', 'Cerqle');
 
         $notice = '<aside class="cms-notice">'
             .'<strong>Template notice.</strong> This is placeholder copy. '

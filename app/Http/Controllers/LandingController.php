@@ -118,4 +118,17 @@ class LandingController extends Controller
             'landing'     => LandingPageController::getPublicSettings(),
         ]);
     }
+
+    public function cerqlePage(string $slug): Response|RedirectResponse
+    {
+        if ($redirect = $this->landingDisabledRedirect()) {
+            return $redirect;
+        }
+
+        return Inertia::render('marketing/CerqlePage', [
+            'canRegister' => Route::has('register'),
+            'landing'     => LandingPageController::getPublicSettings(),
+            'slug'        => $slug,
+        ]);
+    }
 }

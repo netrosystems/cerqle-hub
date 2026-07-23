@@ -69,7 +69,7 @@ use Illuminate\Support\Str;
 
 /**
  * Comprehensive, realistic demo dataset for a single richly-populated client
- * (SpaGreen Wellness — client@spagreen.net) covering every module + feature,
+ * (Cerqle Demo — client@cerqle.net) covering every module + feature,
  * plus a couple of lighter secondary clients so the admin client list looks real.
  *
  * Idempotent: keyed on natural unique values and guarded by existence checks, so
@@ -99,7 +99,7 @@ class DemoSeeder extends Seeder
 
     public function run(): void
     {
-        $this->command?->info('Seeding comprehensive demo data for SpaGreen Wellness…');
+        $this->command?->info('Seeding comprehensive demo data for Cerqle Demo…');
 
         $this->seedPrimaryClient();
         $this->seedTeam();
@@ -121,7 +121,7 @@ class DemoSeeder extends Seeder
         $this->seedIntegrationsAudit();
         $this->seedSecondaryClients();
 
-        $this->command?->info('Demo data complete. Login: client@spagreen.net / 12345678');
+        $this->command?->info('Demo data complete. Login: client@cerqle.net / 12345678');
     }
 
     /* ───────────────────────────── helpers ──────────────────────────── */
@@ -145,14 +145,14 @@ class DemoSeeder extends Seeder
     private function seedPrimaryClient(): void
     {
         $this->client = Client::updateOrCreate(
-            ['email' => 'client@spagreen.net'],
+            ['email' => 'client@cerqle.net'],
             [
-                'name' => 'SpaGreen Wellness',
+                'name' => 'Cerqle Demo',
                 'status' => Client::STATUS_ACTIVE,
                 'phone' => '+1 (415) 555-0142',
                 'address' => "1280 Market Street, Suite 400\nSan Francisco, CA 94102\nUnited States",
                 'tagline' => 'Relax. Restore. Reconnect.',
-                'support_email' => 'hello@spagreen.net',
+                'support_email' => 'hello@cerqle.net',
                 'primary_color' => '#0E7C5A',
                 'base_currency' => 'USD',
                 'currency_symbol' => '$',
@@ -161,7 +161,7 @@ class DemoSeeder extends Seeder
         );
 
         $this->admin = User::updateOrCreate(
-            ['email' => 'client@spagreen.net'],
+            ['email' => 'client@cerqle.net'],
             [
                 'name' => 'Olivia Bennett',
                 'password' => '12345678',
@@ -185,7 +185,7 @@ class DemoSeeder extends Seeder
 
         // Give the workspace a proper brand name.
         Workspace::whereKey($this->workspaceId)->update([
-            'name' => 'SpaGreen Wellness',
+            'name' => 'Cerqle Demo',
             'currency_code' => 'USD',
             'default_locale' => 'en',
         ]);
@@ -194,9 +194,9 @@ class DemoSeeder extends Seeder
     private function seedTeam(): void
     {
         $team = [
-            ['handle' => 'marcus', 'name' => 'Marcus Reed', 'email' => 'marcus@spagreen.net', 'role' => User::CLIENT_ROLE_STAFF],
-            ['handle' => 'priya', 'name' => 'Priya Sharma', 'email' => 'priya@spagreen.net', 'role' => User::CLIENT_ROLE_STAFF],
-            ['handle' => 'daniel', 'name' => 'Daniel Okafor', 'email' => 'daniel@spagreen.net', 'role' => User::CLIENT_ROLE_STAFF],
+            ['handle' => 'marcus', 'name' => 'Marcus Reed', 'email' => 'marcus@cerqle.net', 'role' => User::CLIENT_ROLE_STAFF],
+            ['handle' => 'priya', 'name' => 'Priya Sharma', 'email' => 'priya@cerqle.net', 'role' => User::CLIENT_ROLE_STAFF],
+            ['handle' => 'daniel', 'name' => 'Daniel Okafor', 'email' => 'daniel@cerqle.net', 'role' => User::CLIENT_ROLE_STAFF],
         ];
 
         foreach ($team as $member) {
@@ -264,8 +264,8 @@ class DemoSeeder extends Seeder
                     'currency_code' => 'USD',
                     'status' => 'succeeded',
                     'tax_amount_cents' => 817,
-                    'invoice_path' => 'invoices/spagreen-'.$when->format('Y-m').'.pdf',
-                    'payload' => ['brand' => 'visa', 'last4' => '4242', 'description' => 'SpaGreen Wellness — Business plan'],
+                    'invoice_path' => 'invoices/cerqle-'.$when->format('Y-m').'.pdf',
+                    'payload' => ['brand' => 'visa', 'last4' => '4242', 'description' => 'Cerqle Demo — Business plan'],
                 ]);
                 $this->bk($tx, $when);
             }
@@ -440,33 +440,33 @@ class DemoSeeder extends Seeder
             ['workspace_id' => $this->workspaceId, 'channel' => 'whatsapp', 'phone_number_id' => $this->waPhoneNumberId],
             [
                 'provider' => 'meta',
-                'display_name' => 'SpaGreen Wellness',
+                'display_name' => 'Cerqle Demo',
                 'business_account_id' => '102938475610293',
                 'credentials' => ['system_user_token' => 'DEMO_WA_SYSTEM_TOKEN', 'phone_number_id' => $this->waPhoneNumberId],
                 'status' => 'active',
-                'meta_json' => ['phone_number_id' => $this->waPhoneNumberId, 'verified_name' => 'SpaGreen Wellness'],
+                'meta_json' => ['phone_number_id' => $this->waPhoneNumberId, 'verified_name' => 'Cerqle Demo'],
             ]
         );
 
         $this->channels['instagram'] = ChannelAccount::firstOrCreate(
-            ['workspace_id' => $this->workspaceId, 'channel' => 'instagram', 'display_name' => '@spagreenwellness'],
+            ['workspace_id' => $this->workspaceId, 'channel' => 'instagram', 'display_name' => '@cerqlewellness'],
             [
                 'provider' => 'meta',
                 'business_account_id' => '17841400000111222',
                 'credentials' => ['access_token' => 'DEMO_IG_TOKEN', 'instagram_account_id' => '17841400000111222'],
                 'status' => 'active',
-                'meta_json' => ['instagram_page_id' => '556677889900112', 'instagram_account_id' => '17841400000111222', 'username' => 'spagreenwellness'],
+                'meta_json' => ['instagram_page_id' => '556677889900112', 'instagram_account_id' => '17841400000111222', 'username' => 'cerqlewellness'],
             ]
         );
 
         $this->channels['messenger'] = ChannelAccount::firstOrCreate(
-            ['workspace_id' => $this->workspaceId, 'channel' => 'messenger', 'display_name' => 'SpaGreen Wellness (Facebook)'],
+            ['workspace_id' => $this->workspaceId, 'channel' => 'messenger', 'display_name' => 'Cerqle Demo (Facebook)'],
             [
                 'provider' => 'meta',
                 'business_account_id' => '556677889900112',
                 'credentials' => ['page_access_token' => 'DEMO_MSGR_TOKEN', 'page_id' => '556677889900112'],
                 'status' => 'active',
-                'meta_json' => ['page_id' => '556677889900112', 'page_name' => 'SpaGreen Wellness'],
+                'meta_json' => ['page_id' => '556677889900112', 'page_name' => 'Cerqle Demo'],
             ]
         );
     }
@@ -480,9 +480,9 @@ class DemoSeeder extends Seeder
             ['workspace_id' => $this->workspaceId, 'waba_id' => $wabaId],
             [
                 'credentials' => ['system_user_token' => 'DEMO_WA_SYSTEM_TOKEN'],
-                'webhook_verify_token' => 'spagreen-verify-'.Str::random(24),
+                'webhook_verify_token' => 'cerqle-verify-'.Str::random(24),
                 'status' => 'active',
-                'meta_json' => ['business_name' => 'SpaGreen Wellness', 'timezone' => 'America/Los_Angeles'],
+                'meta_json' => ['business_name' => 'Cerqle Demo', 'timezone' => 'America/Los_Angeles'],
             ]
         );
 
@@ -491,7 +491,7 @@ class DemoSeeder extends Seeder
             [
                 'waba_id_fk' => $waba->id,
                 'display_phone' => '+1 415-555-0142',
-                'verified_name' => 'SpaGreen Wellness',
+                'verified_name' => 'Cerqle Demo',
                 'quality_rating' => 'GREEN',
                 'messaging_limit_tier' => 'TIER_10K',
                 'code_verification_status' => 'VERIFIED',
@@ -508,13 +508,13 @@ class DemoSeeder extends Seeder
             [
                 'phone_number_id' => $this->waPhoneNumberId,
                 'display_phone' => '+1 415-555-0142',
-                'prefilled_message' => "Hi SpaGreen! I'd like to book an appointment.",
+                'prefilled_message' => "Hi Cerqle Demo! I'd like to book an appointment.",
                 'greeting_message' => '👋 Hi there! Need help booking a treatment? Chat with us on WhatsApp.',
-                'agent_name' => 'SpaGreen Concierge',
+                'agent_name' => 'Cerqle Demo Concierge',
                 'agent_avatar_color' => '#0E7C5A',
                 'button_color' => '#25D366',
                 'position' => 'bottom_right',
-                'allowed_domains' => ['spagreen.net', 'www.spagreen.net'],
+                'allowed_domains' => ['cerqle.net', 'www.cerqle.net'],
                 'working_hours_json' => ['mon_fri' => ['09:00', '19:00'], 'sat' => ['10:00', '17:00'], 'sun' => 'closed'],
             ]
         );
@@ -527,7 +527,7 @@ class DemoSeeder extends Seeder
                 'name' => 'appointment_reminder', 'category' => 'UTILITY', 'status' => 'APPROVED',
                 'meta_template_id' => '1462738291029384',
                 'components' => [
-                    ['type' => 'BODY', 'text' => 'Hi {{1}}, a friendly reminder of your {{2}} appointment at SpaGreen on {{3}}. Reply CONFIRM to keep it or RESCHEDULE to change.', 'example' => ['body_text' => [['Emma', 'Deep Tissue Massage', 'Fri 27 Jun, 2:00 PM']]]],
+                    ['type' => 'BODY', 'text' => 'Hi {{1}}, a friendly reminder of your {{2}} appointment at Cerqle Demo on {{3}}. Reply CONFIRM to keep it or RESCHEDULE to change.', 'example' => ['body_text' => [['Emma', 'Deep Tissue Massage', 'Fri 27 Jun, 2:00 PM']]]],
                     ['type' => 'BUTTONS', 'buttons' => [
                         ['type' => 'QUICK_REPLY', 'text' => 'Confirm'],
                         ['type' => 'QUICK_REPLY', 'text' => 'Reschedule'],
@@ -540,7 +540,7 @@ class DemoSeeder extends Seeder
                 'components' => [
                     ['type' => 'HEADER', 'format' => 'TEXT', 'text' => 'Booking Confirmed ✅'],
                     ['type' => 'BODY', 'text' => "Thanks {{1}}! Your {{2}} is booked for {{3}}. We can't wait to pamper you. See you soon!", 'example' => ['body_text' => [['Sophia', 'Hot Stone Facial', 'Sat 28 Jun, 11:30 AM']]]],
-                    ['type' => 'FOOTER', 'text' => 'SpaGreen Wellness · 1280 Market St, SF'],
+                    ['type' => 'FOOTER', 'text' => 'Cerqle Demo · 1280 Market St, SF'],
                 ],
             ],
             [
@@ -548,9 +548,9 @@ class DemoSeeder extends Seeder
                 'meta_template_id' => '1462738291029386',
                 'components' => [
                     ['type' => 'HEADER', 'format' => 'IMAGE', 'example' => ['header_handle' => ['https://loremflickr.com/1080/608/spa,wellness?lock=77']]],
-                    ['type' => 'BODY', 'text' => 'Welcome to SpaGreen, {{1}}! 🌿 Enjoy 20% off your first treatment with code WELCOME20. Valid for 14 days.', 'example' => ['body_text' => [['Liam']]]],
+                    ['type' => 'BODY', 'text' => 'Welcome to Cerqle Demo, {{1}}! 🌿 Enjoy 20% off your first treatment with code WELCOME20. Valid for 14 days.', 'example' => ['body_text' => [['Liam']]]],
                     ['type' => 'BUTTONS', 'buttons' => [
-                        ['type' => 'URL', 'text' => 'Book Now', 'url' => 'https://spagreen.net/book'],
+                        ['type' => 'URL', 'text' => 'Book Now', 'url' => 'https://cerqle.net/book'],
                     ]],
                 ],
             ],
@@ -560,7 +560,7 @@ class DemoSeeder extends Seeder
                 'components' => [
                     ['type' => 'BODY', 'text' => 'Hi {{1}}, we hope you loved your visit! Would you mind leaving us a quick review? It means the world to our therapists. 💚', 'example' => ['body_text' => [['Emma']]]],
                     ['type' => 'BUTTONS', 'buttons' => [
-                        ['type' => 'URL', 'text' => 'Leave a Review', 'url' => 'https://g.page/spagreen/review'],
+                        ['type' => 'URL', 'text' => 'Leave a Review', 'url' => 'https://g.page/cerqle/review'],
                     ]],
                 ],
             ],
@@ -575,7 +575,7 @@ class DemoSeeder extends Seeder
                 'name' => 'otp_verification', 'category' => 'AUTHENTICATION', 'status' => 'APPROVED',
                 'meta_template_id' => '1462738291029388',
                 'components' => [
-                    ['type' => 'BODY', 'text' => '{{1}} is your SpaGreen verification code. It expires in 10 minutes.', 'example' => ['body_text' => [['483920']]]],
+                    ['type' => 'BODY', 'text' => '{{1}} is your Cerqle Demo verification code. It expires in 10 minutes.', 'example' => ['body_text' => [['483920']]]],
                 ],
             ],
             [
@@ -606,18 +606,18 @@ class DemoSeeder extends Seeder
     {
         $rules = [
             ['trigger_type' => 'welcome', 'match_mode' => 'contains', 'keywords' => [], 'response_kind' => 'text', 'priority' => 1,
-                'payload_json' => ['text' => "👋 Welcome to *SpaGreen Wellness*! How can we help you relax today?\n\n• Type *BOOK* to make an appointment\n• Type *PRICES* for our treatment menu\n• Type *HOURS* for opening times\n• Type *HUMAN* to chat with our team"]],
+                'payload_json' => ['text' => "👋 Welcome to *Cerqle Demo*! How can we help you relax today?\n\n• Type *BOOK* to make an appointment\n• Type *PRICES* for our treatment menu\n• Type *HOURS* for opening times\n• Type *HUMAN* to chat with our team"]],
             ['trigger_type' => 'keyword', 'match_mode' => 'exact', 'keywords' => ['prices', 'price', 'menu', 'cost'], 'response_kind' => 'text', 'priority' => 2,
-                'payload_json' => ['text' => "🌿 *SpaGreen Treatment Menu*\n\n• Swedish Massage (60 min) — $95\n• Deep Tissue Massage (60 min) — $120\n• Hot Stone Facial (75 min) — $135\n• Aromatherapy Ritual (90 min) — $160\n• Bridal Glow Package — from $290\n\nMembers save 15%. Reply *BOOK* to reserve."]],
+                'payload_json' => ['text' => "🌿 *Cerqle Demo Treatment Menu*\n\n• Swedish Massage (60 min) — $95\n• Deep Tissue Massage (60 min) — $120\n• Hot Stone Facial (75 min) — $135\n• Aromatherapy Ritual (90 min) — $160\n• Bridal Glow Package — from $290\n\nMembers save 15%. Reply *BOOK* to reserve."]],
             ['trigger_type' => 'keyword', 'match_mode' => 'contains', 'keywords' => ['hours', 'open', 'opening', 'timing'], 'response_kind' => 'text', 'priority' => 3,
                 'payload_json' => ['text' => "🕐 *Opening Hours*\nMon–Fri: 9:00 AM – 7:00 PM\nSaturday: 10:00 AM – 5:00 PM\nSunday: Closed\n\n1280 Market Street, Suite 400, San Francisco."]],
             ['trigger_type' => 'keyword', 'match_mode' => 'contains', 'keywords' => ['book', 'booking', 'appointment', 'reserve'], 'response_kind' => 'text', 'priority' => 4,
-                'payload_json' => ['text' => "📅 Wonderful! You can book instantly here: https://spagreen.net/book\n\nOr tell me the treatment and your preferred day & time, and I'll check availability for you."]],
+                'payload_json' => ['text' => "📅 Wonderful! You can book instantly here: https://cerqle.net/book\n\nOr tell me the treatment and your preferred day & time, and I'll check availability for you."]],
             ['trigger_type' => 'keyword', 'match_mode' => 'contains', 'keywords' => ['human', 'agent', 'staff', 'someone'], 'response_kind' => 'text', 'priority' => 5,
                 'payload_json' => ['text' => '👤 Connecting you with our front desk. One of our team will be with you shortly — usually within a few minutes during opening hours. 💚']],
             ['trigger_type' => 'out_of_hours', 'match_mode' => 'contains', 'keywords' => [], 'response_kind' => 'text', 'priority' => 10,
                 'schedule_json' => ['days' => [1, 2, 3, 4, 5], 'start' => '09:00', 'end' => '19:00', 'timezone' => 'America/Los_Angeles'],
-                'payload_json' => ['text' => "🌙 Thanks for messaging SpaGreen! We're currently closed but your message is safe with us. We'll reply when we reopen. For instant booking visit https://spagreen.net/book"]],
+                'payload_json' => ['text' => "🌙 Thanks for messaging Cerqle Demo! We're currently closed but your message is safe with us. We'll reply when we reopen. For instant booking visit https://cerqle.net/book"]],
         ];
 
         foreach ($rules as $rule) {
@@ -633,10 +633,10 @@ class DemoSeeder extends Seeder
     private function seedInbox(): void
     {
         $canned = [
-            ['booking', "Hi! You can book online any time at https://spagreen.net/book 🌿 Just let me know if you'd like me to reserve a slot for you."],
+            ['booking', "Hi! You can book online any time at https://cerqle.net/book 🌿 Just let me know if you'd like me to reserve a slot for you."],
             ['hours', "We're open Mon–Fri 9am–7pm, Sat 10am–5pm, and closed Sundays. 💚"],
             ['prices', "Here's our menu: Swedish $95 · Deep Tissue $120 · Hot Stone Facial $135 · Aromatherapy $160. Members save 15%!"],
-            ['thanks', "Thank you so much for choosing SpaGreen — we can't wait to see you! 🌸"],
+            ['thanks', "Thank you so much for choosing Cerqle Demo — we can't wait to see you! 🌸"],
             ['directions', "We're at 1280 Market Street, Suite 400, San Francisco. Parking is available in the building garage."],
             ['cancellation', 'No problem! Our policy allows free changes up to 24 hours before your appointment. Would you like to reschedule?'],
             ['membership', 'Our Gold Membership is $79/mo and includes one treatment monthly plus 15% off everything. Want me to send the details?'],
@@ -700,7 +700,7 @@ class DemoSeeder extends Seeder
             ]],
             ['James', 'instagram', 'open', 'bot', null, 1, ['Product Question'], null, [
                 ['in', 'text', 'do you sell the lavender oil you used last time?', 'read', 'human', null],
-                ['out', 'text', 'Hi James! 🌿 Yes — our Lavender Calm Body Oil is $32 in our boutique: https://spagreen.net/shop/lavender-oil', 'delivered', 'bot', null],
+                ['out', 'text', 'Hi James! 🌿 Yes — our Lavender Calm Body Oil is $32 in our boutique: https://cerqle.net/shop/lavender-oil', 'delivered', 'bot', null],
             ]],
             ['William', 'whatsapp', 'open', 'human', 'marcus', 2, ['Follow-up'], 'Lapsed customer — last visit Dec. Win-back opportunity.', [
                 ['in', 'text', "Hi, it's been a while! Do you still have my membership on file?", 'read', 'human', null],
@@ -726,12 +726,12 @@ class DemoSeeder extends Seeder
             ]],
             ['Ethan', 'messenger', 'open', 'human', 'priya', 1, ['Complaint', 'Urgent'], 'Unhappy about a late start last visit — handle with care.', [
                 ['in', 'text', 'My last appointment started 25 minutes late and felt rushed. Not great honestly.', 'read', 'human', null],
-                ['out', 'text', "I'm so sorry Ethan, that's not the SpaGreen standard. 🙏 I'd like to make it right — may I offer you a complimentary 75-minute session with our lead therapist?", 'read', 'human', 'priya'],
+                ['out', 'text', "I'm so sorry Ethan, that's not the Cerqle Demo standard. 🙏 I'd like to make it right — may I offer you a complimentary 75-minute session with our lead therapist?", 'read', 'human', 'priya'],
                 ['in', 'text', 'That would actually be lovely, thank you.', 'delivered', 'human', null],
             ]],
             ['Olivia', 'whatsapp', 'resolved', 'human', 'marcus', 10, ['Resolved'], null, [
                 ['in', 'text', 'Do you have gift cards?', 'read', 'human', null],
-                ['out', 'text', 'We do! 🎁 Digital gift cards from $50, redeemable on any treatment or product: https://spagreen.net/gift', 'read', 'human', 'marcus'],
+                ['out', 'text', 'We do! 🎁 Digital gift cards from $50, redeemable on any treatment or product: https://cerqle.net/gift', 'read', 'human', 'marcus'],
                 ['in', 'text', 'Bought one, thanks!', 'read', 'human', null],
             ]],
         ];
@@ -846,7 +846,7 @@ class DemoSeeder extends Seeder
             'A 60-minute Swedish massage is $95, and members save 15%. Would you like to book?',
             'Absolutely! Our Couples Aromatherapy Ritual is perfect for two. Shall I check availability?',
             "We're open Sat 10am–5pm and closed Sundays 💚",
-            'Yes! Digital gift cards start at $50: https://spagreen.net/gift',
+            'Yes! Digital gift cards start at $50: https://cerqle.net/gift',
             'We do — there’s a parking garage in our building, validated for guests. 🚗',
             'Of course! Just let me know your new preferred day and time and I’ll sort it out.',
             'Yes! Our Gold membership is $79/mo and includes a monthly treatment plus 15% off everything.',
@@ -955,14 +955,14 @@ class DemoSeeder extends Seeder
         );
 
         $kb = AiKnowledgeBase::firstOrCreate(
-            ['workspace_id' => $this->workspaceId, 'name' => 'SpaGreen Services & Policies'],
+            ['workspace_id' => $this->workspaceId, 'name' => 'Cerqle Demo Services & Policies'],
             ['embedding_model' => 'text-embedding-3-small', 'dimensions' => 1536, 'status' => 'active']
         );
 
         $docs = [
-            ['Treatment Menu & Descriptions', "SpaGreen Wellness offers a curated menu of massage, facial and body treatments.\n\nMassages: Swedish (60 min, $95) for relaxation; Deep Tissue (60 min, $120) for muscle tension; Hot Stone (75 min, $140) using heated basalt stones.\n\nFacials: Signature Glow Facial (60 min, $115); Hot Stone Facial (75 min, $135); Anti-Ageing Collagen Facial (90 min, $175).\n\nRituals: Aromatherapy Ritual (90 min, $160); Couples Aromatherapy (90 min, $300 for two).\n\nPackages: Bridal Glow Package from $290 per person; Corporate Wellness afternoons by quote."],
-            ['Membership & Pricing', "SpaGreen offers three memberships.\n\nSilver ($49/mo): 10% off all treatments and products, priority booking.\n\nGold ($79/mo): one 60-minute treatment included monthly, 15% off everything, free birthday add-on.\n\nPlatinum ($129/mo): two treatments included monthly, 20% off, complimentary refreshments, guest passes.\n\nMemberships can be paused once per year and cancelled any time with 30 days notice."],
-            ['Booking & Cancellation Policy', "Appointments can be booked online at spagreen.net/book, via WhatsApp, or by phone.\n\nWe ask for 24 hours notice to change or cancel an appointment. Cancellations within 24 hours are charged 50% of the treatment price. No-shows are charged in full.\n\nPlease arrive 10 minutes early to enjoy our relaxation lounge. Late arrivals may have their treatment shortened to respect the next guest."],
+            ['Treatment Menu & Descriptions', "Cerqle Demo offers a curated menu of massage, facial and body treatments.\n\nMassages: Swedish (60 min, $95) for relaxation; Deep Tissue (60 min, $120) for muscle tension; Hot Stone (75 min, $140) using heated basalt stones.\n\nFacials: Signature Glow Facial (60 min, $115); Hot Stone Facial (75 min, $135); Anti-Ageing Collagen Facial (90 min, $175).\n\nRituals: Aromatherapy Ritual (90 min, $160); Couples Aromatherapy (90 min, $300 for two).\n\nPackages: Bridal Glow Package from $290 per person; Corporate Wellness afternoons by quote."],
+            ['Membership & Pricing', "Cerqle Demo offers three memberships.\n\nSilver ($49/mo): 10% off all treatments and products, priority booking.\n\nGold ($79/mo): one 60-minute treatment included monthly, 15% off everything, free birthday add-on.\n\nPlatinum ($129/mo): two treatments included monthly, 20% off, complimentary refreshments, guest passes.\n\nMemberships can be paused once per year and cancelled any time with 30 days notice."],
+            ['Booking & Cancellation Policy', "Appointments can be booked online at cerqle.net/book, via WhatsApp, or by phone.\n\nWe ask for 24 hours notice to change or cancel an appointment. Cancellations within 24 hours are charged 50% of the treatment price. No-shows are charged in full.\n\nPlease arrive 10 minutes early to enjoy our relaxation lounge. Late arrivals may have their treatment shortened to respect the next guest."],
             ['Product Care & Ingredients FAQ', "Our retail range is vegan, cruelty-free and made with naturally-derived ingredients.\n\nThe Lavender Calm Body Oil ($32) is safe for sensitive skin and pregnancy. The Detox Clay Mask ($28) should be used 1–2 times weekly. Our Soy Wellness Candles ($24) burn for approximately 45 hours.\n\nStore products away from direct sunlight. Patch-test new products 24 hours before full use."],
         ];
         foreach ($docs as $i => [$title, $content]) {
@@ -978,13 +978,13 @@ class DemoSeeder extends Seeder
         }
 
         $bot = AiChatbot::firstOrCreate(
-            ['workspace_id' => $this->workspaceId, 'name' => 'Aria — SpaGreen Concierge'],
+            ['workspace_id' => $this->workspaceId, 'name' => 'Aria — Cerqle Demo Concierge'],
             [
                 'ai_kb_id' => $kb->id,
-                'system_prompt' => "You are Aria, the warm and knowledgeable virtual concierge for SpaGreen Wellness, a premium spa. Help guests with treatments, bookings, memberships, products and policies using the knowledge base. Be calm, friendly and concise. If you can't help, offer to connect them with the team. Never invent prices — use the menu.",
+                'system_prompt' => "You are Aria, the warm and knowledgeable virtual concierge for Cerqle Demo, a premium spa. Help guests with treatments, bookings, memberships, products and policies using the knowledge base. Be calm, friendly and concise. If you can't help, offer to connect them with the team. Never invent prices — use the menu.",
                 'tone' => 'friendly',
                 'max_context_chunks' => 5,
-                'fallback_reply' => 'I want to make sure you get the perfect answer — let me connect you with one of our team. In the meantime, you can book any time at spagreen.net/book 🌿',
+                'fallback_reply' => 'I want to make sure you get the perfect answer — let me connect you with one of our team. In the meantime, you can book any time at cerqle.net/book 🌿',
                 'channels' => ['whatsapp', 'instagram', 'messenger', 'playground'],
                 'enabled' => true,
             ]
@@ -1023,7 +1023,7 @@ class DemoSeeder extends Seeder
                 'nodes' => [
                     ['id' => 'trigger-1', 'type' => 'trigger', 'position' => ['x' => 250, 'y' => 40], 'data' => ['label' => 'Contact Created', 'triggerType' => 'contact.created']],
                     ['id' => 'wait-1', 'type' => 'wait', 'position' => ['x' => 250, 'y' => 170], 'data' => ['nodeType' => 'wait', 'label' => 'Wait', 'configured' => true, 'amount' => 30, 'unit' => 'minutes']],
-                    ['id' => 'send-1', 'type' => 'send_whatsapp', 'position' => ['x' => 250, 'y' => 300], 'data' => ['nodeType' => 'send_whatsapp', 'label' => 'Send WhatsApp', 'configured' => true, 'message' => '🌿 Welcome to SpaGreen, {{contact.first_name}}! Enjoy 20% off your first treatment with code WELCOME20.']],
+                    ['id' => 'send-1', 'type' => 'send_whatsapp', 'position' => ['x' => 250, 'y' => 300], 'data' => ['nodeType' => 'send_whatsapp', 'label' => 'Send WhatsApp', 'configured' => true, 'message' => '🌿 Welcome to Cerqle Demo, {{contact.first_name}}! Enjoy 20% off your first treatment with code WELCOME20.']],
                     ['id' => 'tag-1', 'type' => 'add_tag', 'position' => ['x' => 250, 'y' => 430], 'data' => ['nodeType' => 'add_tag', 'label' => 'Add Tag', 'configured' => true, 'tag' => 'New Lead']],
                 ],
                 'edges' => [
@@ -1052,7 +1052,7 @@ class DemoSeeder extends Seeder
                 'nodes' => [
                     ['id' => 'trigger-1', 'type' => 'trigger', 'position' => ['x' => 250, 'y' => 40], 'data' => ['label' => 'Cart Abandoned', 'triggerType' => 'cart.abandoned']],
                     ['id' => 'wait-1', 'type' => 'wait', 'position' => ['x' => 250, 'y' => 170], 'data' => ['nodeType' => 'wait', 'label' => 'Wait', 'configured' => true, 'amount' => 1, 'unit' => 'hours']],
-                    ['id' => 'send-1', 'type' => 'send_whatsapp', 'position' => ['x' => 250, 'y' => 300], 'data' => ['nodeType' => 'send_whatsapp', 'label' => 'Send WhatsApp', 'configured' => true, 'message' => 'Hi {{contact.first_name}}, you left something in your SpaGreen cart 🛍️ Complete your order and enjoy free shipping today!']],
+                    ['id' => 'send-1', 'type' => 'send_whatsapp', 'position' => ['x' => 250, 'y' => 300], 'data' => ['nodeType' => 'send_whatsapp', 'label' => 'Send WhatsApp', 'configured' => true, 'message' => 'Hi {{contact.first_name}}, you left something in your Cerqle Demo cart 🛍️ Complete your order and enjoy free shipping today!']],
                 ],
                 'edges' => [
                     ['id' => 'e1', 'source' => 'trigger-1', 'target' => 'wait-1'],
@@ -1063,7 +1063,7 @@ class DemoSeeder extends Seeder
                 'name' => 'Win-back Lapsed Clients', 'status' => 'paused', 'trigger_type' => 'contact.tagged', 'trigger_config' => ['tag' => 'Lapsed'], 'run_count' => 18,
                 'nodes' => [
                     ['id' => 'trigger-1', 'type' => 'trigger', 'position' => ['x' => 250, 'y' => 40], 'data' => ['label' => 'Tagged Lapsed', 'triggerType' => 'contact.tagged']],
-                    ['id' => 'send-1', 'type' => 'send_whatsapp', 'position' => ['x' => 250, 'y' => 180], 'data' => ['nodeType' => 'send_whatsapp', 'label' => 'Send WhatsApp', 'configured' => true, 'message' => "We miss you, {{contact.first_name}} 💚 Here's 25% off to welcome you back to SpaGreen."]],
+                    ['id' => 'send-1', 'type' => 'send_whatsapp', 'position' => ['x' => 250, 'y' => 180], 'data' => ['nodeType' => 'send_whatsapp', 'label' => 'Send WhatsApp', 'configured' => true, 'message' => "We miss you, {{contact.first_name}} 💚 Here's 25% off to welcome you back to Cerqle Demo."]],
                 ],
                 'edges' => [['id' => 'e1', 'source' => 'trigger-1', 'target' => 'send-1']],
             ],
@@ -1118,12 +1118,12 @@ class DemoSeeder extends Seeder
     {
         SmsProviderConfig::firstOrCreate(
             ['workspace_id' => $this->workspaceId, 'provider' => 'twilio'],
-            ['credentials' => ['account_sid' => 'ACdemo'.Str::random(20), 'auth_token' => 'demo-token'], 'sender_id' => 'SPAGREEN', 'default' => true]
+            ['credentials' => ['account_sid' => 'ACdemo'.Str::random(20), 'auth_token' => 'demo-token'], 'sender_id' => 'CERQLE', 'default' => true]
         );
 
         WorkspaceSmtpConfig::firstOrCreate(
-            ['workspace_id' => $this->workspaceId, 'username' => 'hello@spagreen.net'],
-            ['host' => 'smtp.mailgun.org', 'port' => 587, 'password' => 'demo-smtp-password', 'encryption' => 'tls', 'from_email' => 'hello@spagreen.net', 'from_name' => 'SpaGreen Wellness', 'is_active' => true]
+            ['workspace_id' => $this->workspaceId, 'username' => 'hello@cerqle.net'],
+            ['host' => 'smtp.mailgun.org', 'port' => 587, 'password' => 'demo-smtp-password', 'encryption' => 'tls', 'from_email' => 'hello@cerqle.net', 'from_name' => 'Cerqle Demo', 'is_active' => true]
         );
 
         // Usage meters for the current month period (YYYYMM).
@@ -1143,14 +1143,14 @@ class DemoSeeder extends Seeder
         $optedInContacts = $this->contacts->where('opt_in_whatsapp', true)->values();
 
         $campaigns = [
-            ['name' => "Mother's Day Spa Package", 'channel' => 'whatsapp', 'status' => 'completed', 'audience_type' => 'segment', 'audience_ref' => 'VIP Members', 'daysAgo' => 38, 'recipients' => 48, 'body' => "💐 Treat the special woman in your life this Mother's Day. Gift a SpaGreen package and she'll thank you forever. Shop now!"],
+            ['name' => "Mother's Day Spa Package", 'channel' => 'whatsapp', 'status' => 'completed', 'audience_type' => 'segment', 'audience_ref' => 'VIP Members', 'daysAgo' => 38, 'recipients' => 48, 'body' => "💐 Treat the special woman in your life this Mother's Day. Gift a Cerqle Demo package and she'll thank you forever. Shop now!"],
             ['name' => 'New Year Wellness Reset', 'channel' => 'whatsapp', 'status' => 'completed', 'audience_type' => 'tag', 'audience_ref' => 'Member', 'daysAgo' => 24, 'recipients' => 60, 'body' => '🌿 New year, new you. Kick off 2026 with our Wellness Reset: 3 treatments for the price of 2. Limited time!'],
             ['name' => 'Summer Glow Email Promotion', 'channel' => 'email', 'status' => 'sending', 'audience_type' => 'segment', 'audience_ref' => 'Email Newsletter Subscribers', 'daysAgo' => 0, 'recipients' => 56, 'body' => 'Get summer-ready with 20% off all facials this month.'],
             ['name' => 'Valentine’s Couples Retreat', 'channel' => 'whatsapp', 'status' => 'completed', 'audience_type' => 'segment', 'audience_ref' => 'VIP Members', 'daysAgo' => 52, 'recipients' => 44, 'body' => '💞 Share the calm this Valentine’s. Book our Couples Aromatherapy Ritual and receive a complimentary glass of bubbly.'],
             ['name' => 'Black Friday Wellness Sale', 'channel' => 'email', 'status' => 'completed', 'audience_type' => 'tag', 'audience_ref' => 'Newsletter', 'daysAgo' => 30, 'recipients' => 54, 'body' => '🖤 Our biggest sale of the year — 30% off all memberships & gift cards this weekend only.'],
-            ['name' => 'Spring Detox SMS Blast', 'channel' => 'sms', 'status' => 'completed', 'audience_type' => 'tag', 'audience_ref' => 'Member', 'daysAgo' => 16, 'recipients' => 40, 'body' => 'SpaGreen Spring Detox is here 🌷 Book a body wrap this week and save 15%. Reply BOOK to reserve.'],
-            ['name' => 'Flash Sale — Aromatherapy Oils', 'channel' => 'sms', 'status' => 'queued', 'audience_type' => 'tag', 'audience_ref' => 'Newsletter', 'daysAgo' => -2, 'recipients' => 0, 'body' => 'SpaGreen flash sale! 30% off all aromatherapy oils for 48h only. Shop: spagreen.net/shop'],
-            ['name' => 'Membership Renewal Reminder', 'channel' => 'whatsapp', 'status' => 'draft', 'audience_type' => 'tag', 'audience_ref' => 'Member', 'daysAgo' => 0, 'recipients' => 0, 'body' => 'Hi {{contact.first_name}}, your SpaGreen membership renews soon. Manage it any time in your account.'],
+            ['name' => 'Spring Detox SMS Blast', 'channel' => 'sms', 'status' => 'completed', 'audience_type' => 'tag', 'audience_ref' => 'Member', 'daysAgo' => 16, 'recipients' => 40, 'body' => 'Cerqle Demo Spring Detox is here 🌷 Book a body wrap this week and save 15%. Reply BOOK to reserve.'],
+            ['name' => 'Flash Sale — Aromatherapy Oils', 'channel' => 'sms', 'status' => 'queued', 'audience_type' => 'tag', 'audience_ref' => 'Newsletter', 'daysAgo' => -2, 'recipients' => 0, 'body' => 'Cerqle Demo flash sale! 30% off all aromatherapy oils for 48h only. Shop: cerqle.net/shop'],
+            ['name' => 'Membership Renewal Reminder', 'channel' => 'whatsapp', 'status' => 'draft', 'audience_type' => 'tag', 'audience_ref' => 'Member', 'daysAgo' => 0, 'recipients' => 0, 'body' => 'Hi {{contact.first_name}}, your Cerqle Demo membership renews soon. Manage it any time in your account.'],
             ['name' => 'Father’s Day Gift Guide', 'channel' => 'email', 'status' => 'draft', 'audience_type' => 'segment', 'audience_ref' => 'Email Newsletter Subscribers', 'daysAgo' => 0, 'recipients' => 0, 'body' => 'Give Dad the gift of calm 🎁 Explore our curated Father’s Day wellness bundles.'],
         ];
 
@@ -1233,9 +1233,9 @@ class DemoSeeder extends Seeder
     private function seedSocial(): void
     {
         $accounts = [
-            ['network' => 'instagram', 'account_id' => '17841400000111222', 'name' => '@spagreenwellness'],
-            ['network' => 'facebook', 'account_id' => '556677889900112', 'name' => 'SpaGreen Wellness'],
-            ['network' => 'linkedin', 'account_id' => 'spagreen-wellness', 'name' => 'SpaGreen Wellness'],
+            ['network' => 'instagram', 'account_id' => '17841400000111222', 'name' => '@cerqlewellness'],
+            ['network' => 'facebook', 'account_id' => '556677889900112', 'name' => 'Cerqle Demo'],
+            ['network' => 'linkedin', 'account_id' => 'cerqle-wellness', 'name' => 'Cerqle Demo'],
         ];
         $accountModels = [];
         foreach ($accounts as $a) {
@@ -1243,7 +1243,7 @@ class DemoSeeder extends Seeder
                 ['workspace_id' => $this->workspaceId, 'network' => $a['network'], 'account_id' => $a['account_id']],
                 [
                     'name' => $a['name'],
-                    'picture_url' => 'https://ui-avatars.com/api/?name=SpaGreen+Wellness&background=0E7C5A&color=ffffff&size=256&bold=true',
+                    'picture_url' => 'https://ui-avatars.com/api/?name=Cerqle Demo+Wellness&background=0E7C5A&color=ffffff&size=256&bold=true',
                     'access_token' => 'DEMO_'.strtoupper($a['network']).'_TOKEN',
                     'token_expires_at' => Carbon::now()->addDays(50),
                     'scopes' => ['pages_manage_posts', 'pages_read_engagement'],
@@ -1257,20 +1257,20 @@ class DemoSeeder extends Seeder
         }
 
         $posts = [
-            ['title' => 'Self-care Sunday', 'body' => "There's no better way to end the week than with a hot stone massage. 🌿 Book your Sunday reset at SpaGreen. #selfcaresunday #spaday", 'status' => 'published', 'daysAgo' => 6, 'networks' => ['instagram', 'facebook'], 'ai' => false],
+            ['title' => 'Self-care Sunday', 'body' => "There's no better way to end the week than with a hot stone massage. 🌿 Book your Sunday reset at Cerqle Demo. #selfcaresunday #spaday", 'status' => 'published', 'daysAgo' => 6, 'networks' => ['instagram', 'facebook'], 'ai' => false],
             ['title' => 'New Aromatherapy Oils', 'body' => 'Our new Lavender Calm Body Oil has landed 💜 Naturally calming, vegan, and perfect for sensitive skin. Available in-spa and online.', 'status' => 'published', 'daysAgo' => 4, 'networks' => ['instagram', 'facebook'], 'ai' => false],
             ['title' => 'Meet the Team — Priya', 'body' => 'Say hello to Priya, our lead therapist with 12 years of experience in deep tissue and aromatherapy. 💚 #meettheteam', 'status' => 'published', 'daysAgo' => 2, 'networks' => ['instagram', 'linkedin'], 'ai' => true],
             ['title' => 'Summer Glow Promo', 'body' => '☀️ Summer Glow is here! 20% off all facials this month. Tap the link in bio to book.', 'status' => 'scheduled', 'daysAgo' => -1, 'networks' => ['instagram', 'facebook'], 'ai' => true],
-            ['title' => 'Corporate Wellness Days', 'body' => 'Bring calm to your team. SpaGreen now offers on-site corporate wellness afternoons. Get in touch for a tailored quote.', 'status' => 'scheduled', 'daysAgo' => -3, 'networks' => ['linkedin'], 'ai' => false],
+            ['title' => 'Corporate Wellness Days', 'body' => 'Bring calm to your team. Cerqle Demo now offers on-site corporate wellness afternoons. Get in touch for a tailored quote.', 'status' => 'scheduled', 'daysAgo' => -3, 'networks' => ['linkedin'], 'ai' => false],
             ['title' => 'Behind the scenes', 'body' => 'A peek inside our relaxation lounge ✨ #spalife', 'status' => 'draft', 'daysAgo' => 0, 'networks' => ['instagram'], 'ai' => false],
             ['title' => 'Failed publish example', 'body' => 'Limited bridal slots for September — DM to reserve! 💍', 'status' => 'failed', 'daysAgo' => 1, 'networks' => ['instagram', 'facebook'], 'ai' => false],
             ['title' => 'Client Love — 5 Star Review', 'body' => '“The most relaxing 90 minutes of my month.” ⭐⭐⭐⭐⭐ Thank you for the kind words! #clientlove', 'status' => 'published', 'daysAgo' => 8, 'networks' => ['instagram', 'facebook'], 'ai' => false],
             ['title' => 'Wellness Tip Tuesday', 'body' => '💧 Tip: drink a glass of water before and after your massage to help flush toxins. #wellnesstip', 'status' => 'published', 'daysAgo' => 10, 'networks' => ['instagram'], 'ai' => true],
             ['title' => 'New Rose Quartz Roller', 'body' => 'Cool, calm, glow ✨ Our new Rose Quartz Facial Roller is now in the boutique.', 'status' => 'published', 'daysAgo' => 12, 'networks' => ['instagram', 'facebook'], 'ai' => false],
             ['title' => 'Mid-week Reset', 'body' => 'Halfway through the week? Treat yourself to a lunchtime express facial. 30 minutes to glow. 🌿', 'status' => 'scheduled', 'daysAgo' => -2, 'networks' => ['instagram', 'facebook'], 'ai' => true],
-            ['title' => 'Gift Card Reminder', 'body' => 'Stuck for a gift? A SpaGreen gift card is always the right size 🎁', 'status' => 'scheduled', 'daysAgo' => -5, 'networks' => ['facebook'], 'ai' => false],
+            ['title' => 'Gift Card Reminder', 'body' => 'Stuck for a gift? A Cerqle Demo gift card is always the right size 🎁', 'status' => 'scheduled', 'daysAgo' => -5, 'networks' => ['facebook'], 'ai' => false],
             ['title' => 'Meet the Team — Marcus', 'body' => 'Marcus runs our front desk and makes sure every visit starts with a smile. 😊 #meettheteam', 'status' => 'draft', 'daysAgo' => 0, 'networks' => ['instagram', 'linkedin'], 'ai' => false],
-            ['title' => 'Hiring — Massage Therapist', 'body' => 'We’re growing! SpaGreen is hiring a licensed massage therapist. Apply via the link in bio.', 'status' => 'published', 'daysAgo' => 14, 'networks' => ['linkedin', 'facebook'], 'ai' => false],
+            ['title' => 'Hiring — Massage Therapist', 'body' => 'We’re growing! Cerqle Demo is hiring a licensed massage therapist. Apply via the link in bio.', 'status' => 'published', 'daysAgo' => 14, 'networks' => ['linkedin', 'facebook'], 'ai' => false],
         ];
 
         foreach ($posts as $pi => $p) {
@@ -1317,9 +1317,9 @@ class DemoSeeder extends Seeder
     private function seedEcommerce(): void
     {
         $store = EcommerceStore::firstOrCreate(
-            ['workspace_id' => $this->workspaceId, 'platform' => 'shopify', 'domain' => 'spagreen-boutique.myshopify.com'],
+            ['workspace_id' => $this->workspaceId, 'platform' => 'shopify', 'domain' => 'cerqle-boutique.myshopify.com'],
             [
-                'name' => 'SpaGreen Boutique',
+                'name' => 'Cerqle Demo Boutique',
                 'credentials' => ['access_token' => 'shpat_demo'.Str::random(24), 'api_key' => 'demo'],
                 'status' => 'connected',
                 'webhook_secret' => Str::random(32),
@@ -1344,7 +1344,7 @@ class DemoSeeder extends Seeder
             ['Gua Sha Stone', 'SG-TOOL-GUA', 22.00, 65, 'tools'],
             ['Herbal Bath Soak', 'SG-BATH-HERB', 26.00, 90, 'bath'],
             ['Gift Card — $100', 'SG-GIFT-100', 100.00, 999, 'gift'],
-            ['SpaGreen Signature Gift Set', 'SG-SET-SIG', 120.00, 30, 'set'],
+            ['Cerqle Demo Signature Gift Set', 'SG-SET-SIG', 120.00, 30, 'set'],
             ['Rose Quartz Facial Roller', 'SG-TOOL-ROSE', 38.00, 44, 'tools'],
             ['Peppermint Foot Balm', 'SG-BALM-PEP', 18.00, 110, 'bath'],
             ['Vitamin C Brightening Serum', 'SG-SERUM-VITC', 52.00, 26, 'skincare'],
@@ -1356,7 +1356,7 @@ class DemoSeeder extends Seeder
             ['Magnesium Bath Flakes', 'SG-BATH-MAG', 29.00, 64, 'bath'],
             ['Hyaluronic Hydra Mist', 'SG-MIST-HYA', 33.00, 41, 'skincare'],
             ['Gift Card — $50', 'SG-GIFT-50', 50.00, 999, 'gift'],
-            ['SpaGreen Deluxe Pamper Box', 'SG-SET-DELUXE', 185.00, 16, 'set'],
+            ['Cerqle Demo Deluxe Pamper Box', 'SG-SET-DELUXE', 185.00, 16, 'set'],
         ];
         // Relevant, always-valid product imagery keyed by category (deterministic via ?lock).
         $catKeyword = [
@@ -1378,7 +1378,7 @@ class DemoSeeder extends Seeder
                     'inventory_quantity' => $inv,
                     'status' => $inv > 0 ? 'active' : 'out_of_stock',
                     'image_url' => 'https://loremflickr.com/600/600/'.$keyword.'?lock='.($i + 1),
-                    'raw' => ['category' => $cat, 'vendor' => 'SpaGreen'],
+                    'raw' => ['category' => $cat, 'vendor' => 'Cerqle Demo'],
                 ]
             );
         }
@@ -1435,7 +1435,7 @@ class DemoSeeder extends Seeder
                     'total' => (float) $prod->price,
                     'currency' => 'USD',
                     'line_items' => [['name' => $prod->name, 'quantity' => 1, 'price' => (float) $prod->price]],
-                    'recovery_url' => 'https://spagreen-boutique.myshopify.com/cart/recover/'.Str::random(20),
+                    'recovery_url' => 'https://cerqle-boutique.myshopify.com/cart/recover/'.Str::random(20),
                     'abandoned_at' => $abandonedAt,
                     'recovery_triggered_at' => $abandonedAt->copy()->addHour(),
                     'recovered_at' => $recovered ? $abandonedAt->copy()->addHours(rand(2, 30)) : null,
@@ -1501,7 +1501,7 @@ class DemoSeeder extends Seeder
                 $reply = SupportReply::create([
                     'ticket_id' => $ticket->id,
                     'user_id' => $who === 'staff' ? null : $this->admin->id,
-                    'author_name' => $who === 'staff' ? 'SpaGreen Support' : $this->admin->name,
+                    'author_name' => $who === 'staff' ? 'Cerqle Demo Support' : $this->admin->name,
                     'is_staff' => $who === 'staff',
                     'message' => $body,
                 ]);
@@ -1511,10 +1511,10 @@ class DemoSeeder extends Seeder
 
         // A few public contact-form submissions (global, not client-scoped).
         ContactMessage::firstOrCreate(['email' => 'partnerships@glowco.com', 'subject' => 'Wholesale enquiry'], [
-            'name' => 'Rachel Kim', 'message' => "Hi, we'd love to stock SpaGreen products in our boutique chain. Who can I speak to?", 'status' => 'new', 'ip_address' => '203.0.113.42',
+            'name' => 'Rachel Kim', 'message' => "Hi, we'd love to stock Cerqle Demo products in our boutique chain. Who can I speak to?", 'status' => 'new', 'ip_address' => '203.0.113.42',
         ]);
         ContactMessage::firstOrCreate(['email' => 'press@wellnessmag.com', 'subject' => 'Feature request'], [
-            'name' => 'Tom Avery', 'message' => "We're writing about top Bay Area spas and would love to feature SpaGreen.", 'status' => 'read', 'ip_address' => '198.51.100.7',
+            'name' => 'Tom Avery', 'message' => "We're writing about top Bay Area spas and would love to feature Cerqle Demo.", 'status' => 'read', 'ip_address' => '198.51.100.7',
         ]);
     }
 
@@ -1523,7 +1523,7 @@ class DemoSeeder extends Seeder
     private function seedWebhooks(): void
     {
         $endpoint = WebhookEndpoint::firstOrCreate(
-            ['user_id' => $this->admin->id, 'url' => 'https://hooks.spagreen.net/incoming/wisperbot'],
+            ['user_id' => $this->admin->id, 'url' => 'https://hooks.cerqle.net/incoming/cerqle'],
             [
                 'secret' => WebhookEndpoint::generateSecret(),
                 'events' => ['message.received', 'message.status', 'conversation.assigned', 'contact.created'],
@@ -1584,7 +1584,7 @@ class DemoSeeder extends Seeder
         );
 
         Invitation::firstOrCreate(
-            ['client_id' => $this->client->id, 'email' => 'sofia@spagreen.net'],
+            ['client_id' => $this->client->id, 'email' => 'sofia@cerqle.net'],
             [
                 'role' => User::ROLE_CLIENT,
                 'client_role' => User::CLIENT_ROLE_STAFF,
@@ -1596,14 +1596,14 @@ class DemoSeeder extends Seeder
 
         // Media library entries.
         $media = [
-            ['spagreen-welcome.jpg', 'image/jpeg', 184320, 'campaign-assets'],
+            ['cerqle-welcome.jpg', 'image/jpeg', 184320, 'campaign-assets'],
             ['summer-glow-banner.png', 'image/png', 240128, 'campaign-assets'],
             ['treatment-menu-2026.pdf', 'application/pdf', 612000, 'documents'],
             ['lavender-oil.jpg', 'image/jpeg', 98304, 'product-images'],
         ];
         foreach ($media as [$file, $mime, $size, $collection]) {
             Media::firstOrCreate(
-                ['path' => 'media/spagreen/'.$file],
+                ['path' => 'media/cerqle/'.$file],
                 ['disk' => 'public', 'filename' => $file, 'mime_type' => $mime, 'size_bytes' => $size, 'collection' => $collection, 'meta' => ['uploaded_by' => $this->admin->name]]
             );
         }
@@ -1614,7 +1614,7 @@ class DemoSeeder extends Seeder
                 ['campaign.launched', 'Launched campaign "New Year Wellness Reset"'],
                 ['template.created', 'Created WhatsApp template "appointment_reminder"'],
                 ['contact.imported', 'Imported 30 contacts from CSV'],
-                ['team.invited', 'Invited sofia@spagreen.net as staff'],
+                ['team.invited', 'Invited sofia@cerqle.net as staff'],
                 ['settings.updated', 'Updated business hours'],
             ];
             foreach ($actions as [$action, $desc]) {

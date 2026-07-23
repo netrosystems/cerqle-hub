@@ -1026,7 +1026,7 @@
     },
     "open_menu": "Open menu",
     "app": {
-        "name": "WisperBot"
+        "name": "Cerqle"
     },
     "impersonation": {
         "return_to_admin": "Return to Admin",
@@ -1636,7 +1636,7 @@
         "step2_title": "2. Run Queue Workers",
         "step2_desc": "Background jobs — campaigns, messages, social posts — run on queues. Start a persistent worker, and use Supervisor in production to keep it alive and restart it automatically.",
         "supervisor_title": "Supervisor configuration",
-        "supervisor_desc": "Save as \/etc\/supervisor\/conf.d\/wisperbot-worker.conf, then run: supervisorctl reread && supervisorctl update.",
+        "supervisor_desc": "Save as \/etc\/supervisor\/conf.d\/cerqle-worker.conf, then run: supervisorctl reread && supervisorctl update.",
         "step3_title": "3. Verify",
         "step3_desc": "Run these commands to confirm the scheduler and queue are wired up correctly.",
         "verify_run": "Trigger all due scheduled tasks immediately:",
@@ -4047,7 +4047,7 @@
     "37": {
         "4220": "4220"
     },
-    "wisperbot": {
+    "cerqle": {
         "sidebar": {
             "scroll": {
                 "admin": "Admin",

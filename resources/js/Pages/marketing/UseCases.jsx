@@ -141,7 +141,7 @@ export default function UseCases({ landing = {}, canRegister }) {
             {/* ── Page hero ── */}
             <section
                 className="relative overflow-hidden py-20 text-center"
-                style={{ background: 'radial-gradient(ellipse 60% 60% at 50% 0%, rgba(255,118,46,0.18) 0%, transparent 70%), #14100c' }}
+                style={{ background: 'radial-gradient(ellipse 60% 60% at 50% 0%, rgba(143,95,167,0.18) 0%, transparent 70%), #281a31' }}
             >
                 <div
                     className="pointer-events-none absolute inset-0"
@@ -164,7 +164,7 @@ export default function UseCases({ landing = {}, canRegister }) {
                         <Reveal delay={260}>
                             <Link
                                 href={route('register')}
-                                className="mt-8 group inline-flex items-center gap-2 rounded-xl bg-gradient-to-b from-brand-500 to-brand-600 px-7 py-3.5 text-base font-bold text-white shadow-[0_10px_30px_-6px_rgba(255,118,46,0.55)] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_16px_40px_-6px_rgba(255,118,46,0.7)]"
+                                className="mt-8 group inline-flex items-center gap-2 rounded-xl bg-gradient-to-b from-brand-500 to-brand-600 px-7 py-3.5 text-base font-bold text-white shadow-[0_10px_30px_-6px_rgba(143,95,167,0.55)] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_16px_40px_-6px_rgba(143,95,167,0.7)]"
                             >
                                 {t('use_cases.start_free_trial')}
                                 <svg className="h-5 w-5 transition-transform duration-200 group-hover:translate-x-1" fill="none" stroke="currentColor" strokeWidth={2.2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" /></svg>
@@ -238,7 +238,7 @@ export default function UseCases({ landing = {}, canRegister }) {
                             <Reveal key={idx} delay={idx * 110} className="group text-center">
                                 <div
                                     className="mx-auto mb-4 h-12 w-12 rounded-full flex items-center justify-center font-bold text-lg text-white bg-gradient-to-br from-brand-400 to-brand-600 transition-transform duration-300 group-hover:scale-110"
-                                    style={{ boxShadow: '0 4px 16px rgba(255,118,46,0.35)' }}
+                                    style={{ boxShadow: '0 4px 16px rgba(143,95,167,0.35)' }}
                                 >
                                     {step.n}
                                 </div>
@@ -253,7 +253,7 @@ export default function UseCases({ landing = {}, canRegister }) {
             {/* ── CTA ── */}
             <section
                 className="py-20"
-                style={{ background: 'radial-gradient(ellipse 60% 80% at 50% 50%, rgba(255,118,46,0.12) 0%, transparent 70%), #14100c' }}
+                style={{ background: 'radial-gradient(ellipse 60% 80% at 50% 50%, rgba(143,95,167,0.12) 0%, transparent 70%), #281a31' }}
             >
                 <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
                     <Reveal as="h2" className="text-3xl font-bold text-white tracking-tight">{t('use_cases.cta_title')}</Reveal>
@@ -262,7 +262,7 @@ export default function UseCases({ landing = {}, canRegister }) {
                         <Reveal delay={180} className="mt-8 flex flex-wrap items-center justify-center gap-4">
                             <Link
                                 href={route('register')}
-                                className="group inline-flex items-center gap-2 rounded-xl bg-gradient-to-b from-brand-500 to-brand-600 px-7 py-3.5 text-base font-bold text-white shadow-[0_10px_30px_-6px_rgba(255,118,46,0.55)] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_16px_40px_-6px_rgba(255,118,46,0.7)]"
+                                className="group inline-flex items-center gap-2 rounded-xl bg-gradient-to-b from-brand-500 to-brand-600 px-7 py-3.5 text-base font-bold text-white shadow-[0_10px_30px_-6px_rgba(143,95,167,0.55)] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_16px_40px_-6px_rgba(143,95,167,0.7)]"
                             >
                                 {t('use_cases.start_free_trial')}
                                 <svg className="h-5 w-5 transition-transform duration-200 group-hover:translate-x-1" fill="none" stroke="currentColor" strokeWidth={2.2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" /></svg>

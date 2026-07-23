@@ -67,7 +67,7 @@ class SmsProviderConfigTest extends TestCase
                     'base_url' => 'http://sms.example.test:8002/api',
                     'username' => 'alaris-user',
                     'password' => 'alaris-password',
-                    'sender_id' => 'WISPERBOT',
+                    'sender_id' => 'CERQLE',
                 ],
             ])
             ->assertSessionHasErrors('credentials.base_url');

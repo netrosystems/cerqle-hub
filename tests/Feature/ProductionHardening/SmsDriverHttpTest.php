@@ -55,7 +55,7 @@ class SmsDriverHttpTest extends TestCase
             'rest.messagebird.com/messages' => Http::response(['id' => 'mb-123'], 201),
         ]);
 
-        $result = (new MessageBirdDriver('key123', 'WisperBot'))->send('+8801712345678', 'Test msg');
+        $result = (new MessageBirdDriver('key123', 'Cerqle'))->send('+8801712345678', 'Test msg');
 
         $this->assertTrue($result->success);
         $this->assertSame('mb-123', $result->messageId);

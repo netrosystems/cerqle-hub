@@ -1,5 +1,5 @@
 /*!
- * WisperBot Website Live-Chat Widget
+ * Cerqle Website Live-Chat Widget
  * Self-contained, dependency-free, rendered inside a Shadow DOM so it never
  * collides with the host site's CSS. Loaded by the per-widget bootstrap served
  * at /widgets/chat/{key}.js, which sets window.__WB_CHAT__ = { key, config }.
@@ -48,7 +48,7 @@
 
   // Identity passed from the client's website (e.g. their logged-in user).
   // Read once here and merged into the session request.
-  function getSettings() { return window.WisperBotSettings || window.wisperBotSettings || {}; }
+  function getSettings() { return window.CerqleSettings || window.cerqleSettings || {}; }
   function identityPayload(extra) {
     var s = getSettings();
     return {
@@ -137,14 +137,14 @@
     if (!open) scheduleInvite();
   }, true);
 
-  // Public API for the host site: WisperBot('open' | 'close' | 'identify', data).
+  // Public API for the host site: Cerqle('open' | 'close' | 'identify', data).
   // `identify`/`update` lets a site push identity after login (SPA) — re-runs the
   // session so the agent's contact gets the name/email/avatar.
-  window.WisperBot = function (action, data) {
+  window.Cerqle = function (action, data) {
     if (action === 'open') { openPanel(); }
     else if (action === 'close') { close(); }
     else if (action === 'identify' || action === 'update') {
-      window.WisperBotSettings = Object.assign({}, getSettings(), data || {});
+      window.CerqleSettings = Object.assign({}, getSettings(), data || {});
       started = false;
       ensureSession().then(startPolling);
     }
@@ -318,7 +318,7 @@
             '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>' +
           '</button>' +
         '</form>' +
-        '<div class="wb-brand">Powered by <b>' + esc(CFG.footer_company_name || 'WisperBot') + '</b></div>' +
+        '<div class="wb-brand">Powered by <b>' + esc(CFG.footer_company_name || 'Cerqle') + '</b></div>' +
       '</div>' +
       '<button class="wb-launcher-invite" type="button" aria-label="Open live chat">' +
         '<span class="wb-invite-card"><strong>' + esc(inviteTitle) + '</strong><small>' + esc(inviteSubtitle) + '</small></span>' +

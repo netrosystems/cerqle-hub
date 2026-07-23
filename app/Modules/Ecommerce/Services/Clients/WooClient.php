@@ -49,7 +49,7 @@ class WooClient implements EcommerceClientInterface
         try {
             foreach (self::WEBHOOK_TOPICS as $topic) {
                 $resp = $this->http()->post('/webhooks', [
-                    'name' => 'WisperBot '.$topic,
+                    'name' => 'Cerqle '.$topic,
                     'topic' => $topic,
                     'delivery_url' => $callbackUrl,
                     'secret' => $this->webhookSecret,

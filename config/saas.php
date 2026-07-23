@@ -9,7 +9,7 @@ return [
     | Used by LandingLayout and email templates.
     | Override these values in config/app.php (app.name) or via .env APP_NAME.
     */
-    'app_name' => env('APP_NAME', 'WisperBot'),
+    'app_name' => env('APP_NAME', 'Cerqle'),
     'tagline' => env('SAAS_TAGLINE', 'Customer messaging on WhatsApp'),
     'support_email' => env('SAAS_SUPPORT_EMAIL', env('MAIL_FROM_ADDRESS', 'support@example.com')),
     // External help/documentation URL shown in the client "Help & Docs" nav
@@ -38,7 +38,7 @@ return [
     |--------------------------------------------------------------------------
     */
     'branding' => [
-        'primary_color' => env('SAAS_PRIMARY_COLOR', '#FF762E'),
+        'primary_color' => env('SAAS_PRIMARY_COLOR', '#8F5FA7'),
         'logo_path' => env('SAAS_LOGO_PATH', null),
     ],
 

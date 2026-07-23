@@ -45,7 +45,7 @@ Route::middleware('throttle:webhooks')->group(function () {
         ->name('webhooks.sms.status')
         ->where('provider', 'twilio|nexmo|messagebird|smsbd|reve|bulksmsbd|sms_dot_bd|mimsms|fast2sms');
 
-    // Alaris documents callback URL templates and providers may call them by
+    // PROSMS documents callback URL templates and providers may call them by
     // either GET or POST. Restrict this flexibility to its dedicated route.
     Route::match(['get', 'post'], 'webhooks/sms/alaris', function (Request $request, SmsStatusWebhookController $controller) {
         return $controller->handle($request, 'alaris');

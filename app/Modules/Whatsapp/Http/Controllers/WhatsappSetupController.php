@@ -51,6 +51,8 @@ class WhatsappSetupController extends Controller
             ]);
         }
 
+        $waba->update(['status' => 'active']);
+
         return back()->with('success', "Synced {$n} phone number(s) from Meta.");
     }
 
@@ -177,6 +179,7 @@ class WhatsappSetupController extends Controller
 
         $rows = CloudApiClient::fetchWabaPhoneNumbers($waba->waba_id, $token);
         $count = 0;
+        $syncedPhoneIds = [];
 
         foreach ($rows as $row) {
             if (empty($row['id'])) {
@@ -189,7 +192,10 @@ class WhatsappSetupController extends Controller
             }
             $this->attachPhoneNumberToWaba($waba, (string) $row['id'], $row);
             $count++;
+            $syncedPhoneIds[] = (string) $row['id'];
         }
+
+        $this->pruneMissingPhoneNumbers($waba, $syncedPhoneIds);
 
         return $count;
     }
@@ -248,5 +254,38 @@ class WhatsappSetupController extends Controller
         }
 
         $account->save();
+    }
+
+    /**
+     * Keep the local WABA phone list aligned with Meta after an explicit sync.
+     * If a number was removed from the Business Account in Meta, leaving it
+     * locally makes Channel Setup show stale "connected" numbers.
+     *
+     * @param  list<string>  $syncedPhoneIds
+     */
+    private function pruneMissingPhoneNumbers(WhatsappBusinessAccount $waba, array $syncedPhoneIds): void
+    {
+        if ($syncedPhoneIds === []) {
+            return;
+        }
+
+        $stalePhoneIds = WhatsappPhoneNumber::where('waba_id_fk', $waba->id)
+            ->whereNotIn('phone_number_id', $syncedPhoneIds)
+            ->pluck('phone_number_id')
+            ->all();
+
+        if ($stalePhoneIds === []) {
+            return;
+        }
+
+        WhatsappPhoneNumber::where('waba_id_fk', $waba->id)
+            ->whereIn('phone_number_id', $stalePhoneIds)
+            ->delete();
+
+        ChannelAccount::where('workspace_id', $waba->workspace_id)
+            ->where('channel', 'whatsapp')
+            ->where('business_account_id', $waba->waba_id)
+            ->whereIn('phone_number_id', $stalePhoneIds)
+            ->delete();
     }
 }

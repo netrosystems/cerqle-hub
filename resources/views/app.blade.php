@@ -26,7 +26,7 @@
         <meta name="csrf-token" content="{{ csrf_token() }}">
         <meta name="vapid-public-key" content="{{ config('webpush.vapid_public_key') }}">
 
-        <title inertia>{{ config('app.name', 'WisperBot') }}</title>
+        <title inertia>{{ config('app.name', 'Cerqle') }}</title>
         @php
             try {
                 $faviconPath = \App\Models\SystemSetting::get('app_favicon_path');
@@ -49,16 +49,13 @@
             <link rel="apple-touch-icon" href="{{ $faviconUrl }}">
         @else
             {{-- Fallback brand icon for browser tabs and mobile home screens. --}}
-            <link rel="icon" href="/favicon.ico" sizes="any">
-            <link rel="icon" type="image/png" href="/wisperbot-icon-512.png">
-            <link rel="apple-touch-icon" href="/wisperbot-icon-512.png">
+            <link rel="icon" type="image/svg+xml" href="/cerqle-icon.svg">
+            <link rel="apple-touch-icon" href="/cerqle-icon.svg">
         @endif
 
         <!-- Fonts -->
         <link rel="preconnect" href="https://fonts.bunny.net">
-        <link href="https://fonts.bunny.net/css?family=space-grotesk:400,500,600,700&display=swap" rel="stylesheet" />
-        {{-- Fraunces: the editorial serif used for display headings on the marketing landing page. --}}
-        <link href="https://fonts.bunny.net/css?family=fraunces:400,400i,500,600,600i,700,700i&display=swap" rel="stylesheet" />
+        <link href="https://fonts.bunny.net/css?family=poppins:400,500,600,700,800&display=swap" rel="stylesheet" />
         {{-- Anek Bangla for Bengali script. The Bengali glyph files are lazy-loaded
              by unicode-range, so they're only fetched when bn text actually renders
              (i.e. html[lang="bn"]); keeping the link unconditional means a client-side

@@ -27,7 +27,7 @@ describe('Sidebar scroll persistence', () => {
         firstNav.scrollTop = 420;
         fireEvent.scroll(firstNav);
 
-        expect(window.sessionStorage.getItem('wisperbot.sidebar.scroll.admin')).toBe('420');
+        expect(window.sessionStorage.getItem('cerqle.sidebar.scroll.admin')).toBe('420');
 
         firstRender.unmount();
         render(<Sidebar scrollKey="admin" navItems={navItems} showCreateButton={false} />);
@@ -36,8 +36,8 @@ describe('Sidebar scroll persistence', () => {
     });
 
     it('keeps admin and client menu positions independent', () => {
-        window.sessionStorage.setItem('wisperbot.sidebar.scroll.admin', '510');
-        window.sessionStorage.setItem('wisperbot.sidebar.scroll.client', '275');
+        window.sessionStorage.setItem('cerqle.sidebar.scroll.admin', '510');
+        window.sessionStorage.setItem('cerqle.sidebar.scroll.client', '275');
 
         const adminRender = render(
             <Sidebar scrollKey="admin" navItems={navItems} showCreateButton={false} />,
@@ -51,7 +51,7 @@ describe('Sidebar scroll persistence', () => {
     });
 
     it('restores the client position when the mobile drawer opens', () => {
-        window.sessionStorage.setItem('wisperbot.sidebar.scroll.client', '330');
+        window.sessionStorage.setItem('cerqle.sidebar.scroll.client', '330');
 
         const { rerender } = render(
             <Sidebar scrollKey="client" navItems={navItems} showCreateButton={false} open={false} />,

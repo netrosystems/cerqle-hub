@@ -14,57 +14,55 @@ export default {
     theme: {
         extend: {
             fontFamily: {
-                sans: ['Space Grotesk', ...defaultTheme.fontFamily.sans],
-                // Editorial serif for marketing landing display headings.
-                display: ['Fraunces', 'Georgia', ...defaultTheme.fontFamily.serif],
+                sans: ['Poppins', ...defaultTheme.fontFamily.sans],
+                display: ['Poppins', ...defaultTheme.fontFamily.sans],
             },
-            // WisperBot palette — brand (orange #FF762E), accent (amber
-            // #FFBF00 / light-yellow #FFF78D), secondary (warm charcoal).
+            // Cerqle palette - primary plum #3E2A49, secondary lilac #8F5FA7.
             // Source of truth: ./.branding
             colors: {
                 surface: {
-                    DEFAULT: '#f7faec',
-                    subtle: '#eef4dd',
+                    DEFAULT: '#fbf9fd',
+                    subtle: '#f5eff8',
                 },
                 secondary: {
-                    50: '#eef2ec',
-                    100: '#d3ddce',
-                    200: '#b3c4ab',
-                    300: '#8da583',
-                    400: '#6c8760',
-                    500: '#4f6b43',
-                    600: '#3d5534',
-                    700: '#32462b',
-                    800: '#283f24',
-                    900: '#20321d',
-                    950: '#121d10',
+                    50: '#f7f5f8',
+                    100: '#ebe6ee',
+                    200: '#d8cede',
+                    300: '#b9a8c2',
+                    400: '#9980a7',
+                    500: '#80638e',
+                    600: '#684e74',
+                    700: '#543f5e',
+                    800: '#46344f',
+                    900: '#3e2a49',
+                    950: '#281a31',
                 },
                 brand: {
-                    50: '#fff5ed',
-                    100: '#ffe8d4',
-                    200: '#ffcda8',
-                    300: '#ffab70',
-                    400: '#ff8a45',
-                    500: '#ff762e',
-                    600: '#f05a12',
-                    700: '#c74310',
-                    800: '#9e3615',
-                    900: '#7f2f14',
-                    950: '#451507',
+                    50: '#faf7fc',
+                    100: '#f1e8f5',
+                    200: '#e3d5ea',
+                    300: '#c7a3d7',
+                    400: '#ad7ac2',
+                    500: '#8f5fa7',
+                    600: '#77488e',
+                    700: '#603a72',
+                    800: '#50305e',
+                    900: '#3e2a49',
+                    950: '#281a31',
                 },
-                // Accent (amber #FFBF00 at 500, light-yellow #FFF78D at 200)
+                // Cool accent from the guideline cover mark.
                 accent: {
-                    50: '#fffdeb',
-                    100: '#fffbc4',
-                    200: '#fff78d',
-                    300: '#ffe24a',
-                    400: '#ffcf1f',
-                    500: '#ffbf00',
-                    600: '#e29400',
-                    700: '#bb6c02',
-                    800: '#985308',
-                    900: '#7c450b',
-                    950: '#482400',
+                    50: '#f8fbfd',
+                    100: '#edf6fb',
+                    200: '#d4edf7',
+                    300: '#aee0ef',
+                    400: '#78cde4',
+                    500: '#45b6d6',
+                    600: '#2d99bc',
+                    700: '#257b98',
+                    800: '#24677e',
+                    900: '#23576b',
+                    950: '#173747',
                 },
                 // Danger / destructive (coral-red)
                 coral: {
@@ -132,7 +130,7 @@ export default {
             transitionTimingFunction: {
                 smooth: 'cubic-bezier(0.4, 0, 0.2, 1)',
             },
-            // ── Landing-page animation system (WisperBot) ──
+            // ── Landing-page animation system (Cerqle) ──
             keyframes: {
                 'fade-up': {
                     '0%': { opacity: '0', transform: 'translateY(28px)' },

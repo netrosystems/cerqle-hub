@@ -1,64 +1,64 @@
 {
-  "name": "WisperBot",
-  "updated": "2026-07-10",
-  "description": "Brand identity for WisperBot. Source of truth for the name and color palette. Tailwind tokens in tailwind.config.js are derived from the scales below.",
+  "name": "Cerqle",
+  "updated": "2026-07-22",
+  "description": "Brand identity for Cerqle. Source of truth for the name and color palette. Tailwind tokens in tailwind.config.js are derived from the scales below.",
   "palette": {
-    "primary": "#FF762E",
-    "amber": "#FFBF00",
-    "lightYellow": "#FFF78D",
-    "charcoal": "#14100C"
+    "primary": "#3E2A49",
+    "secondary": "#8F5FA7",
+    "black": "#000000",
+    "white": "#FFFFFF"
   },
   "roles": {
-    "brand": "#FF762E",
-    "accent": "#FFBF00",
-    "highlight": "#FFF78D",
-    "secondary": "#14100C",
-    "surface": "#fff8f3",
+    "brand": "#8F5FA7",
+    "accent": "#3E2A49",
+    "highlight": "#E3D5EA",
+    "secondary": "#3E2A49",
+    "surface": "#FBF9FD",
     "danger": "#f04e2e"
   },
   "scales": {
     "brand": {
-      "50": "#fff5ed",
-      "100": "#ffe8d4",
-      "200": "#ffcda8",
-      "300": "#ffab70",
-      "400": "#ff8a45",
-      "500": "#ff762e",
-      "600": "#f05a12",
-      "700": "#c74310",
-      "800": "#9e3615",
-      "900": "#7f2f14",
-      "950": "#451507"
+      "50": "#faf7fc",
+      "100": "#f1e8f5",
+      "200": "#e3d5ea",
+      "300": "#c7a3d7",
+      "400": "#ad7ac2",
+      "500": "#8f5fa7",
+      "600": "#77488e",
+      "700": "#603a72",
+      "800": "#50305e",
+      "900": "#3e2a49",
+      "950": "#281a31"
     },
     "accent": {
-      "50": "#fffdeb",
-      "100": "#fffbc4",
-      "200": "#fff78d",
-      "300": "#ffe24a",
-      "400": "#ffcf1f",
-      "500": "#ffbf00",
-      "600": "#e29400",
-      "700": "#bb6c02",
-      "800": "#985308",
-      "900": "#7c450b",
-      "950": "#482400"
+      "50": "#f8fbfd",
+      "100": "#edf6fb",
+      "200": "#d4edf7",
+      "300": "#aee0ef",
+      "400": "#78cde4",
+      "500": "#45b6d6",
+      "600": "#2d99bc",
+      "700": "#257b98",
+      "800": "#24677e",
+      "900": "#23576b",
+      "950": "#173747"
     },
     "secondary": {
-      "50": "#f6f5f4",
-      "100": "#e7e5e3",
-      "200": "#d0ccc8",
-      "300": "#b0a9a3",
-      "400": "#8a817a",
-      "500": "#6f6660",
-      "600": "#5a524d",
-      "700": "#4a433f",
-      "800": "#2b2621",
-      "900": "#1c1814",
-      "950": "#14100c"
+      "50": "#f7f5f8",
+      "100": "#ebe6ee",
+      "200": "#d8cede",
+      "300": "#b9a8c2",
+      "400": "#9980a7",
+      "500": "#80638e",
+      "600": "#684e74",
+      "700": "#543f5e",
+      "800": "#46344f",
+      "900": "#3e2a49",
+      "950": "#281a31"
     },
     "surface": {
-      "DEFAULT": "#fff8f3",
-      "subtle": "#fff1e8"
+      "DEFAULT": "#FBF9FD",
+      "subtle": "#F5EFF8"
     }
   }
 }

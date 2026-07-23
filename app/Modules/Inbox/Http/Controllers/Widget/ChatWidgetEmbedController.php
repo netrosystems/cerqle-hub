@@ -11,7 +11,7 @@ use Illuminate\Http\Response;
  *   <script src="https://<host>/widgets/chat/<key>.js" async></script>
  *
  * Returns a tiny per-widget bootstrap that injects the widget's config onto
- * window and loads the shared, cacheable widget bundle (public/widget/wisperbot-
+ * window and loads the shared, cacheable widget bundle (public/widget/cerqle-
  * chat-widget.js). The heavy UI lives in the static bundle, not here.
  */
 class ChatWidgetEmbedController extends Controller
@@ -24,7 +24,7 @@ class ChatWidgetEmbedController extends Controller
         $widget = ChatWidget::where('widget_key', $key)->where('enabled', true)->firstOrFail();
 
         $apiBase = rtrim(url('/'), '/');
-        $bundleUrl = $apiBase.'/widget/wisperbot-chat-widget.js?v='.self::BUNDLE_VERSION;
+        $bundleUrl = $apiBase.'/widget/cerqle-chat-widget.js?v='.self::BUNDLE_VERSION;
         $configJson = json_encode(array_merge($widget->publicConfig(), ['api_base' => $apiBase]), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
         $keyJson = json_encode($key);
         $bundleJson = json_encode($bundleUrl);
@@ -51,7 +51,7 @@ JS;
         }
 
         $js = <<<JS
-/* WisperBot Chat Widget loader */
+/* Cerqle Chat Widget loader */
 (function () {
   'use strict';
   if (window.__WB_CHAT_LOADED__) return;

@@ -42,11 +42,12 @@ export default function LandingLayout({ children }) {
     const { t } = useTranslation();
 
     const NAV_LINKS = [
-        { label: t('nav.features'),     href: '/#features' },
-        { label: t('nav.use_cases'),    href: '/use-cases' },
-        { label: t('nav.integrations', { defaultValue: 'Integrations' }), href: '/integrations' },
+        { label: 'Products',     href: '/products' },
+        { label: 'Channels',     href: '/channels' },
+        { label: 'Solutions',    href: '/solutions' },
+        { label: 'Resources',    href: '/resources' },
+        { label: 'Partners',     href: '/partners' },
         { label: t('nav.pricing'),      href: '/pricing' },
-        { label: t('nav.faq'),          href: '/faq' },
         { label: t('nav.contact'),      href: '/contact' },
     ];
     const page = usePage();
@@ -55,8 +56,8 @@ export default function LandingLayout({ children }) {
     const { locale: currentLocale, setLocale } = useLocale();
     const supportedLocales = page.props.supportedLocales ?? { en: 'English' };
     const localeEntries = Object.entries(supportedLocales);
-    const appName = page.props.branding?.app_name || import.meta.env.VITE_APP_NAME || 'WisperBot';
-    const logoUrl = page.props.branding?.logo_url || '/wisperbot-logo-white.svg';
+    const appName = page.props.branding?.app_name || import.meta.env.VITE_APP_NAME || 'Cerqle';
+    const logoUrl = page.props.branding?.logo_url || '/cerqle-logo-white.svg';
     const [mobileOpen, setMobileOpen] = useState(false);
     const landing = page.props.landing ?? {};
 
@@ -84,8 +85,8 @@ export default function LandingLayout({ children }) {
         <div className="min-h-screen bg-white dark:bg-neutral-950 text-neutral-900 dark:text-neutral-100 flex flex-col">
             {/* ── Header ── */}
             <header
-                className="sticky top-0 z-50 border-b border-white/10 backdrop-blur-xl supports-[backdrop-filter]:bg-[#14100c]/80"
-                style={{ background: 'rgba(20,16,12,0.92)', boxShadow: '0 1px 0 0 rgba(255,118,46,0.14)' }}
+                className="sticky top-0 z-50 border-b border-white/10 backdrop-blur-xl supports-[backdrop-filter]:bg-[#281a31]/80"
+                style={{ background: 'rgba(20,16,12,0.92)', boxShadow: '0 1px 0 0 rgba(143,95,167,0.14)' }}
             >
                 <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-6">
                     {/* Logo */}
@@ -163,7 +164,7 @@ export default function LandingLayout({ children }) {
                                         href={route('logout')}
                                         method="post"
                                         as="button"
-                                        className="rounded-lg bg-gradient-to-b from-brand-500 to-brand-600 px-4 py-1.5 text-sm font-semibold text-white shadow-[0_4px_14px_-2px_rgba(255,118,46,0.45)] hover:shadow-[0_6px_20px_-2px_rgba(255,118,46,0.6)] hover:-translate-y-0.5 transition-all duration-200"
+                                        className="rounded-lg bg-gradient-to-b from-brand-500 to-brand-600 px-4 py-1.5 text-sm font-semibold text-white shadow-[0_4px_14px_-2px_rgba(143,95,167,0.45)] hover:shadow-[0_6px_20px_-2px_rgba(143,95,167,0.6)] hover:-translate-y-0.5 transition-all duration-200"
                                     >
                                         {t('nav.sign_out')}
                                     </Link>
@@ -188,14 +189,14 @@ export default function LandingLayout({ children }) {
                                     {getStartedIsExternal ? (
                                         <a
                                             href={getStartedHref}
-                                            className="rounded-lg bg-gradient-to-b from-brand-500 to-brand-600 px-4 py-1.5 text-sm font-semibold text-white shadow-[0_4px_14px_-2px_rgba(255,118,46,0.45)] hover:shadow-[0_6px_20px_-2px_rgba(255,118,46,0.6)] hover:-translate-y-0.5 transition-all duration-200"
+                                            className="rounded-lg bg-gradient-to-b from-brand-500 to-brand-600 px-4 py-1.5 text-sm font-semibold text-white shadow-[0_4px_14px_-2px_rgba(143,95,167,0.45)] hover:shadow-[0_6px_20px_-2px_rgba(143,95,167,0.6)] hover:-translate-y-0.5 transition-all duration-200"
                                         >
                                             {getStartedLabel}
                                         </a>
                                     ) : (
                                         <Link
                                             href={getStartedHref}
-                                            className="rounded-lg bg-gradient-to-b from-brand-500 to-brand-600 px-4 py-1.5 text-sm font-semibold text-white shadow-[0_4px_14px_-2px_rgba(255,118,46,0.45)] hover:shadow-[0_6px_20px_-2px_rgba(255,118,46,0.6)] hover:-translate-y-0.5 transition-all duration-200"
+                                            className="rounded-lg bg-gradient-to-b from-brand-500 to-brand-600 px-4 py-1.5 text-sm font-semibold text-white shadow-[0_4px_14px_-2px_rgba(143,95,167,0.45)] hover:shadow-[0_6px_20px_-2px_rgba(143,95,167,0.6)] hover:-translate-y-0.5 transition-all duration-200"
                                         >
                                             {getStartedLabel}
                                         </Link>
@@ -218,7 +219,7 @@ export default function LandingLayout({ children }) {
 
                 {/* Mobile menu */}
                 {mobileOpen && (
-                    <div className="sm:hidden border-t border-white/10 bg-[#14100c]/95 backdrop-blur-md px-4 py-4 space-y-1">
+                    <div className="sm:hidden border-t border-white/10 bg-[#281a31]/95 backdrop-blur-md px-4 py-4 space-y-1">
                         {NAV_LINKS.map((link) => (
                             <Link
                                 key={link.href}
@@ -270,7 +271,7 @@ export default function LandingLayout({ children }) {
             <main className="flex-1">{children}</main>
 
             {/* ── Footer ── */}
-            <footer style={{ background: '#14100c', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+            <footer style={{ background: '#281a31', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
                 <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-14">
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-8 mb-12">
                         {/* Brand */}
@@ -302,9 +303,10 @@ export default function LandingLayout({ children }) {
                             <h4 className="text-xs font-semibold text-neutral-500 uppercase tracking-wider mb-4">{t('landing_page_admin.footer_company', { defaultValue: 'Company' })}</h4>
                             <ul className="space-y-2.5">
                                 {[
-                                    { label: t('landing_page_admin.footer_about', { defaultValue: 'About' }), href: '/about' },
-                                    { label: t('nav.integrations', { defaultValue: 'Integrations' }), href: '/integrations' },
-                                    { label: t('nav.use_cases', { defaultValue: 'Use Cases' }), href: '/use-cases' },
+                                    { label: t('landing_page_admin.footer_about', { defaultValue: 'About' }), href: '/about-us' },
+                                    { label: 'Company values', href: '/company-values' },
+                                    { label: 'Careers', href: '/careers' },
+                                    { label: 'Offices', href: '/offices' },
                                     { label: t('nav.contact'), href: '/contact' },
                                 ].map((l) => (
                                     <li key={l.href}>
@@ -319,7 +321,8 @@ export default function LandingLayout({ children }) {
                             <h4 className="text-xs font-semibold text-neutral-500 uppercase tracking-wider mb-4">{t('landing_page_admin.footer_legal', { defaultValue: 'Legal' })}</h4>
                             <ul className="space-y-2.5">
                                 {[
-                                    { label: t('landing_page_admin.footer_privacy', { defaultValue: 'Privacy Policy' }), href: '/p/privacy' },
+                                    { label: t('landing_page_admin.footer_privacy', { defaultValue: 'Privacy Policy' }), href: '/privacy' },
+                                    { label: 'Policies', href: '/policies' },
                                     { label: t('landing_page_admin.footer_terms', { defaultValue: 'Terms of Service' }), href: '/p/terms' },
                                     { label: t('landing_page_admin.footer_cookies', { defaultValue: 'Cookie Policy' }), href: '/p/cookies' },
                                     { label: t('landing_page_admin.footer_gdpr', { defaultValue: 'GDPR' }), href: '/p/gdpr' },
@@ -336,10 +339,12 @@ export default function LandingLayout({ children }) {
                             <h4 className="text-xs font-semibold text-neutral-500 uppercase tracking-wider mb-4">{t('landing_page_admin.footer_product', { defaultValue: 'Product' })}</h4>
                             <ul className="space-y-2.5">
                                 {[
-                                    { label: t('nav.features'), href: '/#features' },
-                                    { label: t('nav.integrations', { defaultValue: 'Integrations' }), href: '/integrations' },
+                                    { label: 'Products', href: '/products' },
+                                    { label: 'Channels', href: '/channels' },
+                                    { label: 'Solutions', href: '/solutions' },
+                                    { label: 'Resources', href: '/resources' },
+                                    { label: 'Partners', href: '/partners' },
                                     { label: t('nav.pricing'), href: '/pricing' },
-                                    { label: t('nav.faq'), href: '/faq' },
                                 ].map((l) => (
                                     <li key={l.href}>
                                         <Link href={l.href} className="text-sm text-neutral-400 hover:text-white transition">{l.label}</Link>

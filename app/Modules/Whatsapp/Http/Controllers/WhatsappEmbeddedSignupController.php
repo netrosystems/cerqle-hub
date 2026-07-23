@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Modules\Integrations\Services\CredentialResolver;
 use App\Modules\Whatsapp\Jobs\TemplateSyncJob;
 use App\Modules\Whatsapp\Models\WhatsappBusinessAccount;
+use App\Modules\Whatsapp\Models\WhatsappPhoneNumber;
 use App\Modules\Whatsapp\Services\CloudApiClient;
 use App\Modules\Shared\Models\ChannelAccount;
 use Illuminate\Http\JsonResponse;
@@ -88,7 +89,7 @@ class WhatsappEmbeddedSignupController extends Controller
         $wabaId = ($validated['waba_id'] ?? null) ?: $this->discoverWabaId($accessToken, $meta);
         if (! $wabaId) {
             return response()->json([
-                'message' => 'Meta authorized WisperBot, but no WhatsApp Business Account was included. Choose Edit Settings in Meta and select the WhatsApp account you want to connect.',
+                'message' => 'Meta authorized Cerqle, but no WhatsApp Business Account was included. Choose Edit Settings in Meta and select the WhatsApp account you want to connect.',
             ], 422);
         }
 
@@ -146,17 +147,18 @@ class WhatsappEmbeddedSignupController extends Controller
             ]
         );
 
-        // Subscribe the app to this WABA for webhooks and register callback URL
+        // Subscribe the app to this WABA for webhooks and register callback URL.
+        // Keep the WABA active when phones sync successfully; webhook issues are
+        // returned as warnings so outbound messaging is not blocked by a stale
+        // error status.
         $webhookError = $this->subscribeWabaWebhooks($wabaId, $accessToken, $waba->webhook_verify_token, $meta);
-        if ($webhookError) {
-            $waba->update(['status' => 'error']);
-        }
 
         // Sync phone numbers (try user token, then app token, then admin system user)
         $phoneCount = 0;
         $syncError  = null;
+        $selectedPhoneNumberId = $validated['phone_number_id'] ?? null;
         try {
-            $phoneCount = $this->syncPhoneNumbers($waba->fresh(), $accessToken, $meta);
+            $phoneCount = $this->syncPhoneNumbers($waba->fresh(), $accessToken, $meta, $selectedPhoneNumberId);
         } catch (\Throwable $e) {
             $syncError = $e->getMessage();
             Log::warning('WhatsApp embedded signup: phone sync failed', [
@@ -183,6 +185,7 @@ class WhatsappEmbeddedSignupController extends Controller
 
         if ($phoneCount > 0) {
             TemplateSyncJob::dispatch($waba->id)->onQueue('whatsapp');
+            $waba->update(['status' => 'active']);
         }
 
         if ($phoneCount === 0) {
@@ -229,6 +232,8 @@ class WhatsappEmbeddedSignupController extends Controller
         if ($webhookError) {
             return response()->json(['success' => false, 'message' => $webhookError], 422);
         }
+
+        $waba->update(['status' => 'active']);
 
         return response()->json(['success' => true, 'message' => 'Webhook re-registered with Meta.']);
     }
@@ -364,6 +369,7 @@ class WhatsappEmbeddedSignupController extends Controller
         WhatsappBusinessAccount $waba,
         string $userToken,
         \App\Modules\Integrations\Services\Credentials\MetaCredentials $meta,
+        ?string $selectedPhoneNumberId = null,
     ): int {
         $tokens = array_values(array_unique(array_filter([
             $userToken,
@@ -391,7 +397,14 @@ class WhatsappEmbeddedSignupController extends Controller
             throw new \RuntimeException($lastError);
         }
 
+        if ($selectedPhoneNumberId) {
+            $rows = array_values(array_filter($rows, function (array $row) use ($selectedPhoneNumberId): bool {
+                return (string) ($row['id'] ?? '') === $selectedPhoneNumberId;
+            }));
+        }
+
         $count = 0;
+        $syncedPhoneIds = [];
 
         foreach ($rows as $row) {
             if (empty($row['id'])) {
@@ -410,7 +423,10 @@ class WhatsappEmbeddedSignupController extends Controller
 
             $this->attachPhoneNumber($waba, (string) $row['id'], $row);
             $count++;
+            $syncedPhoneIds[] = (string) $row['id'];
         }
+
+        $this->pruneMissingPhoneNumbers($waba, $syncedPhoneIds);
 
         return $count;
     }
@@ -515,5 +531,38 @@ class WhatsappEmbeddedSignupController extends Controller
         }
 
         $account->save();
+    }
+
+    /**
+     * After a Meta-sourced sync, remove local phone rows that no longer belong
+     * to the WABA. This prevents old test numbers from staying visible as
+     * "Active in Inbox" after the client reconnects a different number.
+     *
+     * @param  list<string>  $syncedPhoneIds
+     */
+    private function pruneMissingPhoneNumbers(WhatsappBusinessAccount $waba, array $syncedPhoneIds): void
+    {
+        if ($syncedPhoneIds === []) {
+            return;
+        }
+
+        $stalePhoneIds = WhatsappPhoneNumber::where('waba_id_fk', $waba->id)
+            ->whereNotIn('phone_number_id', $syncedPhoneIds)
+            ->pluck('phone_number_id')
+            ->all();
+
+        if ($stalePhoneIds === []) {
+            return;
+        }
+
+        WhatsappPhoneNumber::where('waba_id_fk', $waba->id)
+            ->whereIn('phone_number_id', $stalePhoneIds)
+            ->delete();
+
+        ChannelAccount::where('workspace_id', $waba->workspace_id)
+            ->where('channel', 'whatsapp')
+            ->where('business_account_id', $waba->waba_id)
+            ->whereIn('phone_number_id', $stalePhoneIds)
+            ->delete();
     }
 }

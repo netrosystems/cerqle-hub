@@ -21,6 +21,7 @@ class AiChatbotApiTest extends TestCase
     public function test_wrong_scope_returns_403(): void
     {
         ['user' => $user] = $this->createWorkspaceContext();
+        $this->grantDeveloperToolsAddon($user);
         $token = $user->createToken('t', [ApiAbilities::CONTACTS_READ])->plainTextToken;
 
         $this->withToken($token)->getJson('/api/v1/ai/chatbots')->assertStatus(403);
@@ -29,6 +30,7 @@ class AiChatbotApiTest extends TestCase
     public function test_list_chatbots_returns_200(): void
     {
         ['user' => $user, 'workspace' => $workspace] = $this->createWorkspaceContext();
+        $this->grantDeveloperToolsAddon($user);
         $token = $user->createToken('t', ['*'])->plainTextToken;
 
         AiChatbot::factory()->create(['workspace_id' => $workspace->id]);
@@ -43,6 +45,7 @@ class AiChatbotApiTest extends TestCase
     public function test_chat_invocation_returns_reply(): void
     {
         ['user' => $user, 'workspace' => $workspace] = $this->createWorkspaceContext();
+        $this->grantDeveloperToolsAddon($user);
         $token = $user->createToken('t', [ApiAbilities::AI_WRITE])->plainTextToken;
 
         $kb = AiKnowledgeBase::factory()->create(['workspace_id' => $workspace->id]);
@@ -72,6 +75,7 @@ class AiChatbotApiTest extends TestCase
     public function test_chat_on_other_workspace_chatbot_returns_404(): void
     {
         ['user' => $user] = $this->createWorkspaceContext();
+        $this->grantDeveloperToolsAddon($user);
         ['workspace' => $otherWs] = $this->createWorkspaceContext();
         $token = $user->createToken('t', ['*'])->plainTextToken;
 

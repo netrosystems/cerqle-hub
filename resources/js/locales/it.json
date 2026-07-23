@@ -1024,7 +1024,7 @@
     },
     "open_menu": "Apri menu",
     "app": {
-        "name": "WisperBot"
+        "name": "Cerqle"
     },
     "impersonation": {
         "return_to_admin": "Torna all'Admin",
@@ -1634,7 +1634,7 @@
         "step2_title": "2. Esegui i worker della coda",
         "step2_desc": "I job in background — campagne, messaggi, post social — vengono eseguiti su code. Avvia un worker persistente e usa Supervisor in produzione per mantenerlo attivo e riavviarlo automaticamente.",
         "supervisor_title": "Configurazione Supervisor",
-        "supervisor_desc": "Salva come \/etc\/supervisor\/conf.d\/wisperbot-worker.conf, poi esegui: supervisorctl reread && supervisorctl update.",
+        "supervisor_desc": "Salva come \/etc\/supervisor\/conf.d\/cerqle-worker.conf, poi esegui: supervisorctl reread && supervisorctl update.",
         "step3_title": "3. Verifica",
         "step3_desc": "Esegui questi comandi per confermare che lo scheduler e la coda siano collegati correttamente.",
         "verify_run": "Attiva immediatamente tutte le attività pianificate in scadenza:",
@@ -4045,7 +4045,7 @@
     "37": {
         "4220": "4220"
     },
-    "wisperbot": {
+    "cerqle": {
         "sidebar": {
             "scroll": {
                 "admin": "Admin",

@@ -4,7 +4,7 @@
     // Resolve branding with graceful fallback (mirrors HandleInertiaRequests::brandingShare()).
     try {
         $appName  = SystemSetting::get('app_name') ?: config('saas.app_name', config('app.name'));
-        $primary  = SystemSetting::get('primary_color') ?: config('saas.branding.primary_color', '#FF762E');
+        $primary  = SystemSetting::get('primary_color') ?: config('saas.branding.primary_color', '#8F5FA7');
         $logoPath = SystemSetting::get('app_logo_path');
         $logoUrl  = $logoPath
             ? \Illuminate\Support\Facades\Storage::disk(SystemSetting::get('app_logo_disk', 'public'))->url($logoPath)
@@ -15,7 +15,7 @@
             : null;
     } catch (\Throwable) {
         $appName  = config('saas.app_name', config('app.name'));
-        $primary  = config('saas.branding.primary_color', '#FF762E');
+        $primary  = config('saas.branding.primary_color', '#8F5FA7');
         $logoUrl  = null;
         $faviconUrl = null;
     }
@@ -41,9 +41,8 @@
         <link rel="icon" href="{{ $faviconUrl }}">
         <link rel="apple-touch-icon" href="{{ $faviconUrl }}">
     @else
-        <link rel="icon" href="/favicon.ico" sizes="any">
-        <link rel="icon" type="image/png" href="/wisperbot-icon-512.png">
-        <link rel="apple-touch-icon" href="/wisperbot-icon-512.png">
+        <link rel="icon" type="image/svg+xml" href="/cerqle-icon.svg">
+        <link rel="apple-touch-icon" href="/cerqle-icon.svg">
     @endif
     <link rel="preconnect" href="https://fonts.bunny.net">
     <link href="https://fonts.bunny.net/css?family=space-grotesk:400,500,600,700&display=swap" rel="stylesheet" />

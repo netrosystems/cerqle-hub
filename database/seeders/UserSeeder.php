@@ -76,7 +76,7 @@ class UserSeeder extends Seeder
                     'password' => $smtpPassword,
                     'encryption' => env('SEED_SMTP_ENCRYPTION', 'tls'),
                     'from_email' => env('SEED_SMTP_FROM_EMAIL', 'noreply@example.com'),
-                    'from_name' => env('SEED_SMTP_FROM_NAME', env('APP_NAME', 'WisperBot')),
+                    'from_name' => env('SEED_SMTP_FROM_NAME', env('APP_NAME', 'Cerqle')),
                     'is_active' => true,
                 ]
             );

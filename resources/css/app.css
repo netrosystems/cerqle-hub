@@ -11,7 +11,7 @@ html.dark {
 }
 
 /* When the Bangla locale is active, render the whole UI in Anek Bangla.
-   Space Grotesk has no Bengali glyphs, so without this Bangla text falls back
+   Poppins has no Bengali glyphs, so without this Bangla text falls back
    to an arbitrary system font. lang="bn" is set on <html> by both the Blade
    layout (initial load) and applyLocaleToDocument() (client-side switch).
    The .font-sans override is needed because Tailwind's utility sets
@@ -19,7 +19,7 @@ html.dark {
    over inheritance from <html>. */
 html[lang="bn"],
 html[lang="bn"] .font-sans {
-    font-family: 'Anek Bangla', 'Space Grotesk', ui-sans-serif, system-ui, -apple-system, sans-serif;
+    font-family: 'Anek Bangla', 'Poppins', ui-sans-serif, system-ui, -apple-system, sans-serif;
 }
 body {
     @apply bg-surface dark:bg-neutral-900 text-gray-900 dark:text-neutral-100;
@@ -187,62 +187,62 @@ body {
 
 /* Article body for cms_pages (privacy, terms, cookies, gdpr, …).
  * Replaces the `prose` class — @tailwindcss/typography is not installed,
- * so we hand-roll a compact set tuned to the cream/orange palette. */
+ * so we hand-roll a compact set tuned to the Cerqle palette. */
 .cms-prose {
-    color: #241f1a;
-    font-family: 'Space Grotesk', ui-sans-serif, system-ui, sans-serif;
+    color: #3e2a49;
+    font-family: 'Poppins', ui-sans-serif, system-ui, sans-serif;
     line-height: 1.75;
     font-size: 1.0625rem;
 }
 .cms-prose h2 {
-    font-family: 'Fraunces', Georgia, serif;
+    font-family: 'Poppins', ui-sans-serif, system-ui, sans-serif;
     font-weight: 600;
     font-size: 1.75rem;
     line-height: 1.2;
     margin: 2.5rem 0 1rem;
-    color: #241f1a;
+    color: #3e2a49;
     scroll-margin-top: 6rem;
 }
 .cms-prose h3 {
-    font-family: 'Fraunces', Georgia, serif;
+    font-family: 'Poppins', ui-sans-serif, system-ui, sans-serif;
     font-weight: 600;
     font-size: 1.25rem;
     line-height: 1.3;
     margin: 2rem 0 0.75rem;
-    color: #241f1a;
+    color: #3e2a49;
     scroll-margin-top: 6rem;
 }
 .cms-prose p { margin: 0 0 1.25rem; }
 .cms-prose ul { list-style: disc; margin: 0 0 1.25rem 1.5rem; }
 .cms-prose ol { list-style: decimal; margin: 0 0 1.25rem 1.5rem; }
 .cms-prose li { margin-bottom: 0.4rem; }
-.cms-prose li::marker { color: #ff762e; }
+.cms-prose li::marker { color: #8f5fa7; }
 .cms-prose a {
-    color: #ff762e;
+    color: #8f5fa7;
     text-decoration: underline;
     text-underline-offset: 3px;
     transition: color 0.15s;
 }
-.cms-prose a:hover { color: #e85a14; }
-.cms-prose strong { color: #14100c; font-weight: 600; }
-.cms-prose em { color: #6f6660; font-style: italic; }
+.cms-prose a:hover { color: #77488e; }
+.cms-prose strong { color: #281a31; font-weight: 600; }
+.cms-prose em { color: #684e74; font-style: italic; }
 .cms-prose blockquote {
-    border-left: 3px solid #ff762e;
+    border-left: 3px solid #8f5fa7;
     padding: 0.25rem 0 0.25rem 1.25rem;
     margin: 1.5rem 0;
-    color: #6f6660;
+    color: #684e74;
     font-style: italic;
 }
 
 /* Calm replacement for the old yellow "Template notice" box. Used by
  * cms_pages content; can stay in all environments until the admin edits. */
 .cms-notice {
-    background: #fffdf9;
-    border: 1px solid #f6efe2;
+    background: #ffffff;
+    border: 1px solid #f5eff8;
     border-radius: 0.75rem;
     padding: 1rem 1.25rem;
     margin: 0 0 2rem;
-    color: #6f6660;
+    color: #684e74;
     font-size: 0.9375rem;
 }
-.cms-notice strong { color: #241f1a; }
+.cms-notice strong { color: #3e2a49; }

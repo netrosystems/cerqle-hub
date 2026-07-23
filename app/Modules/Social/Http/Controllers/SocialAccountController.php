@@ -140,7 +140,7 @@ class SocialAccountController extends Controller
                 }
 
                 return redirect()->route('client.social.accounts.index')
-                    ->with('error', 'No '.ucfirst($network).' Pages were found. Reconnect and grant both pages_show_list and business_management so WisperBot can include Pages assigned through a Meta Business Portfolio.');
+                    ->with('error', 'No '.ucfirst($network).' Pages were found. Reconnect and grant both pages_show_list and business_management so Cerqle can include Pages assigned through a Meta Business Portfolio.');
             }
 
             $connected = 0;

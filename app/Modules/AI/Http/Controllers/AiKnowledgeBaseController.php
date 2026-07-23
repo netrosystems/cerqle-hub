@@ -38,7 +38,13 @@ class AiKnowledgeBaseController extends Controller
         $this->authorise($request, $kb);
         $kb->load('documents');
 
-        return Inertia::render('AI/KnowledgeBases/Show', ['kb' => $kb]);
+        $kbUploadMaxKb = $this->kbUploadMaxKb();
+
+        return Inertia::render('AI/KnowledgeBases/Show', [
+            'kb' => $kb,
+            'kbUploadMaxKb' => $kbUploadMaxKb,
+            'kbUploadMaxMb' => round($kbUploadMaxKb / 1024, 1),
+        ]);
     }
 
     public function store(Request $request): RedirectResponse
@@ -105,7 +111,7 @@ class AiKnowledgeBaseController extends Controller
 
         $validated = $request->validate([
             'source_type' => ['required', 'in:file,url,text,sitemap,faq'],
-            'source_ref' => ['nullable', 'string', 'max:512'],
+            'source_ref' => $this->sourceRefRules((string) $request->input('source_type')),
             'title' => ['nullable', 'string', 'max:256'],
         ]);
 
@@ -114,7 +120,7 @@ class AiKnowledgeBaseController extends Controller
             $request->validate([
                 'file' => [
                     'file',
-                    'max:20480',
+                    'max:'.$this->kbUploadMaxKb(),
                     'mimes:pdf,txt,md,csv,docx,doc,xlsx,xls,json',
                 ],
             ]);
@@ -189,5 +195,49 @@ class AiKnowledgeBaseController extends Controller
     {
         $workspaceId = $request->user()->current_workspace_id ?? $request->user()->workspace_id;
         abort_unless((int) $kb->workspace_id === (int) $workspaceId, 403);
+    }
+
+    private function kbUploadMaxKb(): int
+    {
+        $appMaxKb = 20 * 1024;
+        $serverMaxKb = min(
+            $this->iniSizeToKb(ini_get('upload_max_filesize')),
+            $this->iniSizeToKb(ini_get('post_max_size')),
+        );
+
+        // Leave room for multipart form overhead so a file at the exact PHP
+        // limit does not get rejected by the web server before Laravel sees it.
+        $serverMaxKb = max(1024, $serverMaxKb - 512);
+
+        return min($appMaxKb, $serverMaxKb);
+    }
+
+    private function iniSizeToKb(string|false $value): int
+    {
+        if ($value === false || trim($value) === '') {
+            return PHP_INT_MAX;
+        }
+
+        $value = trim($value);
+        $unit = strtolower(substr($value, -1));
+        $number = (float) $value;
+
+        return match ($unit) {
+            'g' => (int) ($number * 1024 * 1024),
+            'm' => (int) ($number * 1024),
+            'k' => (int) $number,
+            default => (int) ceil($number / 1024),
+        };
+    }
+
+    private function sourceRefRules(string $sourceType): array
+    {
+        return match ($sourceType) {
+            'url', 'sitemap' => ['required', 'url', 'max:2048'],
+            'text' => ['required', 'string', 'max:200000'],
+            'faq' => ['required', 'string', 'max:200000'],
+            'file' => ['nullable', 'string', 'max:512'],
+            default => ['nullable', 'string', 'max:512'],
+        };
     }
 }

@@ -29,7 +29,7 @@ export default function IdentityCard({ embedBase, widgetKey, identitySecret, ver
     const basic =
 `<!-- Before the widget script, set your logged-in user (skip fields you don't have) -->
 <script>
-  window.WisperBotSettings = {
+  window.CerqleSettings = {
     name: "Jane Doe",
     email: "jane@example.com",
     avatar: "https://your-site.com/avatars/jane.jpg",

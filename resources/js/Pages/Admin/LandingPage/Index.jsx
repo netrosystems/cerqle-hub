@@ -426,7 +426,7 @@ function WhyTab({ data, setData, t }) {
                         <Input value={s('why_badge')} onChange={(e) => set('why_badge', e.target.value)} placeholder="Why Choose Us" />
                     </Field>
                     <Field label={t('landing_page_admin.section_title')}>
-                        <Input value={s('why_title')} onChange={(e) => set('why_title', e.target.value)} placeholder="Why WisperBot" />
+                        <Input value={s('why_title')} onChange={(e) => set('why_title', e.target.value)} placeholder="Why Cerqle" />
                     </Field>
                     <Field label={t('landing_page_admin.section_subtitle')}>
                         <Input value={s('why_subtitle')} onChange={(e) => set('why_subtitle', e.target.value)} placeholder="Built for scale, security, and results." />
@@ -602,7 +602,7 @@ function SeoTab({ data, setData, t }) {
             <Card.Body className="space-y-5">
                 <h3 className="font-semibold text-neutral-900 dark:text-neutral-100 pb-3 border-b border-neutral-100 dark:border-neutral-800">{t('landing_page_admin.seo_section', { defaultValue: 'Search Engine Optimization' })}</h3>
                 <Field label={t('landing_page_admin.seo_title', { defaultValue: 'Meta Title' })} hint={t('landing_page_admin.seo_title_hint', { defaultValue: 'Shown in browser tabs and search results (~60 chars).' })}>
-                    <Input value={s('seo_title')} onChange={(e) => set('seo_title', e.target.value)} placeholder="WisperBot — One Inbox for WhatsApp, Messenger & Instagram" />
+                    <Input value={s('seo_title')} onChange={(e) => set('seo_title', e.target.value)} placeholder="Cerqle — One Inbox for WhatsApp, Messenger & Instagram" />
                 </Field>
                 <Field label={t('landing_page_admin.seo_description', { defaultValue: 'Meta Description' })} hint={t('landing_page_admin.seo_description_hint', { defaultValue: 'Shown under the title in search results (~155 chars).' })}>
                     <Input value={s('seo_description')} onChange={(e) => set('seo_description', e.target.value)} multiline rows={3} placeholder="Unify WhatsApp, Messenger and Instagram..." />
@@ -731,7 +731,7 @@ function IntegrationsStripTab({ data, setData, t }) {
                     <Input value={s('integrations_strip_title')} onChange={(e) => set('integrations_strip_title', e.target.value)} placeholder="Works with the tools you already use" />
                 </Field>
                 <Field label={t('landing_page_admin.section_subtitle')}>
-                    <Input value={s('integrations_strip_subtitle')} onChange={(e) => set('integrations_strip_subtitle', e.target.value)} multiline rows={2} placeholder="Connect WisperBot to 100+ apps..." />
+                    <Input value={s('integrations_strip_subtitle')} onChange={(e) => set('integrations_strip_subtitle', e.target.value)} multiline rows={2} placeholder="Connect Cerqle to 100+ apps..." />
                 </Field>
             </Card.Body>
         </Card>
@@ -809,7 +809,7 @@ function AboutTab({ data, setData, t }) {
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     <Field label={t('landing_page_admin.section_badge')}>
-                        <Input value={s('about_badge')} onChange={(e) => set('about_badge', e.target.value)} placeholder="About WisperBot" />
+                        <Input value={s('about_badge')} onChange={(e) => set('about_badge', e.target.value)} placeholder="About Cerqle" />
                     </Field>
                     <div className="sm:col-span-2">
                         <Field label={t('landing_page_admin.headline')}>
@@ -899,7 +899,7 @@ function IntegrationsPageTab({ data, setData, t }) {
                     </Field>
                     <div className="sm:col-span-2">
                         <Field label={t('landing_page_admin.headline')}>
-                            <Input value={s('integrations_page_title')} onChange={(e) => set('integrations_page_title', e.target.value)} placeholder="Connect WisperBot to your entire stack" />
+                            <Input value={s('integrations_page_title')} onChange={(e) => set('integrations_page_title', e.target.value)} placeholder="Connect Cerqle to your entire stack" />
                         </Field>
                     </div>
                 </div>

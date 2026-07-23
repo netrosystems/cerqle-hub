@@ -3,7 +3,7 @@ import LandingLayout from '@/Layouts/LandingLayout';
 import SeoHead from '@/Components/SeoHead';
 import { Reveal } from '@/Components/Reveal';
 
-/** Pill badge mirroring the orange variant in resources/js/Pages/marketing/About.jsx. */
+/** Pill badge mirroring the Cerqle variant in resources/js/Pages/marketing/About.jsx. */
 function Badge({ text }) {
     if (!text) return null;
     return (
@@ -67,7 +67,7 @@ export default function CmsPage({ page }) {
                 className="relative overflow-hidden"
                 style={{
                     background:
-                        'radial-gradient(ellipse 70% 65% at 50% 0%, rgba(255,118,46,0.18) 0%, transparent 60%), #14100c',
+                        'radial-gradient(ellipse 70% 65% at 50% 0%, rgba(143,95,167,0.18) 0%, transparent 60%), #281a31',
                 }}
             >
                 <div className="pointer-events-none absolute -left-24 top-6 h-72 w-72 rounded-full bg-brand-500/20 blur-3xl animate-float-slow" />
@@ -96,7 +96,7 @@ export default function CmsPage({ page }) {
             </section>
 
             {/* Cream article body */}
-            <section className="bg-[#faf5ec]">
+            <section className="bg-[#fbf9fd]">
                 <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-16 lg:py-24">
                     <div className="lg:grid lg:grid-cols-[16rem_minmax(0,1fr)] lg:gap-12">
                         {headings.length > 1 && (
