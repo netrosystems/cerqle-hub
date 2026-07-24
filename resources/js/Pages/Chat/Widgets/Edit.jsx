@@ -9,7 +9,7 @@ export default function ChatWidgetEdit({ widget, chatbots = [], embedBase, ident
     const flash = usePage().props.flash ?? {};
 
     const submit = (payload) => {
-        router.put(route('client.inbox.chat-widgets.update', widget.id), payload, { preserveScroll: true });
+        router.post(route('client.inbox.chat-widgets.update', widget.id), { ...payload, _method: 'put' }, { preserveScroll: true, forceFormData: true });
     };
 
     const remove = () => {

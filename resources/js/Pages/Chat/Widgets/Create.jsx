@@ -5,7 +5,7 @@ import ChatWidgetForm from './Partials/ChatWidgetForm';
 
 export default function ChatWidgetCreate({ chatbots = [], canUseCustomLauncherLogo = false }) {
     const submit = (payload) => {
-        router.post(route('client.inbox.chat-widgets.store'), payload);
+        router.post(route('client.inbox.chat-widgets.store'), payload, { forceFormData: true });
     };
 
     return (

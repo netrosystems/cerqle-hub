@@ -7,6 +7,7 @@ use App\Modules\Inbox\Models\ChatWidget;
 use App\Modules\Inbox\Services\WebchatDriver;
 use App\Modules\Shared\Models\Conversation;
 use App\Modules\Shared\Models\Message;
+use App\Services\StorageManager;
 use App\Support\WebchatVisitorToken;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -20,7 +21,10 @@ use Illuminate\Support\Str;
  */
 class ChatWidgetPublicController extends Controller
 {
-    public function __construct(private readonly WebchatDriver $driver) {}
+    public function __construct(
+        private readonly WebchatDriver $driver,
+        private readonly StorageManager $storageManager,
+    ) {}
 
     /** POST /widget/v1/session — start or restore a visitor's chat session. */
     public function session(Request $request): JsonResponse
@@ -58,7 +62,12 @@ class ChatWidgetPublicController extends Controller
     {
         $data = $request->validate([
             'key' => ['required', 'string'],
-            'message' => ['required', 'string', 'max:4000'],
+            'message' => ['nullable', 'string', 'max:4000'],
+            'type' => ['nullable', 'in:text,audio,image'],
+            'attachment' => [
+                'nullable', 'file', 'max:10240',
+                'mimes:jpg,jpeg,png,webp,mp3,aac,m4a,amr,ogg,oga,wav,webm',
+            ],
         ]);
 
         $widget = $this->resolveWidget($data['key']);
@@ -72,7 +81,34 @@ class ChatWidgetPublicController extends Controller
             ->first();
         abort_if($conversation === null, 404, 'Conversation not found.');
 
-        $message = $this->driver->recordInboundMessage($conversation, $payload['v'], $data['message']);
+        $type = $data['type'] ?? 'text';
+        $body = trim((string) ($data['message'] ?? ''));
+        $messagePayload = [];
+
+        if ($request->hasFile('attachment')) {
+            $file = $request->file('attachment');
+            $mimeType = $file->getMimeType() ?? 'application/octet-stream';
+            $isAudioRecording = str_starts_with($mimeType, 'audio/')
+                || in_array($mimeType, ['video/webm', 'application/ogg'], true);
+            $isImage = str_starts_with($mimeType, 'image/');
+            abort_unless($isAudioRecording || $isImage, 422, 'Only image uploads and audio recordings are accepted here.');
+
+            $type = $isImage ? 'image' : 'audio';
+            $storedPath = $this->storageManager->prefixedPath('message-media/'.$file->hashName());
+            $this->storageManager->disk()->putFileAs(dirname($storedPath), $file, basename($storedPath));
+
+            $messagePayload = [
+                'preview_url' => $this->storageManager->disk()->url($storedPath),
+                'filename' => $file->getClientOriginalName(),
+                'mime_type' => $mimeType,
+                'caption' => $body !== '' ? $body : null,
+            ];
+            $body = $body !== '' ? $body : ($file->getClientOriginalName() ?: ($isImage ? 'Image attachment' : 'Voice message'));
+        }
+
+        abort_if($type === 'text' && $body === '', 422, 'Message body is required.');
+
+        $message = $this->driver->recordInboundMessage($conversation, $payload['v'], $body, $type, $messagePayload);
 
         return response()->json(['message' => $this->mapMessage($message, $widget)]);
     }

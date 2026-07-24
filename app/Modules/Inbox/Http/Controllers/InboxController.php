@@ -161,7 +161,7 @@ class InboxController extends Controller
             // Allow-list of messaging media types (no HTML/SVG/executables).
             'attachment' => [
                 'nullable', 'file', 'max:20480',
-                'mimes:jpg,jpeg,png,webp,mp4,3gp,mov,mp3,aac,m4a,amr,ogg,pdf,doc,docx,xls,xlsx,ppt,pptx,txt',
+                'mimes:jpg,jpeg,png,webp,mp4,3gp,mov,mp3,aac,m4a,amr,ogg,oga,wav,webm,pdf,doc,docx,xls,xlsx,ppt,pptx,txt',
             ],
         ]);
 
@@ -177,7 +177,8 @@ class InboxController extends Controller
             // Derive type from MIME if not explicitly set
             if ($msgType === 'text') {
                 $msgType = str_starts_with($mimeType, 'image/') ? 'image'
-                    : (str_starts_with($mimeType, 'video/') ? 'video' : 'document');
+                    : (str_starts_with($mimeType, 'video/') ? 'video'
+                        : (str_starts_with($mimeType, 'audio/') ? 'audio' : 'document'));
             }
 
             // Every channel needs a public URL for the local preview. WhatsApp is

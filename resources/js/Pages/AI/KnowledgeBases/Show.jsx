@@ -2,7 +2,7 @@ import { Head, Link, useForm, router, usePage } from '@inertiajs/react';
 import ClientLayout from '@/Layouts/ClientLayout';
 import EmptyState from '@/Components/EmptyState';
 import { ArrowLeft, Plus, Pencil, RefreshCw, Trash, Trash2, Globe, FileText, Type, X, Upload, CheckCircle2, Clock, Zap, AlertCircle, HelpCircle } from 'lucide-react';
-import { useState, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation, Trans } from 'react-i18next';
 
 const SOURCE_TYPES = {
@@ -121,8 +121,26 @@ export default function AiKnowledgeBaseShow({ kb, kbUploadMaxKb = 20480, kbUploa
         selectFile(file);
     };
 
+    const hasRunningDocuments = useMemo(
+        () => kb.documents?.some(d => ['pending', 'indexing'].includes(d.status)) ?? false,
+        [kb.documents],
+    );
     const totalTokens = kb.documents?.reduce((s, d) => s + (d.tokens ?? 0), 0) ?? 0;
     const indexedCount = kb.documents?.filter(d => d.status === 'indexed').length ?? 0;
+
+    useEffect(() => {
+        if (!hasRunningDocuments || showAdd || showEdit) return undefined;
+
+        const timer = window.setInterval(() => {
+            router.reload({
+                only: ['kb'],
+                preserveScroll: true,
+                preserveState: true,
+            });
+        }, 8000);
+
+        return () => window.clearInterval(timer);
+    }, [hasRunningDocuments, showAdd, showEdit]);
 
     return (
         <ClientLayout title={kb.name}>
@@ -442,7 +460,8 @@ export default function AiKnowledgeBaseShow({ kb, kbUploadMaxKb = 20480, kbUploa
                                         {data.source_type === 'sitemap' ? t('ai.sitemap_url') : t('ai.source_url')}
                                     </label>
                                     <input
-                                        type="url"
+                                        type="text"
+                                        inputMode="url"
                                         value={data.source_ref}
                                         onChange={e => setData('source_ref', e.target.value)}
                                         placeholder={data.source_type === 'sitemap' ? 'https://example.com/sitemap.xml' : 'https://example.com'}

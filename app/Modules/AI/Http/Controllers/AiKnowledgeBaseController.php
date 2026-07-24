@@ -109,6 +109,13 @@ class AiKnowledgeBaseController extends Controller
     {
         $this->authorise($request, $kb);
 
+        $sourceType = (string) $request->input('source_type');
+        if (in_array($sourceType, ['url', 'sitemap'], true)) {
+            $request->merge([
+                'source_ref' => $this->normaliseSourceUrl((string) $request->input('source_ref')),
+            ]);
+        }
+
         $validated = $request->validate([
             'source_type' => ['required', 'in:file,url,text,sitemap,faq'],
             'source_ref' => $this->sourceRefRules((string) $request->input('source_type')),
@@ -239,5 +246,15 @@ class AiKnowledgeBaseController extends Controller
             'file' => ['nullable', 'string', 'max:512'],
             default => ['nullable', 'string', 'max:512'],
         };
+    }
+
+    private function normaliseSourceUrl(string $url): string
+    {
+        $url = trim($url);
+        if ($url === '' || preg_match('/^[a-z][a-z0-9+.-]*:\/\//i', $url)) {
+            return $url;
+        }
+
+        return 'https://'.$url;
     }
 }

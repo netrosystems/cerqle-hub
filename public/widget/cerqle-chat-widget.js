@@ -33,6 +33,14 @@
   var online = true;
   var pollTimer = null;
   var inviteTimer = null;
+  var unreadCount = 0;
+  var audioCtx = null;
+  var audioUnlocked = false;
+  var mediaRecorder = null;
+  var recordingStream = null;
+  var recordingChunks = [];
+  var pendingAudio = null;
+  var pendingImage = null;
   var prechatNeeded = !!CFG.require_prechat && !safeGet('wb_chat_prechat_' + KEY);
 
   function safeGet(k) { try { return window.localStorage.getItem(k) || ''; } catch (e) { return ''; } }
@@ -83,6 +91,18 @@
   var body = root.querySelector('.wb-body');
   var form = root.querySelector('.wb-inputbar');
   var input = root.querySelector('.wb-input');
+  var imageBtn = root.querySelector('.wb-image-btn');
+  var imageInput = root.querySelector('.wb-image-input');
+  var imagePreview = root.querySelector('.wb-image-preview');
+  var imagePreviewImg = root.querySelector('.wb-image-preview-img');
+  var imageSendBtn = root.querySelector('.wb-image-send');
+  var imageDiscardBtn = root.querySelector('.wb-image-discard');
+  var micBtn = root.querySelector('.wb-mic');
+  var audioPreview = root.querySelector('.wb-audio-preview');
+  var audioPreviewPlayer = root.querySelector('.wb-audio-player');
+  var audioStatus = root.querySelector('.wb-audio-status');
+  var audioSendBtn = root.querySelector('.wb-audio-send');
+  var audioDiscardBtn = root.querySelector('.wb-audio-discard');
   var prechat = root.querySelector('.wb-prechat');
   var prechatForm = root.querySelector('.wb-prechat-form');
   var statusEl = root.querySelector('.wb-status');
@@ -102,6 +122,14 @@
   launcher.addEventListener('click', function () { open ? close() : openPanel(); });
   invite.addEventListener('click', openPanel);
   root.querySelector('.wb-close').addEventListener('click', close);
+  ['click', 'touchstart', 'keydown'].forEach(function (eventName) {
+    document.addEventListener(eventName, unlockSound, { once: true, passive: true });
+  });
+  ['wheel', 'touchmove'].forEach(function (eventName) {
+    body.addEventListener(eventName, function (event) {
+      event.stopPropagation();
+    }, { passive: true });
+  });
 
   form.addEventListener('submit', function (e) {
     e.preventDefault();
@@ -110,6 +138,13 @@
     input.value = '';
     send(text);
   });
+  micBtn.addEventListener('click', toggleRecording);
+  audioSendBtn.addEventListener('click', sendPendingAudio);
+  audioDiscardBtn.addEventListener('click', discardPendingAudio);
+  imageBtn.addEventListener('click', function () { imageInput.click(); });
+  imageInput.addEventListener('change', handleImageSelected);
+  imageSendBtn.addEventListener('click', sendPendingImage);
+  imageDiscardBtn.addEventListener('click', discardPendingImage);
 
   if (prechatForm) {
     prechatForm.addEventListener('submit', function (e) {
@@ -157,7 +192,8 @@
     wrap.classList.remove('wb-show-invite');
     wrap.classList.add('wb-open');
     launcher.classList.add('wb-active');
-    badge.style.display = 'none';
+    unreadCount = 0;
+    updateBadge();
     if (!prechatNeeded && !started) { ensureSession().then(startPolling); }
     else { startPolling(); }
     setTimeout(function () { if (!prechatNeeded) input.focus(); scrollDown(); }, 60);
@@ -167,6 +203,7 @@
     open = false;
     wrap.classList.remove('wb-open');
     launcher.classList.remove('wb-active');
+    stopRecording(false);
   }
 
   function scheduleInvite() {
@@ -206,6 +243,165 @@
     }).catch(function () {});
   }
 
+  function toggleRecording() {
+    if (mediaRecorder && mediaRecorder.state === 'recording') {
+      stopRecording(true);
+      return;
+    }
+    startRecording();
+  }
+
+  function startRecording() {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || !window.MediaRecorder) {
+      setAudioStatus('Audio recording is not supported in this browser.');
+      return;
+    }
+    discardPendingAudio();
+    discardPendingImage();
+    navigator.mediaDevices.getUserMedia({ audio: true }).then(function (stream) {
+      recordingStream = stream;
+      recordingChunks = [];
+      var mimeType = pickRecorderMimeType();
+      mediaRecorder = mimeType ? new MediaRecorder(stream, { mimeType: mimeType }) : new MediaRecorder(stream);
+      mediaRecorder.addEventListener('dataavailable', function (event) {
+        if (event.data && event.data.size > 0) recordingChunks.push(event.data);
+      });
+      mediaRecorder.addEventListener('stop', function () {
+        stopTracks();
+        micBtn.classList.remove('wb-recording');
+        micBtn.setAttribute('aria-label', 'Record voice message');
+        if (!recordingChunks.length) return;
+        var blobType = mediaRecorder.mimeType || 'audio/webm';
+        var blob = new Blob(recordingChunks, { type: blobType });
+        var extension = blobType.indexOf('ogg') !== -1 ? 'ogg' : (blobType.indexOf('mp4') !== -1 ? 'm4a' : 'webm');
+        pendingAudio = {
+          blob: blob,
+          file: new File([blob], 'voice-message.' + extension, { type: blobType }),
+          url: URL.createObjectURL(blob)
+        };
+        audioPreviewPlayer.src = pendingAudio.url;
+        audioPreview.style.display = 'flex';
+        setAudioStatus('Voice message ready. Send or discard it.');
+      });
+      mediaRecorder.start();
+      micBtn.classList.add('wb-recording');
+      micBtn.setAttribute('aria-label', 'Stop recording');
+      setAudioStatus('Recording… tap the microphone again to stop.');
+    }).catch(function () {
+      setAudioStatus('Microphone permission was not granted.');
+    });
+  }
+
+  function stopRecording(keepRecording) {
+    if (mediaRecorder && mediaRecorder.state === 'recording') {
+      mediaRecorder.stop();
+    } else {
+      stopTracks();
+    }
+    if (!keepRecording) {
+      recordingChunks = [];
+      micBtn.classList.remove('wb-recording');
+    }
+  }
+
+  function stopTracks() {
+    if (recordingStream) {
+      recordingStream.getTracks().forEach(function (track) { track.stop(); });
+      recordingStream = null;
+    }
+  }
+
+  function sendPendingAudio() {
+    if (!pendingAudio) return;
+    ensureSession().then(function () {
+      startPolling();
+      audioSendBtn.disabled = true;
+      var fd = new FormData();
+      fd.append('key', KEY);
+      fd.append('type', 'audio');
+      fd.append('message', input.value.trim());
+      fd.append('attachment', pendingAudio.file);
+      return postForm('/widget/v1/messages', fd);
+    }).then(function (data) {
+      if (data && data.message) addMessage(data.message);
+      input.value = '';
+      discardPendingAudio();
+    }).catch(function () {
+      setAudioStatus('Could not send voice message. Please try again.');
+    }).then(function () {
+      audioSendBtn.disabled = false;
+    });
+  }
+
+  function handleImageSelected(event) {
+    var file = event.target.files && event.target.files[0];
+    event.target.value = '';
+    if (!file) return;
+    if (!/^image\//.test(file.type || '')) {
+      setAudioStatus('Please choose an image file.');
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      setAudioStatus('Image is too large. Please choose an image under 10 MB.');
+      return;
+    }
+    discardPendingAudio();
+    discardPendingImage();
+    pendingImage = { file: file, url: URL.createObjectURL(file) };
+    imagePreviewImg.src = pendingImage.url;
+    imagePreview.style.display = 'flex';
+  }
+
+  function sendPendingImage() {
+    if (!pendingImage) return;
+    ensureSession().then(function () {
+      startPolling();
+      imageSendBtn.disabled = true;
+      var fd = new FormData();
+      fd.append('key', KEY);
+      fd.append('type', 'image');
+      fd.append('message', input.value.trim());
+      fd.append('attachment', pendingImage.file);
+      return postForm('/widget/v1/messages', fd);
+    }).then(function (data) {
+      if (data && data.message) addMessage(data.message);
+      input.value = '';
+      discardPendingImage();
+    }).catch(function () {
+      setAudioStatus('Could not send image. Please try again.');
+    }).then(function () {
+      imageSendBtn.disabled = false;
+    });
+  }
+
+  function discardPendingImage() {
+    if (pendingImage && pendingImage.url) URL.revokeObjectURL(pendingImage.url);
+    pendingImage = null;
+    imagePreviewImg.removeAttribute('src');
+    imagePreview.style.display = 'none';
+  }
+
+  function discardPendingAudio() {
+    if (pendingAudio && pendingAudio.url) URL.revokeObjectURL(pendingAudio.url);
+    pendingAudio = null;
+    audioPreviewPlayer.removeAttribute('src');
+    audioPreview.style.display = 'none';
+    setAudioStatus('');
+  }
+
+  function setAudioStatus(text) {
+    audioStatus.textContent = text || '';
+    audioStatus.style.display = text ? 'block' : 'none';
+  }
+
+  function pickRecorderMimeType() {
+    var types = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/ogg', 'audio/mp4'];
+    for (var i = 0; i < types.length; i++) {
+      if (window.MediaRecorder && MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(types[i])) return types[i];
+    }
+    return '';
+  }
+
   function startPolling() {
     if (pollTimer || !started) return;
     var tick = function () {
@@ -221,20 +417,25 @@
       if (!data) return;
       if (typeof data.online === 'boolean') { online = data.online; updateStatus(); }
       (data.messages || []).forEach(function (m) {
-        if (m.role === 'agent') { addMessage(m); if (!open) showBadge(); }
-        else { addMessage(m); }
+        var added = addMessage(m);
+        if (added && m.role === 'agent' && (!open || document.hidden)) {
+          unreadCount += 1;
+          updateBadge();
+          playNotificationSound();
+        }
       });
     });
   }
 
   // ── Rendering ──────────────────────────────────────────────────────────────
   function addMessage(m) {
-    if (!m || rendered[m.id]) return;
+    if (!m || rendered[m.id]) return false;
     rendered[m.id] = true;
     if (m.id > lastId) lastId = m.id;
     thread.push({ id: m.id, role: m.role, body: m.body, agent_name: m.agent_name, attachment_url: m.attachment_url, type: m.type, filename: m.filename });
     saveThread();
     addBubble(m.role, m.body, m.agent_name, m.attachment_url, m.type, m.filename);
+    return true;
   }
 
   function addBubble(role, text, name, attachmentUrl, type, filename) {
@@ -249,6 +450,8 @@
     var attachment = '';
     if (attachmentUrl && type === 'image') {
       attachment = '<img class="wb-media-image" src="' + esc(attachmentUrl) + '" alt="' + esc(filename || text || 'Image attachment') + '">';
+    } else if (attachmentUrl && type === 'audio') {
+      attachment = '<audio class="wb-media-audio" src="' + esc(attachmentUrl) + '" controls preload="metadata"></audio>';
     } else if (attachmentUrl) {
       attachment = '<a class="wb-media-file" href="' + esc(attachmentUrl) + '" target="_blank" rel="noopener noreferrer">' + esc(filename || 'Open attachment') + '</a>';
     }
@@ -265,7 +468,55 @@
       : '<span class="wb-dot wb-dot-off"></span>' + esc(CFG.offline_message || 'Away — leave a message');
   }
 
-  function showBadge() { badge.style.display = 'block'; }
+  function updateBadge() {
+    if (!badge) return;
+    if (unreadCount > 0 && !open) {
+      badge.textContent = unreadCount > 9 ? '9+' : String(unreadCount);
+      badge.style.display = 'flex';
+      launcher.classList.add('wb-has-unread');
+    } else {
+      badge.textContent = '';
+      badge.style.display = 'none';
+      launcher.classList.remove('wb-has-unread');
+    }
+  }
+
+  function unlockSound() {
+    try {
+      audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+      audioUnlocked = true;
+    } catch (e) {
+      audioUnlocked = false;
+    }
+  }
+
+  function playNotificationSound() {
+    try {
+      audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+      if (!audioUnlocked && audioCtx.state === 'suspended') {
+        audioCtx.resume().catch(function () {});
+      }
+      if (audioCtx.state === 'suspended') return;
+
+      var now = audioCtx.currentTime;
+      var gain = audioCtx.createGain();
+      gain.gain.setValueAtTime(0.0001, now);
+      gain.gain.exponentialRampToValueAtTime(0.08, now + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.42);
+      gain.connect(audioCtx.destination);
+
+      [740, 980].forEach(function (freq, index) {
+        var osc = audioCtx.createOscillator();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(freq, now + (index * 0.08));
+        osc.connect(gain);
+        osc.start(now + (index * 0.08));
+        osc.stop(now + 0.28 + (index * 0.08));
+      });
+    } catch (e) {}
+  }
+
   function scrollDown() { setTimeout(function () { body.scrollTop = body.scrollHeight; }, 30); }
 
   // ── HTTP ───────────────────────────────────────────────────────────────────
@@ -276,9 +527,21 @@
       body: JSON.stringify(payload)
     }).then(handle);
   }
+  function postForm(path, payload) {
+    return fetch(API + path, {
+      method: 'POST',
+      headers: formHeaders(),
+      body: payload
+    }).then(handle);
+  }
   function get(path) { return fetch(API + path, { method: 'GET', headers: headers() }).then(handle); }
   function headers() {
     var h = { 'Content-Type': 'application/json', 'Accept': 'application/json' };
+    if (token) h['X-Widget-Token'] = token;
+    return h;
+  }
+  function formHeaders() {
+    var h = { 'Accept': 'application/json' };
     if (token) h['X-Widget-Token'] = token;
     return h;
   }
@@ -313,6 +576,24 @@
           '</form>' +
         '</div>' +
         '<form class="wb-inputbar">' +
+          '<div class="wb-image-preview">' +
+            '<img class="wb-image-preview-img" alt="Selected image preview">' +
+            '<button class="wb-image-send" type="button">Send</button>' +
+            '<button class="wb-image-discard" type="button" aria-label="Discard image">&#x2715;</button>' +
+          '</div>' +
+          '<div class="wb-audio-preview">' +
+            '<audio class="wb-audio-player" controls preload="metadata"></audio>' +
+            '<button class="wb-audio-send" type="button">Send</button>' +
+            '<button class="wb-audio-discard" type="button" aria-label="Discard voice message">&#x2715;</button>' +
+          '</div>' +
+          '<div class="wb-audio-status" aria-live="polite"></div>' +
+          '<button class="wb-tool-btn wb-image-btn" type="button" aria-label="Attach image" title="Attach image">' +
+            '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L6 21"/></svg>' +
+          '</button>' +
+          '<input class="wb-image-input" type="file" accept="image/*">' +
+          '<button class="wb-mic" type="button" aria-label="Record voice message" title="Record voice message">' +
+            '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><path d="M12 19v3"/></svg>' +
+          '</button>' +
           '<input class="wb-input" type="text" placeholder="Type your message…" autocomplete="off">' +
           '<button class="wb-send" type="submit" aria-label="Send">' +
             '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>' +
@@ -324,7 +605,7 @@
         '<span class="wb-invite-card"><strong>' + esc(inviteTitle) + '</strong><small>' + esc(inviteSubtitle) + '</small></span>' +
       '</button>' +
       '<button class="wb-launcher" aria-label="Open chat">' +
-        '<span class="wb-badge"></span>' +
+        '<span class="wb-badge" aria-live="polite"></span>' +
         '<span class="wb-launcher-default">' + launcherIcon + '</span>' +
         '<svg class="wb-ic-close" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>' +
       '</button>';
@@ -336,14 +617,15 @@
       '*{box-sizing:border-box;margin:0;padding:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}',
       '.wb-wrap{position:fixed;bottom:20px;z-index:2147483647}',
       '.wb-right{right:20px}.wb-left{left:20px}',
-      '.wb-launcher{position:relative;width:60px;height:60px;border-radius:50%;border:none;cursor:pointer;color:#fff;background:' + COLOR + ';box-shadow:0 6px 24px rgba(0,0,0,.24);display:flex;align-items:center;justify-content:center;overflow:hidden;transition:opacity .2s,transform .2s}',
+      '.wb-launcher{position:relative;width:60px;height:60px;border-radius:50%;border:none;cursor:pointer;color:#fff;background:' + COLOR + ';box-shadow:0 6px 24px rgba(0,0,0,.24);display:flex;align-items:center;justify-content:center;overflow:visible;transition:opacity .2s,transform .2s}',
       '.wb-launcher:hover{transform:scale(1.06)}.wb-launcher:active{transform:scale(.96)}',
+      '.wb-launcher:before{content:"";position:absolute;inset:-7px;border-radius:50%;border:2px solid ' + COLOR + ';opacity:0;transform:scale(.82);pointer-events:none}.wb-has-unread:before{animation:wb-pulse 1.35s ease-out infinite}',
       '.wb-ic-close{display:none}',
       '.wb-launcher-default{display:flex;align-items:center;justify-content:center}.wb-launcher-logo{width:30px;height:30px;object-fit:contain}.wb-active .wb-launcher-default{display:none}.wb-active .wb-ic-close{display:block}',
       '.wb-launcher-invite{position:absolute;bottom:3px;width:224px;max-width:calc(100vw - 104px);border:0;background:transparent;padding:0;cursor:pointer;text-align:left;opacity:0;pointer-events:none;transform:translateX(14px) scale(.92);transition:opacity .28s ease,transform .48s cubic-bezier(.18,1.18,.35,1)}',
       '.wb-right .wb-launcher-invite{right:72px;transform-origin:right center}.wb-left .wb-launcher-invite{left:72px;transform:translateX(-12px) scale(.96);transform-origin:left center}.wb-show-invite .wb-launcher-invite{opacity:1;pointer-events:auto;transform:translateX(0) scale(1)}',
       '.wb-invite-card{position:relative;display:block;width:100%;background:#fff;border-radius:11px;padding:11px 15px;box-shadow:0 5px 18px rgba(0,0,0,.16);color:#20242c}.wb-invite-card:after{content:"";position:absolute;top:50%;right:-8px;margin-top:-8px;border-width:8px 0 8px 9px;border-style:solid;border-color:transparent transparent transparent #fff}.wb-left .wb-invite-card:after{right:auto;left:-8px;border-width:8px 9px 8px 0;border-color:transparent #fff transparent transparent}.wb-invite-card strong{display:block;font-size:15px;line-height:1.2;font-weight:700}.wb-invite-card small{display:block;margin-top:3px;font-size:12px;line-height:1.3;color:#737984;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
-      '.wb-badge{display:none;position:absolute;top:2px;right:2px;width:14px;height:14px;border-radius:50%;background:#ef4444;border:2px solid #fff}',
+      '.wb-badge{display:none;position:absolute;top:-3px;right:-3px;min-width:22px;height:22px;border-radius:999px;background:#ef4444;border:2px solid #fff;color:#fff;align-items:center;justify-content:center;font-size:11px;font-weight:800;line-height:1;box-shadow:0 3px 10px rgba(239,68,68,.42);z-index:2}',
       '.wb-panel{position:absolute;bottom:74px;' + (LEFT ? 'left:0' : 'right:0') + ';width:370px;max-width:calc(100vw - 40px);height:560px;max-height:calc(100vh - 120px);background:#fff;border-radius:18px;box-shadow:0 16px 50px rgba(0,0,0,.22);display:flex;flex-direction:column;overflow:hidden;opacity:0;transform:translateY(12px) scale(.98);pointer-events:none;transition:opacity .2s,transform .22s cubic-bezier(.34,1.4,.6,1);transform-origin:bottom ' + (LEFT ? 'left' : 'right') + '}',
       '.wb-open .wb-panel{opacity:1;transform:translateY(0) scale(1);pointer-events:auto}',
       '.wb-header{background:' + COLOR + ';color:#fff;padding:16px;display:flex;align-items:center;gap:11px}',
@@ -356,26 +638,31 @@
       '.wb-dot-off{background:#d1d5db}',
       '.wb-close{background:transparent;border:none;color:#fff;font-size:16px;cursor:pointer;opacity:.85;padding:4px;line-height:1}',
       '.wb-close:hover{opacity:1}',
-      '.wb-body{flex:1;overflow-y:auto;padding:16px;background:#f7f8fa;display:flex;flex-direction:column;gap:10px}',
+      '.wb-body{flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;touch-action:pan-y;padding:16px;background:#f7f8fa;display:flex;flex-direction:column;gap:10px}',
       '.wb-row{display:flex;align-items:flex-end;gap:8px;max-width:85%}',
       '.wb-in{align-self:flex-start}.wb-out{align-self:flex-end;flex-direction:row-reverse}',
       '.wb-row .wb-av{width:26px;height:26px;font-size:11px}',
       '.wb-bubble{padding:9px 13px;border-radius:16px;font-size:14px;line-height:1.45;word-wrap:break-word;white-space:normal}',
       '.wb-in .wb-bubble{background:#fff;color:#1f2430;border:1px solid #eceef2;border-bottom-left-radius:5px}',
       '.wb-out .wb-bubble{background:' + COLOR + ';color:#fff;border-bottom-right-radius:5px}',
-      '.wb-media-image{display:block;max-width:100%;max-height:240px;border-radius:10px;object-fit:cover;margin-bottom:6px}.wb-caption:empty{display:none}.wb-media-file{display:block;color:inherit;font-weight:600;text-decoration:underline;word-break:break-word}',
+      '.wb-media-image{display:block;max-width:100%;max-height:240px;border-radius:10px;object-fit:cover;margin-bottom:6px}.wb-media-audio{display:block;width:220px;max-width:100%;height:38px;margin-bottom:6px}.wb-caption:empty{display:none}.wb-media-file{display:block;color:inherit;font-weight:600;text-decoration:underline;word-break:break-word}',
       '.wb-prechat{display:none;padding:18px;background:#fff}',
       '.wb-pc-intro{font-size:13px;color:#6b7280;margin-bottom:12px}',
       '.wb-prechat-form{display:flex;flex-direction:column;gap:10px}',
       '.wb-prechat-form input{border:1px solid #dfe2e8;border-radius:10px;padding:11px 13px;font-size:14px;outline:none}',
       '.wb-prechat-form input:focus{border-color:' + COLOR + '}',
       '.wb-pc-btn{background:' + COLOR + ';color:#fff;border:none;border-radius:10px;padding:11px;font-size:14px;font-weight:600;cursor:pointer}',
-      '.wb-inputbar{display:flex;align-items:center;gap:8px;padding:12px;border-top:1px solid #eceef2;background:#fff}',
+      '.wb-inputbar{display:flex;align-items:center;gap:8px;padding:12px;border-top:1px solid #eceef2;background:#fff;position:relative;flex-wrap:wrap}',
+      '.wb-image-preview{display:none;align-items:center;gap:8px;width:100%;padding:8px 9px;border:1px solid #eceef2;border-radius:12px;background:#f8fafc}.wb-image-preview-img{width:48px;height:48px;border-radius:10px;object-fit:cover}.wb-image-send{border:none;border-radius:999px;background:' + COLOR + ';color:#fff;padding:7px 12px;font-size:12px;font-weight:700;cursor:pointer;margin-left:auto}.wb-image-send:disabled{opacity:.6;cursor:wait}.wb-image-discard{width:30px;height:30px;border:none;border-radius:999px;background:#fff;color:#8b93a1;cursor:pointer;border:1px solid #e5e7eb}.wb-image-input{display:none}',
+      '.wb-audio-preview{display:none;align-items:center;gap:8px;width:100%;padding:8px 9px;border:1px solid #eceef2;border-radius:12px;background:#f8fafc}.wb-audio-player{flex:1;min-width:160px;height:34px}.wb-audio-send{border:none;border-radius:999px;background:' + COLOR + ';color:#fff;padding:7px 12px;font-size:12px;font-weight:700;cursor:pointer}.wb-audio-send:disabled{opacity:.6;cursor:wait}.wb-audio-discard{width:30px;height:30px;border:none;border-radius:999px;background:#fff;color:#8b93a1;cursor:pointer;border:1px solid #e5e7eb}.wb-audio-status{display:none;width:100%;font-size:11px;color:#6b7280;padding:0 4px 2px}.wb-mic{width:34px;height:34px;border-radius:50%;border:none;cursor:pointer;background:#f1f3f6;color:#687386;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:background .15s,color .15s,transform .15s}.wb-mic:hover{background:#e7eaf0;color:#303744}.wb-mic.wb-recording{background:#ef4444;color:#fff;animation:wb-record 1s ease-in-out infinite}',
+      '.wb-tool-btn{width:34px;height:34px;border-radius:50%;border:none;cursor:pointer;background:#f1f3f6;color:#687386;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:background .15s,color .15s}.wb-tool-btn:hover{background:#e7eaf0;color:#303744}',
       '.wb-input{flex:1;border:none;outline:none;font-size:14px;padding:8px 4px;background:transparent}',
       '.wb-send{width:38px;height:38px;border-radius:50%;border:none;cursor:pointer;background:' + COLOR + ';color:#fff;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:opacity .15s}',
       '.wb-send:hover{opacity:.88}',
       '.wb-brand{text-align:center;font-size:11px;color:#9aa1ad;padding:7px;background:#fff;border-top:1px solid #f1f2f4}',
       '.wb-brand b{color:#6b7280}',
+      '@keyframes wb-pulse{0%{opacity:.48;transform:scale(.86)}70%{opacity:0;transform:scale(1.28)}100%{opacity:0;transform:scale(1.28)}}',
+      '@keyframes wb-record{0%,100%{transform:scale(1)}50%{transform:scale(1.08)}}',
       '@media(max-width:420px){.wb-panel{height:calc(100vh - 96px)}}'
     ].join('');
   }

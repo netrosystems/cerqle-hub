@@ -3,6 +3,7 @@ import { Link, usePage } from '@inertiajs/react';
 import SeoHead from '@/Components/SeoHead';
 import { Reveal } from '@/Components/Reveal';
 import { FeatureIcon } from '@/Components/LandingIcons';
+import CookieConsent from '@/Components/CookieConsent';
 import { useTranslation } from 'react-i18next';
 
 const PLUM = '#3E2A49';
@@ -615,6 +616,7 @@ export default function Welcome({ auth, canRegister, landing = {} }) {
                 <CtaBand landing={landing} auth={auth} canRegister={canRegister} />
             </main>
             <Footer />
+            <CookieConsent />
         </div>
     );
 }

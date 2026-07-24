@@ -72,6 +72,7 @@ export default function ChatWidgetForm({ widget = null, chatbots = [], canUseCus
     });
 
     const [domainsText, setDomainsText] = useState((widget?.allowed_domains ?? []).join('\n'));
+    const [launcherLogoPreview, setLauncherLogoPreview] = useState(widget?.launcher_logo_url ?? null);
 
     const togglePrechatField = (field) => {
         const has = data.prechat_fields.includes(field);
@@ -140,10 +141,35 @@ export default function ChatWidgetForm({ widget = null, chatbots = [], canUseCus
                         >
                             {canUseCustomLauncherLogo ? (
                                 <>
-                                <input type="file" accept="image/png,image/jpeg,image/webp,image/gif" className={inputCls} onChange={(e) => setData('launcher_logo', e.target.files?.[0] ?? null)} />
+                                <input
+                                    type="file"
+                                    accept="image/png,image/jpeg,image/webp,image/gif"
+                                    className={inputCls}
+                                    onChange={(e) => {
+                                        const file = e.target.files?.[0] ?? null;
+                                        setData('launcher_logo', file);
+                                        setData('remove_launcher_logo', false);
+                                        setLauncherLogoPreview(file ? URL.createObjectURL(file) : (widget?.launcher_logo_url ?? null));
+                                    }}
+                                />
+                                {launcherLogoPreview && !data.remove_launcher_logo && (
+                                    <div className="mt-2 flex items-center gap-2 rounded-lg border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800/60 px-3 py-2">
+                                        <img src={launcherLogoPreview} alt="Launcher icon preview" className="h-9 w-9 rounded-full object-cover" />
+                                        <span className="text-xs text-neutral-500">Launcher icon preview</span>
+                                    </div>
+                                )}
                                 {data.launcher_logo_url && !data.remove_launcher_logo && (
                                     <label className="mt-2 flex items-center gap-2 text-xs text-neutral-500">
-                                        <input type="checkbox" checked={data.remove_launcher_logo} onChange={(e) => setData('remove_launcher_logo', e.target.checked)} className="rounded" />
+                                        <input
+                                            type="checkbox"
+                                            checked={data.remove_launcher_logo}
+                                            onChange={(e) => {
+                                                setData('remove_launcher_logo', e.target.checked);
+                                                if (e.target.checked) setLauncherLogoPreview(null);
+                                                else setLauncherLogoPreview(widget?.launcher_logo_url ?? null);
+                                            }}
+                                            className="rounded"
+                                        />
                                         Remove the current custom logo
                                     </label>
                                 )}

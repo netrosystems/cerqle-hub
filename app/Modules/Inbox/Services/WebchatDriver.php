@@ -75,14 +75,14 @@ class WebchatDriver implements ChannelDriverInterface
      * the exact conversation the session is bound to — never re-resolved by
      * device id, which could split an identity-matched contact across devices.
      */
-    public function recordInboundMessage(Conversation $conversation, string $visitorId, string $body): Message
+    public function recordInboundMessage(Conversation $conversation, string $visitorId, string $body, string $type = 'text', array $payload = []): Message
     {
         $message = Message::create([
             'conversation_id' => $conversation->id,
             'direction' => 'in',
             'channel' => 'webchat',
-            'type' => 'text',
-            'payload' => ['visitor_id' => $visitorId],
+            'type' => $type,
+            'payload' => array_merge(['visitor_id' => $visitorId], $payload),
             'body' => $body,
             'status' => 'delivered',
             'provider_message_id' => (string) Str::uuid(),

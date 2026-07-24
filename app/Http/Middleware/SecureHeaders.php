@@ -17,7 +17,7 @@ class SecureHeaders
         $response->headers->set('X-Content-Type-Options', 'nosniff');
         $response->headers->set('X-XSS-Protection', '1; mode=block');
         $response->headers->set('Referrer-Policy', 'strict-origin-when-cross-origin');
-        $response->headers->set('Permissions-Policy', 'geolocation=(), microphone=(), camera=()');
+        $response->headers->set('Permissions-Policy', 'geolocation=(), microphone=(self), camera=()');
 
         // Prevent the browser from caching authenticated pages. Without this, the
         // back button after logout restores a cached/bfcache copy of the dashboard,
@@ -56,6 +56,7 @@ class SecureHeaders
             'font-src '.$fontSrc,
             "connect-src 'self' ".$this->connectSources(),
             'frame-src '.$frameSrc,
+            "media-src 'self' https: blob: data:",
             "frame-ancestors 'self'",
         ]);
 

@@ -135,7 +135,7 @@ class IndexDocumentJob implements ShouldQueue
         }
 
         $message = strtolower($exception->getMessage());
-        foreach (['url indexing failed', 'document indexing failed'] as $safeMarker) {
+        foreach (['url indexing failed', 'sitemap indexing failed', 'document indexing failed'] as $safeMarker) {
             if (str_contains($message, $safeMarker)) {
                 return $exception->getMessage();
             }
@@ -169,7 +169,7 @@ class IndexDocumentJob implements ShouldQueue
 
     private function extractText(AiKbDocument $doc, StorageManager $storage): string
     {
-        return match ($doc->source_type) {
+        $text = match ($doc->source_type) {
             'text' => $doc->source_ref ?? '',
             'url' => $this->fetchUrl($doc->source_ref ?? ''),
             'file' => $this->readFile($doc->source_ref ?? '', $storage),
@@ -177,6 +177,8 @@ class IndexDocumentJob implements ShouldQueue
             'sitemap' => $this->processSitemap($doc),
             default => '',
         };
+
+        return $this->normaliseExtractedText($text);
     }
 
     private function fetchUrl(string $url): string
@@ -191,15 +193,15 @@ class IndexDocumentJob implements ShouldQueue
         if (! $resp->successful()) {
             throw new \RuntimeException('URL indexing failed: '.$url.' returned HTTP '.$resp->status().'.');
         }
-        $html = $resp->body();
+        $html = $this->removeHtmlNoise($resp->body());
         // Convert HTML to Markdown using league/html-to-markdown, then strip remaining tags
         if (class_exists(HtmlConverter::class)) {
             $converter = new HtmlConverter(['strip_tags' => true]);
 
-            return trim($converter->convert($html));
+            return $converter->convert($html);
         }
 
-        return trim(strip_tags($html));
+        return strip_tags($html);
     }
 
     /**
@@ -289,9 +291,12 @@ class IndexDocumentJob implements ShouldQueue
         if (empty($sitemapUrl)) {
             return '';
         }
-        $resp = Http::retry(2, 500)->timeout(20)->get($sitemapUrl);
+        $resp = Http::withHeaders([
+            'User-Agent' => 'CerqleKnowledgeIndexer/1.0 (+https://cerqle.ai)',
+            'Accept' => 'application/xml,text/xml,text/plain;q=0.9,*/*;q=0.7',
+        ])->retry(2, 500)->timeout(20)->get($sitemapUrl);
         if (! $resp->successful()) {
-            return '';
+            throw new \RuntimeException('Sitemap indexing failed: '.$sitemapUrl.' returned HTTP '.$resp->status().'.');
         }
 
         try {
@@ -312,6 +317,10 @@ class IndexDocumentJob implements ShouldQueue
                 }
             }
 
+            if ($locs === []) {
+                throw new \RuntimeException('Sitemap indexing failed: no page URLs were found in '.$sitemapUrl.'.');
+            }
+
             foreach (array_slice(array_keys($locs), 0, 200) as $loc) {
                 $child = AiKbDocument::create([
                     'kb_id' => $doc->kb_id,
@@ -322,7 +331,11 @@ class IndexDocumentJob implements ShouldQueue
                 ]);
                 static::dispatch($child->id)->onQueue('ai');
             }
-        } catch (\Throwable) {
+        } catch (\Throwable $exception) {
+            if (str_contains(strtolower($exception->getMessage()), 'sitemap indexing failed')) {
+                throw $exception;
+            }
+
             // Malformed sitemap; fall back to fetching the URL as HTML
             return $this->fetchUrl($sitemapUrl);
         }
@@ -330,7 +343,26 @@ class IndexDocumentJob implements ShouldQueue
         return '';
     }
 
-    private function chunk(string $text, int $size = 800, int $overlap = 100): array
+    private function removeHtmlNoise(string $html): string
+    {
+        // Script/style/svg blobs can contain huge minified strings that are not
+        // useful knowledge-base content and can exceed embedding model limits.
+        $html = preg_replace('/<(script|style|noscript|svg|canvas|iframe)\b[^>]*>.*?<\/\1>/is', ' ', $html) ?? $html;
+        $html = preg_replace('/<!--.*?-->/s', ' ', $html) ?? $html;
+
+        return $html;
+    }
+
+    private function normaliseExtractedText(string $text): string
+    {
+        $text = html_entity_decode($text, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        $text = preg_replace('/[ \t]+/', ' ', $text) ?? $text;
+        $text = preg_replace('/\R{3,}/', "\n\n", $text) ?? $text;
+
+        return trim($text);
+    }
+
+    private function chunk(string $text, int $size = 700, int $overlap = 80, int $maxChars = 6000): array
     {
         $words = preg_split('/\s+/', trim($text)) ?: [];
         $chunks = [];
@@ -338,10 +370,42 @@ class IndexDocumentJob implements ShouldQueue
 
         while ($i < count($words)) {
             $slice = array_slice($words, $i, $size);
-            $chunks[] = implode(' ', $slice);
+            $chunk = trim(implode(' ', $slice));
+            if ($chunk !== '') {
+                foreach ($this->splitOversizedChunk($chunk, $maxChars) as $part) {
+                    $chunks[] = $part;
+                }
+            }
             $i += ($size - $overlap);
         }
 
         return array_values(array_filter($chunks));
+    }
+
+    private function splitOversizedChunk(string $chunk, int $maxChars): array
+    {
+        if (strlen($chunk) <= $maxChars) {
+            return [$chunk];
+        }
+
+        $parts = [];
+        $remaining = $chunk;
+
+        while (strlen($remaining) > $maxChars) {
+            $candidate = substr($remaining, 0, $maxChars);
+            $splitAt = max(strrpos($candidate, "\n") ?: 0, strrpos($candidate, '. ') ?: 0, strrpos($candidate, ' ') ?: 0);
+            if ($splitAt < (int) ($maxChars * 0.5)) {
+                $splitAt = $maxChars;
+            }
+
+            $parts[] = trim(substr($remaining, 0, $splitAt));
+            $remaining = trim(substr($remaining, $splitAt));
+        }
+
+        if ($remaining !== '') {
+            $parts[] = $remaining;
+        }
+
+        return array_values(array_filter($parts));
     }
 }

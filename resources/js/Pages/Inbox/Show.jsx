@@ -7,6 +7,7 @@ import {
     RefreshCw, Search, Inbox, User, CheckCircle, Clock, X, Smile,
     Paperclip, Image as ImageIcon, ChevronDown, UserCheck,
     LayoutTemplate, Plus, Loader2, Bot, Calendar, BarChart2, PhoneMissed,
+    Mic, Square,
     Volume2, VolumeX, ShoppingBag,
 } from 'lucide-react';
 import { ChannelBrandIcon, CHANNEL_LABELS } from '@/Components/BrandIcons';
@@ -1437,6 +1438,9 @@ export default function InboxShow({
         setAssignedTo(conversation.assigned_to ?? 'bot');
         setAssignedUserId(conversation.assigned_user_id ?? null);
         setSendError(null);
+        stopAudioTracks();
+        setRecordingAudio(false);
+        setAttachPreview(null);
     }, [conversation.id]);
 
     useEffect(() => {
@@ -1450,6 +1454,10 @@ export default function InboxShow({
     const [showProducts, setShowProducts]     = useState(false);
     const [showAgentDrop, setShowAgentDrop]   = useState(false);
     const [attachPreview, setAttachPreview]   = useState(null); // { file, url, type }
+    const [recordingAudio, setRecordingAudio] = useState(false);
+    const mediaRecorderRef = useRef(null);
+    const recordingStreamRef = useRef(null);
+    const recordingChunksRef = useRef([]);
     const fileRef = useRef(null);
     const bottomRef = useRef(null);
 
@@ -1636,7 +1644,7 @@ export default function InboxShow({
         if (attachPreview) {
             const fd = new FormData();
             fd.append('body', data.body || attachPreview.file.name);
-            fd.append('type', attachPreview.type === 'image' ? 'image' : 'document');
+            fd.append('type', attachPreview.type);
             fd.append('attachment', attachPreview.file);
             axios.post(route('client.inbox.reply', conversation.uuid), fd, {
                 headers: { 'Content-Type': 'multipart/form-data', Accept: 'application/json' },
@@ -1660,10 +1668,85 @@ export default function InboxShow({
         const file = e.target.files?.[0];
         if (!file) return;
         const isImage = file.type.startsWith('image/');
+        const isAudio = file.type.startsWith('audio/');
+        const isVideo = file.type.startsWith('video/');
         const url = URL.createObjectURL(file);
-        setAttachPreview({ file, url, type: isImage ? 'image' : 'document' });
+        setAttachPreview({ file, url, type: isImage ? 'image' : (isAudio ? 'audio' : (isVideo ? 'video' : 'document')) });
         e.target.value = '';
     };
+
+    const audioMimeType = () => {
+        const types = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/ogg', 'audio/mp4'];
+        return types.find(type => window.MediaRecorder?.isTypeSupported?.(type)) || '';
+    };
+
+    const stopAudioTracks = () => {
+        recordingStreamRef.current?.getTracks?.().forEach(track => track.stop());
+        recordingStreamRef.current = null;
+    };
+
+    const stopAudioRecording = () => {
+        if (mediaRecorderRef.current?.state === 'recording') {
+            mediaRecorderRef.current.stop();
+        } else {
+            stopAudioTracks();
+            setRecordingAudio(false);
+        }
+    };
+
+    const startAudioRecording = async () => {
+        if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) {
+            setSendError('Audio recording is not supported in this browser.');
+            return;
+        }
+
+        try {
+            setSendError(null);
+            if (attachPreview?.url) URL.revokeObjectURL(attachPreview.url);
+            setAttachPreview(null);
+
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            recordingStreamRef.current = stream;
+            recordingChunksRef.current = [];
+
+            const mimeType = audioMimeType();
+            const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+            mediaRecorderRef.current = recorder;
+
+            recorder.ondataavailable = (event) => {
+                if (event.data?.size > 0) recordingChunksRef.current.push(event.data);
+            };
+
+            recorder.onstop = () => {
+                stopAudioTracks();
+                setRecordingAudio(false);
+                const chunks = recordingChunksRef.current;
+                if (!chunks.length) return;
+
+                const blobType = recorder.mimeType || 'audio/webm';
+                const ext = blobType.includes('ogg') ? 'ogg' : (blobType.includes('mp4') ? 'm4a' : 'webm');
+                const blob = new Blob(chunks, { type: blobType });
+                const file = new File([blob], `voice-message.${ext}`, { type: blobType });
+                setAttachPreview({ file, url: URL.createObjectURL(blob), type: 'audio' });
+            };
+
+            recorder.start();
+            setRecordingAudio(true);
+        } catch (error) {
+            stopAudioTracks();
+            setRecordingAudio(false);
+            setSendError('Microphone permission was not granted.');
+        }
+    };
+
+    const toggleAudioRecording = () => {
+        if (recordingAudio) stopAudioRecording();
+        else startAudioRecording();
+    };
+
+    useEffect(() => () => {
+        stopAudioTracks();
+    }, []);
 
     const switchHandover = (mode) => {
         axios.post(route('client.inbox.handover', conversation.uuid), { mode })
@@ -1961,11 +2044,16 @@ export default function InboxShow({
                             <div className="mb-2 flex items-center gap-2 bg-neutral-50 dark:bg-neutral-800 rounded-xl p-2 border border-neutral-200 dark:border-neutral-700">
                                 {attachPreview.type === 'image'
                                     ? <img src={attachPreview.url} alt="" className="h-12 w-12 rounded-lg object-cover" />
-                                    : <div className="h-12 w-12 rounded-lg bg-neutral-200 dark:bg-neutral-700 flex items-center justify-center"><Paperclip className="h-5 w-5 text-neutral-500" /></div>
+                                    : attachPreview.type === 'audio'
+                                        ? <div className="h-12 w-12 rounded-lg bg-brand-50 dark:bg-brand-900/20 flex items-center justify-center"><Mic className="h-5 w-5 text-brand-600" /></div>
+                                        : <div className="h-12 w-12 rounded-lg bg-neutral-200 dark:bg-neutral-700 flex items-center justify-center"><Paperclip className="h-5 w-5 text-neutral-500" /></div>
                                 }
                                 <div className="flex-1 min-w-0">
                                     <p className="text-xs font-medium text-neutral-700 dark:text-neutral-300 truncate">{attachPreview.file.name}</p>
                                     <p className="text-[10px] text-neutral-400">{(attachPreview.file.size / 1024).toFixed(1)} KB</p>
+                                    {attachPreview.type === 'audio' && (
+                                        <audio src={attachPreview.url} controls className="mt-1 h-8 w-full max-w-xs" />
+                                    )}
                                 </div>
                                 <button type="button" onClick={() => setAttachPreview(null)} className="text-neutral-400 hover:text-red-500 transition">
                                     <X className="h-4 w-4" />
@@ -2035,6 +2123,12 @@ export default function InboxShow({
                                         title={t('inbox.attach_image')}
                                         className="p-1.5 rounded-lg text-neutral-400 hover:text-neutral-600 hover:bg-neutral-100 dark:hover:bg-neutral-800 transition">
                                         <ImageIcon className="h-4 w-4" />
+                                    </button>
+                                    {/* Voice note */}
+                                    <button type="button" onClick={toggleAudioRecording}
+                                        title={recordingAudio ? 'Stop recording' : 'Record voice message'}
+                                        className={`p-1.5 rounded-lg transition ${recordingAudio ? 'bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-300 animate-pulse' : 'text-neutral-400 hover:text-neutral-600 hover:bg-neutral-100 dark:hover:bg-neutral-800'}`}>
+                                        {recordingAudio ? <Square className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
                                     </button>
                                     {/* Share product */}
                                     {hasEcommerceStore && (

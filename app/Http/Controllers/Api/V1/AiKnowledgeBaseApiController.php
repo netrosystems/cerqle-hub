@@ -73,9 +73,20 @@ class AiKnowledgeBaseApiController extends WorkspaceScopedController
             return response()->json(['error' => 'Knowledge base not found.'], 404);
         }
 
+        $sourceType = (string) $request->input('source_type');
+        if (in_array($sourceType, ['url', 'sitemap'], true)) {
+            $request->merge([
+                'source_ref' => $this->normaliseSourceUrl((string) $request->input('source_ref')),
+            ]);
+        }
+
         $validated = $request->validate([
             'source_type' => ['required', 'string', 'in:file,url,text,sitemap,faq'],
-            'source_ref' => ['nullable', 'string', 'max:512'],
+            'source_ref' => match ((string) $request->input('source_type')) {
+                'url', 'sitemap' => ['nullable', 'url', 'max:2048'],
+                'text', 'faq' => ['nullable', 'string', 'max:200000'],
+                default => ['nullable', 'string', 'max:512'],
+            },
             'title' => ['nullable', 'string', 'max:256'],
         ]);
 
@@ -143,5 +154,15 @@ class AiKnowledgeBaseApiController extends WorkspaceScopedController
             'status' => $doc->status,
             'created_at' => $doc->created_at->toIso8601String(),
         ];
+    }
+
+    private function normaliseSourceUrl(string $url): string
+    {
+        $url = trim($url);
+        if ($url === '' || preg_match('/^[a-z][a-z0-9+.-]*:\/\//i', $url)) {
+            return $url;
+        }
+
+        return 'https://'.$url;
     }
 }
