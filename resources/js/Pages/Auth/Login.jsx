@@ -46,6 +46,33 @@ function FirebaseGoogleButton() {
 
     if (!firebase.enabled || !firebase.apiKey) return null;
 
+    const firebaseErrorMessage = (err) => {
+        const code = err?.code ? String(err.code) : null;
+        const message = err?.message ? String(err.message) : null;
+
+        if (code === 'auth/unauthorized-domain') {
+            return 'Google sign-in failed: this domain is not authorized in Firebase.';
+        }
+
+        if (code === 'auth/operation-not-allowed') {
+            return 'Google sign-in failed: Google provider is not enabled in Firebase.';
+        }
+
+        if (code === 'auth/invalid-api-key' || code === 'auth/api-key-not-valid.-please-pass-a-valid-api-key.') {
+            return 'Google sign-in failed: Firebase API key is invalid.';
+        }
+
+        if (code) {
+            return `Google sign-in failed: ${code}`;
+        }
+
+        if (message) {
+            return `Google sign-in failed: ${message}`;
+        }
+
+        return t('auth.google_signin_failed');
+    };
+
     const handleClick = async () => {
         setError(null);
         setLoading(true);
@@ -72,7 +99,7 @@ function FirebaseGoogleButton() {
             if (err?.code === 'auth/popup-closed-by-user') {
                 // user dismissed — no error shown
             } else {
-                setError(t('auth.google_signin_failed'));
+                setError(firebaseErrorMessage(err));
             }
         } finally {
             setLoading(false);
