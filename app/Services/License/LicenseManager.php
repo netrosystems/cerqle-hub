@@ -61,7 +61,7 @@ class LicenseManager
         return in_array($this->verifyType(), $types, true) ? $this->verifyType() : ($types[0] ?? 'non_envato');
     }
 
-    public function isEnvato(): bool
+    public function isMarketplacePurchase(): bool
     {
         return $this->verifyType() === 'envato';
     }

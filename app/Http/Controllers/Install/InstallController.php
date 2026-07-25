@@ -71,13 +71,13 @@ class InstallController extends Controller
             abort(404);
         }
 
-        $isEnvato = $request->input('verify_type', $this->license->defaultVerifyType()) === 'envato';
+        $isMarketplacePurchase = $request->input('verify_type', $this->license->defaultVerifyType()) === 'envato';
 
         $data = $request->validate([
             'license_code' => ['required', 'string'],
             'verify_type' => ['nullable', Rule::in(LicenseManager::TYPES)],
-            'client_name' => [Rule::requiredIf($isEnvato), 'nullable', 'string', 'max:255'],
-        ], [], ['client_name' => 'Envato buyer name']);
+            'client_name' => [Rule::requiredIf($isMarketplacePurchase), 'nullable', 'string', 'max:255'],
+        ], [], ['client_name' => 'buyer name']);
 
         return response()->json($this->license->activate(
             $data['license_code'],
@@ -93,12 +93,12 @@ class InstallController extends Controller
             return redirect()->route('admin.login');
         }
 
-        $licenseIsEnvato = $request->input('verify_type', $this->license->defaultVerifyType()) === 'envato';
+        $licenseIsMarketplacePurchase = $request->input('verify_type', $this->license->defaultVerifyType()) === 'envato';
 
         $data = $request->validate([
             'license_code' => [Rule::requiredIf($this->license->enabled()), 'nullable', 'string'],
             'verify_type' => ['nullable', Rule::in(LicenseManager::TYPES)],
-            'client_name' => [Rule::requiredIf($this->license->enabled() && $licenseIsEnvato), 'nullable', 'string', 'max:255'],
+            'client_name' => [Rule::requiredIf($this->license->enabled() && $licenseIsMarketplacePurchase), 'nullable', 'string', 'max:255'],
             'app_name' => ['required', 'string', 'max:255'],
             'app_url' => ['required', 'url'],
             'app_env' => ['required', 'in:production,local'],
@@ -111,7 +111,7 @@ class InstallController extends Controller
             'admin_email' => ['required', 'email', 'max:255'],
             'admin_password' => ['required', 'string', 'min:8', 'confirmed'],
             'import_demo' => ['boolean'],
-        ], [], ['client_name' => 'Envato buyer name']);
+        ], [], ['client_name' => 'buyer name']);
 
         // 1. Activate + verify the license (when licensing is enabled). The
         //    License step normally activates already; activate here as a

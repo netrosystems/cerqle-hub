@@ -43,8 +43,7 @@ export default function LicenseActivate({ reason = null, verify_type = 'non_enva
                     />
                     {copy.helpUrl && (
                         <p className="mt-1.5 text-xs text-neutral-500 dark:text-neutral-400">
-                            Your purchase code is in your Envato/CodeCanyon account under{' '}
-                            <span className="font-medium">Downloads</span>.{' '}
+                            Your purchase code is available from your purchase account.{' '}
                             <a
                                 href={copy.helpUrl}
                                 target="_blank"

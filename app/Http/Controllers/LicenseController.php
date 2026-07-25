@@ -43,13 +43,13 @@ class LicenseController extends Controller
             return redirect()->route('admin.login');
         }
 
-        $isEnvato = $request->input('verify_type', $this->license->defaultVerifyType()) === 'envato';
+        $isMarketplacePurchase = $request->input('verify_type', $this->license->defaultVerifyType()) === 'envato';
 
         $data = $request->validate([
             'license_code' => ['required', 'string'],
             'verify_type' => ['nullable', Rule::in(LicenseManager::TYPES)],
-            'client_name' => [Rule::requiredIf($isEnvato), 'nullable', 'string', 'max:255'],
-        ], [], ['client_name' => 'Envato buyer name']);
+            'client_name' => [Rule::requiredIf($isMarketplacePurchase), 'nullable', 'string', 'max:255'],
+        ], [], ['client_name' => 'buyer name']);
 
         $activation = $this->license->activate(
             $data['license_code'],

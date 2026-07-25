@@ -1,8 +1,8 @@
 import { typeLabel } from '@/lib/licenseLabels';
 
 /**
- * Segmented chooser for the kind of code the buyer has (Envato purchase code vs
- * a plain license code). Renders nothing when only one type is offered.
+ * Segmented chooser for the kind of code the buyer has. Renders nothing when
+ * only one type is offered.
  */
 export default function LicenseTypeTabs({ types = [], value, onChange }) {
     if (!Array.isArray(types) || types.length <= 1) {

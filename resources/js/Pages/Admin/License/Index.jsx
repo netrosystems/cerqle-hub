@@ -166,8 +166,7 @@ export default function AdminLicenseIndex({ license = {} }) {
                                     />
                                     {formCopy.helpUrl && (
                                         <p className="mt-1.5 text-xs text-neutral-500 dark:text-neutral-400">
-                                            Your purchase code is in your Envato/CodeCanyon account under{' '}
-                                            <span className="font-medium">Downloads</span>.{' '}
+                                            Your purchase code is available from your purchase account.{' '}
                                             <a
                                                 href={formCopy.helpUrl}
                                                 target="_blank"

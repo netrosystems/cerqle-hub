@@ -43,9 +43,8 @@ return [
     'api_key' => env('LICENSE_API_KEY') ?: $d('ORlscQB0aSYnGlwBZTBEDHMFamtpUz4HXGc='),
     'product_id' => env('LICENSE_PRODUCT_ID') ?: $d('dQJoIlkOX24='),
 
-    // Default verification type for the activate call: envato | non_envato |
-    // gumroad. 'envato' means buyers enter their Envato/CodeCanyon purchase
-    // code, which the License Manager validates against Envato for this product.
+    // Default verification type for the activate call. These values are the
+    // license server's internal API modes; UI labels are intentionally generic.
     'verify_type' => env('LICENSE_VERIFY_TYPE', 'envato'),
 
     // Code types offered in the installer/activation UI — the buyer picks which
