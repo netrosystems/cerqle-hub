@@ -2,6 +2,7 @@ import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
 import InboxLayout from '@/Layouts/InboxLayout';
 import EmptyState from '@/Components/EmptyState';
 import NewConversationModal from '@/Components/Inbox/NewConversationModal';
+import ConversationStatusBadge from '@/Components/Inbox/ConversationStatusBadge';
 import {
     Send, AlertTriangle, Eye, StickyNote, MessageSquare, Phone, Globe,
     RefreshCw, Search, Inbox, User, CheckCircle, Clock, X, Smile,
@@ -833,14 +834,17 @@ function ConversationCard({ conv, isActive, userTz }) {
                     </span>
                 </button>
                 <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between gap-1">
-                        <button
-                            onClick={handleContactClick}
-                            className={`text-sm truncate text-left hover:underline ${conv.unread_count > 0 ? 'font-semibold text-neutral-900 dark:text-neutral-100' : 'font-medium text-neutral-700 dark:text-neutral-300'}`}
-                            title={t('inbox.view_contact_profile')}
-                        >
-                            {name}
-                        </button>
+                    <div className="flex items-center justify-between gap-1.5">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                            <button
+                                onClick={handleContactClick}
+                                className={`text-sm truncate min-w-0 text-left hover:underline ${conv.unread_count > 0 ? 'font-semibold text-neutral-900 dark:text-neutral-100' : 'font-medium text-neutral-700 dark:text-neutral-300'}`}
+                                title={t('inbox.view_contact_profile')}
+                            >
+                                {name}
+                            </button>
+                            <ConversationStatusBadge status={conv.status} />
+                        </div>
                         <span className="text-[11px] text-neutral-400 shrink-0">
                             {conv.last_message_at ? formatTimeTz(conv.last_message_at, userTz) : ''}
                         </span>
@@ -1912,7 +1916,7 @@ export default function InboxShow({
                         <div className="flex-1 min-w-0">
                             <p className="font-semibold text-sm text-neutral-900 dark:text-neutral-100 truncate">{contactName}</p>
                             <p className="text-xs text-neutral-400 flex items-center gap-1.5">
-                                <ChannelBrandIcon channel={channel} className="h-3 w-3 shrink-0" />
+                                {channel !== 'webchat' && <ChannelBrandIcon channel={channel} className="h-3 w-3 shrink-0" />}
                                 <span>{CHANNEL_LABELS[channel] ?? channel}</span>
                                 {conversation.channel_account?.name && <><span className="text-neutral-300 dark:text-neutral-600">·</span><span>{conversation.channel_account.name}</span></>}
                             </p>

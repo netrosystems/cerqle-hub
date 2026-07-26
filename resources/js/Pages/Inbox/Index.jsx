@@ -2,6 +2,7 @@ import { Head, Link, router, usePage } from '@inertiajs/react';
 import InboxLayout from '@/Layouts/InboxLayout';
 import EmptyState from '@/Components/EmptyState';
 import NewConversationModal from '@/Components/Inbox/NewConversationModal';
+import ConversationStatusBadge from '@/Components/Inbox/ConversationStatusBadge';
 import { Skeleton } from '@/Components/ui';
 import {
     MessageSquare, Inbox, CheckCircle, Clock, User, RefreshCw,
@@ -22,16 +23,6 @@ const FOLDERS = [
 ];
 
 const ALL_CHANNELS = ['whatsapp', 'instagram', 'messenger', 'sms', 'email', 'webchat'];
-
-function StatusDot({ status }) {
-    const colors = {
-        open: 'bg-green-500',
-        pending: 'bg-amber-400',
-        resolved: 'bg-neutral-400',
-        snoozed: 'bg-purple-400',
-    };
-    return <span className={`inline-block h-2 w-2 rounded-full shrink-0 ${colors[status] ?? 'bg-neutral-300'}`} />;
-}
 
 function ConversationCard({ conv, isFlashing, isActive, userTz }) {
     const { t } = useTranslation();
@@ -77,14 +68,17 @@ function ConversationCard({ conv, isFlashing, isActive, userTz }) {
 
                 {/* Content */}
                 <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between gap-1">
-                        <button
-                            onClick={handleContactClick}
-                            className={`text-sm truncate text-left hover:underline ${conv.unread_count > 0 ? 'font-semibold text-neutral-900 dark:text-neutral-100' : 'font-medium text-neutral-700 dark:text-neutral-300'}`}
-                            title={t('inbox.view_contact_profile')}
-                        >
-                            {name}
-                        </button>
+                    <div className="flex items-center justify-between gap-1.5">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                            <button
+                                onClick={handleContactClick}
+                                className={`text-sm truncate min-w-0 text-left hover:underline ${conv.unread_count > 0 ? 'font-semibold text-neutral-900 dark:text-neutral-100' : 'font-medium text-neutral-700 dark:text-neutral-300'}`}
+                                title={t('inbox.view_contact_profile')}
+                            >
+                                {name}
+                            </button>
+                            <ConversationStatusBadge status={conv.status} />
+                        </div>
                         <span className="text-[11px] text-neutral-400 shrink-0">
                             {conv.last_message_at ? formatTimeTz(conv.last_message_at, userTz) : ''}
                         </span>

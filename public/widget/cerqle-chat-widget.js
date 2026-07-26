@@ -64,6 +64,14 @@
   function getSettings() { return window.CerqleSettings || window.cerqleSettings || {}; }
   function truthy(v) { return v === true || v === 1 || v === '1' || v === 'true' || v === 'yes'; }
   function falsey(v) { return v === false || v === 0 || v === '0' || v === 'false' || v === 'no'; }
+  function focusComposer() {
+    // Programmatic focus opens the virtual keyboard on phones and can collapse
+    // the visible chat area while a visitor is trying to play voice messages.
+    // Desktop pointer devices still get the convenient automatic focus.
+    if (window.matchMedia && window.matchMedia('(hover: hover) and (pointer: fine)').matches) {
+      input.focus();
+    }
+  }
   function clean(v) {
     v = v == null ? '' : String(v).trim();
     return v === '' || v === 'null' || v === 'undefined' ? undefined : v;
@@ -174,6 +182,12 @@
       event.stopPropagation();
     }, { passive: true });
   });
+  root.addEventListener('pointerdown', function (event) {
+    var target = event.target;
+    if (target && target.closest && target.closest('audio')) {
+      input.blur();
+    }
+  });
 
   form.addEventListener('submit', function (e) {
     e.preventDefault();
@@ -199,7 +213,7 @@
         safeSet('wb_chat_prechat_' + KEY, '1');
         prechat.style.display = 'none';
         form.style.display = 'flex';
-        input.focus();
+        focusComposer();
       });
     });
   }
@@ -242,7 +256,7 @@
     updateBadge();
     if (!prechatNeeded && !started) { ensureSession().then(startPolling); }
     else { startPolling(); }
-    setTimeout(function () { if (!prechatNeeded) input.focus(); scrollDown(); }, 60);
+    setTimeout(function () { if (!prechatNeeded) focusComposer(); scrollDown(); }, 60);
   }
 
   function close() {
@@ -510,8 +524,9 @@
     row.className = 'wb-row wb-' + (role === 'visitor' ? 'out' : 'in');
     var av = '';
     if (role !== 'visitor') {
-      av = CFG.avatar_url
-        ? '<img class="wb-av" src="' + esc(CFG.avatar_url) + '" alt="">'
+      var agentAvatarUrl = CFG.launcher_logo_url || CFG.avatar_url;
+      av = agentAvatarUrl
+        ? '<img class="wb-av wb-brand-avatar" src="' + esc(agentAvatarUrl) + '" alt="">'
         : '<span class="wb-av wb-av-ini">' + esc(initial(name || CFG.agent_name)) + '</span>';
     }
     var attachment = '';
@@ -616,8 +631,9 @@
 
   // ── Markup + styles ──────────────────────────────────────────────────────────
   function template() {
-    var av = CFG.avatar_url
-      ? '<img class="wb-head-av" src="' + esc(CFG.avatar_url) + '" alt="">'
+    var agentAvatarUrl = CFG.launcher_logo_url || CFG.avatar_url;
+    var av = agentAvatarUrl
+      ? '<img class="wb-head-av wb-brand-avatar" src="' + esc(agentAvatarUrl) + '" alt="">'
       : '<span class="wb-head-av wb-av-ini">' + esc(initial(CFG.agent_name)) + '</span>';
     var pcName = (CFG.prechat_fields || []).indexOf('name') !== -1
       ? '<input class="wb-pc-name" type="text" placeholder="Your name" required>' : '';
@@ -697,6 +713,7 @@
       '.wb-open .wb-panel{opacity:1;transform:translateY(0) scale(1);pointer-events:auto}',
       '.wb-header{background:' + COLOR + ';color:#fff;padding:16px;display:flex;align-items:center;gap:11px}',
       '.wb-head-av,.wb-av{width:38px;height:38px;border-radius:50%;object-fit:cover;flex-shrink:0}',
+      '.wb-brand-avatar{background:' + COLOR + ';padding:5px;object-fit:contain;box-shadow:inset 0 0 0 1px rgba(255,255,255,.18)}',
       '.wb-av-ini{display:flex;align-items:center;justify-content:center;font-weight:700;font-size:15px;background:rgba(255,255,255,.25);color:#fff}',
       '.wb-head-info{flex:1;min-width:0}',
       '.wb-title{font-weight:700;font-size:15px;line-height:1.3}',
@@ -708,7 +725,7 @@
       '.wb-body{flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;touch-action:pan-y;padding:16px;background:#f7f8fa;display:flex;flex-direction:column;gap:10px}',
       '.wb-row{display:flex;align-items:flex-end;gap:8px;max-width:85%}',
       '.wb-in{align-self:flex-start}.wb-out{align-self:flex-end;flex-direction:row-reverse}',
-      '.wb-row .wb-av{width:26px;height:26px;font-size:11px}',
+      '.wb-row .wb-av{width:26px;height:26px;font-size:11px}.wb-row .wb-brand-avatar{padding:3px}',
       '.wb-bubble{padding:9px 13px;border-radius:16px;font-size:14px;line-height:1.45;word-wrap:break-word;white-space:normal}',
       '.wb-in .wb-bubble{background:#fff;color:#1f2430;border:1px solid #eceef2;border-bottom-left-radius:5px}',
       '.wb-out .wb-bubble{background:' + COLOR + ';color:#fff;border-bottom-right-radius:5px}',
