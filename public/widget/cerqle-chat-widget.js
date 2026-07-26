@@ -18,9 +18,10 @@
   var API = (CFG.api_base || '').replace(/\/$/, '');
   var COLOR = CFG.primary_color || '#ff762e';
   var LEFT = CFG.position === 'bottom_left';
-  var LS_VISITOR = 'wb_chat_visitor_' + KEY;
-  var LS_TOKEN = 'wb_chat_token_' + KEY;
-  var LS_THREAD = 'wb_chat_thread_' + KEY;   // device-cached message history
+  var SESSION_VERSION = 'v2';
+  var LS_VISITOR = 'wb_chat_visitor_' + SESSION_VERSION + '_' + KEY;
+  var LS_TOKEN = 'wb_chat_token_' + SESSION_VERSION + '_' + KEY;
+  var LS_THREAD = 'wb_chat_thread_' + SESSION_VERSION + '_' + KEY;   // device-cached message history
 
   // ── State ──────────────────────────────────────────────────────────────────
   var visitorId = safeGet(LS_VISITOR);
@@ -68,6 +69,7 @@
     // still create/update the current device's visitor contact.
     if (extra) {
       return {
+        identity_kind: 'prechat',
         name: clean(extra.name),
         email: clean(extra.email)
       };
@@ -89,6 +91,7 @@
     if (!hasStableIdentity) return {};
 
     return {
+      identity_kind: 'logged_in',
       name: clean(s.name),
       email: email,
       avatar: clean(s.avatar || s.avatar_url),
@@ -652,7 +655,7 @@
       '.wb-launcher:hover{transform:scale(1.06)}.wb-launcher:active{transform:scale(.96)}',
       '.wb-launcher:before{content:"";position:absolute;inset:-7px;border-radius:50%;border:2px solid ' + COLOR + ';opacity:0;transform:scale(.82);pointer-events:none}.wb-has-unread:before{animation:wb-pulse 1.35s ease-out infinite}',
       '.wb-ic-close{display:none}',
-      '.wb-launcher-default{display:flex;align-items:center;justify-content:center}.wb-launcher-logo{width:30px;height:30px;object-fit:contain}.wb-active .wb-launcher-default{display:none}.wb-active .wb-ic-close{display:block}',
+      '.wb-launcher-default{display:flex;align-items:center;justify-content:center}.wb-launcher-logo{width:42px;height:42px;object-fit:contain;border-radius:50%}.wb-active .wb-launcher-default{display:none}.wb-active .wb-ic-close{display:block}',
       '.wb-launcher-invite{position:absolute;bottom:3px;width:224px;max-width:calc(100vw - 104px);border:0;background:transparent;padding:0;cursor:pointer;text-align:left;opacity:0;pointer-events:none;transform:translateX(14px) scale(.92);transition:opacity .28s ease,transform .48s cubic-bezier(.18,1.18,.35,1)}',
       '.wb-right .wb-launcher-invite{right:72px;transform-origin:right center}.wb-left .wb-launcher-invite{left:72px;transform:translateX(-12px) scale(.96);transform-origin:left center}.wb-show-invite .wb-launcher-invite{opacity:1;pointer-events:auto;transform:translateX(0) scale(1)}',
       '.wb-invite-card{position:relative;display:block;width:100%;background:#fff;border-radius:11px;padding:11px 15px;box-shadow:0 5px 18px rgba(0,0,0,.16);color:#20242c}.wb-invite-card:after{content:"";position:absolute;top:50%;right:-8px;margin-top:-8px;border-width:8px 0 8px 9px;border-style:solid;border-color:transparent transparent transparent #fff}.wb-left .wb-invite-card:after{right:auto;left:-8px;border-width:8px 9px 8px 0;border-color:transparent #fff transparent transparent}.wb-invite-card strong{display:block;font-size:15px;line-height:1.2;font-weight:700}.wb-invite-card small{display:block;margin-top:3px;font-size:12px;line-height:1.3;color:#737984;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',

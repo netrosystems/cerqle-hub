@@ -152,9 +152,10 @@ class WebchatDriver implements ChannelDriverInterface
         $avatar = (string) ($identity['avatar'] ?? '');
         $avatar = str_starts_with($avatar, 'http') ? $avatar : null; // only accept URLs
         $externalId = trim((string) ($identity['external_id'] ?? ''));
+        $isLoggedInIdentity = ($identity['identity_kind'] ?? null) === 'logged_in';
 
         $contact = null;
-        if ($externalId !== '') {
+        if ($isLoggedInIdentity && $externalId !== '') {
             $contact = Contact::where('workspace_id', $workspaceId)
                 ->whereJsonContains('custom_fields->webchat_external_id', $externalId)
                 ->first();
@@ -181,7 +182,7 @@ class WebchatDriver implements ChannelDriverInterface
                 'opt_in_email' => false,
                 'custom_fields' => array_filter([
                     'webchat_visitor_id' => $visitorId,
-                    'webchat_external_id' => $externalId ?: null,
+                    'webchat_external_id' => $isLoggedInIdentity && $externalId !== '' ? $externalId : null,
                 ]),
                 'last_seen_at' => now(),
             ]);
@@ -194,7 +195,7 @@ class WebchatDriver implements ChannelDriverInterface
         // Link identifiers + fill any details we didn't already have (never
         // clobber an agent-edited contact).
         $cf = $contact->custom_fields ?? [];
-        if ($externalId !== '' && empty($cf['webchat_external_id'])) {
+        if ($isLoggedInIdentity && $externalId !== '' && empty($cf['webchat_external_id'])) {
             $cf['webchat_external_id'] = $externalId;
         }
         if (empty($cf['webchat_visitor_id'])) {

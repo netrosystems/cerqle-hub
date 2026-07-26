@@ -37,6 +37,7 @@ class ChatWidgetPublicController extends Controller
             'avatar' => ['nullable', 'string', 'max:512'],
             'external_id' => ['nullable', 'string', 'max:190'],
             'user_hash' => ['nullable', 'string', 'max:128'],
+            'identity_kind' => ['nullable', 'string', 'in:logged_in,prechat'],
         ]);
 
         $widget = $this->resolveWidget($data['key']);
@@ -155,10 +156,18 @@ class ChatWidgetPublicController extends Controller
             'email' => $data['email'] ?? null,
             'avatar' => $data['avatar'] ?? null,
             'external_id' => $data['external_id'] ?? null,
+            'identity_kind' => $data['identity_kind'] ?? null,
         ], fn ($v) => $v !== null && $v !== '');
 
         if (empty($identity)) {
             return [];
+        }
+
+        $identityKind = (string) ($data['identity_kind'] ?? '');
+        if ($identityKind !== 'logged_in') {
+            // Pre-chat name/email should enrich the current browser's anonymous
+            // contact, never merge devices into one shared customer thread.
+            unset($identity['external_id']);
         }
 
         if ($widget->identity_verification) {
@@ -167,7 +176,7 @@ class ChatWidgetPublicController extends Controller
             $expected = hash_hmac('sha256', $signedValue, (string) $widget->identity_secret);
 
             if ($signedValue === '' || $provided === '' || ! hash_equals($expected, $provided)) {
-                return []; // unverified → treat visitor as anonymous
+                unset($identity['external_id'], $identity['identity_kind']); // unverified → anonymous device contact
             }
         }
 
