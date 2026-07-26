@@ -18,7 +18,10 @@
   var API = (CFG.api_base || '').replace(/\/$/, '');
   var COLOR = CFG.primary_color || '#ff762e';
   var LEFT = CFG.position === 'bottom_left';
-  var SESSION_VERSION = 'v3';
+  // Rotate this namespace whenever session identity semantics change. v4
+  // discards tokens/history created while placeholder external IDs could merge
+  // unrelated anonymous browsers into one conversation.
+  var SESSION_VERSION = 'v4';
   var LS_VISITOR = 'wb_chat_visitor_' + SESSION_VERSION + '_' + KEY;
   var LS_TOKEN = 'wb_chat_token_' + SESSION_VERSION + '_' + KEY;
   var LS_THREAD = 'wb_chat_thread_' + SESSION_VERSION + '_' + KEY;   // device-cached message history
@@ -84,12 +87,17 @@
     var loggedFlag = s.logged_in !== undefined ? s.logged_in : (s.is_logged_in !== undefined ? s.is_logged_in : s.authenticated);
     if (falsey(loggedFlag)) return {};
 
+    var explicitlyLoggedIn = truthy(loggedFlag);
+    // Identity fields alone are not proof that this browser is authenticated.
+    // This is intentionally strict because copied example/placeholder values
+    // (such as one shared external_id) would otherwise merge every website
+    // visitor into the same contact and conversation.
+    if (!explicitlyLoggedIn) return {};
+
     var externalId = clean(s.external_id || s.user_id || s.id);
     var email = clean(s.email);
     var userHash = clean(s.user_hash);
-    var explicitlyLoggedIn = truthy(loggedFlag);
-    var hasStableIdentity = !!(externalId || userHash || (explicitlyLoggedIn && email));
-    if (!hasStableIdentity) return {};
+    if (!externalId && !userHash && !email) return {};
 
     return {
       identity_kind: 'logged_in',

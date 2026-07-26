@@ -6,6 +6,7 @@ use App\Models\Plan;
 use App\Modules\Inbox\Models\ChatWidget;
 use App\Modules\Shared\Models\ChannelAccount;
 use App\Modules\Shared\Models\Contact;
+use App\Modules\Shared\Models\Conversation;
 use App\Modules\Shared\Models\Message;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
@@ -53,11 +54,13 @@ class WebchatIdentityWidgetTest extends TestCase
 
         $response = $this->postJson(route('widget.session'), [
             'key' => $widget->widget_key,
+            'visitor_id' => 'logged-in-device-a',
             'name' => 'Jane Doe',
             'email' => 'jane@example.com',
             'avatar' => 'https://example.com/jane.jpg',
             'external_id' => 'customer-123',
             'user_hash' => $hash,
+            'identity_kind' => 'logged_in',
         ]);
 
         $response->assertOk()
@@ -65,6 +68,18 @@ class WebchatIdentityWidgetTest extends TestCase
             ->assertJsonPath('config.require_prechat', false);
 
         $this->assertStringContainsString('/storage/', $response->json('config.launcher_logo_url'));
+
+        $this->withHeaders(['X-Widget-Token' => $response->json('token')])
+            ->postJson(route('widget.send'), [
+                'key' => $widget->widget_key,
+                'message' => 'Hello',
+                'name' => 'Jane Doe',
+                'email' => 'jane@example.com',
+                'avatar' => 'https://example.com/jane.jpg',
+                'external_id' => 'customer-123',
+                'user_hash' => $hash,
+                'identity_kind' => 'logged_in',
+            ])->assertOk();
 
         $contact = Contact::where('workspace_id', $workspace->id)->sole();
         $this->assertSame('Jane', $contact->first_name);
@@ -138,17 +153,115 @@ class WebchatIdentityWidgetTest extends TestCase
             'identity_secret' => 'secret-for-test',
         ]);
 
-        $this->postJson(route('widget.session'), [
+        $session = $this->postJson(route('widget.session'), [
             'key' => $widget->widget_key,
+            'visitor_id' => 'unverified-device-a',
             'name' => 'Spoofed Customer',
             'email' => 'spoof@example.com',
             'external_id' => 'customer-789',
             'user_hash' => 'wrong-hash',
+            'identity_kind' => 'logged_in',
         ])->assertOk();
 
+        $this->withHeaders(['X-Widget-Token' => $session->json('token')])
+            ->postJson(route('widget.send'), [
+                'key' => $widget->widget_key,
+                'message' => 'Hello',
+                'name' => 'Spoofed Customer',
+                'email' => 'spoof@example.com',
+                'external_id' => 'customer-789',
+                'user_hash' => 'wrong-hash',
+                'identity_kind' => 'logged_in',
+            ])->assertOk();
+
         $contact = Contact::where('workspace_id', $workspace->id)->sole();
-        $this->assertSame('Website visitor', $contact->first_name);
+        $this->assertSame('Customer 01', $contact->first_name);
         $this->assertNull($contact->email);
         $this->assertArrayNotHasKey('webchat_external_id', $contact->custom_fields ?? []);
+    }
+
+    public function test_anonymous_visitors_from_different_devices_get_distinct_inbox_threads(): void
+    {
+        ['workspace' => $workspace] = $this->createWorkspaceContext();
+
+        $account = ChannelAccount::create([
+            'workspace_id' => $workspace->id,
+            'channel' => 'webchat',
+            'display_name' => 'Website chat',
+            'status' => 'active',
+        ]);
+        $widget = ChatWidget::create([
+            'workspace_id' => $workspace->id,
+            'channel_account_id' => $account->id,
+            'name' => 'Website chat',
+            'position' => 'bottom_right',
+        ]);
+
+        foreach (['device-a', 'device-b'] as $visitorId) {
+            $session = $this->postJson(route('widget.session'), [
+                'key' => $widget->widget_key,
+                'visitor_id' => $visitorId,
+            ])->assertOk();
+
+            $this->withHeaders(['X-Widget-Token' => $session->json('token')])
+                ->postJson(route('widget.send'), [
+                    'key' => $widget->widget_key,
+                    'message' => 'Message from '.$visitorId,
+                ])->assertOk();
+        }
+
+        $this->assertSame(2, Contact::where('workspace_id', $workspace->id)->count());
+        $this->assertSame(2, Conversation::where('workspace_id', $workspace->id)->count());
+        $this->assertSame(2, Message::where('channel', 'webchat')->count());
+        $this->assertEqualsCanonicalizing(
+            ['device-a', 'device-b'],
+            Contact::where('workspace_id', $workspace->id)
+                ->get()
+                ->map(fn (Contact $contact) => $contact->custom_fields['webchat_visitor_id'] ?? null)
+                ->all(),
+        );
+        $this->assertEqualsCanonicalizing(
+            ['Customer 01', 'Customer 02'],
+            Contact::where('workspace_id', $workspace->id)->pluck('first_name')->all(),
+        );
+    }
+
+    public function test_repeat_visit_from_same_anonymous_device_restores_only_its_thread(): void
+    {
+        ['workspace' => $workspace] = $this->createWorkspaceContext();
+
+        $account = ChannelAccount::create([
+            'workspace_id' => $workspace->id,
+            'channel' => 'webchat',
+            'display_name' => 'Website chat',
+            'status' => 'active',
+        ]);
+        $widget = ChatWidget::create([
+            'workspace_id' => $workspace->id,
+            'channel_account_id' => $account->id,
+            'name' => 'Website chat',
+            'position' => 'bottom_right',
+        ]);
+
+        $firstSession = $this->postJson(route('widget.session'), [
+            'key' => $widget->widget_key,
+            'visitor_id' => 'returning-device',
+        ])->assertOk();
+
+        $this->withHeaders(['X-Widget-Token' => $firstSession->json('token')])
+            ->postJson(route('widget.send'), [
+                'key' => $widget->widget_key,
+                'message' => 'Remember this message',
+            ])->assertOk();
+
+        $this->postJson(route('widget.session'), [
+            'key' => $widget->widget_key,
+            'visitor_id' => 'returning-device',
+        ])->assertOk()
+            ->assertJsonCount(1, 'messages')
+            ->assertJsonPath('messages.0.body', 'Remember this message');
+
+        $this->assertSame(1, Contact::where('workspace_id', $workspace->id)->count());
+        $this->assertSame(1, Conversation::where('workspace_id', $workspace->id)->count());
     }
 }

@@ -191,13 +191,16 @@ class ChatWidgetPublicController extends Controller
             unset($identity['external_id']);
         }
 
-        if ($widget->identity_verification) {
+        if ($widget->identity_verification && $identityKind === 'logged_in') {
             $signedValue = (string) ($data['external_id'] ?? ($data['email'] ?? ''));
             $provided = (string) ($data['user_hash'] ?? '');
             $expected = hash_hmac('sha256', $signedValue, (string) $widget->identity_secret);
 
             if ($signedValue === '' || $provided === '' || ! hash_equals($expected, $provided)) {
-                unset($identity['external_id'], $identity['identity_kind']); // unverified → anonymous device contact
+                // None of the claimed identity is trusted when verification
+                // fails. Keep this browser anonymous and isolated by its
+                // generated visitor id.
+                return [];
             }
         }
 
