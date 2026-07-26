@@ -33,6 +33,14 @@ class AddonController extends Controller
             }
         }
 
+        $paypalSubscriptionId = $request->query('subscription_id');
+        if ($paypalSubscriptionId) {
+            $gateway = $this->gateways->get('paypal');
+            if ($gateway instanceof AddonBillingGatewayInterface) {
+                $gateway->fulfillAddonCheckout((string) $paypalSubscriptionId);
+            }
+        }
+
         $subscription = $this->entitlements->subscriptionFor(
             $user,
             AddonEntitlementService::DEVELOPER_TOOLS

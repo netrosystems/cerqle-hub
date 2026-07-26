@@ -80,8 +80,11 @@ class ChatWidget extends Model
 
     private function canUseCustomLauncherLogo(): bool
     {
-        $plan = $this->workspace?->client?->effectivePlan()
-            ?: $this->workspace?->owner?->effectiveSubscription()?->plan;
+        $workspace = $this->workspace
+            ?: $this->workspace()->with(['client.activeSubscription.plan', 'owner.activeSubscription.plan'])->first();
+
+        $plan = $workspace?->client?->effectivePlan()
+            ?: $workspace?->owner?->effectiveSubscription()?->plan;
 
         return (bool) $plan?->hasFeature('white_label');
     }

@@ -43,7 +43,7 @@ class PaymentGatewayConfig extends Model
     public function requiredCredentialKeys(): array
     {
         return match ($this->gateway) {
-            'paypal' => ['publishable_key', 'secret_key', 'webhook_secret'],
+            'paypal' => ['publishable_key', 'secret_key'],
             'stripe', 'paddle' => ['secret_key', 'webhook_secret'],
             default => ['secret_key'],
         };

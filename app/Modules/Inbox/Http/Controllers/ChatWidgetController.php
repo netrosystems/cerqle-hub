@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Modules\AI\Models\AiChatbot;
 use App\Modules\Inbox\Models\ChatWidget;
 use App\Modules\Shared\Models\ChannelAccount;
+use App\Models\Workspace;
 use App\Services\StorageManager;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -195,7 +196,16 @@ class ChatWidgetController extends Controller
 
     private function canUseCustomLauncherLogo(Request $request): bool
     {
-        return (bool) $request->user()?->effectiveSubscription()?->plan?->hasFeature('white_label');
+        return (bool) $this->workspacePlan($request)?->hasFeature('white_label');
+    }
+
+    private function workspacePlan(Request $request)
+    {
+        $workspace = Workspace::with(['client.activeSubscription.plan', 'owner.activeSubscription.plan'])
+            ->find($this->workspaceId($request));
+
+        return $workspace?->client?->effectivePlan()
+            ?: $workspace?->owner?->effectiveSubscription()?->plan;
     }
 
     /**

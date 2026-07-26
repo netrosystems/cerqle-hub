@@ -13,6 +13,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
 class FirebaseLoginController extends Controller
@@ -34,6 +35,11 @@ class FirebaseLoginController extends Controller
 
         $tokenInfo = $this->verifyIdToken($request->id_token, $projectId);
         if (! $tokenInfo) {
+            Log::warning('Firebase login token verification failed', [
+                'project_id' => $projectId,
+                'token_prefix' => Str::limit($request->id_token, 16, '…'),
+            ]);
+
             return response()->json(['message' => 'Invalid or expired token.'], 422);
         }
 
@@ -106,6 +112,11 @@ class FirebaseLoginController extends Controller
             ]);
 
             if (! $response->successful()) {
+                Log::warning('Firebase login tokeninfo request failed', [
+                    'status' => $response->status(),
+                    'body' => Str::limit($response->body(), 500),
+                ]);
+
                 return null;
             }
 
@@ -122,11 +133,21 @@ class FirebaseLoginController extends Controller
             ]);
 
             if (! $validAudience && ! $validIssuer) {
+                Log::warning('Firebase login token audience/issuer mismatch', [
+                    'expected_project_id' => $projectId,
+                    'aud' => $aud,
+                    'iss' => $iss,
+                ]);
+
                 return null;
             }
 
             return $data;
-        } catch (\Throwable) {
+        } catch (\Throwable $e) {
+            Log::warning('Firebase login token verification exception', [
+                'message' => $e->getMessage(),
+            ]);
+
             return null;
         }
     }

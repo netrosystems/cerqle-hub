@@ -277,6 +277,9 @@ class LandingPageController extends Controller
             'landing.about_cta_title'    => 'Want to grow with us?',
             'landing.about_cta_subtitle' => 'Start free today, or just say hello — we would genuinely love to hear from you.',
 
+            // ── Contact page ───────────────────────────────────────
+            'landing.contact_email' => 'hello@cerqle.ai',
+
             // ── Integrations page ───────────────────────────────────
             'landing.integrations_page_badge'    => 'Integrations',
             'landing.integrations_page_title'    => 'Connect Cerqle to everything you run',

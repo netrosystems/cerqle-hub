@@ -25,7 +25,7 @@ export default function Contact({ landing = {} }) {
     const { t } = useTranslation();
     const { flash } = usePage().props;
     const appName = import.meta.env.VITE_APP_NAME || 'Cerqle';
-    const contactEmail = landing['landing.contact_email'] || `support@${appName.toLowerCase().replace(/\s+/g, '')}.com`;
+    const contactEmail = landing['landing.contact_email'] || 'hello@cerqle.ai';
 
     const { data, setData, post, processing, errors, recentlySuccessful } = useForm({
         name: '',

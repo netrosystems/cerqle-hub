@@ -18,6 +18,10 @@ use Inertia\Response;
 
 class AiKnowledgeBaseController extends Controller
 {
+    private const SUPPORTED_FILE_MIMES = 'pdf,txt,md,csv,docx,json';
+
+    private const SUPPORTED_FILE_LABEL = 'PDF, TXT, MD, CSV, DOCX, JSON';
+
     public function __construct(
         private StorageManager $storage,
         private EmbeddingStore $embeddings,
@@ -128,9 +132,9 @@ class AiKnowledgeBaseController extends Controller
                 'file' => [
                     'file',
                     'max:'.$this->kbUploadMaxKb(),
-                    'mimes:pdf,txt,md,csv,docx,doc,xlsx,xls,json',
+                    'mimes:'.self::SUPPORTED_FILE_MIMES,
                 ],
-            ]);
+            ], $this->fileValidationMessages());
             $file = $request->file('file');
             $diskName = $this->storage->diskName();
             $path = $this->storage->prefixedPath('kb-docs/'.$file->hashName());
@@ -217,6 +221,17 @@ class AiKnowledgeBaseController extends Controller
         $serverMaxKb = max(1024, $serverMaxKb - 512);
 
         return min($appMaxKb, $serverMaxKb);
+    }
+
+    private function fileValidationMessages(): array
+    {
+        $maxMb = round($this->kbUploadMaxKb() / 1024, 1);
+
+        return [
+            'file.file' => 'Please upload a valid knowledge base file.',
+            'file.max' => "This file is too large. Please upload a file up to {$maxMb} MB.",
+            'file.mimes' => 'Unsupported file type. Please upload one of: '.self::SUPPORTED_FILE_LABEL.'. Legacy .doc files must be converted to DOCX or PDF first.',
+        ];
     }
 
     private function iniSizeToKb(string|false $value): int

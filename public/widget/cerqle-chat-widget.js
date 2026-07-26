@@ -57,14 +57,43 @@
   // Identity passed from the client's website (e.g. their logged-in user).
   // Read once here and merged into the session request.
   function getSettings() { return window.CerqleSettings || window.cerqleSettings || {}; }
+  function truthy(v) { return v === true || v === 1 || v === '1' || v === 'true' || v === 'yes'; }
+  function falsey(v) { return v === false || v === 0 || v === '0' || v === 'false' || v === 'no'; }
+  function clean(v) {
+    v = v == null ? '' : String(v).trim();
+    return v === '' || v === 'null' || v === 'undefined' ? undefined : v;
+  }
   function identityPayload(extra) {
+    // Pre-chat form submissions are normal anonymous-widget data. They should
+    // still create/update the current device's visitor contact.
+    if (extra) {
+      return {
+        name: clean(extra.name),
+        email: clean(extra.email)
+      };
+    }
+
+    // Global CerqleSettings is for logged-in visitor passthrough. Do not treat
+    // every anonymous page view as the same logged-in customer just because a
+    // site included a placeholder object. Hosts can use any of these flags:
+    // logged_in / is_logged_in / authenticated.
     var s = getSettings();
+    var loggedFlag = s.logged_in !== undefined ? s.logged_in : (s.is_logged_in !== undefined ? s.is_logged_in : s.authenticated);
+    if (falsey(loggedFlag)) return {};
+
+    var externalId = clean(s.external_id || s.user_id || s.id);
+    var email = clean(s.email);
+    var userHash = clean(s.user_hash);
+    var explicitlyLoggedIn = truthy(loggedFlag);
+    var hasStableIdentity = !!(externalId || userHash || (explicitlyLoggedIn && email));
+    if (!hasStableIdentity) return {};
+
     return {
-      name: (extra && extra.name) || s.name || undefined,
-      email: (extra && extra.email) || s.email || undefined,
-      avatar: s.avatar || s.avatar_url || undefined,
-      external_id: s.external_id || s.user_id || undefined,
-      user_hash: s.user_hash || undefined
+      name: clean(s.name),
+      email: email,
+      avatar: clean(s.avatar || s.avatar_url),
+      external_id: externalId,
+      user_hash: userHash
     };
   }
 
@@ -180,8 +209,10 @@
     else if (action === 'close') { close(); }
     else if (action === 'identify' || action === 'update') {
       window.CerqleSettings = Object.assign({}, getSettings(), data || {});
-      started = false;
-      ensureSession().then(startPolling);
+      if (Object.keys(identityPayload()).length) {
+        started = false;
+        ensureSession().then(startPolling);
+      }
     }
   };
 
@@ -626,7 +657,7 @@
       '.wb-right .wb-launcher-invite{right:72px;transform-origin:right center}.wb-left .wb-launcher-invite{left:72px;transform:translateX(-12px) scale(.96);transform-origin:left center}.wb-show-invite .wb-launcher-invite{opacity:1;pointer-events:auto;transform:translateX(0) scale(1)}',
       '.wb-invite-card{position:relative;display:block;width:100%;background:#fff;border-radius:11px;padding:11px 15px;box-shadow:0 5px 18px rgba(0,0,0,.16);color:#20242c}.wb-invite-card:after{content:"";position:absolute;top:50%;right:-8px;margin-top:-8px;border-width:8px 0 8px 9px;border-style:solid;border-color:transparent transparent transparent #fff}.wb-left .wb-invite-card:after{right:auto;left:-8px;border-width:8px 9px 8px 0;border-color:transparent #fff transparent transparent}.wb-invite-card strong{display:block;font-size:15px;line-height:1.2;font-weight:700}.wb-invite-card small{display:block;margin-top:3px;font-size:12px;line-height:1.3;color:#737984;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
       '.wb-badge{display:none;position:absolute;top:-3px;right:-3px;min-width:22px;height:22px;border-radius:999px;background:#ef4444;border:2px solid #fff;color:#fff;align-items:center;justify-content:center;font-size:11px;font-weight:800;line-height:1;box-shadow:0 3px 10px rgba(239,68,68,.42);z-index:2}',
-      '.wb-panel{position:absolute;bottom:74px;' + (LEFT ? 'left:0' : 'right:0') + ';width:370px;max-width:calc(100vw - 40px);height:560px;max-height:calc(100vh - 120px);background:#fff;border-radius:18px;box-shadow:0 16px 50px rgba(0,0,0,.22);display:flex;flex-direction:column;overflow:hidden;opacity:0;transform:translateY(12px) scale(.98);pointer-events:none;transition:opacity .2s,transform .22s cubic-bezier(.34,1.4,.6,1);transform-origin:bottom ' + (LEFT ? 'left' : 'right') + '}',
+      '.wb-panel{position:absolute;bottom:74px;' + (LEFT ? 'left:0' : 'right:0') + ';width:370px;max-width:calc(100vw - 40px);height:560px;max-height:calc(100vh - 120px);max-height:calc(100dvh - 120px);background:#fff;border-radius:18px;box-shadow:0 16px 50px rgba(0,0,0,.22);display:flex;flex-direction:column;overflow:hidden;opacity:0;transform:translateY(12px) scale(.98);pointer-events:none;transition:opacity .2s,transform .22s cubic-bezier(.34,1.4,.6,1);transform-origin:bottom ' + (LEFT ? 'left' : 'right') + '}',
       '.wb-open .wb-panel{opacity:1;transform:translateY(0) scale(1);pointer-events:auto}',
       '.wb-header{background:' + COLOR + ';color:#fff;padding:16px;display:flex;align-items:center;gap:11px}',
       '.wb-head-av,.wb-av{width:38px;height:38px;border-radius:50%;object-fit:cover;flex-shrink:0}',
@@ -663,7 +694,7 @@
       '.wb-brand b{color:#6b7280}',
       '@keyframes wb-pulse{0%{opacity:.48;transform:scale(.86)}70%{opacity:0;transform:scale(1.28)}100%{opacity:0;transform:scale(1.28)}}',
       '@keyframes wb-record{0%,100%{transform:scale(1)}50%{transform:scale(1.08)}}',
-      '@media(max-width:420px){.wb-panel{height:calc(100vh - 96px)}}'
+      '@media(max-width:420px){.wb-wrap{left:10px!important;right:10px!important;bottom:10px}.wb-panel{position:fixed;left:10px!important;right:10px!important;bottom:82px;width:auto;max-width:none;height:auto;max-height:none;top:max(10px,env(safe-area-inset-top));max-height:calc(100vh - 98px);max-height:calc(100dvh - 98px);border-radius:18px}.wb-body{flex:1 1 auto;min-height:0;overflow-y:auto}.wb-launcher-invite{max-width:calc(100vw - 94px)}}'
     ].join('');
   }
 })();

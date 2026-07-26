@@ -20,6 +20,9 @@ const STATUS_CONFIG = {
     error:    { color: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300',            icon: AlertCircle },
 };
 
+const SUPPORTED_FILE_EXTENSIONS = ['pdf', 'txt', 'md', 'csv', 'docx', 'json'];
+const SUPPORTED_FILE_LABEL = 'PDF, TXT, MD, CSV, DOCX, JSON';
+
 export default function AiKnowledgeBaseShow({ kb, kbUploadMaxKb = 20480, kbUploadMaxMb = 20 }) {
     const { t } = useTranslation();
     const { props } = usePage();
@@ -48,6 +51,14 @@ export default function AiKnowledgeBaseShow({ kb, kbUploadMaxKb = 20480, kbUploa
     const selectFile = (file) => {
         if (!file) return;
 
+        const extension = file.name.split('.').pop()?.toLowerCase();
+        if (!SUPPORTED_FILE_EXTENSIONS.includes(extension)) {
+            setFileError(`Unsupported file type. Please upload one of: ${SUPPORTED_FILE_LABEL}. Legacy .doc files must be converted to DOCX or PDF first.`);
+            setData('file', null);
+            if (fileRef.current) fileRef.current.value = '';
+            return;
+        }
+
         if (file.size > maxFileBytes) {
             setFileError(`This file is too large. Please upload a file up to ${kbUploadMaxMb} MB, or increase the server upload limit first.`);
             setData('file', null);
@@ -62,6 +73,11 @@ export default function AiKnowledgeBaseShow({ kb, kbUploadMaxKb = 20480, kbUploa
 
     const handleAdd = (e) => {
         e.preventDefault();
+        if (data.source_type === 'file' && !data.file) {
+            setFileError(`Please choose a supported file first: ${SUPPORTED_FILE_LABEL}.`);
+            return;
+        }
+
         if (data.source_type === 'file' && data.file?.size > maxFileBytes) {
             setFileError(`This file is too large. Please upload a file up to ${kbUploadMaxMb} MB, or increase the server upload limit first.`);
             return;
@@ -378,14 +394,14 @@ export default function AiKnowledgeBaseShow({ kb, kbUploadMaxKb = 20480, kbUploa
                                             : 'border-neutral-300 dark:border-neutral-600 hover:border-brand-400 dark:hover:border-brand-600'
                                     }`}
                                 >
-                                    <input ref={fileRef} type="file" accept=".pdf,.txt,.md,.csv,.docx,.doc,.xlsx,.xls,.json" className="hidden" onChange={e => selectFile(e.target.files[0])} />
+                                    <input ref={fileRef} type="file" accept=".pdf,.txt,.md,.csv,.docx,.json" className="hidden" onChange={e => selectFile(e.target.files[0])} />
                                     <Upload className="h-6 w-6 mx-auto mb-2 text-neutral-400" />
                                     {data.file ? (
                                         <p className="text-sm font-medium text-brand-600 dark:text-brand-400">{data.file.name}</p>
                                     ) : (
                                         <>
                                             <p className="text-sm text-neutral-600 dark:text-neutral-400"><Trans i18nKey="ai.drop_a_file_or_browse" components={{ 1: <span className="text-brand-600 dark:text-brand-400 font-medium" /> }} /></p>
-                                            <p className="text-xs text-neutral-400 mt-1">PDF, TXT, MD, CSV, DOCX, DOC, XLSX, XLS, JSON · max {kbUploadMaxMb} MB</p>
+                                            <p className="text-xs text-neutral-400 mt-1">{SUPPORTED_FILE_LABEL} · max {kbUploadMaxMb} MB</p>
                                         </>
                                     )}
                                     {fileError && (

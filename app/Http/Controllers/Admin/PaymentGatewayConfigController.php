@@ -148,7 +148,7 @@ class PaymentGatewayConfigController extends Controller
             $mode = (bool) $validated['test_mode'] ? 'test' : 'live';
             $active = $mode === 'test' ? $test : $live;
             $required = $gateway === 'paypal'
-                ? ['publishable_key', 'secret_key', 'webhook_secret']
+                ? ['publishable_key', 'secret_key']
                 : ['secret_key', 'webhook_secret'];
             $labels = [
                 'publishable_key' => $gateway === 'paypal' ? 'Client ID' : 'Publishable key',

@@ -546,12 +546,41 @@ class PayPalGateway implements AddonBillingGatewayInterface, BillingGatewayInter
 
     public function fulfillCheckoutSession(string $sessionId): array
     {
-        return ['ok' => false, 'error' => 'PayPal fulfillment is handled via webhook.'];
+        if (! $this->isConfigured() || $sessionId === '') {
+            return ['ok' => false, 'error' => 'PayPal is not configured.'];
+        }
+
+        $token = $this->getAccessToken();
+        if (! $token) {
+            return ['ok' => false, 'error' => 'Could not obtain PayPal access token.'];
+        }
+
+        $res = Http::withToken($token)
+            ->get($this->baseUrl().'/v1/billing/subscriptions/'.$sessionId);
+
+        if (! $res->successful()) {
+            Log::warning('PayPal fulfilment lookup failed', [
+                'subscription_id' => $sessionId,
+                'body' => $res->body(),
+            ]);
+
+            return ['ok' => false, 'error' => 'Could not verify PayPal subscription.'];
+        }
+
+        $resource = $res->json();
+        $status = strtoupper((string) ($resource['status'] ?? ''));
+        if (! in_array($status, ['ACTIVE', 'APPROVED'], true)) {
+            return ['ok' => false, 'error' => 'PayPal subscription is not active yet.'];
+        }
+
+        $this->handleSubscriptionActivated(['resource' => $resource]);
+
+        return ['ok' => true];
     }
 
     public function fulfillAddonCheckout(string $sessionId): array
     {
-        return ['ok' => false, 'error' => 'PayPal add-on fulfillment is handled by webhook.'];
+        return $this->fulfillCheckoutSession($sessionId);
     }
 
     public function changePlan(Subscription $subscription, Plan $newPlan, string $billingCycle): array

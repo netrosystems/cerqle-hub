@@ -138,14 +138,22 @@ JS;
         }
 
         $phone    = $widget->display_phone ?? '';
+        $phoneForUrl = preg_replace('/\D+/', '', $phone);
+        abort_if($phoneForUrl === '', 404, 'WhatsApp widget phone number is not configured.');
         $msg      = rawurlencode($widget->prefilled_message ?? '');
         $color    = $widget->button_color ?? '#25D366';
         $posRight = $widget->position !== 'bottom_left';
         $posStyle = $posRight ? 'right:20px' : 'left:20px';
-        $greeting = addslashes($widget->greeting_message ?? '');
-        $agentName = addslashes($widget->agent_name ?? 'Support');
+        $transformOrigin = $posRight ? 'right' : 'left';
+        $greeting = $widget->greeting_message ?? '';
+        $agentName = $widget->agent_name ?: 'Support';
+        $agentInitial = mb_strtoupper(mb_substr($agentName, 0, 1) ?: 'S');
         $agentColor = $widget->agent_avatar_color ?? $color;
-        $waUrl    = "https://wa.me/{$phone}?text={$msg}";
+        $waUrl    = "https://wa.me/{$phoneForUrl}".($msg !== '' ? "?text={$msg}" : '');
+        $waUrlJson = json_encode($waUrl, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+        $greetingJson = json_encode($greeting, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+        $agentNameJson = json_encode($agentName, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+        $agentInitialJson = json_encode($agentInitial, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
 
         // SVG WhatsApp icon (inline, no external requests)
         $svgIcon = '<svg xmlns=\\"http://www.w3.org/2000/svg\\" width=\\"28\\" height=\\"28\\" fill=\\"white\\" viewBox=\\"0 0 24 24\\"><path d=\\"M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z\\"/></svg>';
@@ -159,6 +167,10 @@ JS;
 {$domainCheck}
 {$workingHoursCheck}
   if (document.getElementById('_wacw_root')) return;
+  var _waUrl = {$waUrlJson};
+  var _greeting = {$greetingJson};
+  var _agentName = {$agentNameJson};
+  var _agentInitial = {$agentInitialJson};
 
   // ── Inject styles ────────────────────────────────────────────────────────
   var _style = document.createElement('style');
@@ -171,7 +183,7 @@ JS;
     '#_wacw_pulse{position:absolute;width:56px;height:56px;border-radius:50%;background:{$color};opacity:.5;animation:_wacw_pulse 2s ease-out infinite}',
     '@keyframes _wacw_pulse{0%{transform:scale(1);opacity:.5}100%{transform:scale(1.7);opacity:0}}',
     '#_wacw_badge{position:absolute;top:-3px;right:-3px;width:16px;height:16px;border-radius:50%;background:#ef4444;border:2px solid #fff;display:none}',
-    '#_wacw_tooltip{position:absolute;bottom:66px;{$posStyle};background:#fff;border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,.18);width:280px;overflow:hidden;transform-origin:bottom ' . ($posRight ? 'right' : 'left') . ';transform:scale(.85);opacity:0;pointer-events:none;transition:transform .25s cubic-bezier(.34,1.56,.64,1),opacity .2s}',
+    '#_wacw_tooltip{position:absolute;bottom:66px;{$posStyle};background:#fff;border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,.18);width:280px;overflow:hidden;transform-origin:bottom {$transformOrigin};transform:scale(.85);opacity:0;pointer-events:none;transition:transform .25s cubic-bezier(.34,1.56,.64,1),opacity .2s}',
     '#_wacw_tooltip.open{transform:scale(1);opacity:1;pointer-events:auto}',
     '#_wacw_tip_head{background:{$color};padding:14px 16px;display:flex;align-items:center;gap:10px}',
     '#_wacw_tip_avatar{width:38px;height:38px;border-radius:50%;background:{$agentColor};flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:700;color:#fff;text-transform:uppercase}',
@@ -208,23 +220,29 @@ JS;
   btn.innerHTML = '{$svgIcon}';
 
   // Tooltip / greeting card
-  var hasGreeting = '{$greeting}' !== '';
+  var hasGreeting = _greeting !== '';
   var tooltip = document.createElement('div');
   tooltip.id = '_wacw_tooltip';
   tooltip.setAttribute('role', 'dialog');
   tooltip.setAttribute('aria-label', 'WhatsApp greeting');
   tooltip.innerHTML = '<div id="_wacw_tip_head">'
-    + '<div id="_wacw_tip_avatar">{$agentName[0]}</div>'
+    + '<div id="_wacw_tip_avatar"></div>'
     + '<div id="_wacw_tip_info">'
-      + '<div id="_wacw_tip_name">{$agentName}</div>'
+      + '<div id="_wacw_tip_name"></div>'
       + '<div id="_wacw_tip_status"><span id="_wacw_tip_dot"></span>Typically replies instantly</div>'
     + '</div>'
     + '<button id="_wacw_tip_close" aria-label="Close">&#x2715;</button>'
     + '</div>'
     + (hasGreeting
-      ? '<div id="_wacw_tip_body"><div id="_wacw_tip_bubble">{$greeting}</div>'
-        + '<a id="_wacw_tip_cta" href="{$waUrl}" target="_blank" rel="noopener noreferrer">Start Chat</a></div>'
-      : '<div id="_wacw_tip_body"><a id="_wacw_tip_cta" href="{$waUrl}" target="_blank" rel="noopener noreferrer">Start Chat on WhatsApp</a></div>');
+      ? '<div id="_wacw_tip_body"><div id="_wacw_tip_bubble"></div>'
+        + '<a id="_wacw_tip_cta" target="_blank" rel="noopener noreferrer">Start Chat</a></div>'
+      : '<div id="_wacw_tip_body"><a id="_wacw_tip_cta" target="_blank" rel="noopener noreferrer">Start Chat on WhatsApp</a></div>');
+
+  tooltip.querySelector('#_wacw_tip_avatar').textContent = _agentInitial;
+  tooltip.querySelector('#_wacw_tip_name').textContent = _agentName;
+  var _bubble = tooltip.querySelector('#_wacw_tip_bubble');
+  if (_bubble) _bubble.textContent = _greeting;
+  tooltip.querySelector('#_wacw_tip_cta').href = _waUrl;
 
   root.appendChild(pulse);
   root.appendChild(badge);

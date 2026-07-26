@@ -237,7 +237,52 @@ class IndexDocumentJob implements ShouldQueue
             }
         }
 
+        if ($ext === 'docx') {
+            return $this->readDocx((string) ($disk->get($path) ?? ''));
+        }
+
+        if ($ext === 'doc') {
+            throw new \RuntimeException('Document indexing failed: legacy .doc files are not supported. Please convert this file to .docx, PDF, or TXT and upload it again.');
+        }
+
         return (string) ($disk->get($path) ?? '');
+    }
+
+    private function readDocx(string $contents): string
+    {
+        if ($contents === '' || ! class_exists(\ZipArchive::class)) {
+            return '';
+        }
+
+        $tmp = tempnam(sys_get_temp_dir(), 'kbdocx_');
+        try {
+            file_put_contents($tmp, $contents);
+
+            $zip = new \ZipArchive;
+            if ($zip->open($tmp) !== true) {
+                return '';
+            }
+
+            $parts = [];
+            foreach (['word/document.xml', 'word/footnotes.xml', 'word/endnotes.xml'] as $entry) {
+                $xml = $zip->getFromName($entry);
+                if ($xml === false) {
+                    continue;
+                }
+
+                // Preserve paragraph/table-cell boundaries before stripping XML.
+                $xml = preg_replace('/<\/w:p>/i', "\n", $xml) ?? $xml;
+                $xml = preg_replace('/<\/w:tr>/i', "\n", $xml) ?? $xml;
+                $xml = preg_replace('/<\/w:tc>/i', "\t", $xml) ?? $xml;
+                $parts[] = strip_tags($xml);
+            }
+
+            $zip->close();
+
+            return implode("\n\n", $parts);
+        } finally {
+            @unlink($tmp);
+        }
     }
 
     /**

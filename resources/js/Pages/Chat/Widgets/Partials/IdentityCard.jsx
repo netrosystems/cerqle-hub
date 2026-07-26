@@ -27,14 +27,17 @@ function CopyBox({ code, label }) {
 export default function IdentityCard({ embedBase, widgetKey, identitySecret, verification }) {
     const [expanded, setExpanded] = useState(false);
     const basic =
-`<!-- Before the widget script, set your logged-in user (skip fields you don't have) -->
+`<!-- Before the widget script, set identity ONLY when your visitor is logged in. -->
 <script>
-  window.CerqleSettings = {
-    name: "Jane Doe",
-    email: "jane@example.com",
-    avatar: "https://your-site.com/avatars/jane.jpg",
-    external_id: "USER_123"${verification ? ',\n    user_hash: "GENERATED_ON_YOUR_SERVER"' : ''}
-  };
+  if (window.currentUser) {
+    window.CerqleSettings = {
+      logged_in: true,
+      name: window.currentUser.name,
+      email: window.currentUser.email,
+      avatar: window.currentUser.avatar_url,
+      external_id: String(window.currentUser.id)${verification ? ',\n      user_hash: "GENERATED_ON_YOUR_SERVER"' : ''}
+    };
+  }
 </script>
 <script src="${embedBase}/widgets/chat/${widgetKey}.js" async></script>`;
 

@@ -17,5 +17,11 @@ export async function signInWithGoogle() {
     if (!_auth) throw new Error('Firebase not initialized');
     const provider = new GoogleAuthProvider();
     const result = await signInWithPopup(_auth, provider);
+
+    const credential = GoogleAuthProvider.credentialFromResult(result);
+    if (credential?.idToken) {
+        return credential.idToken;
+    }
+
     return result.user.getIdToken();
 }

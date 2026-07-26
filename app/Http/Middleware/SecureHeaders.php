@@ -120,6 +120,9 @@ class SecureHeaders
             $sources[] = 'https://www.facebook.com';
             $sources[] = 'https://web.facebook.com';
         }
+        foreach ($this->firebaseConnectSources() as $source) {
+            $sources[] = $source;
+        }
 
         return implode(' ', array_unique($sources));
     }
@@ -127,11 +130,40 @@ class SecureHeaders
     /** Allow Meta Login / Embedded Signup dialogs in iframes when the Meta App is configured. */
     private function metaFrameSources(): string
     {
-        if (! $this->metaSdkEnabled()) {
-            return '';
+        $sources = [];
+
+        if ($this->metaSdkEnabled()) {
+            $sources[] = 'https://www.facebook.com';
+            $sources[] = 'https://web.facebook.com';
+            $sources[] = 'https://connect.facebook.net';
         }
 
-        return ' https://www.facebook.com https://web.facebook.com https://connect.facebook.net';
+        foreach ($this->firebaseFrameSources() as $source) {
+            $sources[] = $source;
+        }
+
+        return $sources === [] ? '' : ' '.implode(' ', array_unique($sources));
+    }
+
+    /** Firebase Auth uses these endpoints for Google sign-in popup/token exchange. */
+    private function firebaseConnectSources(): array
+    {
+        return [
+            'https://identitytoolkit.googleapis.com',
+            'https://securetoken.googleapis.com',
+            'https://www.googleapis.com',
+            'https://firebaseinstallations.googleapis.com',
+        ];
+    }
+
+    /** Firebase Auth may use the auth domain iframe during popup/redirect flows. */
+    private function firebaseFrameSources(): array
+    {
+        return [
+            'https://*.firebaseapp.com',
+            'https://*.web.app',
+            'https://accounts.google.com',
+        ];
     }
 
     private function metaSdkEnabled(): bool

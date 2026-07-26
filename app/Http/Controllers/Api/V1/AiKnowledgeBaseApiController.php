@@ -11,6 +11,10 @@ use Illuminate\Http\Request;
 
 class AiKnowledgeBaseApiController extends WorkspaceScopedController
 {
+    private const SUPPORTED_FILE_MIMES = 'pdf,txt,md,csv,docx,json';
+
+    private const SUPPORTED_FILE_LABEL = 'PDF, TXT, MD, CSV, DOCX, JSON';
+
     public function __construct(private StorageManager $storage) {}
 
     /**
@@ -91,6 +95,10 @@ class AiKnowledgeBaseApiController extends WorkspaceScopedController
         ]);
 
         if ($request->hasFile('file')) {
+            $request->validate([
+                'file' => ['file', 'max:20480', 'mimes:'.self::SUPPORTED_FILE_MIMES],
+            ], $this->fileValidationMessages());
+
             $file = $request->file('file');
             $path = $this->storage->prefixedPath('kb-docs/'.$file->hashName());
             $this->storage->disk()->putFileAs(dirname($path), $file, basename($path));
@@ -153,6 +161,15 @@ class AiKnowledgeBaseApiController extends WorkspaceScopedController
             'title' => $doc->title,
             'status' => $doc->status,
             'created_at' => $doc->created_at->toIso8601String(),
+        ];
+    }
+
+    private function fileValidationMessages(): array
+    {
+        return [
+            'file.file' => 'Please upload a valid knowledge base file.',
+            'file.max' => 'This file is too large. Please upload a file up to 20 MB.',
+            'file.mimes' => 'Unsupported file type. Please upload one of: '.self::SUPPORTED_FILE_LABEL.'. Legacy .doc files must be converted to DOCX or PDF first.',
         ];
     }
 

@@ -6,6 +6,7 @@ use App\Contracts\BillingGatewayInterface;
 use App\Http\Controllers\Controller;
 use App\Models\PaymentTransaction;
 use App\Services\Billing\BillingGatewayRegistry;
+use App\Services\Billing\PayPalGateway;
 use App\Services\Billing\StripeGateway;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -31,7 +32,13 @@ class BillingController extends Controller
             $this->callFulfil('stripe', $sessionId, $userId);
         }
 
-        // Legacy gateway return handlers are intentionally disabled.
+        // PayPal redirects back with the approved subscription ID. Webhooks are
+        // still the source of truth for renewals/payments, but this fallback
+        // lets the first subscription activate immediately after approval.
+        $paypalSubscriptionId = $request->query('subscription_id');
+        if ($paypalSubscriptionId) {
+            $this->callFulfil('paypal', (string) $paypalSubscriptionId, $userId);
+        }
     }
 
     private function callFulfil(string $gatewayKey, string $sessionId, int $userId): void
@@ -43,6 +50,8 @@ class BillingController extends Controller
         try {
             if ($gateway instanceof StripeGateway) {
                 $gateway->fulfillCheckoutSession($sessionId, $userId);
+            } elseif ($gateway instanceof PayPalGateway) {
+                $gateway->fulfillCheckoutSession($sessionId);
             } else {
                 $gateway->fulfillCheckoutSession($sessionId);
             }
