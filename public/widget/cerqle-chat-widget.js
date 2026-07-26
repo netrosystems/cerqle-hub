@@ -112,8 +112,11 @@
   // ── Shadow host ────────────────────────────────────────────────────────────
   var host = document.createElement('div');
   host.id = 'wb-chat-host';
-  host.style.cssText = 'all:initial';
-  (document.body || document.documentElement).appendChild(host);
+  // Anchor the shadow host itself to the viewport. A zero-sized host appended
+  // at the end of <body> can become the containing block for fixed descendants
+  // on transformed pages/mobile Safari, pushing the widget outside the screen.
+  host.style.cssText = 'all:initial;position:fixed;inset:0;width:100%;height:100%;z-index:2147483647;pointer-events:none;contain:layout style';
+  document.documentElement.appendChild(host);
   var root = host.attachShadow({ mode: 'open' });
 
   var style = document.createElement('style');
@@ -679,7 +682,7 @@
     return [
       ':host{all:initial}',
       '*{box-sizing:border-box;margin:0;padding:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}',
-      '.wb-wrap{position:fixed;bottom:20px;width:60px;height:60px;z-index:2147483647}',
+      '.wb-wrap{position:absolute;bottom:20px;width:60px;height:60px;z-index:1;pointer-events:auto}',
       '.wb-right{right:20px}.wb-left{left:20px}',
       '.wb-launcher{position:absolute;inset:0;width:60px;height:60px;border-radius:50%;border:none;cursor:pointer;color:#fff;background:' + COLOR + ';box-shadow:0 6px 24px rgba(0,0,0,.24);display:flex;align-items:center;justify-content:center;overflow:visible;transition:opacity .2s,transform .2s}',
       '.wb-launcher:hover{transform:scale(1.06)}.wb-launcher:active{transform:scale(.96)}',
@@ -727,7 +730,7 @@
       '.wb-brand b{color:#6b7280}',
       '@keyframes wb-pulse{0%{opacity:.48;transform:scale(.86)}70%{opacity:0;transform:scale(1.28)}100%{opacity:0;transform:scale(1.28)}}',
       '@keyframes wb-record{0%,100%{transform:scale(1)}50%{transform:scale(1.08)}}',
-      '@media(max-width:420px){.wb-wrap{bottom:10px}.wb-right{right:10px!important;left:auto!important}.wb-left{left:10px!important;right:auto!important}.wb-panel{position:fixed;left:10px!important;right:10px!important;bottom:82px;width:auto;max-width:none;height:auto;max-height:none;top:max(10px,env(safe-area-inset-top));max-height:calc(100vh - 98px);max-height:calc(100dvh - 98px);border-radius:18px;transform-origin:bottom ' + (LEFT ? 'left' : 'right') + '}.wb-body{flex:1 1 auto;min-height:0;overflow-y:auto}.wb-launcher-invite{max-width:calc(100vw - 94px)}}'
+      '@media(max-width:420px){.wb-wrap{bottom:max(10px,env(safe-area-inset-bottom))}.wb-right{right:10px!important;left:auto!important}.wb-left{left:10px!important;right:auto!important}.wb-panel{position:absolute;left:auto!important;right:0!important;bottom:72px;width:calc(100vw - 20px);max-width:none;height:calc(100vh - 98px);height:calc(100dvh - 98px);max-height:none;top:auto;border-radius:18px;transform-origin:bottom ' + (LEFT ? 'left' : 'right') + '}.wb-left .wb-panel{left:0!important;right:auto!important}.wb-body{flex:1 1 auto;min-height:0;overflow-y:auto}.wb-launcher-invite{max-width:calc(100vw - 94px)}}'
     ].join('');
   }
 })();
