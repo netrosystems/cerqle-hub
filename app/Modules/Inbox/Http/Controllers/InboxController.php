@@ -38,22 +38,8 @@ class InboxController extends Controller
     public function index(Request $request): Response
     {
         $workspaceId = $request->user()->current_workspace_id ?? $request->user()->workspace_id;
-        $userId = $request->user()->id;
 
-        $conversations = Conversation::where('workspace_id', $workspaceId)
-            ->with(['contact', 'channelAccount', 'lastMessage', 'labels'])
-            ->when($request->folder === 'mine', fn ($q) => $q->where('assigned_user_id', $userId))
-            ->when($request->folder === 'unassigned', fn ($q) => $q->whereNull('assigned_user_id'))
-            ->when($request->channel, fn ($q) => $q->whereHas('channelAccount', fn ($q) => $q->where('channel', $request->channel)))
-            ->when($request->account_id, fn ($q) => $q->where('channel_account_id', $request->account_id))
-            // "All" is intentionally unfiltered: resolved and snoozed threads
-            // remain discoverable from the primary inbox view. The dedicated
-            // views below are narrower shortcuts, not the only place those
-            // conversations can be found.
-            ->when($request->folder === 'resolved', fn ($q) => $q->where('status', 'resolved'))
-            ->when($request->folder === 'snoozed', fn ($q) => $q->where('status', 'snoozed'))
-            ->when($request->label, fn ($q) => $q->whereHas('labels', fn ($q) => $q->where('inbox_labels.id', $request->label)))
-            ->orderByDesc('last_message_at')
+        $conversations = $this->conversationListQuery($request, $workspaceId)
             ->paginate(30)
             ->withQueryString();
 
@@ -70,6 +56,17 @@ class InboxController extends Controller
             'labels' => $labels,
             'channelAccounts' => $channelAccounts,
         ]);
+    }
+
+    public function pollConversations(Request $request): JsonResponse
+    {
+        $workspaceId = $request->user()->current_workspace_id ?? $request->user()->workspace_id;
+
+        $conversations = $this->conversationListQuery($request, $workspaceId)
+            ->paginate(30)
+            ->withQueryString();
+
+        return response()->json(['conversations' => $conversations]);
     }
 
     public function show(Request $request, Conversation $conversation): Response
@@ -148,6 +145,23 @@ class InboxController extends Controller
             'channelAccounts' => $channelAccounts,
             'hasEcommerceStore' => $hasEcommerceStore,
         ]);
+    }
+
+    public function pollMessages(Request $request, Conversation $conversation): JsonResponse
+    {
+        $this->authorise($request, $conversation);
+
+        $after = max(0, (int) $request->integer('after'));
+        $messages = $conversation->messages()
+            ->where('id', '>', $after)
+            ->orderBy('sent_at')
+            ->get();
+
+        if ($messages->isNotEmpty()) {
+            $conversation->update(['unread_count' => 0]);
+        }
+
+        return response()->json(['messages' => $messages]);
     }
 
     public function reply(Request $request, Conversation $conversation): JsonResponse|RedirectResponse
@@ -705,6 +719,26 @@ class InboxController extends Controller
         }
 
         return redirect()->route('client.inbox.show', $conversation);
+    }
+
+    private function conversationListQuery(Request $request, int $workspaceId)
+    {
+        $userId = $request->user()->id;
+
+        return Conversation::where('workspace_id', $workspaceId)
+            ->with(['contact', 'channelAccount', 'lastMessage', 'labels'])
+            ->when($request->folder === 'mine', fn ($q) => $q->where('assigned_user_id', $userId))
+            ->when($request->folder === 'unassigned', fn ($q) => $q->whereNull('assigned_user_id'))
+            ->when($request->channel, fn ($q) => $q->whereHas('channelAccount', fn ($q) => $q->where('channel', $request->channel)))
+            ->when($request->account_id, fn ($q) => $q->where('channel_account_id', $request->account_id))
+            // "All" is intentionally unfiltered: resolved and snoozed threads
+            // remain discoverable from the primary inbox view. The dedicated
+            // views below are narrower shortcuts, not the only place those
+            // conversations can be found.
+            ->when($request->folder === 'resolved', fn ($q) => $q->where('status', 'resolved'))
+            ->when($request->folder === 'snoozed', fn ($q) => $q->where('status', 'snoozed'))
+            ->when($request->label, fn ($q) => $q->whereHas('labels', fn ($q) => $q->where('inbox_labels.id', $request->label)))
+            ->orderByDesc('last_message_at');
     }
 
     private function authorise(Request $request, Conversation $conversation): void

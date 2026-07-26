@@ -11,6 +11,7 @@ import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ChannelBrandIcon, CHANNEL_LABELS } from '@/Components/BrandIcons';
 import { formatTimeTz } from '@/Utils/datetime';
+import axios from 'axios';
 
 const FOLDERS = [
     { key: null,         labelKey: 'inbox.folder_all',        icon: Inbox },
@@ -258,6 +259,26 @@ export default function InboxIndex({ conversations: initialConversations, filter
             });
         return () => { window.Echo.leave(`workspace.${workspaceId}`); };
     }, [workspaceId]);
+
+    // Polling fallback for servers where websocket broadcasting is not running.
+    useEffect(() => {
+        let stopped = false;
+        const poll = () => {
+            axios.get(route('client.inbox.poll'), { params: filters })
+                .then(({ data }) => {
+                    if (!stopped && data?.conversations) {
+                        setConversations(data.conversations);
+                    }
+                })
+                .catch(() => {});
+        };
+
+        const timer = setInterval(poll, 5000);
+        return () => {
+            stopped = true;
+            clearInterval(timer);
+        };
+    }, [JSON.stringify(filters)]);
 
     const navigate = (params) => {
         setLoading(true);

@@ -25,7 +25,9 @@ class PusherSettingsController extends Controller
         }
 
         $settings['pusher_enabled'] = SystemSetting::get('pusher_enabled', 'false');
-        $configured = ! empty(SystemSetting::get('pusher_app_key')) && ! empty(SystemSetting::get('pusher_app_secret'));
+        $configured = ! empty(SystemSetting::get('pusher_app_id'))
+            && ! empty(SystemSetting::get('pusher_app_key'))
+            && ! empty(SystemSetting::get('pusher_app_secret'));
 
         return Inertia::render('Admin/PusherSettings/Index', [
             'settings'   => $settings,

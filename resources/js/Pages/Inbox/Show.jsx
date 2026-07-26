@@ -1543,6 +1543,49 @@ export default function InboxShow({
         return () => { window.Echo.leave(`workspace.${workspaceId}`); };
     }, [workspaceId]);
 
+    // Polling fallback for deployments without active websocket broadcasting.
+    useEffect(() => {
+        let stopped = false;
+        const poll = () => {
+            const after = messages.reduce((max, message) => Math.max(max, Number(message.id) || 0), 0);
+            axios.get(route('client.inbox.messages.poll', conversation.uuid), { params: { after } })
+                .then(({ data }) => {
+                    if (stopped || !Array.isArray(data?.messages) || data.messages.length === 0) return;
+                    setMessages(prev => {
+                        const existing = new Set(prev.map(message => message.id));
+                        const fresh = data.messages.filter(message => !existing.has(message.id));
+                        return fresh.length ? [...prev, ...fresh] : prev;
+                    });
+                })
+                .catch(() => {});
+        };
+
+        const timer = setInterval(poll, 3000);
+        return () => {
+            stopped = true;
+            clearInterval(timer);
+        };
+    }, [conversation.uuid, messages]);
+
+    useEffect(() => {
+        let stopped = false;
+        const poll = () => {
+            axios.get(route('client.inbox.poll'), { params: filters })
+                .then(({ data }) => {
+                    if (!stopped && data?.conversations) {
+                        setConversations(data.conversations);
+                    }
+                })
+                .catch(() => {});
+        };
+
+        const timer = setInterval(poll, 5000);
+        return () => {
+            stopped = true;
+            clearInterval(timer);
+        };
+    }, [JSON.stringify(filters)]);
+
     const typingTimer = useRef(null);
     const handleTyping = () => {
         // Use server-side broadcast instead of Pusher client events (whispers),

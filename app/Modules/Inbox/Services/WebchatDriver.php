@@ -178,10 +178,12 @@ class WebchatDriver implements ChannelDriverInterface
         $contact = $this->findVisitorContact($workspaceId, $visitorId, $identity);
 
         if (! $contact) {
+            $anonymousName = $first ?: $this->nextAnonymousCustomerName($workspaceId);
+
             $contact = Contact::create([
                 'workspace_id' => $workspaceId,
                 'source' => 'webchat',
-                'first_name' => $first ?: 'Website visitor',
+                'first_name' => $anonymousName,
                 'last_name' => $last,
                 'email' => $email,
                 'avatar' => $avatar,
@@ -194,6 +196,7 @@ class WebchatDriver implements ChannelDriverInterface
                 'custom_fields' => array_filter([
                     'webchat_visitor_id' => $visitorId,
                     'webchat_external_id' => $isLoggedInIdentity && $externalId !== '' ? $externalId : null,
+                    'webchat_device_label' => substr($visitorId, 0, 8),
                 ]),
                 'last_seen_at' => now(),
             ]);
@@ -214,7 +217,7 @@ class WebchatDriver implements ChannelDriverInterface
         }
 
         $updates = ['last_seen_at' => now(), 'custom_fields' => $cf];
-        if ($first && (! $contact->first_name || $contact->first_name === 'Website visitor')) {
+        if ($first && (! $contact->first_name || str_starts_with((string) $contact->first_name, 'Customer '))) {
             $updates['first_name'] = $first;
             $updates['last_name'] = $last;
         }
@@ -249,5 +252,15 @@ class WebchatDriver implements ChannelDriverInterface
         return Contact::where('workspace_id', $workspaceId)
             ->whereJsonContains('custom_fields->webchat_visitor_id', $visitorId)
             ->first();
+    }
+
+    private function nextAnonymousCustomerName(int $workspaceId): string
+    {
+        $count = Contact::where('workspace_id', $workspaceId)
+            ->where('source', 'webchat')
+            ->where('first_name', 'like', 'Customer %')
+            ->count() + 1;
+
+        return 'Customer '.str_pad((string) $count, 2, '0', STR_PAD_LEFT);
     }
 }

@@ -21,7 +21,11 @@ class SystemSetting extends Model
             try {
                 return Crypt::decryptString($raw);
             } catch (\Throwable) {
-                return null;
+                // Older saves could mark a setting as secret after assigning
+                // the value, leaving plaintext in the DB. Keep those settings
+                // readable so integrations do not appear "not configured";
+                // the next save will re-encrypt via setValueAttribute().
+                return $raw;
             }
         }
 
@@ -47,8 +51,8 @@ class SystemSetting extends Model
     public static function set(string $key, $value, bool $isSecret = false, ?string $group = null): void
     {
         $s = static::firstOrNew(['key' => $key]);
-        $s->value = $value;
         $s->is_secret = $isSecret;
+        $s->value = $value;
         $s->group = $group;
         $s->save();
     }
