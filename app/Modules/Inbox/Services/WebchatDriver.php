@@ -128,6 +128,27 @@ class WebchatDriver implements ChannelDriverInterface
     }
 
     /**
+     * Return an existing visitor conversation without creating a contact or
+     * conversation. Used when the widget opens so browsing a site does not fill
+     * the inbox with empty webchat threads.
+     *
+     * @param  array<string, mixed>  $identity
+     */
+    public function findConversation(ChatWidget $widget, string $visitorId, array $identity = []): ?Conversation
+    {
+        $contact = $this->findVisitorContact($widget->workspace_id, $visitorId, $identity);
+        if (! $contact) {
+            return null;
+        }
+
+        return Conversation::where('workspace_id', $widget->workspace_id)
+            ->where('contact_id', $contact->id)
+            ->where('channel_account_id', $widget->channelAccount?->id)
+            ->latest('id')
+            ->first();
+    }
+
+    /**
      * Find-or-create the visitor as a Contact. A logged-in customer passed from
      * the client's site is matched on their stable external id
      * (custom_fields.webchat_external_id) so they map to ONE contact across
@@ -154,17 +175,7 @@ class WebchatDriver implements ChannelDriverInterface
         $externalId = trim((string) ($identity['external_id'] ?? ''));
         $isLoggedInIdentity = ($identity['identity_kind'] ?? null) === 'logged_in';
 
-        $contact = null;
-        if ($isLoggedInIdentity && $externalId !== '') {
-            $contact = Contact::where('workspace_id', $workspaceId)
-                ->whereJsonContains('custom_fields->webchat_external_id', $externalId)
-                ->first();
-        }
-        if (! $contact) {
-            $contact = Contact::where('workspace_id', $workspaceId)
-                ->whereJsonContains('custom_fields->webchat_visitor_id', $visitorId)
-                ->first();
-        }
+        $contact = $this->findVisitorContact($workspaceId, $visitorId, $identity);
 
         if (! $contact) {
             $contact = Contact::create([
@@ -216,5 +227,27 @@ class WebchatDriver implements ChannelDriverInterface
         $contact->update($updates);
 
         return $contact;
+    }
+
+    /**
+     * @param  array<string, mixed>  $identity
+     */
+    private function findVisitorContact(int $workspaceId, string $visitorId, array $identity): ?Contact
+    {
+        $externalId = trim((string) ($identity['external_id'] ?? ''));
+        $isLoggedInIdentity = ($identity['identity_kind'] ?? null) === 'logged_in';
+
+        if ($isLoggedInIdentity && $externalId !== '') {
+            $contact = Contact::where('workspace_id', $workspaceId)
+                ->whereJsonContains('custom_fields->webchat_external_id', $externalId)
+                ->first();
+            if ($contact) {
+                return $contact;
+            }
+        }
+
+        return Contact::where('workspace_id', $workspaceId)
+            ->whereJsonContains('custom_fields->webchat_visitor_id', $visitorId)
+            ->first();
     }
 }

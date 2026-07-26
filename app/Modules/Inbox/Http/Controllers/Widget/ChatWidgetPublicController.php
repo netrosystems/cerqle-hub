@@ -46,15 +46,15 @@ class ChatWidgetPublicController extends Controller
         $visitorId = ($data['visitor_id'] ?? '') ?: (string) Str::uuid();
         $identity = $this->resolveIdentity($widget, $data);
 
-        $conversation = $this->driver->resolveConversation($widget, $visitorId, $identity);
-        $token = WebchatVisitorToken::issue($conversation->id, $widget->widget_key, $visitorId);
+        $conversation = $this->driver->findConversation($widget, $visitorId, $identity);
+        $token = WebchatVisitorToken::issue($conversation?->id, $widget->widget_key, $visitorId);
 
         return response()->json([
             'visitor_id' => $visitorId,
             'token' => $token,
             'config' => $widget->publicConfig(),
             'online' => $this->isOnline($widget),
-            'messages' => $this->mapMessages($conversation->id, $widget, 0),
+            'messages' => $conversation ? $this->mapMessages($conversation->id, $widget, 0) : [],
         ]);
     }
 
@@ -65,6 +65,12 @@ class ChatWidgetPublicController extends Controller
             'key' => ['required', 'string'],
             'message' => ['nullable', 'string', 'max:4000'],
             'type' => ['nullable', 'in:text,audio,image'],
+            'name' => ['nullable', 'string', 'max:120'],
+            'email' => ['nullable', 'string', 'max:190'],
+            'avatar' => ['nullable', 'string', 'max:512'],
+            'external_id' => ['nullable', 'string', 'max:190'],
+            'user_hash' => ['nullable', 'string', 'max:128'],
+            'identity_kind' => ['nullable', 'string', 'in:logged_in,prechat'],
             'attachment' => [
                 'nullable', 'file', 'max:10240',
                 'mimes:jpg,jpeg,png,webp,mp3,aac,m4a,amr,ogg,oga,wav,webm',
@@ -75,12 +81,18 @@ class ChatWidgetPublicController extends Controller
         $this->assertDomainAllowed($widget, $request);
         $payload = $this->authVisitor($request, $widget);
 
-        // Append to the exact conversation the session token is bound to (never
-        // re-resolve by device id — see WebchatDriver::recordInboundMessage).
-        $conversation = Conversation::where('id', $payload['c'])
-            ->where('workspace_id', $widget->workspace_id)
-            ->first();
-        abort_if($conversation === null, 404, 'Conversation not found.');
+        $conversationId = $payload['c'] ?? null;
+        $conversation = $conversationId
+            ? Conversation::where('id', $conversationId)
+                ->where('workspace_id', $widget->workspace_id)
+                ->first()
+            : null;
+
+        $issuedToken = null;
+        if (! $conversation) {
+            $conversation = $this->driver->resolveConversation($widget, (string) $payload['v'], $this->resolveIdentity($widget, $data));
+            $issuedToken = WebchatVisitorToken::issue($conversation->id, $widget->widget_key, (string) $payload['v']);
+        }
 
         $type = $data['type'] ?? 'text';
         $body = trim((string) ($data['message'] ?? ''));
@@ -111,7 +123,10 @@ class ChatWidgetPublicController extends Controller
 
         $message = $this->driver->recordInboundMessage($conversation, $payload['v'], $body, $type, $messagePayload);
 
-        return response()->json(['message' => $this->mapMessage($message, $widget)]);
+        return response()->json(array_filter([
+            'token' => $issuedToken,
+            'message' => $this->mapMessage($message, $widget),
+        ]));
     }
 
     /** GET /widget/v1/messages?after=ID — poll for new messages. */
@@ -125,6 +140,12 @@ class ChatWidgetPublicController extends Controller
         $widget = $this->resolveWidget($data['key']);
         $this->assertDomainAllowed($widget, $request);
         $payload = $this->authVisitor($request, $widget);
+        if (empty($payload['c'])) {
+            return response()->json([
+                'messages' => [],
+                'online' => $this->isOnline($widget),
+            ]);
+        }
 
         return response()->json([
             'messages' => $this->mapMessages((int) $payload['c'], $widget, (int) ($data['after'] ?? 0)),

@@ -18,7 +18,7 @@
   var API = (CFG.api_base || '').replace(/\/$/, '');
   var COLOR = CFG.primary_color || '#ff762e';
   var LEFT = CFG.position === 'bottom_left';
-  var SESSION_VERSION = 'v2';
+  var SESSION_VERSION = 'v3';
   var LS_VISITOR = 'wb_chat_visitor_' + SESSION_VERSION + '_' + KEY;
   var LS_TOKEN = 'wb_chat_token_' + SESSION_VERSION + '_' + KEY;
   var LS_THREAD = 'wb_chat_thread_' + SESSION_VERSION + '_' + KEY;   // device-cached message history
@@ -42,6 +42,7 @@
   var recordingChunks = [];
   var pendingAudio = null;
   var pendingImage = null;
+  var currentIdentity = {};
   var prechatNeeded = !!CFG.require_prechat && !safeGet('wb_chat_prechat_' + KEY);
 
   function safeGet(k) { try { return window.localStorage.getItem(k) || ''; } catch (e) { return ''; } }
@@ -253,6 +254,7 @@
     if (starting) return starting;
     var body = { key: KEY, visitor_id: visitorId || undefined };
     var id = identityPayload(prechatData);
+    currentIdentity = id || {};
     for (var k in id) { if (id[k] !== undefined) body[k] = id[k]; }
     starting = post('/widget/v1/session', body).then(function (data) {
       if (!data) return;
@@ -269,8 +271,11 @@
   function send(text) {
     ensureSession().then(function () {
       startPolling();
-      return post('/widget/v1/messages', { key: KEY, message: text });
+      var payload = { key: KEY, message: text };
+      for (var k in currentIdentity) { if (currentIdentity[k] !== undefined) payload[k] = currentIdentity[k]; }
+      return post('/widget/v1/messages', payload);
     }).then(function (data) {
+      updateSessionToken(data);
       // Render from the server echo (carries the real id) so it dedupes cleanly
       // against the next poll — no optimistic double-render.
       if (data && data.message) addMessage(data.message);
@@ -355,8 +360,10 @@
       fd.append('type', 'audio');
       fd.append('message', input.value.trim());
       fd.append('attachment', pendingAudio.file);
+      appendIdentity(fd);
       return postForm('/widget/v1/messages', fd);
     }).then(function (data) {
+      updateSessionToken(data);
       if (data && data.message) addMessage(data.message);
       input.value = '';
       discardPendingAudio();
@@ -396,8 +403,10 @@
       fd.append('type', 'image');
       fd.append('message', input.value.trim());
       fd.append('attachment', pendingImage.file);
+      appendIdentity(fd);
       return postForm('/widget/v1/messages', fd);
     }).then(function (data) {
+      updateSessionToken(data);
       if (data && data.message) addMessage(data.message);
       input.value = '';
       discardPendingImage();
@@ -426,6 +435,19 @@
   function setAudioStatus(text) {
     audioStatus.textContent = text || '';
     audioStatus.style.display = text ? 'block' : 'none';
+  }
+
+  function appendIdentity(fd) {
+    for (var k in currentIdentity) {
+      if (currentIdentity[k] !== undefined) fd.append(k, currentIdentity[k]);
+    }
+  }
+
+  function updateSessionToken(data) {
+    if (data && data.token) {
+      token = data.token;
+      safeSet(LS_TOKEN, token);
+    }
   }
 
   function pickRecorderMimeType() {
