@@ -119,6 +119,10 @@ class PayPalGateway implements AddonBillingGatewayInterface, BillingGatewayInter
                         ],
                     ],
                 ],
+                'payment_preferences' => [
+                    'auto_bill_outstanding' => true,
+                    'payment_failure_threshold' => 3,
+                ],
             ]);
 
         if (! $planRes->successful()) {
@@ -198,6 +202,10 @@ class PayPalGateway implements AddonBillingGatewayInterface, BillingGatewayInter
                     'fixed_price' => ['value' => $amount, 'currency_code' => $addon['currency']],
                 ],
             ]],
+            'payment_preferences' => [
+                'auto_bill_outstanding' => true,
+                'payment_failure_threshold' => 3,
+            ],
         ]);
         if (! $planRes->successful()) {
             return ['error' => $planRes->json('message', 'PayPal add-on plan creation failed.')];
