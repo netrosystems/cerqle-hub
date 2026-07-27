@@ -44,29 +44,22 @@ class ChatbotRunner
             $contextChunks = array_column($results, 'chunk');
         }
 
-        // 3. Build prompt
-        $systemPrompt = $bot->system_prompt ?? 'You are a helpful assistant.';
-        if (! empty($contextChunks)) {
-            $context = implode("\n\n---\n\n", array_map(fn ($c) => $c->content, $contextChunks));
-            $systemPrompt .= "\n\nRelevant context:\n".$context;
-        }
-
         // Inject the customer's recent orders so the bot can answer "where is my order?".
         // Gated on a connected Ecommerce store; resolved lazily to avoid a hard
         // cross-module dependency (matches the CredentialResolver class_exists pattern).
         $orderSummary = $this->orderSummary($workspaceId, $conversation->contact_id);
-        if ($orderSummary !== null) {
-            $systemPrompt .= "\n\nUse this order information if the customer asks about their order status, shipping, or delivery:\n".$orderSummary;
-        }
+        $systemPrompt = $this->buildSystemPrompt($bot, $contextChunks, $orderSummary);
 
         // Load recent conversation turns as context (last 20 messages)
         $history = [];
         $recentMessages = $conversation->messages()
             ->whereIn('type', ['text', 'template'])
             ->where('id', '!=', $inboundMessage->id)
-            ->orderBy('sent_at')
+            ->latest('id')
             ->take(20)
-            ->get();
+            ->get()
+            ->sortBy('id')
+            ->values();
 
         foreach ($recentMessages as $m) {
             if (! $m->body) {
@@ -89,7 +82,7 @@ class ChatbotRunner
             $response = $this->llmGateway->chat(
                 $workspaceId,
                 $messages,
-                ['max_tokens' => 512],
+                $this->chatOptions(),
                 $bot->id,
                 $conversation->id,
             );
@@ -159,8 +152,13 @@ class ChatbotRunner
      * @param  array  $history  Array of {role, content} prior turns (optional)
      * @return array{reply: string|null, tokens_used: int}
      */
-    public function runForApi(AiChatbot $bot, string $message, int $workspaceId, array $history = []): array
-    {
+    public function runForApi(
+        AiChatbot $bot,
+        string $message,
+        int $workspaceId,
+        array $history = [],
+        bool $throwProviderErrors = false,
+    ): array {
         // 1. Embed the user query for RAG
         $queryEmbedding = [];
         if ($bot->ai_kb_id) {
@@ -179,15 +177,11 @@ class ChatbotRunner
         }
 
         // 3. Build messages array
-        $systemPrompt = $bot->system_prompt ?? 'You are a helpful assistant.';
-        if (! empty($contextChunks)) {
-            $context = implode("\n\n---\n\n", array_map(fn ($c) => $c->content, $contextChunks));
-            $systemPrompt .= "\n\nRelevant context:\n".$context;
-        }
+        $systemPrompt = $this->buildSystemPrompt($bot, $contextChunks);
 
         $messages = array_merge(
             [['role' => 'system', 'content' => $systemPrompt]],
-            $history,
+            $this->normaliseHistory($history),
             [['role' => 'user', 'content' => $message]],
         );
 
@@ -196,7 +190,7 @@ class ChatbotRunner
             $response = $this->llmGateway->chat(
                 $workspaceId,
                 $messages,
-                ['max_tokens' => 512],
+                $this->chatOptions(),
                 $bot->id,
             );
 
@@ -204,8 +198,77 @@ class ChatbotRunner
                 'reply' => $response->content,
                 'tokens_used' => $response->promptTokens + $response->completionTokens,
             ];
-        } catch (\Throwable) {
+        } catch (\Throwable $e) {
+            if ($throwProviderErrors) {
+                throw $e;
+            }
+
             return ['reply' => $bot->fallback_reply ?? null, 'tokens_used' => 0];
         }
+    }
+
+    /**
+     * Combine the workspace's brand instructions with a stable conversation
+     * policy. Keeping this policy at the end makes concise, multilingual,
+     * human replies consistent even when a customer supplies a verbose prompt.
+     *
+     * @param  array<int, mixed>  $contextChunks
+     */
+    private function buildSystemPrompt(AiChatbot $bot, array $contextChunks = [], ?string $orderSummary = null): string
+    {
+        $parts = [
+            trim((string) ($bot->system_prompt ?: 'You are a helpful customer support assistant.')),
+        ];
+
+        if (! empty($contextChunks)) {
+            $context = implode("\n\n---\n\n", array_map(fn ($chunk) => $chunk->content, $contextChunks));
+            $parts[] = "Knowledge base context:\n".$context;
+        }
+
+        if ($orderSummary !== null) {
+            $parts[] = "Use this order information only when the customer asks about an order, shipping, or delivery:\n".$orderSummary;
+        }
+
+        $tone = trim((string) ($bot->tone ?: 'friendly'));
+        $parts[] = <<<PROMPT
+Runtime conversation policy (follow this for every reply):
+- Sound like a capable human support agent, with a {$tone} and warm tone. Never mention being an AI, a prompt, or a knowledge base.
+- Answer the customer's actual request immediately. Never replace a concrete answer with a generic greeting, introduction, or "How can I help?".
+- Detect the customer's language and reply in that language. If they request another language, use the requested language. Understand reasonable spelling and grammar mistakes from context.
+- Keep ordinary replies to 1-3 short sentences and usually under 60 words. For instructions, give only the essential steps (normally 3-5) and no long preamble. Use plain text and light numbering only when it improves clarity.
+- Use relevant knowledge-base facts when available. If context is missing, make a sensible decision and answer from safe general knowledge. Do not invent prices, account data, policies, availability, or other business-specific facts.
+- Ask one short, specific question only when a missing detail is essential. Otherwise make the most helpful reasonable assumption and proceed.
+- Use recent conversation details naturally, avoid repeating greetings, and do not repeat information the customer already acknowledged.
+- If the request is ambiguous, briefly state the likely interpretation and help with it. If it is account-specific or high risk and cannot be verified, say so briefly and offer the safest next step or a human handoff.
+PROMPT;
+
+        return implode("\n\n", array_filter($parts));
+    }
+
+    /**
+     * Keep only safe conversational roles and bounded text from API callers.
+     */
+    private function normaliseHistory(array $history): array
+    {
+        return collect($history)
+            ->filter(fn ($turn) => is_array($turn)
+                && in_array($turn['role'] ?? null, ['user', 'assistant'], true)
+                && is_string($turn['content'] ?? null)
+                && trim($turn['content']) !== '')
+            ->take(-20)
+            ->map(fn ($turn) => [
+                'role' => $turn['role'],
+                'content' => mb_substr(trim($turn['content']), 0, 4000),
+            ])
+            ->values()
+            ->all();
+    }
+
+    private function chatOptions(): array
+    {
+        return [
+            'max_tokens' => 240,
+            'temperature' => 0.45,
+        ];
     }
 }

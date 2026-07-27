@@ -7,8 +7,6 @@ use App\Modules\AI\Models\AiChatbot;
 use App\Modules\AI\Models\AiKnowledgeBase;
 use App\Modules\AI\Services\ChatbotRunner;
 use App\Modules\AI\Services\ProviderErrorPresenter;
-use App\Modules\Shared\Models\Conversation;
-use App\Modules\Shared\Models\Message;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -97,19 +95,14 @@ class AiChatbotController extends Controller
         }
 
         try {
-            // Build a synthetic inbound Message model (unsaved) for ChatbotRunner
-            $fakeMessage = new Message;
-            $fakeMessage->body = $request->message;
-            $fakeMessage->direction = 'in';
-            $fakeMessage->channel = 'playground';
-
-            // Attach a minimal conversation with workspace context
-            $fakeConversation = new Conversation;
-            $fakeConversation->workspace_id = $this->workspaceId($request);
-            $fakeConversation->id = 0;
-            $fakeMessage->setRelation('conversation', $fakeConversation);
-
-            $reply = app(ChatbotRunner::class)->run($chatbot, $fakeMessage, throwProviderErrors: true);
+            $result = app(ChatbotRunner::class)->runForApi(
+                $chatbot,
+                $request->message,
+                $this->workspaceId($request),
+                $request->input('history', []),
+                throwProviderErrors: true,
+            );
+            $reply = $result['reply'];
 
             if (blank($reply)) {
                 return response()->json([
