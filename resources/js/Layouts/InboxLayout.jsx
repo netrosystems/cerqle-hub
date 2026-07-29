@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { Toaster, toast } from 'sonner';
 import Sidebar from '@/Components/Sidebar';
 import UpgradeModal from '@/Components/UpgradeModal';
+import ReleaseBadge from '@/Components/ReleaseBadge';
 import useClientNav from '@/Layouts/useClientNav';
 
 export default function InboxLayout({ children }) {
@@ -71,6 +72,7 @@ export default function InboxLayout({ children }) {
                             active: () => item.activePattern ? route().current(item.activePattern) : false,
                         }))
                     }))}
+                    footer={<ReleaseBadge />}
                 />
 
                 <div className="lg:pl-64 rtl:lg:pl-0 rtl:lg:pr-64 flex-1 overflow-hidden flex flex-col">

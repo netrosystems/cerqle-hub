@@ -13,6 +13,7 @@ use App\Modules\Integrations\Services\CredentialResolver;
 use App\Services\AddonEntitlementService;
 use App\Services\I18n\I18nFileService;
 use App\Services\OnboardingService;
+use App\Services\ReleaseVersionService;
 use App\Services\StorageManager;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -77,7 +78,8 @@ class HandleInertiaRequests extends Middleware
                 'displayCurrency' => 'USD',
                 'theme' => 'light',
                 'demo_mode' => false,
-                'app_version' => env('APP_VERSION', '1.0.0'),
+                'app_version' => app(ReleaseVersionService::class)->current()['version'],
+                'release' => app(ReleaseVersionService::class)->current(),
                 'onboardingSummary' => null,
                 'entitlements' => ['developer_tools' => false],
             ];
@@ -321,6 +323,8 @@ class HandleInertiaRequests extends Middleware
             }
         }
 
+        $release = app(ReleaseVersionService::class)->current();
+
         return [
             // Current CSRF token, re-shared on every Inertia response so the SPA can
             // keep its axios header + <meta> tag in sync. Without this a long-lived
@@ -355,7 +359,8 @@ class HandleInertiaRequests extends Middleware
             'displayCurrency' => $displayCurrency,
             'demo_mode' => config('app.demo_mode', false),
             'current_workspace_usage' => $this->workspaceUsage($workspaceId ?? null, $plan ?? null),
-            'app_version' => env('APP_VERSION', '1.0.0'),
+            'app_version' => $release['version'],
+            'release' => $release,
             'onboardingSummary' => $onboardingSummary,
             'landingPageEnabled' => SystemSetting::get('landing.page_enabled', '1') === '1',
             'branding' => $this->brandingShare(),

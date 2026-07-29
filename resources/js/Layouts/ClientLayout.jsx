@@ -6,6 +6,7 @@ import { Toaster, toast } from 'sonner';
 import Topbar from '@/Components/Topbar';
 import Sidebar from '@/Components/Sidebar';
 import UpgradeModal from '@/Components/UpgradeModal';
+import ReleaseBadge from '@/Components/ReleaseBadge';
 import useClientNav from '@/Layouts/useClientNav';
 import { ChannelBrandIcon } from '@/Components/BrandIcons';
 import {
@@ -81,13 +82,7 @@ function UsageBanner({ usage }) {
 }
 
 function ClientLayoutFooter() {
-    const { app_version: appVersion } = usePage().props;
-    const v = typeof appVersion === 'string' && appVersion.trim() !== '' ? appVersion.trim() : '1.0.0';
-    return (
-        <div className="rounded-soft px-3 py-2 text-xs text-neutral-400 dark:text-neutral-500 tabular-nums">
-            v{v}
-        </div>
-    );
+    return <ReleaseBadge />;
 }
 
 export default function ClientLayout({ header, children, title }) {

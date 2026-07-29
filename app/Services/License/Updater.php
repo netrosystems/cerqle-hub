@@ -3,6 +3,7 @@
 namespace App\Services\License;
 
 use App\Services\Install\EnvWriter;
+use App\Services\ReleaseVersionService;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -25,6 +26,7 @@ class Updater
     public function __construct(
         private LicenseManager $license,
         private EnvWriter $env,
+        private ReleaseVersionService $releases,
     ) {}
 
     /** @return array{ok: bool, message: string} */
@@ -90,6 +92,7 @@ class Updater
             // 5. Record the new version and refresh caches.
             if ($newVersion !== '') {
                 $this->env->set(['APP_VERSION' => $newVersion]);
+                $this->releases->record($newVersion);
             }
             Artisan::call('optimize:clear');
 

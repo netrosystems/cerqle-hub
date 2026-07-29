@@ -3,6 +3,7 @@
     "type": "module",
     "scripts": {
         "build": "vite build",
+        "postbuild": "php artisan app:release",
         "dev": "vite",
         "lint": "eslint resources/js --ext .js,.jsx",
         "lint:fix": "eslint resources/js --ext .js,.jsx --fix",

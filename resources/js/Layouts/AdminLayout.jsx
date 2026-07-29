@@ -5,6 +5,7 @@ import { Toaster } from 'sonner';
 import Sidebar from '@/Components/Sidebar';
 import Topbar from '@/Components/Topbar';
 import CommandPalette from '@/Components/CommandPalette';
+import ReleaseBadge from '@/Components/ReleaseBadge';
 import {
     LayoutDashboard,
     Users,
@@ -81,7 +82,7 @@ function useAdminNav() {
 
 function AdminLayoutFooter() {
     const { t } = useTranslation();
-    const { auth, app_version: appVersion } = usePage().props;
+    const { auth } = usePage().props;
     const adminUser = auth?.adminUser;
     const initials = (() => {
         if (adminUser?.name) return adminUser.name.split(' ').filter(Boolean).map((n) => n[0]).join('').slice(0, 2).toUpperCase();
@@ -114,11 +115,7 @@ function AdminLayoutFooter() {
                 <LogOut className="h-4 w-4 flex-shrink-0" />
                 {t('nav.logout')}
             </Link>
-            {appVersion && (
-                <p className="px-3 pt-1 text-center text-[11px] text-neutral-400 dark:text-neutral-600">
-                    v{appVersion}
-                </p>
-            )}
+            <ReleaseBadge className="w-full text-center" />
         </div>
     );
 }
