@@ -8,6 +8,7 @@ use App\Events\TypingChanged;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Modules\Inbox\Models\InboxLabel;
+use App\Modules\Inbox\Services\ConversationHandoverService;
 use App\Modules\Shared\Models\ChannelAccount;
 use App\Modules\Shared\Models\Contact;
 use App\Modules\Shared\Models\Conversation;
@@ -15,7 +16,6 @@ use App\Modules\Shared\Models\Message;
 use App\Modules\Shared\Services\ChannelManager;
 use App\Modules\Whatsapp\Models\WhatsappTemplate;
 use App\Modules\Whatsapp\Services\CloudApiClient;
-use App\Notifications\ConversationHandoverNotification;
 use App\Services\StorageManager;
 use App\Support\Demo;
 use Illuminate\Http\JsonResponse;
@@ -33,6 +33,7 @@ class InboxController extends Controller
     public function __construct(
         private ChannelManager $channelManager,
         private StorageManager $storageManager,
+        private ConversationHandoverService $handoverService,
     ) {}
 
     public function index(Request $request): Response
@@ -74,7 +75,7 @@ class InboxController extends Controller
         $this->authorise($request, $conversation);
 
         $conversation->load(['contact', 'channelAccount', 'labels']);
-        $messages = $conversation->messages()->with('conversation')->orderBy('sent_at')->get();
+        $messages = $conversation->messages()->with(['conversation', 'user:id,name,avatar'])->orderBy('sent_at')->get();
 
         // Mark as read
         $conversation->update(['unread_count' => 0]);
@@ -106,7 +107,7 @@ class InboxController extends Controller
         // Pass conversation list so the left panel stays populated on the show page
         $filters = $request->only('folder', 'channel', 'label', 'account_id');
         $conversations = Conversation::where('workspace_id', $workspaceId)
-            ->with(['contact', 'channelAccount', 'lastMessage', 'labels'])
+            ->with(['contact', 'channelAccount', 'lastMessage', 'lastHumanReply.user:id,name,avatar', 'labels'])
             ->when(($filters['folder'] ?? null) === 'mine', fn ($q) => $q->where('assigned_user_id', $userId))
             ->when(($filters['folder'] ?? null) === 'unassigned', fn ($q) => $q->whereNull('assigned_user_id'))
             ->when($filters['channel'] ?? null, fn ($q, $ch) => $q->whereHas('channelAccount', fn ($q) => $q->where('channel', $ch)))
@@ -153,6 +154,7 @@ class InboxController extends Controller
 
         $after = max(0, (int) $request->integer('after'));
         $messages = $conversation->messages()
+            ->with('user:id,name,avatar')
             ->where('id', '>', $after)
             ->orderBy('sent_at')
             ->get();
@@ -276,7 +278,7 @@ class InboxController extends Controller
         }
 
         // Re-load the relation so the broadcast event can resolve workspace_id
-        $message->load('conversation');
+        $message->load(['conversation', 'user:id,name,avatar']);
 
         MessageSent::dispatch($message);
 
@@ -376,7 +378,7 @@ class InboxController extends Controller
             $conversation->update(['first_response_at' => now()]);
         }
 
-        $message->load('conversation');
+        $message->load(['conversation', 'user:id,name,avatar']);
         MessageSent::dispatch($message);
 
         return response()->json(['message' => $message, 'error' => $sendError]);
@@ -495,17 +497,10 @@ class InboxController extends Controller
         $this->authorise($request, $conversation);
         $mode = $request->input('mode', 'human'); // 'human' or 'bot'
 
-        $updates = ['assigned_to' => $mode];
-        if ($mode === 'human' && ! $conversation->handover_at) {
-            $updates['handover_at'] = now();
-        }
-        $conversation->update($updates);
-
         if ($mode === 'human') {
-            $members = User::where('workspace_id', $conversation->workspace_id)->get();
-            foreach ($members as $member) {
-                $member->notify(new ConversationHandoverNotification($conversation, 'manual'));
-            }
+            $this->handoverService->request($conversation, 'manual');
+        } else {
+            $conversation->update(['assigned_to' => 'bot']);
         }
 
         return response()->json(['ok' => true, 'assigned_to' => $mode]);
@@ -714,7 +709,7 @@ class InboxController extends Controller
             }
 
             $conversation->update(['last_message_at' => now()]);
-            $message->load('conversation');
+            $message->load(['conversation', 'user:id,name,avatar']);
             MessageSent::dispatch($message);
         }
 
@@ -726,7 +721,7 @@ class InboxController extends Controller
         $userId = $request->user()->id;
 
         return Conversation::where('workspace_id', $workspaceId)
-            ->with(['contact', 'channelAccount', 'lastMessage', 'labels'])
+            ->with(['contact', 'channelAccount', 'lastMessage', 'lastHumanReply.user:id,name,avatar', 'labels'])
             ->when($request->folder === 'mine', fn ($q) => $q->where('assigned_user_id', $userId))
             ->when($request->folder === 'unassigned', fn ($q) => $q->whereNull('assigned_user_id'))
             ->when($request->channel, fn ($q) => $q->whereHas('channelAccount', fn ($q) => $q->where('channel', $request->channel)))

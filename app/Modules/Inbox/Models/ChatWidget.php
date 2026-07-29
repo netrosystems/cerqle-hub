@@ -3,6 +3,8 @@
 namespace App\Modules\Inbox\Models;
 
 use App\Models\Workspace;
+use App\Models\User;
+use App\Modules\AI\Models\AiChatbot;
 use App\Modules\Shared\Models\ChannelAccount;
 use App\Services\StorageManager;
 use Illuminate\Database\Eloquent\Model;
@@ -89,6 +91,52 @@ class ChatWidget extends Model
         return (bool) $plan?->hasFeature('white_label');
     }
 
+    public function hasEnabledAiChatbot(): bool
+    {
+        if (! $this->ai_enabled) {
+            return false;
+        }
+
+        $chatbotId = $this->channelAccount?->meta_json['ai_chatbot_id'] ?? $this->ai_chatbot_id;
+
+        return $chatbotId
+            && AiChatbot::query()
+                ->whereKey($chatbotId)
+                ->where('workspace_id', $this->workspace_id)
+                ->where('enabled', true)
+                ->exists();
+    }
+
+    /**
+     * Public, compact team presence. Email addresses and internal IDs are never
+     * exposed to the embedded widget.
+     *
+     * @return array{count: int, members: array<int, array{name: string, initial: string, avatar_url: ?string}>}
+     */
+    private function availableTeam(): array
+    {
+        $members = User::query()
+            ->where('workspace_id', $this->workspace_id)
+            ->where('status', User::STATUS_ACTIVE)
+            ->orderByRaw('CASE WHEN id = ? THEN 0 ELSE 1 END', [$this->workspace?->owner_id ?? 0])
+            ->orderBy('name')
+            ->get(['id', 'name', 'avatar']);
+
+        return [
+            'count' => $members->count(),
+            'members' => $members->take(3)->map(function (User $member): array {
+                $name = trim((string) $member->name) ?: 'Team';
+                $firstName = preg_split('/\s+/u', $name)[0] ?? $name;
+
+                return [
+                    'name' => $firstName,
+                    'initial' => mb_strtoupper(mb_substr($firstName, 0, 1)),
+                    'avatar_url' => $member->avatarUrl(),
+                ];
+            })->values()->all(),
+        ];
+    }
+
     /** Public theming/config surfaced to the embed script + widget UI. */
     public function publicConfig(): array
     {
@@ -108,6 +156,8 @@ class ChatWidget extends Model
             // The product icon remains the default for every free widget.
             // A custom launcher mark is only exposed for white-label plans.
             'launcher_logo_url' => $this->launcher_logo_url ?: url('/cerqle-icon-white-bg.svg'),
+            'ai_enabled' => $this->hasEnabledAiChatbot(),
+            'available_team' => $this->availableTeam(),
             'require_prechat' => (bool) $this->require_prechat,
             'prechat_fields' => $this->prechat_fields ?: ['name', 'email'],
             'offline_message' => $this->offline_message,

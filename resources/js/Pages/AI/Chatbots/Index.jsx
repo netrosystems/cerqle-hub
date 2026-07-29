@@ -347,7 +347,7 @@ export default function AiChatbotsIndex({ chatbots, knowledgeBases }) {
 
     return (
         <ClientLayout title={t('ai.chatbots_title')}>
-            <Head title={`${t('ai.chatbots_title')} · AI`} />
+            <Head title={`${t('ai.chatbots_title')} · AI Automations`} />
             <div className="space-y-6">
                 {/* Header */}
                 <div className="flex items-start justify-between gap-3">

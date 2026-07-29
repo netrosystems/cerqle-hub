@@ -279,6 +279,9 @@ function ImageGallery({ messages, conversationId }) {
                     ))}
                 </div>
                 <div className={`flex items-center justify-end gap-1 px-3 py-1 text-[10px] ${isOut ? 'text-white/60' : 'text-neutral-400'}`}>
+                    {isOut && last.sent_by === 'human' && last.user?.name && (
+                        <span className="max-w-28 truncate" title={last.user.name}>{last.user.name}</span>
+                    )}
                     {last.sent_at ? formatTimeTz(last.sent_at, bubbleTz) : ''}
                     {isOut && <span title={last.status} className={statusClass}>{statusGlyph}</span>}
                 </div>
@@ -701,6 +704,9 @@ function MessageBubble({ msg, conversationId }) {
 
     const timeRow = (
         <div className={`flex items-center gap-1 text-[10px] mt-1 ${isOut ? 'text-white/60 justify-end' : 'text-neutral-400'}`}>
+            {isOut && msg.sent_by === 'human' && msg.user?.name && (
+                <span className="max-w-28 truncate" title={msg.user.name}>{msg.user.name}</span>
+            )}
             {msg.sent_at ? formatTimeTz(msg.sent_at, bubbleTz) : ''}
             {isOut && (
                 <span title={msg.status} className={statusClass}>{statusGlyph}</span>
@@ -844,6 +850,13 @@ function ConversationCard({ conv, isActive, userTz }) {
                                 {name}
                             </button>
                             <ConversationStatusBadge status={conv.status} />
+                            {conv.assigned_to === 'human' && conv.handover_at && (
+                                <span
+                                    className="h-2.5 w-2.5 shrink-0 rounded-full bg-amber-500 ring-2 ring-amber-100 dark:ring-amber-900/50"
+                                    title="Customer requested a human agent"
+                                    aria-label="Customer requested a human agent"
+                                />
+                            )}
                         </div>
                         <span className="text-[11px] text-neutral-400 shrink-0">
                             {conv.last_message_at ? formatTimeTz(conv.last_message_at, userTz) : ''}
@@ -852,6 +865,11 @@ function ConversationCard({ conv, isActive, userTz }) {
                     <p className={`text-xs truncate mt-0.5 ${conv.unread_count > 0 ? 'text-neutral-700 dark:text-neutral-300' : 'text-neutral-400'}`}>
                         {conv.last_message?.body || '(media)'}
                     </p>
+                    {conv.last_human_reply?.user?.name && (
+                        <p className="mt-1 text-[10px] font-medium text-neutral-400 dark:text-neutral-500 truncate">
+                            Replied by {conv.last_human_reply.user.name}
+                        </p>
+                    )}
                     {conv.labels?.length > 0 && (
                         <div className="flex flex-wrap gap-1 mt-1">
                             {conv.labels.map(l => (

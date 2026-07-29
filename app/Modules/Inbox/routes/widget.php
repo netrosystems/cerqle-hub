@@ -22,6 +22,8 @@ Route::prefix('widget/v1')->name('widget.')->group(function () {
         ->middleware('throttle:30,1')->name('session');
     Route::post('/messages', [ChatWidgetPublicController::class, 'send'])
         ->middleware('throttle:60,1')->name('send');
+    Route::post('/handover', [ChatWidgetPublicController::class, 'handover'])
+        ->middleware('throttle:10,1')->name('handover');
     Route::get('/messages', [ChatWidgetPublicController::class, 'poll'])
         ->middleware('throttle:300,1')->name('poll');
 });

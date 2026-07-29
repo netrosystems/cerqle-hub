@@ -83,6 +83,14 @@ Schedule::command('notifications:trial-ending --days=3')
     ->withoutOverlapping()
     ->onOneServer();
 
+// Escalate conversations where the latest customer message has waited one hour
+// without any successful outbound reply.
+Schedule::command('inbox:notify-unanswered --minutes=60')
+    ->everyFiveMinutes()
+    ->name('notify-unanswered-conversations')
+    ->withoutOverlapping()
+    ->onOneServer();
+
 // Send weekly performance digest to all workspace owners (Monday 09:00)
 Schedule::command('reports:weekly-digest')
     ->mondays()

@@ -4,6 +4,7 @@ namespace App\Modules\Shared\Models;
 
 use App\Models\InternalNote;
 use App\Models\User;
+use App\Models\Workspace;
 use App\Modules\Inbox\Models\InboxLabel;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -33,6 +34,7 @@ class Conversation extends Model
         'status', 'assigned_user_id', 'assigned_to', 'handover_at',
         'last_message_at', 'unread_count',
         'first_response_at', 'resolved_at', 'last_inbound_at',
+        'pending_reply_notified_at',
     ];
 
     protected function casts(): array
@@ -43,6 +45,7 @@ class Conversation extends Model
             'resolved_at' => 'datetime',
             'last_inbound_at' => 'datetime',
             'handover_at' => 'datetime',
+            'pending_reply_notified_at' => 'datetime',
             'unread_count' => 'integer',
         ];
     }
@@ -50,6 +53,11 @@ class Conversation extends Model
     public function contact(): BelongsTo
     {
         return $this->belongsTo(Contact::class);
+    }
+
+    public function workspace(): BelongsTo
+    {
+        return $this->belongsTo(Workspace::class);
     }
 
     public function channelAccount(): BelongsTo
@@ -65,6 +73,15 @@ class Conversation extends Model
     public function lastMessage()
     {
         return $this->hasOne(Message::class)->latestOfMany('sent_at');
+    }
+
+    public function lastHumanReply()
+    {
+        return $this->hasOne(Message::class)
+            ->ofMany(['id' => 'max'], fn ($query) => $query
+                ->where('direction', 'out')
+                ->where('sent_by', 'human')
+                ->whereNotNull('user_id'));
     }
 
     public function internalNotes(): HasMany

@@ -14,6 +14,16 @@ class SmsProviderController extends Controller
 {
     public const PROVIDERS = ['twilio', 'nexmo', 'messagebird', 'smsbd', 'reve', 'alaris', 'bulksmsbd', 'sms_dot_bd', 'mimsms', 'fast2sms', 'amazon_sns'];
 
+    /**
+     * Providers currently offered in the client SMS Gateways screen.
+     *
+     * The remaining drivers stay registered so existing configurations and
+     * delivery callbacks continue to work, but they are intentionally hidden
+     * from new client setup: nexmo, messagebird, smsbd, reve, bulksmsbd,
+     * sms_dot_bd, mimsms, and fast2sms.
+     */
+    public const CLIENT_VISIBLE_PROVIDERS = ['twilio', 'alaris', 'amazon_sns'];
+
     public const FIELDS = [
         'twilio' => [
             ['key' => 'account_sid', 'label' => 'Account SID',  'type' => 'text',     'required' => true],
@@ -91,7 +101,7 @@ class SmsProviderController extends Controller
         $workspaceId = $this->workspaceId($request);
         $configs = SmsProviderConfig::where('workspace_id', $workspaceId)->get()->keyBy('provider');
 
-        $providers = collect(self::PROVIDERS)->map(fn ($p) => [
+        $providers = collect(self::CLIENT_VISIBLE_PROVIDERS)->map(fn ($p) => [
             'provider'   => $p,
             'label'      => self::LABELS[$p],
             'fields'     => self::FIELDS[$p],

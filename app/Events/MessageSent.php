@@ -45,6 +45,9 @@ class MessageSent implements ShouldBroadcast
             'body' => $this->message->body,
             'payload' => $this->message->payload,
             'status' => $this->message->status,
+            'sent_by' => $this->message->sent_by,
+            'user_id' => $this->message->user_id,
+            'user' => $this->message->user?->only(['id', 'name', 'avatar']),
             'sent_at' => $this->message->sent_at?->toIso8601String(),
             'created_at' => $this->message->created_at?->toIso8601String(),
         ];

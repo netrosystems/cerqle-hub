@@ -4,11 +4,28 @@ namespace Tests\Feature\ProductionHardening;
 
 use App\Modules\Broadcasting\Models\SmsProviderConfig;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Inertia\Testing\AssertableInertia as Assert;
 use Tests\TestCase;
 
 class SmsProviderConfigTest extends TestCase
 {
     use RefreshDatabase;
+
+    public function test_client_gateway_screen_only_offers_approved_sms_providers(): void
+    {
+        ['user' => $user] = $this->createWorkspaceContext();
+
+        $this->actingAs($user)
+            ->get(route('client.sms-gateways.index'))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Broadcasting/SmsProviders/Index')
+                ->has('providers', 3)
+                ->where('providers.0.provider', 'twilio')
+                ->where('providers.1.provider', 'alaris')
+                ->where('providers.2.provider', 'amazon_sns')
+            );
+    }
 
     public function test_partial_sms_credentials_are_rejected_before_persistence(): void
     {

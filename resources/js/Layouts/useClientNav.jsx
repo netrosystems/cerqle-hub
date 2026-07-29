@@ -4,8 +4,8 @@ import { ChannelBrandIcon } from '@/Components/BrandIcons';
 import {
     LayoutDashboard, CreditCard, Package, FileText, Users, Settings,
     Layers, Webhook, Key, BookOpen, Image, Radio, Inbox, Bot, Database,
-    Zap, Share2, Tag, LifeBuoy, ExternalLink, MessageSquare,
-    ShoppingBag, MessageCircle,
+    Zap, Share2, Tag, LifeBuoy, MessageSquare,
+    MessageCircle,
 } from 'lucide-react';
 
 const iconClass = 'h-4 w-4';
@@ -30,8 +30,15 @@ export default function useClientNav() {
     const docsUrl = branding?.docs_url;
     const isClientAdmin = user?.client_role === 'administrator';
 
-    const accountItems = [
+    const landingItems = [
         { label: t('nav.dashboard'), href: safeRoute('client.dashboard'), icon: <LayoutDashboard className={iconClass} />, activePattern: 'client.dashboard' },
+        {
+            label: t('nav.tutorials'),
+            href: docsUrl || safeRoute('client.onboarding.show'),
+            icon: <BookOpen className={iconClass} />,
+            activePattern: docsUrl ? null : 'client.onboarding.*',
+            external: Boolean(docsUrl),
+        },
     ];
 
     const accountSettingsItems = [
@@ -67,10 +74,6 @@ export default function useClientNav() {
         { label: t('nav.support_tickets'), href: safeRoute('client.support.index'), icon: <LifeBuoy className={iconClass} />,   activePattern: 'client.support.*' },
     ];
 
-    if (docsUrl) {
-        supportItems.push({ label: t('nav.help_docs'), href: docsUrl, icon: <ExternalLink className={iconClass} />, external: true });
-    }
-
     const contactsItems = [
         { label: t('nav.contacts'),  href: safeRoute('client.contacts.index'),  icon: <Users className={iconClass} />,  activePattern: 'client.contacts.*' },
         { label: t('nav.segments'),  href: safeRoute('client.segments.index'),  icon: <Tag className={iconClass} />,    activePattern: 'client.segments.*' },
@@ -79,18 +82,21 @@ export default function useClientNav() {
     const messagingItems = [
         { label: t('nav.templates'),     href: safeRoute('client.whatsapp.templates.index'),     icon: whatsappNavIcon, activePattern: 'client.whatsapp.templates.*' },
         { label: t('nav.auto_replies'),  href: safeRoute('client.whatsapp.auto-replies.index'),  icon: whatsappNavIcon, activePattern: 'client.whatsapp.auto-replies.*' },
-        { label: t('nav.chat_widget'),   href: safeRoute('client.whatsapp.widget.index'),         icon: whatsappNavIcon, activePattern: 'client.whatsapp.widget.*' },
     ];
 
     const broadcastItems = [
-        { label: t('nav.campaigns'),    href: safeRoute('client.campaigns.index'),    icon: <Radio className={iconClass} />,        activePattern: 'client.campaigns.*' },
+        { label: t('nav.sms_campaigns'), href: safeRoute('client.campaigns.index'),    icon: <Radio className={iconClass} />,        activePattern: 'client.campaigns.*' },
         { label: t('nav.sms_gateways'), href: safeRoute('client.sms-gateways.index'), icon: <MessageSquare className={iconClass} />, activePattern: 'client.sms-gateways.*' },
     ];
 
     const inboxItems = [
         { label: t('nav.inbox'),          href: safeRoute('client.inbox.index'),               icon: <Inbox className={iconClass} />,         activePattern: 'client.inbox.index' },
         { label: t('nav.channel_setup'),  href: safeRoute('client.inbox.setup'),               icon: <Inbox className={iconClass} />,         activePattern: 'client.inbox.setup' },
+    ];
+
+    const chatbotSetupItems = [
         { label: t('nav.website_widget', { defaultValue: 'Website Widget' }), href: safeRoute('client.inbox.chat-widgets.index'), icon: <MessageCircle className={iconClass} />, activePattern: 'client.inbox.chat-widgets.*' },
+        { label: t('nav.chat_widget'), href: safeRoute('client.whatsapp.widget.index'), icon: whatsappNavIcon, activePattern: 'client.whatsapp.widget.*' },
     ];
 
     const aiItems = [
@@ -110,12 +116,6 @@ export default function useClientNav() {
         { label: t('nav.automations'), href: safeRoute('client.automations.index'), icon: <Zap className={iconClass} />, activePattern: 'client.automations.*' },
     ];
 
-    const ecommerceItems = [
-        { label: t('nav.orders'),   href: safeRoute('client.ecommerce.orders.index'),   icon: <Package className={iconClass} />,     activePattern: 'client.ecommerce.orders.*' },
-        { label: t('nav.products'), href: safeRoute('client.ecommerce.products.index'), icon: <Tag className={iconClass} />,         activePattern: 'client.ecommerce.products.*' },
-        { label: t('nav.stores'),   href: safeRoute('client.ecommerce.stores.index'),   icon: <ShoppingBag className={iconClass} />, activePattern: 'client.ecommerce.stores.*' },
-    ];
-
     const reportsItems = [
         { label: t('nav.reports_inbox'),       href: safeRoute('client.reports.inbox.index'),       icon: <Inbox className={iconClass} />,  activePattern: 'client.reports.inbox.*' },
         { label: t('nav.campaigns'),           href: safeRoute('client.reports.campaigns.index'),   icon: <Radio className={iconClass} />,  activePattern: 'client.reports.campaigns.*' },
@@ -124,24 +124,25 @@ export default function useClientNav() {
         { label: t('nav.social'),              href: safeRoute('client.reports.social.index'),      icon: <Share2 className={iconClass} />, activePattern: 'client.reports.social.*' },
     ];
 
-    // Group order: daily operations first, then growth tools, periodic review, then account-adjacent config (usage-frequency–based).
+    // E-Commerce remains available at route level but is intentionally omitted
+    // from the client sidebar until the product area is ready to be promoted.
     return [
-        { type: 'group', label: t('nav.group_account'),      items: accountItems },
-        { type: 'group', label: t('nav.group_inbox'),         items: inboxItems },
-        { type: 'group', label: t('nav.group_social_media'),  items: socialItems },
-        { type: 'group', label: t('nav.group_messaging'),     items: messagingItems },
-        { type: 'group', label: t('nav.group_contacts'),      items: contactsItems },
-        { type: 'group', label: t('nav.group_broadcasting'),  items: broadcastItems },
-        { type: 'group', label: t('nav.group_automations'),   items: automationItems },
-        { type: 'group', label: t('nav.group_ecommerce'),    items: ecommerceItems },
-        { type: 'group', label: t('nav.group_ai'),            items: aiItems },
-        { type: 'group', label: t('nav.group_reports'),       items: reportsItems },
+        { type: 'group', label: t('nav.group_landing'), items: landingItems },
+        { type: 'group', label: t('nav.group_inbox'), items: inboxItems },
+        { type: 'group', label: t('nav.group_chatbot_setup'), items: chatbotSetupItems },
+        { type: 'group', label: t('nav.group_social_media'), items: socialItems },
+        { type: 'group', label: t('nav.group_messaging'), items: messagingItems },
+        { type: 'group', label: t('nav.group_contacts'), items: contactsItems },
+        { type: 'group', label: t('nav.group_broadcasting'), items: broadcastItems },
+        { type: 'group', label: t('nav.group_automations'), items: automationItems },
+        { type: 'group', label: t('nav.group_ai'), items: aiItems },
+        { type: 'group', label: t('nav.group_reports'), items: reportsItems },
         { type: 'group', label: t('nav.group_assets', { defaultValue: 'Assets' }), items: assetItems },
-        { type: 'group', label: t('nav.group_support'),       items: supportItems },
-        { type: 'group', label: t('nav.group_billing'),       items: billingItems },
+        { type: 'group', label: t('nav.group_support'), items: supportItems },
+        { type: 'group', label: t('nav.group_billing'), items: billingItems },
         ...(entitlements?.developer_tools
             ? [{ type: 'group', label: t('nav.group_developer'), items: developerItems }]
             : []),
-        { type: 'group', label: t('nav.group_account'),       items: accountSettingsItems },
+        { type: 'group', label: t('nav.group_account'), items: accountSettingsItems },
     ];
 }

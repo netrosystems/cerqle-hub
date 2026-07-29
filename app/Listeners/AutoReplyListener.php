@@ -4,14 +4,13 @@ namespace App\Listeners;
 
 use App\Events\MessageReceived;
 use App\Events\MessageSent;
-use App\Models\User;
 use App\Modules\AI\Models\AiChatbot;
 use App\Modules\AI\Services\ChatbotRunner;
+use App\Modules\Inbox\Services\ConversationHandoverService;
 use App\Modules\Shared\Models\Conversation;
 use App\Modules\Shared\Models\Message;
 use App\Modules\Shared\Services\ChannelManager;
 use App\Modules\Whatsapp\Models\WhatsappAutoReply;
-use App\Notifications\ConversationHandoverNotification;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
@@ -31,6 +30,7 @@ class AutoReplyListener
     public function __construct(
         private readonly ChatbotRunner $runner,
         private readonly ChannelManager $channelManager,
+        private readonly ConversationHandoverService $handoverService,
     ) {}
 
     public function handle(MessageReceived $event): void
@@ -296,15 +296,6 @@ class AutoReplyListener
 
     private function triggerHandover(Conversation $conversation, string $reason): void
     {
-        $conversation->update([
-            'assigned_to' => 'human',
-            'handover_at' => now(),
-        ]);
-
-        // Notify all workspace members
-        $members = User::where('workspace_id', $conversation->workspace_id)->get();
-        foreach ($members as $member) {
-            $member->notify(new ConversationHandoverNotification($conversation, $reason));
-        }
+        $this->handoverService->request($conversation, $reason);
     }
 }

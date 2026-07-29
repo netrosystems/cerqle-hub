@@ -78,6 +78,13 @@ function ConversationCard({ conv, isFlashing, isActive, userTz }) {
                                 {name}
                             </button>
                             <ConversationStatusBadge status={conv.status} />
+                            {conv.assigned_to === 'human' && conv.handover_at && (
+                                <span
+                                    className="h-2.5 w-2.5 shrink-0 rounded-full bg-amber-500 ring-2 ring-amber-100 dark:ring-amber-900/50"
+                                    title="Customer requested a human agent"
+                                    aria-label="Customer requested a human agent"
+                                />
+                            )}
                         </div>
                         <span className="text-[11px] text-neutral-400 shrink-0">
                             {conv.last_message_at ? formatTimeTz(conv.last_message_at, userTz) : ''}
@@ -93,6 +100,11 @@ function ConversationCard({ conv, isFlashing, isActive, userTz }) {
                             </span>
                         )}
                     </div>
+                    {conv.last_human_reply?.user?.name && (
+                        <p className="mt-1 text-[10px] font-medium text-neutral-400 dark:text-neutral-500 truncate">
+                            Replied by {conv.last_human_reply.user.name}
+                        </p>
+                    )}
                     {conv.labels?.length > 0 && (
                         <div className="flex flex-wrap gap-1 mt-1.5">
                             {conv.labels.map(label => (

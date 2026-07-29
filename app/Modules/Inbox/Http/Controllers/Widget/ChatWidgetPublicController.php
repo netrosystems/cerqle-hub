@@ -4,6 +4,7 @@ namespace App\Modules\Inbox\Http\Controllers\Widget;
 
 use App\Http\Controllers\Controller;
 use App\Modules\Inbox\Models\ChatWidget;
+use App\Modules\Inbox\Services\ConversationHandoverService;
 use App\Modules\Inbox\Services\WebchatDriver;
 use App\Modules\Shared\Models\Conversation;
 use App\Modules\Shared\Models\Message;
@@ -24,6 +25,7 @@ class ChatWidgetPublicController extends Controller
     public function __construct(
         private readonly WebchatDriver $driver,
         private readonly StorageManager $storageManager,
+        private readonly ConversationHandoverService $handoverService,
     ) {}
 
     /** POST /widget/v1/session — start or restore a visitor's chat session. */
@@ -55,6 +57,7 @@ class ChatWidgetPublicController extends Controller
             'config' => $widget->publicConfig(),
             'online' => $this->isOnline($widget),
             'messages' => $conversation ? $this->mapMessages($conversation->id, $widget, 0) : [],
+            'handover' => $this->handoverState($conversation, $widget),
         ]);
     }
 
@@ -126,7 +129,42 @@ class ChatWidgetPublicController extends Controller
         return response()->json(array_filter([
             'token' => $issuedToken,
             'message' => $this->mapMessage($message, $widget),
+            'handover' => $this->handoverState($conversation->fresh(), $widget),
         ]));
+    }
+
+    /** POST /widget/v1/handover — visitor requests a human after chatting with AI. */
+    public function handover(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'key' => ['required', 'string'],
+        ]);
+
+        $widget = $this->resolveWidget($data['key']);
+        $this->assertDomainAllowed($widget, $request);
+        abort_unless($widget->hasEnabledAiChatbot(), 422, 'Human handover is available when the AI chatbot is enabled.');
+
+        $payload = $this->authVisitor($request, $widget);
+        abort_if(empty($payload['c']), 409, 'Send a message before requesting a human agent.');
+
+        $conversation = Conversation::query()
+            ->whereKey((int) $payload['c'])
+            ->where('workspace_id', $widget->workspace_id)
+            ->where('channel_account_id', $widget->channel_account_id)
+            ->firstOrFail();
+
+        abort_if(
+            $conversation->messages()->where('direction', 'in')->count() < 2,
+            422,
+            'Human handover becomes available after two messages.'
+        );
+
+        $this->handoverService->request($conversation, 'widget_request');
+
+        return response()->json([
+            'status' => 'connected',
+            'handover' => $this->handoverState($conversation->fresh(), $widget),
+        ]);
     }
 
     /** GET /widget/v1/messages?after=ID — poll for new messages. */
@@ -144,12 +182,20 @@ class ChatWidgetPublicController extends Controller
             return response()->json([
                 'messages' => [],
                 'online' => $this->isOnline($widget),
+                'handover' => $this->handoverState(null, $widget),
             ]);
         }
+
+        $conversation = Conversation::query()
+            ->whereKey((int) $payload['c'])
+            ->where('workspace_id', $widget->workspace_id)
+            ->where('channel_account_id', $widget->channel_account_id)
+            ->firstOrFail();
 
         return response()->json([
             'messages' => $this->mapMessages((int) $payload['c'], $widget, (int) ($data['after'] ?? 0)),
             'online' => $this->isOnline($widget),
+            'handover' => $this->handoverState($conversation, $widget),
         ]);
     }
 
@@ -279,6 +325,20 @@ class ChatWidgetPublicController extends Controller
             'sent_by' => $m->sent_by,
             'agent_name' => $isAgent ? ($widget->agent_name ?: 'Support') : null,
             'created_at' => optional($m->sent_at ?? $m->created_at)->toIso8601String(),
+        ];
+    }
+
+    /**
+     * @return array{available: bool, requested: bool, visitor_message_count: int}
+     */
+    private function handoverState(?Conversation $conversation, ChatWidget $widget): array
+    {
+        return [
+            'available' => $widget->hasEnabledAiChatbot(),
+            'requested' => $conversation?->assigned_to === 'human' && $conversation->handover_at !== null,
+            'visitor_message_count' => $conversation
+                ? $conversation->messages()->where('direction', 'in')->count()
+                : 0,
         ];
     }
 

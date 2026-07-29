@@ -47,6 +47,11 @@
   var pendingImage = null;
   var currentIdentity = {};
   var prechatNeeded = !!CFG.require_prechat && !safeGet('wb_chat_prechat_' + KEY);
+  var handoverAvailable = !!CFG.ai_enabled;
+  var handoverRequested = false;
+  var visitorMessageCount = 0;
+  var defaultInviteTitle = CFG.launcher_text || 'Live Chat!';
+  var defaultInviteSubtitle = CFG.subtitle || 'One human agent online now!';
 
   function safeGet(k) { try { return window.localStorage.getItem(k) || ''; } catch (e) { return ''; } }
   function safeSet(k, v) { try { window.localStorage.setItem(k, v); } catch (e) {} }
@@ -56,6 +61,7 @@
   // Device-cached message history: shows instantly on return visits (incl. any
   // agent replies that arrived while the visitor was away) before the network.
   var thread = loadThread();
+  visitorMessageCount = thread.filter(function (m) { return m.role === 'visitor'; }).length;
   function loadThread() { try { return JSON.parse(safeGet(LS_THREAD) || '[]'); } catch (e) { return []; } }
   function saveThread() { safeSet(LS_THREAD, JSON.stringify(thread.slice(-200))); }
 
@@ -159,6 +165,12 @@
   var prechatForm = root.querySelector('.wb-prechat-form');
   var statusEl = root.querySelector('.wb-status');
   var invite = root.querySelector('.wb-launcher-invite');
+  var inviteTitleEl = root.querySelector('.wb-invite-title');
+  var inviteSubtitleEl = root.querySelector('.wb-invite-subtitle');
+  var newMessageAlert = root.querySelector('.wb-new-message-alert');
+  var handoff = root.querySelector('.wb-handoff');
+  var handoffBtn = root.querySelector('.wb-handoff-btn');
+  var handoffStatus = root.querySelector('.wb-handoff-status');
 
   // Greeting bubble, then the cached history from this device.
   if (CFG.welcome_message) addBubble('agent', CFG.welcome_message, CFG.agent_name);
@@ -168,6 +180,7 @@
     addBubble(m.role, m.body, m.agent_name, m.attachment_url, m.type, m.filename);
   });
   updateStatus();
+  updateHandoffUI();
   if (prechatNeeded) { prechat.style.display = 'block'; form.style.display = 'none'; }
 
   // ── Events ─────────────────────────────────────────────────────────────────
@@ -203,6 +216,10 @@
   imageInput.addEventListener('change', handleImageSelected);
   imageSendBtn.addEventListener('click', sendPendingImage);
   imageDiscardBtn.addEventListener('click', discardPendingImage);
+  if (handoffBtn) handoffBtn.addEventListener('click', requestHumanAgent);
+  if (newMessageAlert) newMessageAlert.addEventListener('click', markMessagesSeen);
+  input.addEventListener('focus', markMessagesSeen);
+  input.addEventListener('input', markMessagesSeen);
 
   if (prechatForm) {
     prechatForm.addEventListener('submit', function (e) {
@@ -214,13 +231,15 @@
         prechat.style.display = 'none';
         form.style.display = 'flex';
         focusComposer();
+      }).catch(function () {
+        setAudioStatus('Could not start chat. Please check your connection and try again.');
       });
     });
   }
 
   // If a returning visitor already has a session, quietly restore + poll for
   // any replies that arrived while they were away.
-  if (visitorId && token) { ensureSession().then(startPolling); }
+  if (visitorId && token) { ensureSession().then(startPolling).catch(function () {}); }
 
   // Start discreetly, then make the live-chat invitation visible. Any page
   // scrolling dismisses it and restarts the five-second idle timer, so it never
@@ -240,7 +259,7 @@
       window.CerqleSettings = Object.assign({}, getSettings(), data || {});
       if (Object.keys(identityPayload()).length) {
         started = false;
-        ensureSession().then(startPolling);
+        ensureSession().then(startPolling).catch(function () {});
       }
     }
   };
@@ -252,9 +271,8 @@
     wrap.classList.remove('wb-show-invite');
     wrap.classList.add('wb-open');
     launcher.classList.add('wb-active');
-    unreadCount = 0;
-    updateBadge();
-    if (!prechatNeeded && !started) { ensureSession().then(startPolling); }
+    markMessagesSeen();
+    if (!prechatNeeded && !started) { ensureSession().then(startPolling).catch(function () {}); }
     else { startPolling(); }
     setTimeout(function () { if (!prechatNeeded) focusComposer(); scrollDown(); }, 60);
   }
@@ -264,6 +282,7 @@
     wrap.classList.remove('wb-open');
     launcher.classList.remove('wb-active');
     stopRecording(false);
+    updateBadge();
   }
 
   function scheduleInvite() {
@@ -288,8 +307,14 @@
       safeSet(LS_VISITOR, visitorId); safeSet(LS_TOKEN, token);
       online = data.online !== false;
       (data.messages || []).forEach(function (m) { addMessage(m); });
+      applyHandoverState(data.handover);
       updateStatus(); scrollDown();
-    }).catch(function () {}).then(function () { starting = false; });
+      starting = false;
+      return data;
+    }, function (error) {
+      starting = false;
+      throw error;
+    });
     return starting;
   }
 
@@ -300,10 +325,10 @@
       for (var k in currentIdentity) { if (currentIdentity[k] !== undefined) payload[k] = currentIdentity[k]; }
       return post('/widget/v1/messages', payload);
     }).then(function (data) {
-      updateSessionToken(data);
       // Render from the server echo (carries the real id) so it dedupes cleanly
       // against the next poll — no optimistic double-render.
       if (data && data.message) addMessage(data.message);
+      updateSessionData(data);
     }).catch(function () {});
   }
 
@@ -388,8 +413,8 @@
       appendIdentity(fd);
       return postForm('/widget/v1/messages', fd);
     }).then(function (data) {
-      updateSessionToken(data);
       if (data && data.message) addMessage(data.message);
+      updateSessionData(data);
       input.value = '';
       discardPendingAudio();
     }).catch(function () {
@@ -431,8 +456,8 @@
       appendIdentity(fd);
       return postForm('/widget/v1/messages', fd);
     }).then(function (data) {
-      updateSessionToken(data);
       if (data && data.message) addMessage(data.message);
+      updateSessionData(data);
       input.value = '';
       discardPendingImage();
     }).catch(function () {
@@ -468,11 +493,12 @@
     }
   }
 
-  function updateSessionToken(data) {
+  function updateSessionData(data) {
     if (data && data.token) {
       token = data.token;
       safeSet(LS_TOKEN, token);
     }
+    if (data && data.handover) applyHandoverState(data.handover);
   }
 
   function pickRecorderMimeType() {
@@ -499,12 +525,9 @@
       if (typeof data.online === 'boolean') { online = data.online; updateStatus(); }
       (data.messages || []).forEach(function (m) {
         var added = addMessage(m);
-        if (added && m.role === 'agent' && (!open || document.hidden)) {
-          unreadCount += 1;
-          updateBadge();
-          playNotificationSound();
-        }
+        if (added && m.role === 'agent' && !isActivelyChatting()) notifyAgentMessage(m);
       });
+      applyHandoverState(data.handover);
     });
   }
 
@@ -513,9 +536,11 @@
     if (!m || rendered[m.id]) return false;
     rendered[m.id] = true;
     if (m.id > lastId) lastId = m.id;
+    if (m.role === 'visitor') visitorMessageCount += 1;
     thread.push({ id: m.id, role: m.role, body: m.body, agent_name: m.agent_name, attachment_url: m.attachment_url, type: m.type, filename: m.filename });
     saveThread();
     addBubble(m.role, m.body, m.agent_name, m.attachment_url, m.type, m.filename);
+    updateHandoffUI();
     return true;
   }
 
@@ -537,17 +562,96 @@
     } else if (attachmentUrl) {
       attachment = '<a class="wb-media-file" href="' + esc(attachmentUrl) + '" target="_blank" rel="noopener noreferrer">' + esc(filename || 'Open attachment') + '</a>';
     }
-    var caption = text ? '<div class="wb-caption">' + esc(text).replace(/\n/g, '<br>') + '</div>' : '';
+    var caption = text ? '<div class="wb-caption"></div>' : '';
     row.innerHTML = av + '<div class="wb-bubble">' + attachment + caption + '</div>';
+    if (text) appendLinkedText(row.querySelector('.wb-caption'), text);
     body.appendChild(row);
     scrollDown();
   }
 
+  function appendLinkedText(container, text) {
+    var pattern = /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)|(https?:\/\/[^\s<]+)/g;
+    var cursor = 0;
+    var match;
+
+    function appendPlain(value) {
+      String(value).split('\n').forEach(function (part, index) {
+        if (index) container.appendChild(document.createElement('br'));
+        if (part) container.appendChild(document.createTextNode(part));
+      });
+    }
+
+    while ((match = pattern.exec(String(text))) !== null) {
+      appendPlain(String(text).slice(cursor, match.index));
+      var link = document.createElement('a');
+      link.href = match[2] || match[3];
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+      link.textContent = match[1] || match[3];
+      container.appendChild(link);
+      cursor = pattern.lastIndex;
+    }
+
+    appendPlain(String(text).slice(cursor));
+  }
+
+  function applyHandoverState(state) {
+    if (!state) return;
+    handoverAvailable = state.available === true;
+    handoverRequested = state.requested === true;
+    // The server is authoritative. Cached browser history may refer to an old
+    // conversation and must not expose a handoff action the API will reject.
+    visitorMessageCount = Number(state.visitor_message_count || 0);
+    updateHandoffUI();
+  }
+
+  function updateHandoffUI() {
+    if (!handoff || !handoffBtn || !handoffStatus) return;
+    if (!handoverAvailable || visitorMessageCount < 2) {
+      handoff.style.display = 'none';
+      return;
+    }
+
+    handoff.style.display = 'flex';
+    handoff.classList.toggle('wb-connected', handoverRequested);
+    handoffBtn.style.display = handoverRequested ? 'none' : 'inline-flex';
+    handoffStatus.textContent = handoverRequested ? 'Connected to a human agent' : '';
+  }
+
+  function requestHumanAgent() {
+    if (!handoverAvailable || handoverRequested || visitorMessageCount < 2) return;
+    handoff.style.display = 'flex';
+    handoffBtn.disabled = true;
+    handoffStatus.textContent = 'Connecting to a human agent…';
+
+    // Refresh the signed token and conversation state first. This avoids stale
+    // local tokens/counts causing intermittent 401, 409, or 422 responses.
+    started = false;
+    ensureSession().then(function () {
+      if (!handoverAvailable || visitorMessageCount < 2) {
+        var countError = new Error('Send two messages before connecting to a human agent.');
+        countError.status = 422;
+        throw countError;
+      }
+      return post('/widget/v1/handover', { key: KEY });
+    }).then(function (data) {
+      applyHandoverState(data && data.handover);
+      if (!handoverRequested) throw new Error('handover_not_confirmed');
+    }).catch(function (error) {
+      handoffBtn.disabled = false;
+      handoffStatus.textContent = (error && error.message && error.message.indexOf('http ') !== 0)
+        ? error.message
+        : 'Could not connect. Please try again.';
+    });
+  }
+
   function updateStatus() {
     if (!statusEl) return;
-    statusEl.innerHTML = online
-      ? '<span class="wb-dot"></span>' + esc(CFG.subtitle || 'Online')
-      : '<span class="wb-dot wb-dot-off"></span>' + esc(CFG.offline_message || 'Away — leave a message');
+    var teamCount = Number((CFG.available_team || {}).count || 0);
+    var label = teamCount > 1
+      ? teamCount + ' team members available'
+      : (teamCount === 1 ? '1 team member available' : (CFG.subtitle || 'Team available'));
+    statusEl.innerHTML = '<span class="wb-dot"></span>' + esc(label);
   }
 
   function updateBadge() {
@@ -561,6 +665,44 @@
       badge.style.display = 'none';
       launcher.classList.remove('wb-has-unread');
     }
+  }
+
+  function isActivelyChatting() {
+    return open && !document.hidden && root.activeElement === input;
+  }
+
+  function notifyAgentMessage(message) {
+    unreadCount += 1;
+    updateBadge();
+    playNotificationSound();
+
+    if (newMessageAlert && open) newMessageAlert.style.display = 'flex';
+    if (inviteTitleEl) inviteTitleEl.textContent = 'New message';
+    if (inviteSubtitleEl) inviteSubtitleEl.textContent = 'Tap to view the reply';
+    if (!open) {
+      wrap.classList.add('wb-show-invite');
+      if (inviteTimer) { clearTimeout(inviteTimer); inviteTimer = null; }
+    }
+
+    // Use native notifications only when the visitor has already granted
+    // permission. The widget never interrupts them with a permission prompt.
+    if (document.hidden && window.Notification && Notification.permission === 'granted') {
+      try {
+        new Notification(CFG.title || 'New chat message', {
+          body: String((message && message.body) || 'You have a new reply.').slice(0, 120),
+          icon: CFG.launcher_logo_url || CFG.avatar_url || undefined
+        });
+      } catch (e) {}
+    }
+  }
+
+  function markMessagesSeen() {
+    unreadCount = 0;
+    if (newMessageAlert) newMessageAlert.style.display = 'none';
+    if (inviteTitleEl) inviteTitleEl.textContent = defaultInviteTitle;
+    if (inviteSubtitleEl) inviteSubtitleEl.textContent = defaultInviteSubtitle;
+    updateBadge();
+    scrollDown();
   }
 
   function unlockSound() {
@@ -627,7 +769,17 @@
     if (token) h['X-Widget-Token'] = token;
     return h;
   }
-  function handle(r) { if (!r.ok) throw new Error('http ' + r.status); return r.json(); }
+  function handle(r) {
+    return r.json().catch(function () { return {}; }).then(function (data) {
+      if (!r.ok) {
+        var error = new Error(data.message || data.error || ('http ' + r.status));
+        error.status = r.status;
+        error.data = data;
+        throw error;
+      }
+      return data;
+    });
+  }
 
   // ── Markup + styles ──────────────────────────────────────────────────────────
   function template() {
@@ -642,16 +794,29 @@
     var launcherIcon = CFG.launcher_logo_url
       ? '<img class="wb-launcher-logo" src="' + esc(CFG.launcher_logo_url) + '" alt="">'
       : '<svg class="wb-ic-chat" width="26" height="26" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3C6.5 3 2 6.9 2 11.7c0 2.2 1 4.3 2.6 5.8-.1 1-.5 2.4-1.4 3.4 1.5-.2 3.2-.8 4.3-1.6 1.4.6 2.9.9 4.5.9 5.5 0 10-3.9 10-8.7S17.5 3 12 3z"/></svg>';
-    var inviteTitle = CFG.launcher_text || 'Live Chat!';
-    var inviteSubtitle = CFG.subtitle || 'One human agent online now!';
+    var availableMembers = ((CFG.available_team || {}).members || []).slice(0, 3);
+    var teamAvatars = availableMembers.map(function (member) {
+      return member.avatar_url
+        ? '<img class="wb-team-avatar" src="' + esc(member.avatar_url) + '" alt="" title="' + esc(member.name) + ' is available">'
+        : '<span class="wb-team-avatar wb-team-initial" title="' + esc(member.name) + ' is available">' + esc(member.initial || initial(member.name)) + '</span>';
+    }).join('');
     return '' +
       '<div class="wb-panel" role="dialog" aria-label="Chat">' +
         '<div class="wb-header">' + av +
           '<div class="wb-head-info"><div class="wb-title">' + esc(CFG.title || 'Chat with us') + '</div>' +
           '<div class="wb-status"></div></div>' +
+          (teamAvatars ? '<div class="wb-team-stack" aria-label="Available team members">' + teamAvatars + '</div>' : '') +
           '<button class="wb-close" aria-label="Close">&#x2715;</button>' +
         '</div>' +
         '<div class="wb-body"></div>' +
+        '<button class="wb-new-message-alert" type="button" aria-live="polite">New message <span>&darr;</span></button>' +
+        '<div class="wb-handoff" aria-live="polite">' +
+          '<button class="wb-handoff-btn" type="button">' +
+            '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21a8 8 0 0 0-16 0"/><circle cx="12" cy="7" r="4"/></svg>' +
+            'Human Agent' +
+          '</button>' +
+          '<span class="wb-handoff-status"></span>' +
+        '</div>' +
         '<div class="wb-prechat">' +
           '<p class="wb-pc-intro">Tell us who you are and we\'ll get right back to you.</p>' +
           '<form class="wb-prechat-form">' + pcName + pcEmail +
@@ -685,10 +850,11 @@
         '<div class="wb-brand">Powered by <b>' + esc(CFG.footer_company_name || 'Cerqle') + '</b></div>' +
       '</div>' +
       '<button class="wb-launcher-invite" type="button" aria-label="Open live chat">' +
-        '<span class="wb-invite-card"><strong>' + esc(inviteTitle) + '</strong><small>' + esc(inviteSubtitle) + '</small></span>' +
+        '<span class="wb-invite-card"><strong class="wb-invite-title">' + esc(defaultInviteTitle) + '</strong><small class="wb-invite-subtitle">' + esc(defaultInviteSubtitle) + '</small></span>' +
       '</button>' +
       '<button class="wb-launcher" aria-label="Open chat">' +
         '<span class="wb-badge" aria-live="polite"></span>' +
+        '<span class="wb-launcher-online" aria-label="Team online"></span>' +
         '<span class="wb-launcher-default">' + launcherIcon + '</span>' +
         '<svg class="wb-ic-close" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>' +
       '</button>';
@@ -709,6 +875,7 @@
       '.wb-right .wb-launcher-invite{right:72px;transform-origin:right center}.wb-left .wb-launcher-invite{left:72px;transform:translateX(-12px) scale(.96);transform-origin:left center}.wb-show-invite .wb-launcher-invite{opacity:1;pointer-events:auto;transform:translateX(0) scale(1)}',
       '.wb-invite-card{position:relative;display:block;width:100%;background:#fff;border-radius:11px;padding:11px 15px;box-shadow:0 5px 18px rgba(0,0,0,.16);color:#20242c}.wb-invite-card:after{content:"";position:absolute;top:50%;right:-8px;margin-top:-8px;border-width:8px 0 8px 9px;border-style:solid;border-color:transparent transparent transparent #fff}.wb-left .wb-invite-card:after{right:auto;left:-8px;border-width:8px 9px 8px 0;border-color:transparent #fff transparent transparent}.wb-invite-card strong{display:block;font-size:15px;line-height:1.2;font-weight:700}.wb-invite-card small{display:block;margin-top:3px;font-size:12px;line-height:1.3;color:#737984;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
       '.wb-badge{display:none;position:absolute;top:-3px;right:-3px;min-width:22px;height:22px;border-radius:999px;background:#ef4444;border:2px solid #fff;color:#fff;align-items:center;justify-content:center;font-size:11px;font-weight:800;line-height:1;box-shadow:0 3px 10px rgba(239,68,68,.42);z-index:2}',
+      '.wb-launcher-online{position:absolute;right:1px;bottom:2px;width:14px;height:14px;border-radius:50%;background:#22c55e;border:3px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.18);z-index:3}',
       '.wb-panel{position:absolute;bottom:74px;' + (LEFT ? 'left:0' : 'right:0') + ';width:370px;max-width:calc(100vw - 40px);height:560px;max-height:calc(100vh - 120px);max-height:calc(100dvh - 120px);background:#fff;border-radius:18px;box-shadow:0 16px 50px rgba(0,0,0,.22);display:flex;flex-direction:column;overflow:hidden;opacity:0;transform:translateY(12px) scale(.98);pointer-events:none;transition:opacity .2s,transform .22s cubic-bezier(.34,1.4,.6,1);transform-origin:bottom ' + (LEFT ? 'left' : 'right') + '}',
       '.wb-open .wb-panel{opacity:1;transform:translateY(0) scale(1);pointer-events:auto}',
       '.wb-header{background:' + COLOR + ';color:#fff;padding:16px;display:flex;align-items:center;gap:11px}',
@@ -720,16 +887,20 @@
       '.wb-status{font-size:12px;opacity:.9;display:flex;align-items:center;gap:6px;margin-top:2px}',
       '.wb-dot{width:8px;height:8px;border-radius:50%;background:#4ade80;display:inline-block}',
       '.wb-dot-off{background:#d1d5db}',
+      '.wb-team-stack{display:flex;align-items:center;padding-left:5px}.wb-team-avatar{width:24px;height:24px;border-radius:50%;object-fit:cover;border:2px solid ' + COLOR + ';background:#fff;margin-left:-6px}.wb-team-avatar:first-child{margin-left:0}.wb-team-initial{display:flex;align-items:center;justify-content:center;color:' + COLOR + ';font-size:9px;font-weight:800}',
       '.wb-close{background:transparent;border:none;color:#fff;font-size:16px;cursor:pointer;opacity:.85;padding:4px;line-height:1}',
       '.wb-close:hover{opacity:1}',
       '.wb-body{flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;touch-action:pan-y;padding:16px;background:#f7f8fa;display:flex;flex-direction:column;gap:10px}',
+      '.wb-new-message-alert{display:none;align-items:center;justify-content:center;gap:6px;align-self:center;margin:-37px auto 8px;padding:7px 12px;border:1px solid rgba(0,0,0,.08);border-radius:999px;background:#fff;color:' + COLOR + ';font-size:12px;font-weight:750;cursor:pointer;box-shadow:0 5px 16px rgba(0,0,0,.14);z-index:4}.wb-new-message-alert span{font-size:15px;line-height:1}',
       '.wb-row{display:flex;align-items:flex-end;gap:8px;max-width:85%}',
       '.wb-in{align-self:flex-start}.wb-out{align-self:flex-end;flex-direction:row-reverse}',
       '.wb-row .wb-av{width:26px;height:26px;font-size:11px}.wb-row .wb-brand-avatar{padding:3px}',
       '.wb-bubble{padding:9px 13px;border-radius:16px;font-size:14px;line-height:1.45;word-wrap:break-word;white-space:normal}',
       '.wb-in .wb-bubble{background:#fff;color:#1f2430;border:1px solid #eceef2;border-bottom-left-radius:5px}',
       '.wb-out .wb-bubble{background:' + COLOR + ';color:#fff;border-bottom-right-radius:5px}',
+      '.wb-caption a{color:inherit;font-weight:650;text-decoration:underline;text-underline-offset:2px}',
       '.wb-media-image{display:block;max-width:100%;max-height:240px;border-radius:10px;object-fit:cover;margin-bottom:6px}.wb-media-audio{display:block;width:220px;max-width:100%;height:38px;margin-bottom:6px}.wb-caption:empty{display:none}.wb-media-file{display:block;color:inherit;font-weight:600;text-decoration:underline;word-break:break-word}',
+      '.wb-handoff{display:none;align-items:center;justify-content:center;gap:8px;min-height:46px;padding:8px 12px;border-top:1px solid #eceef2;background:#fff}.wb-handoff-btn{display:inline-flex;align-items:center;gap:6px;border:1px solid ' + COLOR + ';border-radius:999px;background:#fff;color:' + COLOR + ';padding:7px 13px;font-size:12px;font-weight:700;cursor:pointer;transition:background .15s,color .15s}.wb-handoff-btn:hover{background:' + COLOR + ';color:#fff}.wb-handoff-btn:disabled{opacity:.55;cursor:wait}.wb-handoff-status{font-size:12px;font-weight:600;color:#6b7280}.wb-handoff.wb-connected .wb-handoff-status{color:#15803d}.wb-handoff.wb-connected .wb-handoff-status:before{content:"";display:inline-block;width:8px;height:8px;margin-right:6px;border-radius:50%;background:#22c55e}',
       '.wb-prechat{display:none;padding:18px;background:#fff}',
       '.wb-pc-intro{font-size:13px;color:#6b7280;margin-bottom:12px}',
       '.wb-prechat-form{display:flex;flex-direction:column;gap:10px}',

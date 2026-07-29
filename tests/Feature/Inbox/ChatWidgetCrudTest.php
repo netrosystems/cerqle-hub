@@ -94,6 +94,9 @@ class ChatWidgetCrudTest extends TestCase
 
         $this->assertSame('Cerqle', $widget->publicConfig()['footer_company_name']);
         $this->assertStringContainsString('cerqle-icon-white-bg.svg', $widget->publicConfig()['launcher_logo_url']);
+        $this->assertGreaterThanOrEqual(1, $widget->publicConfig()['available_team']['count']);
+        $this->assertArrayNotHasKey('email', $widget->publicConfig()['available_team']['members'][0]);
+        $this->assertArrayNotHasKey('id', $widget->publicConfig()['available_team']['members'][0]);
 
         $widget->update(['footer_company_name' => 'Netro Systems']);
 

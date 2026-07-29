@@ -120,7 +120,9 @@ class ChatbotRunnerTest extends TestCase
         $this->assertStringContainsString('refund policy is 30 days', $capturedSystemPrompt);
         $this->assertStringContainsString('reply in that language', $capturedSystemPrompt);
         $this->assertStringContainsString('Never replace a concrete answer with a generic greeting', $capturedSystemPrompt);
-        $this->assertSame(240, $capturedRequest['max_tokens']);
+        $this->assertStringContainsString('answer from safe general knowledge', $capturedSystemPrompt);
+        $this->assertStringContainsString('Markdown hyperlink', $capturedSystemPrompt);
+        $this->assertSame(180, $capturedRequest['max_tokens']);
         $this->assertSame(0.45, $capturedRequest['temperature']);
     }
 
