@@ -285,13 +285,25 @@ function ProviderCard({ provider }) {
                             {field.label}{field.required && ' *'}
                         </label>
                         <div className="relative mt-1">
-                            <input
-                                type={field.type === 'password' && !showSecrets[field.key] ? 'password' : 'text'}
-                                value={data.credentials[field.key] ?? ''}
-                                onChange={e => setData('credentials', { ...data.credentials, [field.key]: e.target.value })}
-                                placeholder={provider.configured ? t('sms.encrypted_placeholder') : ''}
-                                className="w-full rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 pr-10 text-sm"
-                            />
+                            {field.type === 'select' ? (
+                                <select
+                                    value={data.credentials[field.key] || 'split'}
+                                    onChange={e => setData('credentials', { ...data.credentials, [field.key]: e.target.value })}
+                                    className="w-full rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm"
+                                >
+                                    {(field.options ?? []).map(option => (
+                                        <option key={option} value={option}>{option}</option>
+                                    ))}
+                                </select>
+                            ) : (
+                                <input
+                                    type={field.type === 'password' && !showSecrets[field.key] ? 'password' : 'text'}
+                                    value={data.credentials[field.key] ?? ''}
+                                    onChange={e => setData('credentials', { ...data.credentials, [field.key]: e.target.value })}
+                                    placeholder={provider.configured ? t('sms.encrypted_placeholder') : ''}
+                                    className="w-full rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 pr-10 text-sm"
+                                />
+                            )}
                             {field.type === 'password' && (
                                 <button
                                     type="button"

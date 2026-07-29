@@ -56,7 +56,13 @@ class SmsProviderController extends Controller
             ['key' => 'password', 'label' => 'Password', 'type' => 'password', 'required' => true],
             ['key' => 'sender_id', 'label' => 'Sender ID (ANI)', 'type' => 'text', 'required' => true],
             ['key' => 'service_type', 'label' => 'Service Type', 'type' => 'text', 'required' => false],
-            ['key' => 'long_message_mode', 'label' => 'Long Message Mode', 'type' => 'text', 'required' => false],
+            [
+                'key' => 'long_message_mode',
+                'label' => 'Long Message Mode',
+                'type' => 'select',
+                'required' => false,
+                'options' => AlarisSmsDriver::LONG_MESSAGE_MODES,
+            ],
         ],
         'bulksmsbd' => [
             ['key' => 'api_key',   'label' => 'API Key',   'type' => 'password', 'required' => true],
@@ -133,6 +139,11 @@ class SmsProviderController extends Controller
             // The guide also documents plain HTTP, but credentials must never be
             // sent unencrypted from a production Cerqle installation.
             $rules['credentials.base_url'] = ['required', 'url', 'starts_with:https://', 'max:512'];
+            $rules['credentials.long_message_mode'] = [
+                'nullable',
+                'string',
+                'in:'.implode(',', AlarisSmsDriver::LONG_MESSAGE_MODES),
+            ];
         }
 
         $validated = $request->validate($rules);
@@ -231,6 +242,10 @@ class SmsProviderController extends Controller
 
     private function mask(array $creds): array
     {
-        return collect($creds)->map(fn ($v) => $v === '' ? '' : '••••••••••••')->all();
+        return collect($creds)->map(
+            fn ($v, $key) => $key === 'long_message_mode'
+                ? $v
+                : ($v === '' ? '' : '••••••••••••')
+        )->all();
     }
 }

@@ -120,6 +120,29 @@ class SmsProviderConfigTest extends TestCase
         $this->assertSame('KHALIFEH', $config->credentials['sender_id']);
     }
 
+    public function test_alaris_rejects_an_unsupported_long_message_mode(): void
+    {
+        ['user' => $user, 'workspace' => $workspace] = $this->createWorkspaceContext();
+
+        $this->actingAs($user)
+            ->put(route('client.sms-gateways.update', 'alaris'), [
+                'default' => true,
+                'credentials' => [
+                    'base_url' => 'https://sms.example.test:8002/api',
+                    'username' => 'alaris-user',
+                    'password' => 'alaris-password',
+                    'sender_id' => 'KHALIFEH',
+                    'long_message_mode' => 'cut , split , split_sar',
+                ],
+            ])
+            ->assertSessionHasErrors('credentials.long_message_mode');
+
+        $this->assertDatabaseMissing('sms_provider_configs', [
+            'workspace_id' => $workspace->id,
+            'provider' => 'alaris',
+        ]);
+    }
+
     public function test_alaris_connection_can_be_tested_without_sending_sms(): void
     {
         ['user' => $user, 'workspace' => $workspace] = $this->createWorkspaceContext();

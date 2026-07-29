@@ -95,6 +95,27 @@ class SmsDriverHttpTest extends TestCase
         });
     }
 
+    public function test_alaris_driver_normalizes_legacy_invalid_long_message_mode(): void
+    {
+        Http::fake([
+            'https://sms.alaris.test:8002/api*' => Http::response([
+                'message_id' => 'ALARIS_456',
+            ], 200),
+        ]);
+
+        $result = (new AlarisSmsDriver(
+            'https://sms.alaris.test:8002/api',
+            'client-user',
+            'client-password',
+            'WISPER',
+            '',
+            'cut , split , split_sar , single_id_split , payload',
+        ))->send('+8801712345678', 'Campaign message');
+
+        $this->assertTrue($result->success);
+        Http::assertSent(fn ($request) => $request['longMessageMode'] === 'split');
+    }
+
     public function test_alaris_driver_queries_and_maps_delivery_status(): void
     {
         Http::fake([

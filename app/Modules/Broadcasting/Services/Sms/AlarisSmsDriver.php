@@ -15,6 +15,8 @@ use Illuminate\Support\Str;
  */
 class AlarisSmsDriver implements SmsDriverInterface
 {
+    public const LONG_MESSAGE_MODES = ['cut', 'split', 'split_sar', 'single_id_split', 'payload'];
+
     public function __construct(
         private readonly string $baseUrl,
         private readonly string $username,
@@ -33,7 +35,7 @@ class AlarisSmsDriver implements SmsDriverInterface
             'dnis' => ltrim($to, '+'),
             'message' => $body,
             'serviceType' => $this->serviceType ?: null,
-            'longMessageMode' => $this->longMessageMode ?: null,
+            'longMessageMode' => $this->normalizedLongMessageMode(),
         ], static fn ($value) => $value !== null && $value !== '');
 
         try {
@@ -134,10 +136,17 @@ class AlarisSmsDriver implements SmsDriverInterface
     {
         return array_merge([
             'serviceType' => $this->serviceType,
-            'longMessageMode' => $this->longMessageMode,
+            'longMessageMode' => $this->normalizedLongMessageMode(),
             'username' => $this->username,
             'password' => $this->password,
         ], $payload, ['command' => $command]);
+    }
+
+    private function normalizedLongMessageMode(): string
+    {
+        $mode = strtolower(trim($this->longMessageMode));
+
+        return in_array($mode, self::LONG_MESSAGE_MODES, true) ? $mode : 'split';
     }
 
     private function redact(string $message): string
