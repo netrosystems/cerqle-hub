@@ -20,5 +20,6 @@ Route::middleware(['web', 'client-app'])->prefix('app/broadcasts')->name('client
 
     Route::get('/sms-gateways', [SmsProviderController::class, 'index'])->name('sms-gateways.index');
     Route::put('/sms-gateways/{provider}', [SmsProviderController::class, 'update'])->name('sms-gateways.update');
+    Route::post('/sms-gateways/{provider}/test', [SmsProviderController::class, 'test'])->name('sms-gateways.test');
     Route::delete('/sms-gateways/{provider}', [SmsProviderController::class, 'destroy'])->name('sms-gateways.destroy');
 });

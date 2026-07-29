@@ -2,13 +2,16 @@
 
 namespace App\Modules\Broadcasting\Services\Sms;
 
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Str;
 
 /**
  * PROSMS HTTP API.
  *
- * The platform accepts credentials with each request. We use HTTPS and HTTP
- * Basic authentication rather than placing credentials in the query string.
+ * This installation's verified ProSMS contract uses HTTPS GET requests with
+ * credentials and message fields in the query string. Never configure an HTTP
+ * base URL: TLS is required because the provider authenticates every request.
  */
 class AlarisSmsDriver implements SmsDriverInterface
 {
@@ -33,10 +36,13 @@ class AlarisSmsDriver implements SmsDriverInterface
             'longMessageMode' => $this->longMessageMode ?: null,
         ], static fn ($value) => $value !== null && $value !== '');
 
-        $response = Http::acceptJson()
-            ->withBasicAuth($this->username, $this->password)
-            ->timeout(15)
-            ->post($this->endpoint('submit'), $payload);
+        try {
+            $response = $this->client()
+                ->timeout(20)
+                ->get($this->endpoint(), $this->query('submit', $payload));
+        } catch (ConnectionException $e) {
+            return new SmsSendResult(false, '', 'PROSMS connection failed: '.$this->redact($e->getMessage()));
+        }
 
         $messageId = $response->successful() ? $this->messageId($response->json()) : null;
 
@@ -47,18 +53,19 @@ class AlarisSmsDriver implements SmsDriverInterface
 
     public function status(string $providerId): SmsStatus
     {
-        $response = Http::acceptJson()
-            ->withBasicAuth($this->username, $this->password)
-            ->timeout(10)
-            // Laravel replaces an existing query string when the second argument
-            // is supplied to get(), so append the provider message ID ourselves.
-            ->get($this->endpoint('query').'&messageId='.rawurlencode($providerId));
+        try {
+            $response = $this->client()
+                ->timeout(15)
+                ->get($this->endpoint(), $this->query('query', ['messageId' => $providerId]));
+        } catch (ConnectionException $e) {
+            return new SmsStatus($providerId, 'sent', 'PROSMS connection failed: '.$this->redact($e->getMessage()));
+        }
 
         if (! $response->successful()) {
             return new SmsStatus($providerId, 'sent', $this->errorMessage($response));
         }
 
-        $payload = $response->json();
+        $payload = $this->firstResult($response->json());
         $raw = strtolower((string) ($payload['status'] ?? $payload['delivery_status'] ?? ''));
 
         $status = match (true) {
@@ -71,11 +78,75 @@ class AlarisSmsDriver implements SmsDriverInterface
         return new SmsStatus($providerId, $status, $payload['error_code'] ?? null);
     }
 
-    private function endpoint(string $command): string
+    /**
+     * Authenticate and query an impossible message ID. The guide documents an
+     * UNKNOWN 200 response for IDs that do not exist, making this a non-billable
+     * connectivity test.
+     *
+     * @return array{ok: bool, message: string}
+     */
+    public function testConnection(): array
     {
-        $base = rtrim(trim($this->baseUrl), '?&');
+        $testId = 'cerqle-healthcheck-'.Str::uuid();
 
-        return $base.(str_contains($base, '?') ? '&' : '?').'command='.$command;
+        try {
+            $response = $this->client()
+                ->timeout(15)
+                ->get($this->endpoint(), $this->query('query', ['messageId' => $testId]));
+        } catch (ConnectionException $e) {
+            return ['ok' => false, 'message' => 'Connection failed: '.$this->redact($e->getMessage())];
+        }
+
+        if (! $response->successful()) {
+            return [
+                'ok' => false,
+                'message' => "PROSMS returned HTTP {$response->status()}: ".$this->errorMessage($response),
+            ];
+        }
+
+        $payload = $this->firstResult($response->json());
+        $status = strtoupper((string) ($payload['status'] ?? ''));
+
+        return [
+            'ok' => true,
+            'message' => $status === 'UNKNOWN'
+                ? 'PROSMS authentication and API connectivity are working.'
+                : 'PROSMS API connection succeeded'.($status !== '' ? " (status: {$status})." : '.'),
+        ];
+    }
+
+    private function client()
+    {
+        return Http::acceptJson()
+            ->connectTimeout(8);
+    }
+
+    private function endpoint(): string
+    {
+        return rtrim(trim($this->baseUrl), '?&');
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
+     */
+    private function query(string $command, array $payload = []): array
+    {
+        return array_merge([
+            'serviceType' => $this->serviceType,
+            'longMessageMode' => $this->longMessageMode,
+            'username' => $this->username,
+            'password' => $this->password,
+        ], $payload, ['command' => $command]);
+    }
+
+    private function redact(string $message): string
+    {
+        return str_replace(
+            array_filter([$this->username, $this->password]),
+            '[redacted]',
+            $message
+        );
     }
 
     private function messageId(mixed $payload): ?string
@@ -102,9 +173,32 @@ class AlarisSmsDriver implements SmsDriverInterface
         return null;
     }
 
+    /**
+     * PROSMS wraps submit and query results in a JSON array, including when
+     * only one message ID was requested.
+     *
+     * @return array<string, mixed>
+     */
+    private function firstResult(mixed $payload): array
+    {
+        if (! is_array($payload)) {
+            return [];
+        }
+
+        if (array_is_list($payload)) {
+            return is_array($payload[0] ?? null) ? $payload[0] : [];
+        }
+
+        return $payload;
+    }
+
     private function errorMessage($response): string
     {
         $json = $response->json();
+
+        if (is_array($json)) {
+            $json = $this->firstResult($json);
+        }
 
         return (string) ($json['error'] ?? $json['message'] ?? $json['description'] ?? $response->body() ?: 'Request was rejected');
     }

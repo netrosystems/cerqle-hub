@@ -58,7 +58,13 @@ return new class extends Migration
         Schema::create('sms_provider_configs', function (Blueprint $table) {
             $table->id();
             $table->unsignedBigInteger('workspace_id');
-            $table->enum('provider', ['twilio', 'nexmo', 'messagebird', 'smsbd', 'reve', 'bulksmsbd']);
+            // Keep this list aligned with SmsProviderController::PROVIDERS.
+            // SQLite represents enum() as a CHECK constraint, so later MySQL
+            // ALTER ENUM migrations cannot repair a fresh SQLite test database.
+            $table->enum('provider', [
+                'twilio', 'nexmo', 'messagebird', 'smsbd', 'reve', 'alaris',
+                'bulksmsbd', 'sms_dot_bd', 'mimsms', 'fast2sms', 'amazon_sns',
+            ]);
             $table->text('credentials')->nullable();
             $table->string('sender_id', 64)->nullable();
             $table->boolean('default')->default(false);

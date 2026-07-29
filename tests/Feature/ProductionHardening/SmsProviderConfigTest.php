@@ -4,6 +4,7 @@ namespace Tests\Feature\ProductionHardening;
 
 use App\Modules\Broadcasting\Models\SmsProviderConfig;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Http;
 use Inertia\Testing\AssertableInertia as Assert;
 use Tests\TestCase;
 
@@ -93,5 +94,60 @@ class SmsProviderConfigTest extends TestCase
             'workspace_id' => $workspace->id,
             'provider' => 'alaris',
         ]);
+    }
+
+    public function test_alaris_uses_one_canonical_sender_id(): void
+    {
+        ['user' => $user, 'workspace' => $workspace] = $this->createWorkspaceContext();
+
+        $this->actingAs($user)
+            ->put(route('client.sms-gateways.update', 'alaris'), [
+                'default' => true,
+                'sender_id' => 'KHALIFEH',
+                'credentials' => [
+                    'base_url' => 'https://sms.example.test:8002/api?',
+                    'username' => 'alaris-user',
+                    'password' => 'alaris-password',
+                ],
+            ])
+            ->assertSessionHasNoErrors();
+
+        $config = SmsProviderConfig::where('workspace_id', $workspace->id)
+            ->where('provider', 'alaris')
+            ->firstOrFail();
+
+        $this->assertSame('KHALIFEH', $config->sender_id);
+        $this->assertSame('KHALIFEH', $config->credentials['sender_id']);
+    }
+
+    public function test_alaris_connection_can_be_tested_without_sending_sms(): void
+    {
+        ['user' => $user, 'workspace' => $workspace] = $this->createWorkspaceContext();
+
+        SmsProviderConfig::create([
+            'workspace_id' => $workspace->id,
+            'provider' => 'alaris',
+            'credentials' => [
+                'base_url' => 'https://sms.example.test:8002/api?',
+                'username' => 'alaris-user',
+                'password' => 'alaris-password',
+                'sender_id' => 'KHALIFEH',
+            ],
+            'sender_id' => 'KHALIFEH',
+            'default' => true,
+        ]);
+
+        Http::fake([
+            'https://sms.example.test:8002/api*' => Http::response([
+                ['status' => 'UNKNOWN'],
+            ], 200),
+        ]);
+
+        $this->actingAs($user)
+            ->post(route('client.sms-gateways.test', 'alaris'))
+            ->assertSessionHas('success', 'PROSMS authentication and API connectivity are working.');
+
+        Http::assertSentCount(1);
+        Http::assertSent(fn ($request) => str_contains($request->url(), 'command=query'));
     }
 }

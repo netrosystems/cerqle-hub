@@ -4,6 +4,8 @@ namespace App\Modules\Broadcasting\Http\Controllers;
 
 use App\Http\Controllers\Controller;
 use App\Modules\Broadcasting\Models\SmsProviderConfig;
+use App\Modules\Broadcasting\Services\Sms\AlarisSmsDriver;
+use App\Modules\Broadcasting\Services\Sms\SmsDriverManager;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
@@ -147,6 +149,18 @@ class SmsProviderController extends Controller
             $merged[$k] = $v;
         }
 
+        // PROSMS historically displayed both a provider-specific ANI and the
+        // generic Sender ID field. Keep old records compatible while storing
+        // one canonical value for the driver.
+        if ($provider === 'alaris') {
+            $senderId = $validated['sender_id'] ?? null;
+            if (filled($senderId)) {
+                $merged['sender_id'] = $senderId;
+            } elseif (filled($merged['sender_id'] ?? null)) {
+                $validated['sender_id'] = $merged['sender_id'];
+            }
+        }
+
         // Never persist a partial provider configuration. CredentialResolver
         // treats any non-empty workspace config as usable, so saving only one
         // half of a credential pair would make sends fail later with blanks.
@@ -175,6 +189,29 @@ class SmsProviderController extends Controller
         ])->save();
 
         return back()->with('success', self::LABELS[$provider].' configuration saved.');
+    }
+
+    public function test(Request $request, string $provider): RedirectResponse
+    {
+        abort_unless($provider === 'alaris', 404);
+
+        $config = SmsProviderConfig::where('workspace_id', $this->workspaceId($request))
+            ->where('provider', $provider)
+            ->first();
+
+        if (! $config || empty($config->credentials)) {
+            return back()->with('error', 'Save the PROSMS configuration before testing it.');
+        }
+
+        $driver = SmsDriverManager::build($provider, $config->credentials);
+        abort_unless($driver instanceof AlarisSmsDriver, 422);
+
+        $result = $driver->testConnection();
+
+        return back()->with(
+            $result['ok'] ? 'success' : 'error',
+            $result['message']
+        );
     }
 
     public function destroy(Request $request, string $provider): RedirectResponse

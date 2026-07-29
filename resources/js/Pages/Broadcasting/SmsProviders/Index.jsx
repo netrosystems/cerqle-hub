@@ -56,7 +56,8 @@ const SETUP_GUIDES = {
     alaris: {
         steps: [
             'Request your HTTPS API base URL, username, password, and approved Sender ID (ANI) from PROSMS.',
-            'Enter the credentials below. Cerqle sends campaigns through command=submit using secure HTTP Basic authentication.',
+            'Use the HTTPS hostname supplied by PROSMS, not its numeric IP address, so certificate verification succeeds.',
+            'Cerqle uses the verified PROSMS GET API contract with command=submit and URL-encoded request fields.',
             'Use E.164 destination numbers. Cerqle sends one contact at a time, which is compatible with long SMS handling.',
             'Ask PROSMS to configure delivery reports to your Cerqle callback URL after saving this gateway.',
         ],
@@ -219,6 +220,7 @@ function ProviderBadge({ provider }) {
 function ProviderCard({ provider }) {
     const { t } = useTranslation();
     const [showSecrets, setShowSecrets] = useState({});
+    const [testingConnection, setTestingConnection] = useState(false);
 
     const initialCredentials = {};
     (provider.fields ?? []).forEach(f => {
@@ -239,6 +241,18 @@ function ProviderCard({ provider }) {
     const handleDelete = () => {
         if (!confirm(t('sms.remove_confirm', { label: provider.label }))) return;
         router.delete(route('client.sms-gateways.destroy', provider.provider), { preserveScroll: true });
+    };
+
+    const handleTestConnection = () => {
+        setTestingConnection(true);
+        router.post(
+            route('client.sms-gateways.test', provider.provider),
+            {},
+            {
+                preserveScroll: true,
+                onFinish: () => setTestingConnection(false),
+            },
+        );
     };
 
     return (
@@ -294,7 +308,7 @@ function ProviderCard({ provider }) {
                     </div>
                 ))}
 
-                <div>
+                {provider.provider !== 'alaris' && <div>
                     <label className="text-xs font-medium text-neutral-500 dark:text-neutral-400">{t('sms.sender_id')}</label>
                     <input
                         type="text"
@@ -303,7 +317,7 @@ function ProviderCard({ provider }) {
                         placeholder={t('sms.sender_id_placeholder')}
                         className="mt-1 w-full rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm"
                     />
-                </div>
+                </div>}
 
                 <label className="flex items-center gap-2 text-sm cursor-pointer">
                     <input
@@ -323,6 +337,16 @@ function ProviderCard({ provider }) {
                     >
                         {processing ? t('sms.saving') : t('common.save')}
                     </button>
+                    {provider.configured && provider.provider === 'alaris' && (
+                        <button
+                            type="button"
+                            onClick={handleTestConnection}
+                            disabled={testingConnection}
+                            className="rounded-lg border border-neutral-200 dark:border-neutral-700 px-3 py-2 text-sm text-neutral-600 dark:text-neutral-300 hover:border-brand-300 hover:text-brand-600 disabled:opacity-60 transition"
+                        >
+                            {testingConnection ? 'Testing…' : 'Test connection'}
+                        </button>
+                    )}
                     {provider.configured && (
                         <button
                             type="button"

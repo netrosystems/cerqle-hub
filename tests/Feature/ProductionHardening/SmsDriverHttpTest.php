@@ -62,37 +62,48 @@ class SmsDriverHttpTest extends TestCase
         Http::assertSent(fn ($request) => $request['recipients'] === ['8801712345678']);
     }
 
-    public function test_alaris_driver_sends_with_basic_auth_and_tracks_the_returned_message_id(): void
+    public function test_alaris_driver_sends_with_verified_get_contract_and_tracks_the_returned_message_id(): void
     {
         Http::fake([
-            'https://sms.alaris.test:8002/api?command=submit' => Http::response([
-                ['dnis' => '8801712345678', 'message_id' => 'ALARIS_123'],
+            'https://sms.alaris.test:8002/api*' => Http::response([
+                'message_id' => 'ALARIS_123',
             ], 200),
         ]);
 
         $result = (new AlarisSmsDriver(
-            'https://sms.alaris.test:8002/api',
+            'https://sms.alaris.test:8002/api?',
             'client-user',
             'client-password',
             'WISPER',
+            '',
+            'split',
         ))->send('+8801712345678', 'Campaign message');
 
         $this->assertTrue($result->success);
         $this->assertSame('ALARIS_123', $result->messageId);
         Http::assertSent(function ($request) {
-            return $request->url() === 'https://sms.alaris.test:8002/api?command=submit'
+            return str_starts_with($request->url(), 'https://sms.alaris.test:8002/api?')
+                && $request->method() === 'GET'
+                && $request['username'] === 'client-user'
+                && $request['password'] === 'client-password'
                 && $request['ani'] === 'WISPER'
                 && $request['dnis'] === '8801712345678'
                 && $request['message'] === 'Campaign message'
-                && str_starts_with($request->header('Authorization')[0] ?? '', 'Basic ');
+                && $request['longMessageMode'] === 'split'
+                && $request['command'] === 'submit'
+                && empty($request->header('Authorization'));
         });
     }
 
     public function test_alaris_driver_queries_and_maps_delivery_status(): void
     {
         Http::fake([
-            'https://sms.alaris.test:8002/api?command=query*' => Http::response([
-                'status' => 'DELIVRD',
+            'https://sms.alaris.test:8002/api*' => Http::response([
+                [
+                    'status' => 'DELIVRD',
+                    'delivery_time' => '20260729120000',
+                    'error_code' => '000',
+                ],
             ], 200),
         ]);
 
@@ -105,5 +116,31 @@ class SmsDriverHttpTest extends TestCase
 
         $this->assertSame('delivered', $status->status);
         Http::assertSent(fn ($request) => str_contains($request->url(), 'command=query') && str_contains($request->url(), 'messageId=ALARIS_123'));
+    }
+
+    public function test_alaris_connection_test_authenticates_without_sending_an_sms(): void
+    {
+        Http::fake([
+            'https://sms.alaris.test:8002/api*' => Http::response([
+                ['status' => 'UNKNOWN', 'delivery_time' => '', 'mccmnc' => ''],
+            ], 200),
+        ]);
+
+        $result = (new AlarisSmsDriver(
+            'https://sms.alaris.test:8002/api?',
+            'client-user',
+            'client-password',
+            'WISPER',
+        ))->testConnection();
+
+        $this->assertTrue($result['ok']);
+        $this->assertStringContainsString('working', $result['message']);
+        Http::assertSent(function ($request) {
+            return str_contains($request->url(), 'command=query')
+                && str_contains($request->url(), 'messageId=cerqle-healthcheck-')
+                && $request['username'] === 'client-user'
+                && $request['password'] === 'client-password'
+                && empty($request->header('Authorization'));
+        });
     }
 }
