@@ -14,7 +14,7 @@ class CampaignRecipientFactory extends Factory
         return [
             'campaign_id' => 1,
             'contact_id' => 1,
-            'status' => 'pending',
+            'status' => 'queued',
         ];
     }
 }

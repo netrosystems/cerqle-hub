@@ -4,6 +4,10 @@ namespace App\Modules\Broadcasting\Jobs;
 
 use App\Modules\Broadcasting\Models\Campaign;
 use App\Modules\Broadcasting\Models\CampaignRecipient;
+use App\Modules\Broadcasting\Services\CampaignAudienceService;
+use App\Modules\Broadcasting\Services\CampaignStepService;
+use App\Modules\Broadcasting\Services\Sms\SmsDriverManager;
+use App\Modules\Broadcasting\Services\SmsCampaignCapacityService;
 use App\Modules\Shared\Models\Contact;
 use App\Modules\Shared\Models\Segment;
 use App\Modules\Shared\Services\ContactService;
@@ -27,7 +31,13 @@ class LaunchCampaignJob implements ShouldQueue
     public function handle(): void
     {
         $campaign = Campaign::find($this->campaignId);
-        if (! $campaign || $campaign->status !== 'queued') {
+        if (! $campaign || ! in_array($campaign->status, ['queued', 'waiting_capacity'], true)) {
+            return;
+        }
+
+        if ($campaign->channel === 'sms') {
+            $this->launchSms($campaign);
+
             return;
         }
 
@@ -105,6 +115,106 @@ class LaunchCampaignJob implements ShouldQueue
         FinalizeCampaignJob::dispatch($campaign->id)
             ->onQueue('broadcast')
             ->delay(now()->addSeconds($finalDelay));
+    }
+
+    private function launchSms(Campaign $campaign): void
+    {
+        try {
+            $resolved = SmsDriverManager::resolveForWorkspace($campaign->workspace_id);
+        } catch (\Throwable $exception) {
+            $campaign->update([
+                'status' => 'safety_paused',
+                'pause_reason' => 'SMS provider is not configured: '.substr($exception->getMessage(), 0, 350),
+            ]);
+
+            return;
+        }
+        $audience = app(CampaignAudienceService::class);
+        app(CampaignStepService::class)->ensure($campaign);
+
+        if ($campaign->audience_type === 'csv') {
+            // CSV contacts are streamed and counted during preparation. Treat
+            // the campaign as large from the outset so it receives exclusive
+            // provider capacity.
+            $cutoffId = null;
+            $recipientCount = max(
+                (int) $campaign->estimated_recipients,
+                (int) config('broadcasting.sms.large_campaign_threshold', 10000),
+            );
+        } else {
+            $cutoffId = $campaign->audience_cutoff_id ?: $audience->maxContactId($campaign);
+            $recipientCount = $cutoffId ? $audience->count($campaign, $cutoffId) : 0;
+        }
+
+        if ($campaign->audience_type !== 'csv' && $recipientCount === 0) {
+            $campaign->update([
+                'status' => 'failed',
+                'pause_reason' => 'No eligible SMS contacts matched the audience.',
+                'totals_json' => ['total' => 0, 'failed_reason' => 'No matching contacts for audience.'],
+            ]);
+
+            return;
+        }
+
+        $capacity = app(SmsCampaignCapacityService::class);
+        if (! $capacity->admit($campaign, $resolved->providerKey, $recipientCount)) {
+            return;
+        }
+
+        $campaign->refresh();
+
+        // A paused campaign already has its audience snapshot. Resume from the
+        // recipient states instead of rebuilding or duplicating it.
+        if ($campaign->audience_prepared_at && $campaign->recipients()->exists()) {
+            $campaign->update([
+                'status' => 'sending',
+                'pause_reason' => null,
+                'started_at' => $campaign->started_at ?: now(),
+            ]);
+            if (! $campaign->steps()->where('status', 'active')->exists()) {
+                $campaign->steps()->where('status', 'pending')->orderBy('position')->first()?->update([
+                    'status' => 'active',
+                    'started_at' => now(),
+                ]);
+            }
+            PumpSmsCampaignJob::dispatch($campaign->id)->onQueue('broadcast');
+
+            return;
+        }
+
+        // Preparation can be paused or interrupted between chunks. Resume at
+        // the persisted cursor/CSV byte offset instead of treating a partial
+        // snapshot as complete or starting over.
+        if ($campaign->prepared_recipients > 0 || $campaign->preparation_cursor > 0 || $campaign->preparation_offset > 0) {
+            $campaign->update([
+                'status' => 'preparing',
+                'pause_reason' => null,
+                'started_at' => $campaign->started_at ?: now(),
+            ]);
+            PrepareSmsCampaignAudienceJob::dispatch($campaign->id)->onQueue('broadcast');
+
+            return;
+        }
+
+        $campaign->steps()->update([
+            'status' => 'pending',
+            'scheduled_at' => null,
+            'started_at' => null,
+            'completed_at' => null,
+        ]);
+        $campaign->update([
+            'status' => 'preparing',
+            'pause_reason' => null,
+            'audience_cutoff_id' => $cutoffId,
+            'preparation_cursor' => 0,
+            'preparation_offset' => 0,
+            'prepared_recipients' => 0,
+            'audience_prepared_at' => null,
+            'started_at' => now(),
+            'completed_at' => null,
+        ]);
+
+        PrepareSmsCampaignAudienceJob::dispatch($campaign->id)->onQueue('broadcast');
     }
 
     /**
@@ -221,7 +331,7 @@ class LaunchCampaignJob implements ShouldQueue
         ) {
             Log::channel('json')->warning('campaign.csv.invalid_path', [
                 'campaign_id' => $campaign->id,
-                'path'        => $path,
+                'path' => $path,
             ]);
 
             return [];

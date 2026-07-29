@@ -25,6 +25,7 @@ class CampaignResource extends JsonResource
             'stats' => [
                 'total' => (int) ($totals['total'] ?? 0),
                 'queued' => (int) ($totals['queued'] ?? 0),
+                'retrying' => (int) ($totals['retrying'] ?? 0),
                 'sent' => (int) ($totals['sent'] ?? 0),
                 'delivered' => (int) ($totals['delivered'] ?? 0),
                 'read' => (int) ($totals['read'] ?? 0),
@@ -32,6 +33,11 @@ class CampaignResource extends JsonResource
             ],
             'created_at' => $this->created_at->toIso8601String(),
             'updated_at' => $this->updated_at->toIso8601String(),
+            'estimated_recipients' => (int) ($this->estimated_recipients ?? 0),
+            'prepared_recipients' => (int) ($this->prepared_recipients ?? 0),
+            'is_large' => (bool) ($this->is_large ?? false),
+            'pause_reason' => $this->pause_reason,
+            'delivery_steps' => $this->whenLoaded('steps'),
         ];
     }
 }

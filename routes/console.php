@@ -1,12 +1,13 @@
 <?php
 
+use App\Http\Controllers\Admin\CronSetupController;
 use App\Modules\Broadcasting\Jobs\LaunchScheduledCampaignsJob;
+use App\Modules\Broadcasting\Jobs\RecoverSmsCampaignsJob;
 use App\Modules\Broadcasting\Models\UsageMeter;
 use App\Modules\Social\Jobs\DispatchScheduledPostsJob;
 use App\Modules\Social\Jobs\RefreshSocialTokensJob;
 use App\Modules\Whatsapp\Jobs\TemplateSyncJob;
 use App\Modules\Whatsapp\Models\WhatsappBusinessAccount;
-use App\Http\Controllers\Admin\CronSetupController;
 use App\Services\WebhookIdempotencyService;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
@@ -29,6 +30,12 @@ Schedule::call(function () {
 Schedule::job(new LaunchScheduledCampaignsJob, 'broadcast')
     ->everyMinute()
     ->name('launch-scheduled-campaigns')
+    ->withoutOverlapping();
+
+// Self-healing safety net for a worker/VPS restart between chained SMS jobs.
+Schedule::job(new RecoverSmsCampaignsJob, 'broadcast')
+    ->everyMinute()
+    ->name('recover-sms-campaigns')
     ->withoutOverlapping();
 
 // Sync WhatsApp templates from Meta (once per day)

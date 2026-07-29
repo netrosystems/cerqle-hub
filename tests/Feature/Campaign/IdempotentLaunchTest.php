@@ -4,11 +4,13 @@ namespace Tests\Feature\Campaign;
 
 use App\Models\User;
 use App\Models\Workspace;
-use App\Modules\Broadcasting\Jobs\DispatchCampaignChunkJob;
 use App\Modules\Broadcasting\Jobs\FinalizeCampaignJob;
 use App\Modules\Broadcasting\Jobs\LaunchCampaignJob;
+use App\Modules\Broadcasting\Jobs\PrepareSmsCampaignAudienceJob;
+use App\Modules\Broadcasting\Jobs\PumpSmsCampaignJob;
 use App\Modules\Broadcasting\Models\Campaign;
 use App\Modules\Broadcasting\Models\CampaignRecipient;
+use App\Modules\Broadcasting\Models\SmsProviderConfig;
 use App\Modules\Shared\Models\Contact;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Queue;
@@ -23,6 +25,17 @@ class IdempotentLaunchTest extends TestCase
     {
         $user = User::factory()->create(['role' => 'client', 'email_verified_at' => now()]);
         $workspace = Workspace::factory()->create(['owner_id' => $user->id]);
+        SmsProviderConfig::create([
+            'workspace_id' => $workspace->id,
+            'provider' => 'alaris',
+            'credentials' => [
+                'base_url' => 'https://sms.test/api',
+                'username' => 'safe-user',
+                'password' => 'safe-password',
+                'sender_id' => 'CERQLE',
+            ],
+            'default' => true,
+        ]);
 
         return [$user, $workspace];
     }
@@ -48,8 +61,10 @@ class IdempotentLaunchTest extends TestCase
             'payload_json' => ['body' => 'Hi'],
         ]);
 
-        // First launch — materialises 5 recipients.
+        // First launch prepares the audience in bounded chunks.
         (new LaunchCampaignJob($campaign->id))->handle();
+        app()->call([new PrepareSmsCampaignAudienceJob($campaign->id), 'handle']);
+        app()->call([new PrepareSmsCampaignAudienceJob($campaign->id), 'handle']);
         $this->assertSame(5, CampaignRecipient::where('campaign_id', $campaign->id)->count());
 
         // User pauses, then re-launches.
@@ -87,6 +102,8 @@ class IdempotentLaunchTest extends TestCase
         ]);
 
         (new LaunchCampaignJob($campaign->id))->handle();
+        app()->call([new PrepareSmsCampaignAudienceJob($campaign->id), 'handle']);
+        app()->call([new PrepareSmsCampaignAudienceJob($campaign->id), 'handle']);
 
         $this->assertSame(3, CampaignRecipient::where('campaign_id', $campaign->id)->count());
     }
@@ -111,7 +128,8 @@ class IdempotentLaunchTest extends TestCase
 
         $campaign->refresh();
         $this->assertSame('failed', $campaign->status);
-        Queue::assertNotPushed(DispatchCampaignChunkJob::class);
+        Queue::assertNotPushed(PrepareSmsCampaignAudienceJob::class);
+        Queue::assertNotPushed(PumpSmsCampaignJob::class);
         Queue::assertNotPushed(FinalizeCampaignJob::class);
     }
 }

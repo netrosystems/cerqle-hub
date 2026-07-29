@@ -5,6 +5,7 @@ namespace App\Modules\Broadcasting\Jobs;
 use App\Events\CampaignCompleted;
 use App\Modules\Broadcasting\Models\Campaign;
 use App\Modules\Broadcasting\Models\CampaignRecipient;
+use App\Modules\Broadcasting\Services\SmsCampaignCapacityService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -22,15 +23,13 @@ class FinalizeCampaignJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
-    public int $tries = 60;
+    public int $tries = 5;
 
-    /** Used to bound max self-rescheduling (24h). */
     public function __construct(
         public readonly int $campaignId,
-        public readonly int $attempt = 1,
     ) {}
 
-    public function handle(): void
+    public function handle(SmsCampaignCapacityService $capacity): void
     {
         $campaign = Campaign::find($this->campaignId);
         if (! $campaign) {
@@ -43,19 +42,20 @@ class FinalizeCampaignJob implements ShouldQueue
         }
 
         // Already finalised
-        if (in_array($campaign->status, ['completed', 'failed', 'draft'], true)) {
+        if (in_array($campaign->status, ['completed', 'completed_with_failures', 'failed', 'cancelled', 'draft'], true)) {
             $campaign->updateTotals();
 
             return;
         }
 
         $stillQueued = CampaignRecipient::where('campaign_id', $campaign->id)
-            ->where('status', 'queued')
+            ->whereIn('status', ['queued', 'dispatching', 'sending', 'retrying'])
             ->count();
 
-        if ($stillQueued > 0 && $this->attempt < 1440) {
-            // Re-schedule in 60s; keeps polling for at most ~24h.
-            self::dispatch($campaign->id, $this->attempt + 1)
+        if ($stillQueued > 0) {
+            // A deliberately slow million-recipient campaign can run for days.
+            // Never finalise it while recipients remain unsettled.
+            self::dispatch($campaign->id)
                 ->onQueue('broadcast')
                 ->delay(now()->addSeconds(60));
 
@@ -74,19 +74,30 @@ class FinalizeCampaignJob implements ShouldQueue
         $failed = (int) ($totals['failed'] ?? 0);
         $total = $sent + $failed + (int) ($totals['queued'] ?? 0);
 
-        $newStatus = ($total === 0 || ($failed > 0 && $sent === 0)) ? 'failed' : 'completed';
+        $newStatus = match (true) {
+            $total === 0 || ($failed > 0 && $sent === 0) => 'failed',
+            $failed > 0 => 'completed_with_failures',
+            default => 'completed',
+        };
 
         // Atomic guard: only one concurrent worker may finalize the campaign.
         // If another worker already set the status, affected=0 and we skip the event.
         $affected = Campaign::where('id', $campaign->id)
-            ->whereNotIn('status', ['completed', 'failed', 'draft'])
-            ->update(['status' => $newStatus]);
+            ->whereNotIn('status', ['completed', 'completed_with_failures', 'failed', 'cancelled', 'draft'])
+            ->update(['status' => $newStatus, 'completed_at' => now(), 'pause_reason' => null]);
 
         if ($affected === 0) {
             return;
         }
 
         $campaign->updateTotals();
+        $campaign->steps()->whereNotIn('status', ['completed'])->update([
+            'status' => 'completed',
+            'completed_at' => now(),
+        ]);
+        if ($campaign->channel === 'sms') {
+            $capacity->release($campaign);
+        }
 
         CampaignCompleted::dispatch($campaign->fresh());
     }

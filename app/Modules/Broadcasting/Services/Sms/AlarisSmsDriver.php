@@ -43,14 +43,31 @@ class AlarisSmsDriver implements SmsDriverInterface
                 ->timeout(20)
                 ->get($this->endpoint(), $this->query('submit', $payload));
         } catch (ConnectionException $e) {
-            return new SmsSendResult(false, '', 'PROSMS connection failed: '.$this->redact($e->getMessage()));
+            return new SmsSendResult(
+                false,
+                '',
+                'PROSMS connection failed: '.$this->redact($e->getMessage()),
+                null,
+                true,
+                false,
+                true,
+            );
         }
 
         $messageId = $response->successful() ? $this->messageId($response->json()) : null;
 
         return $messageId
             ? new SmsSendResult(true, $messageId)
-            : new SmsSendResult(false, '', 'PROSMS error: '.$this->errorMessage($response));
+            : new SmsSendResult(
+                false,
+                '',
+                'PROSMS error: '.$this->errorMessage($response),
+                $response->status(),
+                $response->status() === 429 || $response->serverError(),
+                $response->status() === 401,
+                false,
+                $this->retryAfterSeconds($response->header('Retry-After')),
+            );
     }
 
     public function status(string $providerId): SmsStatus
@@ -210,5 +227,18 @@ class AlarisSmsDriver implements SmsDriverInterface
         }
 
         return (string) ($json['error'] ?? $json['message'] ?? $json['description'] ?? $response->body() ?: 'Request was rejected');
+    }
+
+    private function retryAfterSeconds(?string $value): ?int
+    {
+        if (! filled($value)) {
+            return null;
+        }
+        if (ctype_digit($value)) {
+            return max(1, (int) $value);
+        }
+        $timestamp = strtotime($value);
+
+        return $timestamp ? max(1, $timestamp - time()) : null;
     }
 }

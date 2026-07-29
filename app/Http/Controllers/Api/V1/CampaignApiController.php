@@ -8,6 +8,7 @@ use App\Modules\Broadcasting\Jobs\LaunchCampaignJob;
 use App\Modules\Broadcasting\Models\Campaign;
 use App\Modules\Broadcasting\Models\CampaignRecipient;
 use App\Modules\Broadcasting\Models\UsageMeter;
+use App\Modules\Broadcasting\Services\CampaignStepService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -46,18 +47,26 @@ class CampaignApiController extends WorkspaceScopedController
             'payload_json' => ['nullable', 'array'],
             'schedule_at' => ['nullable', 'date'],
             'timezone' => ['nullable', 'string', 'max:64'],
+            'delivery_steps' => ['nullable', 'array', 'max:10'],
+            'delivery_steps.*.name' => ['required', 'string', 'max:80'],
+            'delivery_steps.*.recipient_limit' => ['nullable', 'integer', 'min:1'],
+            'delivery_steps.*.delay_after_previous_seconds' => ['required', 'integer', 'min:0', 'max:86400'],
+            'delivery_steps.*.rate_per_second' => ['required', 'integer', 'min:1', 'max:5'],
         ]);
 
         // Default audience_type when omitted to keep DB enum happy.
         $validated['audience_type'] = $validated['audience_type'] ?? 'segment';
 
+        $steps = $validated['delivery_steps'] ?? null;
+        unset($validated['delivery_steps']);
         $campaign = Campaign::create(array_merge($validated, [
             'workspace_id' => $this->workspaceId($request),
             'status' => 'draft',
             'created_by' => $request->user()->id,
         ]));
+        app(CampaignStepService::class)->sync($campaign, $steps);
 
-        return (new CampaignResource($campaign))
+        return (new CampaignResource($campaign->load('steps')))
             ->response()
             ->setStatusCode(201);
     }
@@ -77,7 +86,7 @@ class CampaignApiController extends WorkspaceScopedController
         $campaign->updateTotals();
         $campaign->refresh();
 
-        return new CampaignResource($campaign);
+        return new CampaignResource($campaign->load('steps'));
     }
 
     /**
@@ -91,7 +100,7 @@ class CampaignApiController extends WorkspaceScopedController
             return response()->json(['error' => 'Campaign not found.'], 404);
         }
 
-        if (! in_array($campaign->status, ['draft', 'paused'])) {
+        if (! in_array($campaign->status, ['draft', 'paused', 'safety_paused'])) {
             return response()->json(['error' => 'Campaign cannot be launched from status: '.$campaign->status.'.'], 422);
         }
 
@@ -128,8 +137,8 @@ class CampaignApiController extends WorkspaceScopedController
             return response()->json(['error' => 'Campaign not found.'], 404);
         }
 
-        if ($campaign->status !== 'sending') {
-            return response()->json(['error' => 'Only campaigns with status "sending" can be paused.'], 422);
+        if (! in_array($campaign->status, ['preparing', 'sending', 'retrying'], true)) {
+            return response()->json(['error' => 'Only active campaigns can be paused.'], 422);
         }
 
         $campaign->update(['status' => 'paused']);
@@ -166,7 +175,7 @@ class CampaignApiController extends WorkspaceScopedController
             return response()->json(['error' => 'Campaign not found.'], 404);
         }
 
-        if (! in_array($campaign->status, ['draft', 'paused'], true)) {
+        if (! in_array($campaign->status, ['draft', 'paused', 'safety_paused'], true)) {
             return response()->json(['error' => 'Only draft or paused campaigns can be edited.'], 422);
         }
 
@@ -179,10 +188,27 @@ class CampaignApiController extends WorkspaceScopedController
             'payload_json' => ['nullable', 'array'],
             'schedule_at' => ['nullable', 'date'],
             'timezone' => ['nullable', 'string', 'max:64'],
+            'delivery_steps' => ['nullable', 'array', 'max:10'],
+            'delivery_steps.*.name' => ['required', 'string', 'max:80'],
+            'delivery_steps.*.recipient_limit' => ['nullable', 'integer', 'min:1'],
+            'delivery_steps.*.delay_after_previous_seconds' => ['required', 'integer', 'min:0', 'max:86400'],
+            'delivery_steps.*.rate_per_second' => ['required', 'integer', 'min:1', 'max:5'],
         ]);
 
+        $steps = $validated['delivery_steps'] ?? null;
+        unset($validated['delivery_steps']);
+        if ($campaign->recipients()->exists()) {
+            foreach (['channel', 'audience_type', 'audience_ref'] as $field) {
+                if (array_key_exists($field, $validated) && (string) $validated[$field] !== (string) $campaign->{$field}) {
+                    return response()->json([
+                        'error' => 'Channel and audience cannot change after campaign recipients have been prepared.',
+                    ], 422);
+                }
+            }
+        }
         $campaign->update($validated);
+        app(CampaignStepService::class)->sync($campaign, $steps);
 
-        return new CampaignResource($campaign->refresh());
+        return new CampaignResource($campaign->refresh()->load('steps'));
     }
 }

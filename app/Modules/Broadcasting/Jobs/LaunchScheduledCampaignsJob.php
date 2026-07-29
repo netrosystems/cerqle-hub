@@ -17,7 +17,11 @@ class LaunchScheduledCampaignsJob implements ShouldQueue
         Campaign::where('status', 'queued')
             ->whereNotNull('schedule_at')
             ->where('schedule_at', '<=', now())
-            ->get()
-            ->each(fn (Campaign $c) => LaunchCampaignJob::dispatch($c->id)->onQueue('broadcast'));
+            ->orderBy('id')
+            ->chunkById(100, function ($campaigns) {
+                $campaigns->each(
+                    fn (Campaign $campaign) => LaunchCampaignJob::dispatch($campaign->id)->onQueue('broadcast')
+                );
+            });
     }
 }

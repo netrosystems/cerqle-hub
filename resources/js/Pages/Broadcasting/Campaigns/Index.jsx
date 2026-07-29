@@ -18,9 +18,14 @@ import { ChannelBrandIcon, CHANNEL_LABELS } from '@/Components/BrandIcons';
 const STATUS_COLORS = {
     draft:     'bg-neutral-100 text-neutral-600 dark:bg-neutral-700 dark:text-neutral-300',
     queued:    'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300',
+    waiting_capacity: 'bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300',
+    preparing: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300',
     sending:   'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-300',
+    retrying:  'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300',
     paused:    'bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300',
+    safety_paused: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300',
     completed: 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300',
+    completed_with_failures: 'bg-lime-100 text-lime-800 dark:bg-lime-900/40 dark:text-lime-300',
     failed:    'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300',
 };
 
@@ -31,6 +36,14 @@ const STATUS_LABEL_KEYS = {
     paused: 'campaign.status_paused',
     completed: 'campaign.status_completed',
     failed: 'campaign.status_failed',
+};
+
+const STATUS_FALLBACKS = {
+    waiting_capacity: 'Waiting for capacity',
+    preparing: 'Preparing audience',
+    retrying: 'Retrying',
+    safety_paused: 'Safety paused',
+    completed_with_failures: 'Completed with failures',
 };
 
 export default function CampaignsIndex({ campaigns, filters }) {
@@ -56,7 +69,9 @@ export default function CampaignsIndex({ campaigns, filters }) {
     };
 
     // Auto-refresh while any campaign is actively sending so totals tick up.
-    const liveCount = campaigns.data.filter((c) => ['queued', 'sending'].includes(c.status)).length;
+    const liveCount = campaigns.data.filter((c) =>
+        ['queued', 'waiting_capacity', 'preparing', 'sending', 'retrying'].includes(c.status),
+    ).length;
     useEffect(() => {
         if (liveCount === 0) return;
         const id = setInterval(() => {
@@ -109,9 +124,13 @@ export default function CampaignsIndex({ campaigns, filters }) {
                         className="rounded border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-1.5 text-sm"
                     >
                         <option value="">{t('campaign.all_statuses')}</option>
-                        {['draft', 'queued', 'sending', 'paused', 'completed', 'failed'].map((s) => (
+                        {[
+                            'draft', 'queued', 'waiting_capacity', 'preparing', 'sending',
+                            'retrying', 'paused', 'safety_paused', 'completed',
+                            'completed_with_failures', 'failed',
+                        ].map((s) => (
                             <option key={s} value={s}>
-                                {t(STATUS_LABEL_KEYS[s])}
+                                {STATUS_LABEL_KEYS[s] ? t(STATUS_LABEL_KEYS[s]) : STATUS_FALLBACKS[s]}
                             </option>
                         ))}
                     </select>
@@ -146,8 +165,8 @@ export default function CampaignsIndex({ campaigns, filters }) {
                                     totals.total > 0
                                         ? Math.round((totals.delivered / totals.total) * 100)
                                         : 0;
-                                const live = ['queued', 'sending'].includes(c.status);
-                                const canEdit = ['draft', 'queued', 'paused'].includes(c.status);
+                                const live = ['queued', 'waiting_capacity', 'preparing', 'sending', 'retrying'].includes(c.status);
+                                const canEdit = ['draft', 'queued', 'paused', 'safety_paused'].includes(c.status);
                                 return (
                                     <tr key={c.id} className="hover:bg-neutral-50 dark:hover:bg-neutral-800/50">
                                         <td className="px-4 py-3 font-medium text-neutral-900 dark:text-neutral-100">
@@ -170,7 +189,9 @@ export default function CampaignsIndex({ campaigns, filters }) {
                                                     STATUS_COLORS[c.status] ?? ''
                                                 }`}
                                             >
-                                                {STATUS_LABEL_KEYS[c.status] ? t(STATUS_LABEL_KEYS[c.status]) : c.status}
+                                                {STATUS_LABEL_KEYS[c.status]
+                                                    ? t(STATUS_LABEL_KEYS[c.status])
+                                                    : STATUS_FALLBACKS[c.status] ?? c.status}
                                             </span>
                                             {live && (
                                                 <span className="ml-2 inline-flex items-center gap-1 text-xs text-yellow-700 dark:text-yellow-300">
@@ -224,7 +245,7 @@ export default function CampaignsIndex({ campaigns, filters }) {
                                                         <Play className="h-4 w-4" />
                                                     </button>
                                                 )}
-                                                {c.status === 'sending' && (
+                                                {['preparing', 'sending', 'retrying'].includes(c.status) && (
                                                     <button
                                                         onClick={() => handlePause(c.uuid)}
                                                         title={t('campaign.pause')}
@@ -233,7 +254,7 @@ export default function CampaignsIndex({ campaigns, filters }) {
                                                         <Pause className="h-4 w-4" />
                                                     </button>
                                                 )}
-                                                {c.status === 'paused' && (
+                                                {['paused', 'safety_paused'].includes(c.status) && (
                                                     <button
                                                         onClick={() => handleLaunch(c.uuid)}
                                                         title={t('campaign.resume')}

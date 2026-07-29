@@ -16,6 +16,9 @@ import {
     Save,
     Upload,
     Link as LinkIcon,
+    Plus,
+    Trash2,
+    ShieldCheck,
 } from 'lucide-react';
 import { browserTz, formatInTz, tzLocalToUtcIso, utcToTzLocal } from '@/Utils/datetime';
 import { ChannelBrandIcon } from '@/Components/BrandIcons';
@@ -75,6 +78,15 @@ function defaultInitialData(campaign, userTz) {
             },
             schedule_at: campaign.schedule_at ? utcToTzLocal(campaign.schedule_at, tz) : '',
             timezone: tz,
+            delivery_steps:
+                campaign.steps?.length > 0
+                    ? campaign.steps.map((step) => ({
+                          name: step.name,
+                          recipient_limit: step.recipient_limit,
+                          delay_after_previous_seconds: step.delay_after_previous_seconds ?? 0,
+                          rate_per_second: Math.min(5, Math.max(1, step.rate_per_second ?? 5)),
+                      }))
+                    : defaultDeliverySteps(),
         };
     }
 
@@ -88,7 +100,25 @@ function defaultInitialData(campaign, userTz) {
         payload_json: { subject: '', body: '', from_email: '', from_name: '', reply_to: '', track_opens: true, track_clicks: false },
         schedule_at: '',
         timezone: fallbackTz,
+        delivery_steps: defaultDeliverySteps(),
     };
+}
+
+function defaultDeliverySteps() {
+    return [
+        {
+            name: 'Safety check',
+            recipient_limit: 100,
+            delay_after_previous_seconds: 0,
+            rate_per_second: 5,
+        },
+        {
+            name: 'Remaining contacts',
+            recipient_limit: null,
+            delay_after_previous_seconds: 600,
+            rate_per_second: 5,
+        },
+    ];
 }
 
 /**
@@ -397,6 +427,7 @@ export default function CampaignForm({
                 schedule_at: data.schedule_at
                     ? tzLocalToUtcIso(data.schedule_at, data.timezone || 'UTC')
                     : null,
+                delivery_steps: data.delivery_steps,
             };
             const res = await axios.post(route('client.campaigns.store-draft'), payload);
             setDraftUuid(res.data.uuid);
@@ -590,7 +621,12 @@ export default function CampaignForm({
                         )}
 
                         {step === 3 && (
-                            <ScheduleStep data={data} setData={setData} errors={errors} />
+                            <ScheduleStep
+                                data={data}
+                                setData={setData}
+                                errors={errors}
+                                audienceCount={audiencePreview.deliverable}
+                            />
                         )}
 
                         {step === 4 && (
@@ -1110,7 +1146,7 @@ function ContentStep({
     );
 }
 
-function ScheduleStep({ data, setData, errors }) {
+function ScheduleStep({ data, setData, errors, audienceCount = 0 }) {
     const { t } = useTranslation();
     // Build a friendly preview that proves what UTC instant we'll persist.
     const tz = data.timezone || browserTz();
@@ -1118,6 +1154,62 @@ function ScheduleStep({ data, setData, errors }) {
     const localPreview = utcIso ? formatInTz(utcIso, tz) : null;
     const browserPreview =
         utcIso && tz !== browserTz() ? formatInTz(utcIso, browserTz()) : null;
+    const deliverySteps = data.delivery_steps?.length ? data.delivery_steps : defaultDeliverySteps();
+    const estimatedSeconds =
+        deliverySteps.reduce((total, step, index) => {
+            const previousLimits = deliverySteps
+                .slice(0, index)
+                .reduce((sum, item) => sum + (Number(item.recipient_limit) || 0), 0);
+            const contacts =
+                step.recipient_limit == null
+                    ? Math.max(0, audienceCount - previousLimits)
+                    : Math.min(Number(step.recipient_limit) || 0, Math.max(0, audienceCount - previousLimits));
+            return (
+                total +
+                contacts / Math.max(1, Math.min(5, Number(step.rate_per_second) || 5)) +
+                Number(step.delay_after_previous_seconds || 0)
+            );
+        }, 0);
+
+    const updateDeliveryStep = (index, patch) => {
+        setData(
+            'delivery_steps',
+            deliverySteps.map((item, itemIndex) =>
+                itemIndex === index ? { ...item, ...patch } : item,
+            ),
+        );
+    };
+
+    const addDeliveryStep = () => {
+        if (deliverySteps.length >= 10) return;
+        const next = deliverySteps.map((item, index) =>
+            index === deliverySteps.length - 1 && item.recipient_limit == null
+                ? { ...item, recipient_limit: 1000 }
+                : item,
+        );
+        next.push({
+            name: `Step ${next.length + 1}`,
+            recipient_limit: null,
+            delay_after_previous_seconds: 600,
+            rate_per_second: 5,
+        });
+        setData('delivery_steps', next);
+    };
+
+    const removeDeliveryStep = (index) => {
+        if (deliverySteps.length <= 1) return;
+        const next = deliverySteps.filter((_, itemIndex) => itemIndex !== index);
+        next[next.length - 1] = { ...next[next.length - 1], recipient_limit: null };
+        setData('delivery_steps', next);
+    };
+
+    const formatDuration = (seconds) => {
+        if (!Number.isFinite(seconds) || seconds <= 0) return '—';
+        const hours = Math.floor(seconds / 3600);
+        const minutes = Math.ceil((seconds % 3600) / 60);
+        if (hours === 0) return `${minutes} minutes`;
+        return `${hours}h ${minutes}m`;
+    };
 
     return (
         <>
@@ -1169,6 +1261,158 @@ function ScheduleStep({ data, setData, errors }) {
                     )}
                 </div>
             )}
+
+            {data.channel === 'sms' && (
+                <div className="space-y-3 border-t border-neutral-200 pt-4 dark:border-neutral-700">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                            <h4 className="flex items-center gap-2 text-sm font-semibold text-neutral-800 dark:text-neutral-100">
+                                <ShieldCheck className="h-4 w-4 text-emerald-600" />
+                                Safe delivery plan
+                            </h4>
+                            <p className="mt-1 max-w-2xl text-xs text-neutral-500 dark:text-neutral-400">
+                                Messages are released individually. Five per second means a minimum
+                                200 ms gap between provider requests, shared by every campaign using
+                                the same SMS account.
+                            </p>
+                        </div>
+                        <div className="rounded-lg bg-emerald-50 px-3 py-2 text-right dark:bg-emerald-950/30">
+                            <div className="text-[11px] font-medium uppercase tracking-wide text-emerald-700 dark:text-emerald-300">
+                                Estimated delivery
+                            </div>
+                            <div className="text-sm font-semibold text-emerald-900 dark:text-emerald-100">
+                                {formatDuration(estimatedSeconds)}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="space-y-3">
+                        {deliverySteps.map((deliveryStep, index) => {
+                            const isLast = index === deliverySteps.length - 1;
+                            return (
+                                <div
+                                    key={index}
+                                    className="rounded-lg border border-neutral-200 bg-neutral-50 p-4 dark:border-neutral-700 dark:bg-neutral-800/50"
+                                >
+                                    <div className="mb-3 flex items-center justify-between gap-2">
+                                        <span className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
+                                            Step {index + 1}
+                                        </span>
+                                        {deliverySteps.length > 1 && (
+                                            <button
+                                                type="button"
+                                                onClick={() => removeDeliveryStep(index)}
+                                                className="text-neutral-400 transition hover:text-red-500"
+                                                title="Remove delivery step"
+                                            >
+                                                <Trash2 className="h-4 w-4" />
+                                            </button>
+                                        )}
+                                    </div>
+                                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                                        <div>
+                                            <label className="text-xs font-medium text-neutral-600 dark:text-neutral-300">
+                                                Name
+                                            </label>
+                                            <input
+                                                value={deliveryStep.name}
+                                                onChange={(event) =>
+                                                    updateDeliveryStep(index, { name: event.target.value })
+                                                }
+                                                className={inputClass}
+                                                maxLength={80}
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="text-xs font-medium text-neutral-600 dark:text-neutral-300">
+                                                Recipients
+                                            </label>
+                                            {isLast ? (
+                                                <div className="mt-1 rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm text-neutral-500 dark:border-neutral-600 dark:bg-neutral-800">
+                                                    All remaining
+                                                </div>
+                                            ) : (
+                                                <input
+                                                    type="number"
+                                                    min="1"
+                                                    value={deliveryStep.recipient_limit ?? ''}
+                                                    onChange={(event) =>
+                                                        updateDeliveryStep(index, {
+                                                            recipient_limit: Math.max(1, Number(event.target.value) || 1),
+                                                        })
+                                                    }
+                                                    className={inputClass}
+                                                />
+                                            )}
+                                        </div>
+                                        <div>
+                                            <label className="text-xs font-medium text-neutral-600 dark:text-neutral-300">
+                                                Speed
+                                            </label>
+                                            <select
+                                                value={deliveryStep.rate_per_second}
+                                                onChange={(event) =>
+                                                    updateDeliveryStep(index, {
+                                                        rate_per_second: Math.min(5, Math.max(1, Number(event.target.value))),
+                                                    })
+                                                }
+                                                className={inputClass}
+                                            >
+                                                {[1, 2, 3, 4, 5].map((rate) => (
+                                                    <option key={rate} value={rate}>
+                                                        {rate} SMS/sec ({Math.ceil(1000 / rate)} ms gap)
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="text-xs font-medium text-neutral-600 dark:text-neutral-300">
+                                                Wait before step
+                                            </label>
+                                            <select
+                                                value={deliveryStep.delay_after_previous_seconds}
+                                                onChange={(event) =>
+                                                    updateDeliveryStep(index, {
+                                                        delay_after_previous_seconds: Number(event.target.value),
+                                                    })
+                                                }
+                                                disabled={index === 0}
+                                                className={inputClass}
+                                            >
+                                                <option value={0}>No wait</option>
+                                                <option value={180}>3 minutes</option>
+                                                <option value={300}>5 minutes</option>
+                                                <option value={600}>10 minutes</option>
+                                                <option value={1800}>30 minutes</option>
+                                                <option value={3600}>1 hour</option>
+                                                <option value={21600}>6 hours</option>
+                                                <option value={86400}>24 hours</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+
+                    <button
+                        type="button"
+                        onClick={addDeliveryStep}
+                        disabled={deliverySteps.length >= 10}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-neutral-300 px-3 py-2 text-xs font-medium text-neutral-700 transition hover:bg-neutral-50 disabled:opacity-50 dark:border-neutral-600 dark:text-neutral-300 dark:hover:bg-neutral-800"
+                    >
+                        <Plus className="h-3.5 w-3.5" />
+                        Add delivery step
+                    </button>
+
+                    <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
+                        Campaigns with 10,000 or more recipients receive exclusive access to the
+                        provider account. Other campaigns wait for capacity and cannot multiply the
+                        five-per-second limit.
+                    </div>
+                    <FieldError message={errors.delivery_steps} />
+                </div>
+            )}
         </>
     );
 }
@@ -1216,6 +1460,29 @@ function ReviewStep({
                         <dt className="w-32 shrink-0 font-medium text-neutral-500 dark:text-neutral-400">{t('campaign.template')}</dt>
                         <dd className="text-neutral-900 dark:text-neutral-100 font-mono">
                             {data.template_ref.name} ({data.template_ref.language})
+                        </dd>
+                    </div>
+                )}
+                {data.channel === 'sms' && (
+                    <div className="flex gap-3 sm:col-span-2">
+                        <dt className="w-32 shrink-0 font-medium text-neutral-500 dark:text-neutral-400">
+                            Delivery plan
+                        </dt>
+                        <dd className="space-y-1 text-neutral-900 dark:text-neutral-100">
+                            {(data.delivery_steps ?? []).map((deliveryStep, index) => (
+                                <div key={index} className="text-xs">
+                                    <span className="font-medium">{index + 1}. {deliveryStep.name}</span>
+                                    {' · '}
+                                    {deliveryStep.recipient_limit == null
+                                        ? 'remaining contacts'
+                                        : Number(deliveryStep.recipient_limit).toLocaleString()}
+                                    {' · '}
+                                    {deliveryStep.rate_per_second} SMS/sec
+                                    {index > 0 && Number(deliveryStep.delay_after_previous_seconds) > 0
+                                        ? ` · waits ${Math.round(Number(deliveryStep.delay_after_previous_seconds) / 60)} min`
+                                        : ''}
+                                </div>
+                            ))}
                         </dd>
                     </div>
                 )}

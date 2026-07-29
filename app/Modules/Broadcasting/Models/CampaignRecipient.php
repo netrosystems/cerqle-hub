@@ -18,8 +18,10 @@ class CampaignRecipient extends Model
     }
 
     protected $fillable = [
-        'campaign_id', 'contact_id', 'status', 'provider_message_id', 'tracking_token', 'unsubscribe_token',
+        'campaign_id', 'campaign_step_id', 'contact_id', 'status', 'attempts',
+        'next_attempt_at', 'claimed_at', 'provider_message_id', 'tracking_token', 'unsubscribe_token',
         'sent_at', 'delivered_at', 'read_at', 'clicked_at', 'opted_out_at', 'failed_reason',
+        'failure_class', 'idempotency_key',
     ];
 
     protected function casts(): array
@@ -30,6 +32,9 @@ class CampaignRecipient extends Model
             'read_at' => 'datetime',
             'clicked_at' => 'datetime',
             'opted_out_at' => 'datetime',
+            'next_attempt_at' => 'datetime',
+            'claimed_at' => 'datetime',
+            'attempts' => 'integer',
         ];
     }
 
@@ -41,5 +46,10 @@ class CampaignRecipient extends Model
     public function contact(): BelongsTo
     {
         return $this->belongsTo(Contact::class);
+    }
+
+    public function step(): BelongsTo
+    {
+        return $this->belongsTo(CampaignStep::class, 'campaign_step_id');
     }
 }

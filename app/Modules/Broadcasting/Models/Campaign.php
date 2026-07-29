@@ -51,6 +51,9 @@ class Campaign extends Model
     protected $fillable = [
         'workspace_id', 'name', 'channel', 'whatsapp_phone_number_id', 'audience_type', 'audience_ref',
         'template_ref', 'payload_json', 'schedule_at', 'timezone', 'status', 'totals_json', 'created_by',
+        'provider_key', 'estimated_recipients', 'prepared_recipients', 'preparation_cursor',
+        'preparation_offset', 'audience_cutoff_id', 'is_large', 'pause_reason',
+        'audience_prepared_at', 'started_at', 'completed_at',
     ];
 
     protected function casts(): array
@@ -60,12 +63,26 @@ class Campaign extends Model
             'payload_json' => 'array',
             'totals_json' => 'array',
             'schedule_at' => 'datetime',
+            'estimated_recipients' => 'integer',
+            'prepared_recipients' => 'integer',
+            'preparation_cursor' => 'integer',
+            'preparation_offset' => 'integer',
+            'audience_cutoff_id' => 'integer',
+            'is_large' => 'boolean',
+            'audience_prepared_at' => 'datetime',
+            'started_at' => 'datetime',
+            'completed_at' => 'datetime',
         ];
     }
 
     public function recipients(): HasMany
     {
         return $this->hasMany(CampaignRecipient::class);
+    }
+
+    public function steps(): HasMany
+    {
+        return $this->hasMany(CampaignStep::class)->orderBy('position');
     }
 
     public function updateTotals(): void
@@ -89,13 +106,16 @@ class Campaign extends Model
 
         $this->update([
             'totals_json' => [
-                'total'        => array_sum($counts),
-                'queued'       => $counts['queued'] ?? 0,
-                'sent'         => $counts['sent'] ?? 0,
-                'delivered'    => $counts['delivered'] ?? 0,
-                'read'         => $counts['read'] ?? 0,
-                'failed'       => $counts['failed'] ?? 0,
-                'clicked'      => $clicked,
+                'total' => array_sum($counts),
+                'queued' => ($counts['queued'] ?? 0)
+                    + ($counts['dispatching'] ?? 0)
+                    + ($counts['sending'] ?? 0),
+                'retrying' => $counts['retrying'] ?? 0,
+                'sent' => $counts['sent'] ?? 0,
+                'delivered' => $counts['delivered'] ?? 0,
+                'read' => $counts['read'] ?? 0,
+                'failed' => $counts['failed'] ?? 0,
+                'clicked' => $clicked,
                 'unsubscribed' => $unsubscribed,
             ],
         ]);

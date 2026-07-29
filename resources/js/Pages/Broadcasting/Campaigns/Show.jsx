@@ -19,10 +19,23 @@ import { browserTz, formatInTz } from '@/Utils/datetime';
 const STATUS_COLORS = {
     draft: 'bg-neutral-100 text-neutral-600',
     queued: 'bg-blue-100 text-blue-700',
+    waiting_capacity: 'bg-sky-100 text-sky-700',
+    preparing: 'bg-indigo-100 text-indigo-700',
     sending: 'bg-yellow-100 text-yellow-700',
+    retrying: 'bg-amber-100 text-amber-700',
     paused: 'bg-orange-100 text-orange-700',
+    safety_paused: 'bg-red-100 text-red-700',
     completed: 'bg-green-100 text-green-700',
+    completed_with_failures: 'bg-lime-100 text-lime-800',
     failed: 'bg-red-100 text-red-700',
+};
+
+const STATUS_FALLBACKS = {
+    waiting_capacity: 'Waiting for capacity',
+    preparing: 'Preparing audience',
+    retrying: 'Retrying',
+    safety_paused: 'Safety paused',
+    completed_with_failures: 'Completed with failures',
 };
 
 const STATUS_LABEL_KEYS = {
@@ -61,10 +74,16 @@ export default function CampaignShow({ campaign, sample = [], reportUrl }) {
     const userTz = props.timezone || browserTz() || 'Asia/Dhaka';
     const totals = campaign.totals_json ?? {};
     const total = totals.total || 1;
+    const processed =
+        (totals.sent ?? 0) + (totals.delivered ?? 0) + (totals.read ?? 0) + (totals.failed ?? 0);
+    const remaining = Math.max(0, (totals.total ?? campaign.estimated_recipients ?? 0) - processed);
+    const activeStep = campaign.steps?.find((step) => step.status === 'active');
+    const activeRate = Math.max(1, Math.min(5, activeStep?.rate_per_second ?? 5));
+    const etaHours = remaining > 0 ? remaining / activeRate / 3600 : 0;
 
     // Auto-refresh while a campaign is actively sending so the user sees live progress.
     useEffect(() => {
-        if (!['queued', 'sending'].includes(campaign.status)) return;
+        if (!['queued', 'waiting_capacity', 'preparing', 'sending', 'retrying'].includes(campaign.status)) return;
         const id = setInterval(() => {
             router.reload({ only: ['campaign', 'sample'] });
         }, 8000);
@@ -78,6 +97,7 @@ export default function CampaignShow({ campaign, sample = [], reportUrl }) {
     const metrics = [
         { key: 'total', label: t('campaign.metric_total'), value: totals.total ?? 0, color: 'bg-neutral-500' },
         { key: 'sent', label: t('campaign.metric_sent'), value: totals.sent ?? 0, color: 'bg-blue-500' },
+        { key: 'retrying', label: 'Retry scheduled', value: totals.retrying ?? 0, color: 'bg-amber-500' },
         { key: 'delivered', label: t('campaign.metric_delivered'), value: totals.delivered ?? 0, color: 'bg-green-500' },
         { key: 'read', label: t('campaign.metric_read'), value: totals.read ?? 0, color: 'bg-purple-500' },
         { key: 'failed', label: t('campaign.metric_failed'), value: totals.failed ?? 0, color: 'bg-red-500' },
@@ -93,7 +113,7 @@ export default function CampaignShow({ campaign, sample = [], reportUrl }) {
         }
     };
 
-    const canEdit = ['draft', 'queued', 'paused'].includes(campaign.status);
+    const canEdit = ['draft', 'queued', 'paused', 'safety_paused'].includes(campaign.status);
 
     return (
         <ClientLayout title={campaign.name}>
@@ -113,7 +133,9 @@ export default function CampaignShow({ campaign, sample = [], reportUrl }) {
                                 STATUS_COLORS[campaign.status] ?? ''
                             }`}
                         >
-                            {STATUS_LABEL_KEYS[campaign.status] ? t(STATUS_LABEL_KEYS[campaign.status]) : campaign.status}
+                            {STATUS_LABEL_KEYS[campaign.status]
+                                ? t(STATUS_LABEL_KEYS[campaign.status])
+                                : STATUS_FALLBACKS[campaign.status] ?? campaign.status}
                         </span>
                     </h2>
                     <div className="ml-auto flex flex-wrap gap-2">
@@ -147,7 +169,7 @@ export default function CampaignShow({ campaign, sample = [], reportUrl }) {
                                 <Play className="h-4 w-4" /> {t('campaign.launch')}
                             </button>
                         )}
-                        {campaign.status === 'sending' && (
+                        {['preparing', 'sending', 'retrying'].includes(campaign.status) && (
                             <button
                                 onClick={handlePause}
                                 className="flex items-center gap-1.5 rounded-lg bg-orange-500 px-3 py-2 text-sm font-medium text-white hover:bg-orange-600 transition"
@@ -155,7 +177,7 @@ export default function CampaignShow({ campaign, sample = [], reportUrl }) {
                                 <Pause className="h-4 w-4" /> {t('campaign.pause')}
                             </button>
                         )}
-                        {campaign.status === 'paused' && (
+                        {['paused', 'safety_paused'].includes(campaign.status) && (
                             <button
                                 onClick={handleLaunch}
                                 className="flex items-center gap-1.5 rounded-lg bg-green-600 px-3 py-2 text-sm font-medium text-white hover:bg-green-700 transition"
@@ -173,6 +195,65 @@ export default function CampaignShow({ campaign, sample = [], reportUrl }) {
                             {t('campaign.sending_in')} <span className="font-mono font-semibold">{countdown}</span>
                             {` (${campaign.timezone || userTz})`}
                         </span>
+                    </div>
+                )}
+
+                {campaign.pause_reason && (
+                    <div
+                        className={`rounded-lg border px-4 py-3 text-sm ${
+                            campaign.status === 'safety_paused'
+                                ? 'border-red-200 bg-red-50 text-red-800 dark:border-red-900 dark:bg-red-950/30 dark:text-red-200'
+                                : 'border-sky-200 bg-sky-50 text-sky-800 dark:border-sky-900 dark:bg-sky-950/30 dark:text-sky-200'
+                        }`}
+                    >
+                        {campaign.pause_reason}
+                    </div>
+                )}
+
+                {campaign.channel === 'sms' && campaign.steps?.length > 0 && (
+                    <div className="rounded-xl border border-neutral-200 bg-white p-5 dark:border-neutral-700 dark:bg-neutral-900">
+                        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                            <div>
+                                <h3 className="font-medium text-neutral-800 dark:text-neutral-200">Safe delivery plan</h3>
+                                <p className="mt-1 text-xs text-neutral-500">
+                                    Provider-wide limit: {activeRate} SMS/sec · minimum {Math.ceil(1000 / activeRate)} ms between starts
+                                </p>
+                            </div>
+                            <div className="text-right text-xs text-neutral-500">
+                                <div>{remaining.toLocaleString()} remaining</div>
+                                {remaining > 0 && (
+                                    <div className="font-medium text-neutral-700 dark:text-neutral-300">
+                                        ETA {etaHours >= 1 ? `${etaHours.toFixed(1)} hours` : `${Math.ceil(etaHours * 60)} minutes`}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                        <div className="space-y-2">
+                            {campaign.steps.map((deliveryStep) => (
+                                <div
+                                    key={deliveryStep.id}
+                                    className="flex flex-wrap items-center gap-2 rounded-lg bg-neutral-50 px-3 py-2 text-xs dark:bg-neutral-800"
+                                >
+                                    <span className="font-semibold text-neutral-800 dark:text-neutral-100">
+                                        {deliveryStep.position}. {deliveryStep.name}
+                                    </span>
+                                    <span className="text-neutral-500">
+                                        {deliveryStep.recipient_limit == null
+                                            ? 'Remaining contacts'
+                                            : `${Number(deliveryStep.recipient_limit).toLocaleString()} contacts`}
+                                    </span>
+                                    <span className="text-neutral-500">{deliveryStep.rate_per_second} SMS/sec</span>
+                                    {deliveryStep.position > 1 && deliveryStep.delay_after_previous_seconds > 0 && (
+                                        <span className="text-neutral-500">
+                                            waits {Math.round(deliveryStep.delay_after_previous_seconds / 60)} min
+                                        </span>
+                                    )}
+                                    <span className="ml-auto rounded-full bg-white px-2 py-0.5 font-medium text-neutral-600 dark:bg-neutral-700 dark:text-neutral-200">
+                                        {deliveryStep.status}
+                                    </span>
+                                </div>
+                            ))}
+                        </div>
                     </div>
                 )}
 

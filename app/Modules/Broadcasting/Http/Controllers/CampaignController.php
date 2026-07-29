@@ -3,12 +3,16 @@
 namespace App\Modules\Broadcasting\Http\Controllers;
 
 use App\Http\Controllers\Controller;
+use App\Models\SmtpConfiguration;
 use App\Modules\Broadcasting\Jobs\LaunchCampaignJob;
 use App\Modules\Broadcasting\Models\Campaign;
 use App\Modules\Broadcasting\Models\CampaignRecipient;
 use App\Modules\Broadcasting\Models\UsageMeter;
+use App\Modules\Broadcasting\Models\WorkspaceSmtpConfig;
 use App\Modules\Broadcasting\Services\CampaignPersonalizer;
+use App\Modules\Broadcasting\Services\CampaignStepService;
 use App\Modules\Broadcasting\Services\Sms\SmsDriverManager;
+use App\Modules\Broadcasting\Services\SmsCampaignCapacityService;
 use App\Modules\Shared\Models\Contact;
 use App\Modules\Shared\Models\ContactTag;
 use App\Modules\Shared\Models\Segment;
@@ -16,9 +20,11 @@ use App\Modules\Shared\Services\SegmentResolver;
 use App\Modules\Whatsapp\Models\WhatsappBusinessAccount;
 use App\Modules\Whatsapp\Models\WhatsappTemplate;
 use App\Modules\Whatsapp\Services\CloudApiClient;
+use App\Services\Mail\MailService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -51,11 +57,14 @@ class CampaignController extends Controller
         $workspaceId = $this->workspaceId($request);
         $validated = $this->validateCampaign($request);
 
+        $steps = $validated['delivery_steps'] ?? null;
+        unset($validated['delivery_steps']);
         $campaign = Campaign::create(array_merge($validated, [
             'workspace_id' => $workspaceId,
             'status' => 'draft',
             'created_by' => $request->user()->id,
         ]));
+        app(CampaignStepService::class)->sync($campaign, $steps);
 
         return redirect()->route('client.campaigns.show', $campaign)->with('success', 'Campaign created.');
     }
@@ -75,28 +84,33 @@ class CampaignController extends Controller
         $workspaceId = $this->workspaceId($request);
 
         $validated = $request->validate([
-            'uuid'                      => ['nullable', 'string', 'uuid'],
-            'name'                      => ['required', 'string', 'max:128'],
-            'channel'                   => ['required', 'in:whatsapp,sms'],
-            'whatsapp_phone_number_id'  => ['nullable', 'string'],
-            'audience_type'             => ['nullable', 'in:segment,contact_list,tag,csv'],
-            'audience_ref'              => ['nullable', 'string'],
-            'template_ref'              => ['nullable', 'array'],
-            'payload_json'              => ['nullable', 'array'],
-            'schedule_at'               => ['nullable', 'date'],
-            'timezone'                  => ['nullable', 'string', 'max:64'],
+            'uuid' => ['nullable', 'string', 'uuid'],
+            'name' => ['required', 'string', 'max:128'],
+            'channel' => ['required', 'in:whatsapp,sms'],
+            'whatsapp_phone_number_id' => ['nullable', 'string'],
+            'audience_type' => ['nullable', 'in:segment,contact_list,tag,csv'],
+            'audience_ref' => ['nullable', 'string'],
+            'template_ref' => ['nullable', 'array'],
+            'payload_json' => ['nullable', 'array'],
+            'schedule_at' => ['nullable', 'date'],
+            'timezone' => ['nullable', 'string', 'max:64'],
+            'delivery_steps' => ['nullable', 'array', 'max:10'],
+            'delivery_steps.*.name' => ['required', 'string', 'max:80'],
+            'delivery_steps.*.recipient_limit' => ['nullable', 'integer', 'min:1'],
+            'delivery_steps.*.delay_after_previous_seconds' => ['required', 'integer', 'min:0', 'max:86400'],
+            'delivery_steps.*.rate_per_second' => ['required', 'integer', 'min:1', 'max:5'],
         ]);
 
         $fields = array_filter([
-            'name'                     => $validated['name'],
-            'channel'                  => $validated['channel'],
+            'name' => $validated['name'],
+            'channel' => $validated['channel'],
             'whatsapp_phone_number_id' => $validated['whatsapp_phone_number_id'] ?? null,
-            'audience_type'            => $validated['audience_type'] ?? null,
-            'audience_ref'             => $validated['audience_ref'] ?? null,
-            'template_ref'             => $validated['template_ref'] ?? null,
-            'payload_json'             => $validated['payload_json'] ?? null,
-            'schedule_at'              => $validated['schedule_at'] ?? null,
-            'timezone'                 => $validated['timezone'] ?? null,
+            'audience_type' => $validated['audience_type'] ?? null,
+            'audience_ref' => $validated['audience_ref'] ?? null,
+            'template_ref' => $validated['template_ref'] ?? null,
+            'payload_json' => $validated['payload_json'] ?? null,
+            'schedule_at' => $validated['schedule_at'] ?? null,
+            'timezone' => $validated['timezone'] ?? null,
         ], fn ($v) => $v !== null);
 
         if (! empty($validated['uuid'])) {
@@ -107,16 +121,19 @@ class CampaignController extends Controller
 
             if ($existing) {
                 $existing->update($fields);
+                app(CampaignStepService::class)->sync($existing, $validated['delivery_steps'] ?? null);
+
                 return response()->json(['uuid' => $existing->uuid]);
             }
         }
 
         $campaign = Campaign::create(array_merge($fields, [
-            'workspace_id'  => $workspaceId,
+            'workspace_id' => $workspaceId,
             'audience_type' => $fields['audience_type'] ?? 'segment',
-            'status'        => 'draft',
-            'created_by'    => $request->user()->id,
+            'status' => 'draft',
+            'created_by' => $request->user()->id,
         ]));
+        app(CampaignStepService::class)->sync($campaign, $validated['delivery_steps'] ?? null);
 
         return response()->json(['uuid' => $campaign->uuid]);
     }
@@ -124,24 +141,30 @@ class CampaignController extends Controller
     public function edit(Request $request, Campaign $campaign): Response
     {
         $this->authorise($request, $campaign);
-        abort_unless(in_array($campaign->status, ['draft', 'queued', 'paused'], true), 422, 'Only draft, queued, or paused campaigns can be edited.');
+        abort_unless(in_array($campaign->status, ['draft', 'queued', 'paused', 'safety_paused'], true), 422, 'Only draft, queued, paused, or safety-paused campaigns can be edited.');
+
+        $campaign->load('steps');
 
         return Inertia::render('Broadcasting/Campaigns/Edit', array_merge(
             $this->wizardProps($request),
-            ['campaign' => $campaign->only(
+            ['campaign' => array_merge($campaign->only(
                 'id', 'uuid', 'name', 'channel', 'whatsapp_phone_number_id', 'audience_type', 'audience_ref',
                 'template_ref', 'payload_json', 'schedule_at', 'timezone', 'status',
-            )],
+            ), ['steps' => $campaign->steps])],
         ));
     }
 
     public function update(Request $request, Campaign $campaign): RedirectResponse
     {
         $this->authorise($request, $campaign);
-        abort_unless(in_array($campaign->status, ['draft', 'queued', 'paused'], true), 422, 'Only draft, queued, or paused campaigns can be edited.');
+        abort_unless(in_array($campaign->status, ['draft', 'queued', 'paused', 'safety_paused'], true), 422, 'Only draft, queued, paused, or safety-paused campaigns can be edited.');
 
         $validated = $this->validateCampaign($request);
+        $steps = $validated['delivery_steps'] ?? null;
+        unset($validated['delivery_steps']);
+        $this->assertPreparedAudienceIsUnchanged($campaign, $validated);
         $campaign->update($validated);
+        app(CampaignStepService::class)->sync($campaign, $steps);
 
         return redirect()->route('client.campaigns.show', $campaign)->with('success', 'Campaign updated.');
     }
@@ -152,12 +175,14 @@ class CampaignController extends Controller
 
         // Only recalculate totals for campaigns that are still changing.
         // Completed/failed/draft campaigns have stable totals stored in totals_json.
-        if (in_array($campaign->status, ['queued', 'sending', 'paused'], true)) {
+        if (in_array($campaign->status, [
+            'queued', 'waiting_capacity', 'preparing', 'sending', 'retrying', 'paused', 'safety_paused',
+        ], true)) {
             $campaign->updateTotals();
             $campaign->refresh();
         }
 
-        $campaign->loadCount('recipients');
+        $campaign->loadCount('recipients')->load('steps');
 
         $recipientStats = CampaignRecipient::where('campaign_id', $campaign->id)
             ->selectRaw('status, count(*) as cnt')
@@ -181,7 +206,7 @@ class CampaignController extends Controller
     public function launch(Request $request, Campaign $campaign): RedirectResponse
     {
         $this->authorise($request, $campaign);
-        abort_unless(in_array($campaign->status, ['draft', 'paused'], true), 422, 'Cannot launch this campaign.');
+        abort_unless(in_array($campaign->status, ['draft', 'paused', 'safety_paused'], true), 422, 'Cannot launch this campaign.');
 
         $patch = ['status' => 'queued'];
 
@@ -213,7 +238,7 @@ class CampaignController extends Controller
     public function pause(Request $request, Campaign $campaign): RedirectResponse
     {
         $this->authorise($request, $campaign);
-        abort_unless(in_array($campaign->status, ['queued', 'sending'], true), 422, 'Only queued or sending campaigns can be paused.');
+        abort_unless(in_array($campaign->status, ['queued', 'preparing', 'sending', 'retrying'], true), 422, 'Only active campaigns can be paused.');
         $campaign->update(['status' => 'paused']);
 
         return back()->with('success', 'Campaign paused.');
@@ -222,6 +247,9 @@ class CampaignController extends Controller
     public function destroy(Request $request, Campaign $campaign): RedirectResponse
     {
         $this->authorise($request, $campaign);
+        if ($campaign->channel === 'sms') {
+            app(SmsCampaignCapacityService::class)->release($campaign);
+        }
         $campaign->delete();
 
         return redirect()->route('client.campaigns.index')->with('success', 'Campaign deleted.');
@@ -241,13 +269,13 @@ class CampaignController extends Controller
             'channel' => ['required', 'in:whatsapp,sms'],
         ]);
 
-        $contactIds = $this->resolveAudienceForPreview(
+        $query = $this->audienceQueryForPreview(
             $workspaceId,
             $validated['audience_type'],
             $validated['audience_ref'] ?? null,
         );
 
-        $totalMatched = count($contactIds);
+        $totalMatched = (clone $query)->count('contacts.id');
 
         $optInColumn = match ($validated['channel']) {
             'whatsapp' => 'opt_in_whatsapp',
@@ -258,15 +286,13 @@ class CampaignController extends Controller
         $sample = [];
 
         if ($totalMatched > 0) {
-            $query = Contact::query()
-                ->where('workspace_id', $workspaceId)
-                ->whereIn('id', $contactIds)
+            $deliverableQuery = (clone $query)
                 ->where($optInColumn, true);
 
-            $query->whereNotNull('phone_e164')->where('phone_e164', '!=', '');
+            $deliverableQuery->whereNotNull('phone_e164')->where('phone_e164', '!=', '');
 
-            $deliverable = $query->count();
-            $sample = $query->limit(5)
+            $deliverable = (clone $deliverableQuery)->count('contacts.id');
+            $sample = $deliverableQuery->limit(5)
                 ->get(['id', 'first_name', 'last_name', 'phone_e164', 'email']);
         }
 
@@ -333,10 +359,10 @@ class CampaignController extends Controller
         } catch (\Throwable $e) {
             // Log full details server-side; return a sanitised message to the client
             // so SMTP credentials, API keys, and internal paths are not disclosed.
-            \Illuminate\Support\Facades\Log::channel('json')->warning('campaign.test_send.failed', [
+            Log::channel('json')->warning('campaign.test_send.failed', [
                 'campaign_id' => $campaign->id,
-                'channel'     => $campaign->channel,
-                'error'       => $e->getMessage(),
+                'channel' => $campaign->channel,
+                'error' => $e->getMessage(),
             ]);
 
             $safe = match (true) {
@@ -359,6 +385,19 @@ class CampaignController extends Controller
         abort_unless((int) $campaign->workspace_id === (int) $workspaceId, 403);
     }
 
+    private function assertPreparedAudienceIsUnchanged(Campaign $campaign, array $validated): void
+    {
+        if (! $campaign->recipients()->exists()) {
+            return;
+        }
+
+        foreach (['channel', 'audience_type', 'audience_ref'] as $field) {
+            if (array_key_exists($field, $validated) && (string) $validated[$field] !== (string) $campaign->{$field}) {
+                abort(422, 'Channel and audience cannot change after campaign recipients have been prepared.');
+            }
+        }
+    }
+
     private function workspaceId(Request $request): int
     {
         return (int) ($request->user()->current_workspace_id ?? $request->user()->workspace_id);
@@ -367,15 +406,20 @@ class CampaignController extends Controller
     private function validateCampaign(Request $request): array
     {
         return $request->validate([
-            'name'                     => ['required', 'string', 'max:128'],
-            'channel'                  => ['required', 'in:whatsapp,sms'],
+            'name' => ['required', 'string', 'max:128'],
+            'channel' => ['required', 'in:whatsapp,sms'],
             'whatsapp_phone_number_id' => ['nullable', 'string'],
-            'audience_type'            => ['required', 'in:segment,contact_list,tag,csv'],
-            'audience_ref'             => ['nullable', 'string'],
-            'template_ref'             => ['nullable', 'array'],
-            'payload_json'             => ['nullable', 'array'],
-            'schedule_at'              => ['nullable', 'date'],
-            'timezone'                 => ['nullable', 'string', 'max:64'],
+            'audience_type' => ['required', 'in:segment,contact_list,tag,csv'],
+            'audience_ref' => ['nullable', 'string'],
+            'template_ref' => ['nullable', 'array'],
+            'payload_json' => ['nullable', 'array'],
+            'schedule_at' => ['nullable', 'date'],
+            'timezone' => ['nullable', 'string', 'max:64'],
+            'delivery_steps' => ['nullable', 'array', 'max:10'],
+            'delivery_steps.*.name' => ['required', 'string', 'max:80'],
+            'delivery_steps.*.recipient_limit' => ['nullable', 'integer', 'min:1'],
+            'delivery_steps.*.delay_after_previous_seconds' => ['required', 'integer', 'min:0', 'max:86400'],
+            'delivery_steps.*.rate_per_second' => ['required', 'integer', 'min:1', 'max:5'],
         ]);
     }
 
@@ -439,18 +483,18 @@ class CampaignController extends Controller
             ->get()
             ->flatMap(fn ($waba) => $waba->phoneNumbers->map(fn ($p) => [
                 'phone_number_id' => $p->phone_number_id,
-                'display_phone'   => $p->display_phone,
-                'verified_name'   => $p->verified_name,
-                'waba_id'         => $waba->waba_id,
+                'display_phone' => $p->display_phone,
+                'verified_name' => $p->verified_name,
+                'waba_id' => $waba->waba_id,
             ]))
             ->values();
 
         return [
-            'whatsappTemplates'    => $whatsappTemplates,
+            'whatsappTemplates' => $whatsappTemplates,
             'whatsappPhoneNumbers' => $whatsappPhoneNumbers,
-            'segments'             => $segments,
-            'tags'                 => $tags,
-            'contactTokens'        => CampaignPersonalizer::availableContactTokens(),
+            'segments' => $segments,
+            'tags' => $tags,
+            'contactTokens' => CampaignPersonalizer::availableContactTokens(),
         ];
     }
 
@@ -468,6 +512,29 @@ class CampaignController extends Controller
             'csv' => [],
             default => [],
         };
+    }
+
+    private function audienceQueryForPreview(int $workspaceId, string $type, ?string $ref)
+    {
+        return match ($type) {
+            'segment' => $this->segmentQueryForPreview($workspaceId, $ref),
+            'tag' => Contact::where('workspace_id', $workspaceId)
+                ->whereHas('tags', fn ($q) => $q->where('contact_tags.id', $ref)),
+            'contact_list' => Contact::where('workspace_id', $workspaceId),
+            default => Contact::whereRaw('1 = 0'),
+        };
+    }
+
+    private function segmentQueryForPreview(int $workspaceId, ?string $ref)
+    {
+        if (! $ref) {
+            return Contact::whereRaw('1 = 0');
+        }
+        $segment = Segment::where('workspace_id', $workspaceId)->find($ref);
+
+        return $segment
+            ? app(SegmentResolver::class)->query($segment)
+            : Contact::whereRaw('1 = 0');
     }
 
     /** @return array<int, int> */
@@ -564,18 +631,18 @@ class CampaignController extends Controller
             throw new \RuntimeException('Email is required for an email test send.');
         }
 
-        $payload   = $campaign->payload_json ?? [];
-        $subject   = $personalizer->renderText('[TEST] '.($payload['subject'] ?? 'No subject'), $contact);
-        $body      = $personalizer->renderText($payload['body'] ?? '', $contact);
+        $payload = $campaign->payload_json ?? [];
+        $subject = $personalizer->renderText('[TEST] '.($payload['subject'] ?? 'No subject'), $contact);
+        $body = $personalizer->renderText($payload['body'] ?? '', $contact);
         $fromEmail = filled($payload['from_email'] ?? '') ? $payload['from_email'] : null;
-        $fromName  = filled($payload['from_name']  ?? '') ? $payload['from_name']  : null;
-        $replyTo   = filled($payload['reply_to']   ?? '') ? $payload['reply_to']   : null;
+        $fromName = filled($payload['from_name'] ?? '') ? $payload['from_name'] : null;
+        $replyTo = filled($payload['reply_to'] ?? '') ? $payload['reply_to'] : null;
 
-        $smtp = \App\Modules\Broadcasting\Models\WorkspaceSmtpConfig::forWorkspace($campaign->workspace_id)
-            ?? \App\Models\SmtpConfiguration::getActive();
+        $smtp = WorkspaceSmtpConfig::forWorkspace($campaign->workspace_id)
+            ?? SmtpConfiguration::getActive();
 
         if ($smtp) {
-            app(\App\Services\Mail\MailService::class)->sendRaw(
+            app(MailService::class)->sendRaw(
                 $smtp, $contact->email, $subject, $body, [], $fromEmail, $fromName, $replyTo
             );
         } else {
