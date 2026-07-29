@@ -8,6 +8,7 @@ import {
     BarChart2,
     Users,
     Pencil,
+    Trash2,
     Clock,
     ExternalLink,
 } from 'lucide-react';
@@ -86,8 +87,13 @@ export default function CampaignShow({ campaign, sample = [], reportUrl }) {
         router.post(route('client.campaigns.launch', campaign.uuid), {}, { preserveScroll: true });
     const handlePause = () =>
         router.post(route('client.campaigns.pause', campaign.uuid), {}, { preserveScroll: true });
+    const handleDelete = () => {
+        if (confirm(t('campaign.delete_confirm'))) {
+            router.delete(route('client.campaigns.destroy', campaign.uuid));
+        }
+    };
 
-    const canEdit = ['draft', 'paused'].includes(campaign.status);
+    const canEdit = ['draft', 'queued', 'paused'].includes(campaign.status);
 
     return (
         <ClientLayout title={campaign.name}>
@@ -127,6 +133,12 @@ export default function CampaignShow({ campaign, sample = [], reportUrl }) {
                                 <BarChart2 className="h-4 w-4" /> {t('campaign.full_report')} <ExternalLink className="h-3 w-3" />
                             </a>
                         )}
+                        <button
+                            onClick={handleDelete}
+                            className="flex items-center gap-1.5 rounded-lg border border-red-200 dark:border-red-800 px-3 py-2 text-sm font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition"
+                        >
+                            <Trash2 className="h-4 w-4" /> {t('common.delete')}
+                        </button>
                         {campaign.status === 'draft' && (
                             <button
                                 onClick={handleLaunch}

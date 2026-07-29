@@ -124,7 +124,7 @@ class CampaignController extends Controller
     public function edit(Request $request, Campaign $campaign): Response
     {
         $this->authorise($request, $campaign);
-        abort_unless(in_array($campaign->status, ['draft', 'paused'], true), 422, 'Only drafts or paused campaigns can be edited.');
+        abort_unless(in_array($campaign->status, ['draft', 'queued', 'paused'], true), 422, 'Only draft, queued, or paused campaigns can be edited.');
 
         return Inertia::render('Broadcasting/Campaigns/Edit', array_merge(
             $this->wizardProps($request),
@@ -138,7 +138,7 @@ class CampaignController extends Controller
     public function update(Request $request, Campaign $campaign): RedirectResponse
     {
         $this->authorise($request, $campaign);
-        abort_unless(in_array($campaign->status, ['draft', 'paused'], true), 422, 'Only drafts or paused campaigns can be edited.');
+        abort_unless(in_array($campaign->status, ['draft', 'queued', 'paused'], true), 422, 'Only draft, queued, or paused campaigns can be edited.');
 
         $validated = $this->validateCampaign($request);
         $campaign->update($validated);
@@ -222,7 +222,6 @@ class CampaignController extends Controller
     public function destroy(Request $request, Campaign $campaign): RedirectResponse
     {
         $this->authorise($request, $campaign);
-        abort_unless($campaign->status === 'draft', 422, 'Only draft campaigns can be deleted.');
         $campaign->delete();
 
         return redirect()->route('client.campaigns.index')->with('success', 'Campaign deleted.');

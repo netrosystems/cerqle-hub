@@ -147,7 +147,7 @@ export default function CampaignsIndex({ campaigns, filters }) {
                                         ? Math.round((totals.delivered / totals.total) * 100)
                                         : 0;
                                 const live = ['queued', 'sending'].includes(c.status);
-                                const canEdit = ['draft', 'paused'].includes(c.status);
+                                const canEdit = ['draft', 'queued', 'paused'].includes(c.status);
                                 return (
                                     <tr key={c.id} className="hover:bg-neutral-50 dark:hover:bg-neutral-800/50">
                                         <td className="px-4 py-3 font-medium text-neutral-900 dark:text-neutral-100">
@@ -242,15 +242,13 @@ export default function CampaignsIndex({ campaigns, filters }) {
                                                         <Play className="h-4 w-4" />
                                                     </button>
                                                 )}
-                                                {c.status === 'draft' && (
-                                                    <button
-                                                        onClick={() => handleDelete(c.uuid)}
-                                                        title={t('common.delete')}
-                                                        className="text-neutral-400 hover:text-red-500 transition"
-                                                    >
-                                                        <Trash2 className="h-4 w-4" />
-                                                    </button>
-                                                )}
+                                                <button
+                                                    onClick={() => handleDelete(c.uuid)}
+                                                    title={t('common.delete')}
+                                                    className="text-neutral-400 hover:text-red-500 transition"
+                                                >
+                                                    <Trash2 className="h-4 w-4" />
+                                                </button>
                                             </div>
                                         </td>
                                     </tr>

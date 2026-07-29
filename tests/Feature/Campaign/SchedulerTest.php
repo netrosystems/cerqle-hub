@@ -7,6 +7,8 @@ use App\Models\Workspace;
 use App\Modules\Broadcasting\Jobs\LaunchCampaignJob;
 use App\Modules\Broadcasting\Jobs\LaunchScheduledCampaignsJob;
 use App\Modules\Broadcasting\Models\Campaign;
+use App\Modules\Broadcasting\Models\CampaignRecipient;
+use App\Modules\Shared\Models\Contact;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Queue;
 use PHPUnit\Framework\Attributes\Test;
@@ -41,7 +43,7 @@ class SchedulerTest extends TestCase
         ]);
 
         $this->actingAs($user)
-            ->post(route('client.campaigns.launch', $campaign->id))
+            ->post(route('client.campaigns.launch', $campaign))
             ->assertRedirect();
 
         $campaign->refresh();
@@ -69,7 +71,7 @@ class SchedulerTest extends TestCase
 
         // POST without schedule_at — must keep the existing schedule.
         $this->actingAs($user)
-            ->post(route('client.campaigns.launch', $campaign->id))
+            ->post(route('client.campaigns.launch', $campaign))
             ->assertRedirect();
 
         $campaign->refresh();
@@ -132,7 +134,7 @@ class SchedulerTest extends TestCase
 
         // Empty string explicitly clears the schedule and sends now.
         $this->actingAs($user)
-            ->post(route('client.campaigns.launch', $campaign->id), ['schedule_at' => ''])
+            ->post(route('client.campaigns.launch', $campaign), ['schedule_at' => ''])
             ->assertRedirect();
 
         $campaign->refresh();
@@ -211,7 +213,7 @@ class SchedulerTest extends TestCase
         $iso = '2030-06-01T18:00:00.000Z';
 
         $response = $this->actingAs($user)
-            ->patch(route('client.campaigns.update', $campaign->id), [
+            ->patch(route('client.campaigns.update', $campaign), [
                 'name' => $campaign->name,
                 'channel' => $campaign->channel,
                 'audience_type' => $campaign->audience_type,
@@ -228,5 +230,66 @@ class SchedulerTest extends TestCase
         $campaign->refresh();
         $this->assertSame('2030-06-01 18:00:00', $campaign->schedule_at->utc()->format('Y-m-d H:i:s'));
         $this->assertSame('Asia/Kolkata', $campaign->timezone);
+    }
+
+    #[Test]
+    public function a_queued_campaign_can_be_edited_before_sending_starts(): void
+    {
+        [$user, $workspace] = $this->ctx();
+
+        $campaign = Campaign::factory()->create([
+            'workspace_id' => $workspace->id,
+            'channel' => 'sms',
+            'audience_type' => 'contact_list',
+            'status' => 'queued',
+            'schedule_at' => now()->addHour(),
+        ]);
+
+        $response = $this->actingAs($user)
+            ->patch(route('client.campaigns.update', $campaign), [
+                'name' => 'Updated queued campaign',
+                'channel' => 'sms',
+                'audience_type' => 'contact_list',
+                'audience_ref' => null,
+                'template_ref' => $campaign->template_ref,
+                'payload_json' => ['body' => 'Updated before launch'],
+                'schedule_at' => now()->addHours(2)->toISOString(),
+                'timezone' => 'UTC',
+            ]);
+
+        $response->assertRedirect();
+        $response->assertSessionHasNoErrors();
+
+        $campaign->refresh();
+        $this->assertSame('queued', $campaign->status);
+        $this->assertSame('Updated queued campaign', $campaign->name);
+        $this->assertSame('Updated before launch', $campaign->payload_json['body']);
+    }
+
+    #[Test]
+    public function a_campaign_can_be_deleted_in_any_status(): void
+    {
+        [$user, $workspace] = $this->ctx();
+
+        foreach (['draft', 'queued', 'sending', 'paused', 'completed', 'failed'] as $status) {
+            $campaign = Campaign::factory()->create([
+                'workspace_id' => $workspace->id,
+                'channel' => 'sms',
+                'status' => $status,
+            ]);
+            $contact = Contact::factory()->create(['workspace_id' => $workspace->id]);
+            CampaignRecipient::create([
+                'campaign_id' => $campaign->id,
+                'contact_id' => $contact->id,
+                'status' => 'queued',
+            ]);
+
+            $this->actingAs($user)
+                ->delete(route('client.campaigns.destroy', $campaign))
+                ->assertRedirect(route('client.campaigns.index'));
+
+            $this->assertDatabaseMissing('campaigns', ['id' => $campaign->id]);
+            $this->assertDatabaseMissing('campaign_recipients', ['campaign_id' => $campaign->id]);
+        }
     }
 }
