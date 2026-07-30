@@ -3,7 +3,10 @@
 namespace App\Modules\Shared\Http\Controllers;
 
 use App\Http\Controllers\Controller;
+use App\Modules\Shared\Jobs\AddContactsToListJob;
+use App\Modules\Shared\Jobs\ImportContactsToListJob;
 use App\Modules\Shared\Models\Contact;
+use App\Modules\Shared\Models\ContactListOperation;
 use App\Modules\Shared\Models\Segment;
 use App\Modules\Shared\Services\SegmentResolver;
 use Illuminate\Http\RedirectResponse;
@@ -38,7 +41,7 @@ class SegmentController extends Controller
             $this->resolver->materialise($segment);
         }
 
-        return back()->with('success', 'Segment created.');
+        return back()->with('success', 'Contact list created.');
     }
 
     public function update(Request $request, Segment $segment): RedirectResponse
@@ -54,7 +57,7 @@ class SegmentController extends Controller
             $this->resolver->materialise($segment);
         }
 
-        return back()->with('success', 'Segment updated.');
+        return back()->with('success', 'Contact list updated.');
     }
 
     public function destroy(Request $request, Segment $segment): RedirectResponse
@@ -63,37 +66,49 @@ class SegmentController extends Controller
         $segment->contacts()->detach();
         $segment->delete();
 
-        return back()->with('success', 'Segment deleted.');
+        return back()->with('success', 'Contact list deleted.');
     }
 
     public function manageContacts(Request $request, Segment $segment): Response
     {
         $this->authorise($request, $segment);
-        abort_if($segment->type !== 'static', 403, 'Only static segments support manual contact management.');
+        abort_if($segment->type !== 'static', 403, 'Only static contact lists support manual contact management.');
 
         $workspaceId = $request->user()->current_workspace_id ?? $request->user()->workspace_id;
 
-        $segmentContacts = $segment->contacts()
-            ->orderBy('first_name')
-            ->get(['contacts.id', 'contacts.uuid', 'first_name', 'last_name', 'phone_e164', 'email', 'avatar']);
+        $search = trim((string) $request->input('search', ''));
 
-        $allContacts = Contact::where('workspace_id', $workspaceId)
-            ->when($request->search, fn ($q) => $q->where(function ($q) use ($request) {
-                $q->where('first_name', 'like', '%'.$request->search.'%')
-                    ->orWhere('last_name', 'like', '%'.$request->search.'%')
-                    ->orWhere('phone_e164', 'like', '%'.$request->search.'%')
-                    ->orWhere('email', 'like', '%'.$request->search.'%');
+        $segmentContacts = $segment->contacts()
+            ->orderByDesc('contacts.id')
+            ->paginate(25, ['contacts.id', 'contacts.uuid', 'first_name', 'last_name', 'phone_e164', 'email', 'avatar'], 'members_page')
+            ->withQueryString();
+
+        $availableQuery = Contact::where('workspace_id', $workspaceId)
+            ->when($search !== '', fn ($q) => $q->where(function ($q) use ($search) {
+                $q->where('first_name', 'like', '%'.$search.'%')
+                    ->orWhere('last_name', 'like', '%'.$search.'%')
+                    ->orWhere('phone_e164', 'like', '%'.$search.'%')
+                    ->orWhere('email', 'like', '%'.$search.'%');
             }))
-            ->whereNotIn('id', $segmentContacts->pluck('id'))
-            ->orderBy('first_name')
-            ->limit(50)
-            ->get(['id', 'uuid', 'first_name', 'last_name', 'phone_e164', 'email', 'avatar']);
+            ->whereDoesntHave('segments', fn ($q) => $q->whereKey($segment->id));
+
+        $availableCount = (clone $availableQuery)->count();
+        $allContacts = $availableQuery
+            ->orderByDesc('id')
+            ->paginate(50, ['id', 'uuid', 'first_name', 'last_name', 'phone_e164', 'email', 'avatar'], 'available_page')
+            ->withQueryString();
 
         return Inertia::render('Contacts/SegmentContacts', [
             'segment' => $segment,
             'segmentContacts' => $segmentContacts,
             'availableContacts' => $allContacts,
-            'filters' => $request->only('search'),
+            'availableCount' => $availableCount,
+            'filters' => ['search' => $search],
+            'operations' => ContactListOperation::where('workspace_id', $workspaceId)
+                ->where('segment_id', $segment->id)
+                ->latest()
+                ->limit(5)
+                ->get(),
         ]);
     }
 
@@ -102,15 +117,73 @@ class SegmentController extends Controller
         $this->authorise($request, $segment);
         abort_if($segment->type !== 'static', 403);
 
+        $workspaceId = (int) ($request->user()->current_workspace_id ?? $request->user()->workspace_id);
         $validated = $request->validate([
-            'contact_ids' => ['required', 'array', 'min:1'],
-            'contact_ids.*' => ['integer', 'exists:contacts,id'],
+            'selection' => ['required', 'in:selected,all'],
+            'contact_ids' => ['required_if:selection,selected', 'array', 'min:1', 'max:500'],
+            'contact_ids.*' => ['integer'],
+            'search' => ['nullable', 'string', 'max:191'],
         ]);
 
-        $segment->contacts()->syncWithoutDetaching($validated['contact_ids']);
+        if ($validated['selection'] === 'all') {
+            $search = trim((string) ($validated['search'] ?? ''));
+            $query = Contact::where('workspace_id', $workspaceId)
+                ->when($search !== '', fn ($q) => $q->where(function ($q) use ($search) {
+                    $q->where('first_name', 'like', '%'.$search.'%')
+                        ->orWhere('last_name', 'like', '%'.$search.'%')
+                        ->orWhere('phone_e164', 'like', '%'.$search.'%')
+                        ->orWhere('email', 'like', '%'.$search.'%');
+                }))
+                ->whereDoesntHave('segments', fn ($q) => $q->whereKey($segment->id));
+
+            $operation = ContactListOperation::create([
+                'workspace_id' => $workspaceId,
+                'segment_id' => $segment->id,
+                'created_by' => $request->user()->id,
+                'type' => 'add_existing',
+                'status' => 'queued',
+                'total' => (clone $query)->count(),
+                'options' => [
+                    'search' => $search,
+                    'max_contact_id' => (int) ((clone $query)->max('contacts.id') ?? 0),
+                ],
+            ]);
+            AddContactsToListJob::dispatch($operation->id);
+
+            return back()->with('success', number_format($operation->total).' contact(s) queued for this contact list.');
+        }
+
+        $contactIds = Contact::where('workspace_id', $workspaceId)
+            ->whereIn('id', $validated['contact_ids'])
+            ->pluck('id');
+        $segment->contacts()->syncWithoutDetaching($contactIds);
         $segment->update(['contact_count' => $segment->contacts()->count()]);
 
-        return back()->with('success', count($validated['contact_ids']).' contact(s) added to segment.');
+        return back()->with('success', $contactIds->count().' contact(s) added to the contact list.');
+    }
+
+    public function importContacts(Request $request, Segment $segment): RedirectResponse
+    {
+        $this->authorise($request, $segment);
+        abort_if($segment->type !== 'static', 403);
+
+        $workspaceId = (int) ($request->user()->current_workspace_id ?? $request->user()->workspace_id);
+        $validated = $request->validate([
+            'file' => ['required', 'file', 'mimes:csv,txt', 'max:102400'],
+        ]);
+        $path = $validated['file']->store('contact-list-imports', 'local');
+
+        $operation = ContactListOperation::create([
+            'workspace_id' => $workspaceId,
+            'segment_id' => $segment->id,
+            'created_by' => $request->user()->id,
+            'type' => 'csv_import',
+            'status' => 'queued',
+            'source_path' => $path,
+        ]);
+        ImportContactsToListJob::dispatch($operation->id);
+
+        return back()->with('success', 'CSV accepted. Contacts will be validated and added in the background.');
     }
 
     public function detachContact(Request $request, Segment $segment, Contact $contact): RedirectResponse
@@ -121,7 +194,7 @@ class SegmentController extends Controller
         $segment->contacts()->detach($contact->id);
         $segment->update(['contact_count' => $segment->contacts()->count()]);
 
-        return back()->with('success', 'Contact removed from segment.');
+        return back()->with('success', 'Contact removed from the contact list.');
     }
 
     private function authorise(Request $request, Segment $segment): void

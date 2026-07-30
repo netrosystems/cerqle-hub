@@ -2,7 +2,7 @@ import { Head, useForm, router } from '@inertiajs/react';
 import ClientLayout from '@/Layouts/ClientLayout';
 import EmptyState from '@/Components/EmptyState';
 import { useState } from 'react';
-import { Plus, Trash2, Filter, UserPlus } from 'lucide-react';
+import { Plus, Trash2, Filter } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 const FIELDS = ['first_name', 'last_name', 'phone_e164', 'email', 'country', 'language', 'source', 'opt_in_whatsapp', 'opt_in_sms', 'opt_in_email'];
@@ -68,7 +68,7 @@ export default function ContactsSegments({ segments }) {
             <div className="space-y-5">
                 <div className="flex items-center justify-between gap-3">
                     <div>
-                        <h2 className="text-xl font-semibold text-neutral-900 dark:text-neutral-100">{t('contacts_page.segments')}</h2>
+                        <h2 className="text-xl font-semibold text-neutral-900 dark:text-neutral-100">Contact Lists</h2>
                         <p className="text-sm text-neutral-500 dark:text-neutral-400 mt-0.5">{t('contacts_page.seg_subtitle')}</p>
                     </div>
                     {(
@@ -89,11 +89,13 @@ export default function ContactsSegments({ segments }) {
                             </div>
                             <p className="text-sm text-neutral-500 dark:text-neutral-400">{t('contacts_page.seg_contact_count', { count: seg.contact_count })}</p>
                             <div className="flex gap-2 mt-auto pt-2 border-t border-neutral-100 dark:border-neutral-800">
-                                <a href={route('client.contacts.index', { segment: seg.id })} className="flex-1 text-center text-xs font-medium text-brand-600 hover:text-brand-700 dark:text-brand-400">{t('contacts_page.seg_view_contacts')}</a>
                                 {seg.type === 'static' && (
-                                    <a href={route('client.segments.contacts', seg.id)} className="flex items-center gap-1 text-xs font-medium text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 px-1" title={t('contacts_page.seg_add_contacts')}>
-                                        <UserPlus className="h-4 w-4" />
+                                    <a href={route('client.segments.contacts', seg.id)} className="flex-1 text-center text-xs font-medium text-brand-600 hover:text-brand-700 dark:text-brand-400">
+                                        Add Contacts →
                                     </a>
+                                )}
+                                {seg.type === 'dynamic' && (
+                                    <a href={route('client.contacts.index', { segment: seg.id })} className="flex-1 text-center text-xs font-medium text-brand-600 hover:text-brand-700 dark:text-brand-400">View Contacts →</a>
                                 )}
                                 <button type="button" onClick={() => handleDelete(seg.id)} className="text-neutral-400 hover:text-red-500 transition"><Trash2 className="h-4 w-4" /></button>
                             </div>
