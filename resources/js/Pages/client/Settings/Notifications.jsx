@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Head, useForm, router } from '@inertiajs/react';
+import { Head, useForm, usePage } from '@inertiajs/react';
 import ClientLayout from '@/Layouts/ClientLayout';
 import { Bell, Mail, Smartphone, CheckCircle } from 'lucide-react';
 import { subscribeToPush, unsubscribeFromPush } from '@/push';
@@ -19,15 +19,22 @@ const EVENT_TYPES = [
     { key: 'billing_failed',      labelKey: 'settings.notif_event_billing_failed_label',     descriptionKey: 'settings.notif_event_billing_failed_desc' },
 ];
 
-const CHANNELS = [
+const VAPID_CHANNELS = [
     { key: 'mail',     labelKey: 'common.email',          icon: Mail },
     { key: 'web_push', labelKey: 'settings.channel_web_push', icon: Smartphone },
 ];
 
 export default function NotificationSettings({ preferences = {} }) {
     const { t } = useTranslation();
+    const { onesignal } = usePage().props;
     const { data, setData, post, processing, transform } = useForm({ preferences: [] });
     const [pushError, setPushError] = useState('');
+    const channels = onesignal?.enabled
+        ? [
+            { key: 'mail', labelKey: 'common.email', icon: Mail },
+            { key: 'one_signal', label: 'Push notifications', icon: Smartphone },
+        ]
+        : VAPID_CHANNELS;
 
     // Build the preference grid from props
     const getEnabled = (event, channel) => {
@@ -101,11 +108,11 @@ export default function NotificationSettings({ preferences = {} }) {
                 <div className="bg-white dark:bg-neutral-900 rounded-xl border border-neutral-200 dark:border-neutral-700 overflow-hidden">
                     {/* Header row */}
                     <div className="grid bg-neutral-50 dark:bg-neutral-800 border-b border-neutral-200 dark:border-neutral-700 px-6 py-3 text-xs font-semibold uppercase tracking-wider text-neutral-500 dark:text-neutral-400"
-                         style={{ gridTemplateColumns: '1fr repeat(2, 100px)' }}>
+                         style={{ gridTemplateColumns: `1fr repeat(${channels.length}, 100px)` }}>
                         <span>{t('notifications.col_event')}</span>
-                        {CHANNELS.map(ch => (
+                        {channels.map(ch => (
                             <span key={ch.key} className="text-center flex items-center justify-center gap-1">
-                                <ch.icon className="h-3.5 w-3.5" /> {t(ch.labelKey)}
+                                <ch.icon className="h-3.5 w-3.5" /> {ch.label ?? t(ch.labelKey)}
                             </span>
                         ))}
                     </div>
@@ -115,13 +122,13 @@ export default function NotificationSettings({ preferences = {} }) {
                         <div
                             key={evt.key}
                             className={`grid items-center px-6 py-4 ${i < EVENT_TYPES.length - 1 ? 'border-b border-neutral-100 dark:border-neutral-800' : ''}`}
-                            style={{ gridTemplateColumns: '1fr repeat(2, 100px)' }}
+                            style={{ gridTemplateColumns: `1fr repeat(${channels.length}, 100px)` }}
                         >
                             <div>
                                 <p className="text-sm font-medium text-neutral-900 dark:text-neutral-100">{t(evt.labelKey)}</p>
                                 <p className="text-xs text-neutral-500 dark:text-neutral-400">{t(evt.descriptionKey)}</p>
                             </div>
-                            {CHANNELS.map(ch => {
+                            {channels.map(ch => {
                                 if ((UNAVAILABLE[evt.key] ?? []).includes(ch.key)) {
                                     return (
                                         <div key={ch.key} className="flex justify-center">
@@ -149,7 +156,9 @@ export default function NotificationSettings({ preferences = {} }) {
                 </div>
 
                 <p className="text-xs text-neutral-400 dark:text-neutral-500">
-                    {t('settings.push_permission_hint')}
+                    {onesignal?.enabled
+                        ? 'Push permissions are managed by OneSignal. Turn this preference off to stop Cerqle notifications on your devices.'
+                        : t('settings.push_permission_hint')}
                 </p>
 
                 {pushError && (

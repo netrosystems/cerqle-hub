@@ -2,26 +2,27 @@
 
 namespace App\Services;
 
+use App\Modules\Integrations\Models\IntegrationConfig;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
 class OneSignalService
 {
-    private string $appId;
-
-    private string $restApiKey;
-
-    private const API_URL = 'https://onesignal.com/api/v1/notifications';
-
-    public function __construct()
-    {
-        $this->appId = (string) config('services.onesignal.app_id', '');
-        $this->restApiKey = (string) config('services.onesignal.rest_api_key', '');
-    }
+    private const API_URL = 'https://api.onesignal.com/notifications';
 
     public function isConfigured(): bool
     {
-        return $this->appId !== '' && $this->restApiKey !== '';
+        $config = $this->configuration();
+
+        return $config['enabled'] && $config['app_id'] !== '' && $config['rest_api_key'] !== '';
+    }
+
+    /** The only OneSignal value that may be rendered in the browser. */
+    public function publicAppId(): string
+    {
+        $config = $this->configuration();
+
+        return $config['enabled'] ? $config['app_id'] : '';
     }
 
     /**
@@ -29,14 +30,22 @@ class OneSignalService
      */
     public function sendToUser(int|string $userId, string $title, string $body, ?string $url = null, int|string|null $conversationId = null): void
     {
+        $this->sendToExternalId('user:'.$userId, $title, $body, $url, $conversationId);
+    }
+
+    /** Send a push message to a namespaced OneSignal external ID. */
+    public function sendToExternalId(string $externalId, string $title, string $body, ?string $url = null, int|string|null $conversationId = null): void
+    {
         if (! $this->isConfigured()) {
             return;
         }
 
+        $config = $this->configuration();
+
         $payload = [
-            'app_id'                        => $this->appId,
-            'include_external_user_ids'     => [(string) $userId],
-            'channel_for_external_user_ids' => 'push',
+            'app_id'                        => $config['app_id'],
+            'include_aliases'               => ['external_id' => [$externalId]],
+            'target_channel'                => 'push',
             'headings'                      => ['en' => $title],
             'contents'                      => ['en' => $body],
             'ios_badgeType'                 => 'Increase',
@@ -54,12 +63,12 @@ class OneSignalService
             $payload['data']                    = ['conversation_id' => $conversationId, 'url' => $url];
         }
 
-        $response = Http::withToken($this->restApiKey)
+        $response = Http::withHeaders(['Authorization' => 'Key '.$config['rest_api_key']])
             ->post(self::API_URL, $payload);
 
         if (! $response->successful()) {
             Log::warning('OneSignal notification failed', [
-                'user_id' => $userId,
+                'external_id' => $externalId,
                 'status'  => $response->status(),
                 'body'    => $response->body(),
             ]);
@@ -77,10 +86,12 @@ class OneSignalService
             return;
         }
 
+        $config = $this->configuration();
+
         $payload = [
-            'app_id' => $this->appId,
-            'include_external_user_ids' => array_map('strval', $userIds),
-            'channel_for_external_user_ids' => 'push',
+            'app_id' => $config['app_id'],
+            'include_aliases' => ['external_id' => array_map(fn ($id) => 'user:'.$id, $userIds)],
+            'target_channel' => 'push',
             'headings' => ['en' => $title],
             'contents' => ['en' => $body],
         ];
@@ -89,7 +100,7 @@ class OneSignalService
             $payload['url'] = $url;
         }
 
-        $response = Http::withToken($this->restApiKey)
+        $response = Http::withHeaders(['Authorization' => 'Key '.$config['rest_api_key']])
             ->post(self::API_URL, $payload);
 
         if (! $response->successful()) {
@@ -99,5 +110,35 @@ class OneSignalService
                 'body' => $response->body(),
             ]);
         }
+    }
+
+    /**
+     * Super-admin configuration overrides .env, including an explicit disabled
+     * state. The environment remains a safe fallback for existing deployments.
+     *
+     * @return array{enabled: bool, app_id: string, rest_api_key: string}
+     */
+    private function configuration(): array
+    {
+        try {
+            $saved = IntegrationConfig::forProvider('onesignal');
+            if ($saved) {
+                $credentials = $saved->credentials ?? [];
+
+                return [
+                    'enabled' => (bool) $saved->enabled,
+                    'app_id' => trim((string) ($credentials['app_id'] ?? '')),
+                    'rest_api_key' => trim((string) ($credentials['rest_api_key'] ?? '')),
+                ];
+            }
+        } catch (\Throwable) {
+            // During install/migrations integration_configs may not exist yet.
+        }
+
+        return [
+            'enabled' => filled(config('services.onesignal.app_id', '')),
+            'app_id' => trim((string) config('services.onesignal.app_id', '')),
+            'rest_api_key' => trim((string) config('services.onesignal.rest_api_key', '')),
+        ];
     }
 }

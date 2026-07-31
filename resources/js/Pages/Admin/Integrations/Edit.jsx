@@ -7,6 +7,18 @@ import { formatInTz } from '@/Utils/datetime';
 import { useTranslation, Trans } from 'react-i18next';
 
 const SETUP_GUIDES = {
+    onesignal: {
+        title: 'OneSignal Push Setup',
+        steps: [
+            'Create or open the Cerqle app in the OneSignal dashboard.',
+            'Under Settings → Keys & IDs, copy the OneSignal App ID and REST API Key into Cerqle.',
+            'Add cerqle.ai as the Web Push site URL in OneSignal and verify its HTTPS configuration.',
+            'Enable this integration, sign in as a Super Admin, and allow notifications in the target browser/app.',
+            'Use Test configuration to validate credentials. It never sends a push notification to a Super Admin.',
+        ],
+        link: 'https://dashboard.onesignal.com',
+        linkLabel: 'Open OneSignal Dashboard',
+    },
     storage_s3: {
         title: 'Amazon S3 Setup',
         steps: [
@@ -762,7 +774,7 @@ export default function IntegrationsEdit({ provider, label, category, fields, co
                             className="flex items-center gap-1.5 rounded-lg border border-neutral-300 dark:border-neutral-600 px-4 py-2 text-sm font-medium text-neutral-700 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-800 disabled:opacity-60 transition"
                         >
                             <FlaskConical className="h-4 w-4" />
-                            {testing ? t('integrations.testing') : t('integrations.test_connection')}
+                            {testing ? t('integrations.testing') : provider === 'onesignal' ? 'Test configuration' : t('integrations.test_connection')}
                         </button>
                         {!STORAGE_PROVIDERS.includes(provider) && (
                             <button

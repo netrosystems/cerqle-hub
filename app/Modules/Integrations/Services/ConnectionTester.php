@@ -21,6 +21,7 @@ class ConnectionTester
                 str_starts_with($config->provider, 'llm_') => $this->testLlm($config),
                 str_starts_with($config->provider, 'sms_') => $this->testSms($config),
                 $config->provider === 'google_workspace' => $this->testGoogleWorkspace($config),
+                $config->provider === 'onesignal' => $this->testOneSignal($config),
                 $config->provider === 'qdrant' => $this->testQdrant($config),
                 str_starts_with($config->provider, 'storage_') => $this->testStorage($config),
                 default => ['ok' => false, 'message' => 'No test available for this provider.'],
@@ -259,6 +260,29 @@ class ConnectionTester
         return $resp->successful() && $resp->json('access_token')
             ? ['ok' => true,  'message' => 'Google Workspace connection successful.']
             : ['ok' => false, 'message' => $resp->json('error_description') ?? $resp->json('error') ?? 'Google token exchange failed.'];
+    }
+
+    private function testOneSignal(IntegrationConfig $config): array
+    {
+        $credentials = $config->credentials ?? [];
+        $appId = trim((string) ($credentials['app_id'] ?? ''));
+        $apiKey = trim((string) ($credentials['rest_api_key'] ?? ''));
+
+        if ($appId === '' || $apiKey === '') {
+            return ['ok' => false, 'message' => 'OneSignal App ID and REST API Key are required.'];
+        }
+
+        // Validate the App API key without targeting any user. This must never
+        // send a configuration test to a Super Admin account.
+        $response = HttpFacade::timeout(15)
+            ->withHeaders(['Authorization' => 'Key '.$apiKey])
+            ->get('https://api.onesignal.com/apps/'.$appId.'/segments', ['limit' => 1]);
+
+        if (! $response->successful()) {
+            return ['ok' => false, 'message' => $response->json('errors.0') ?? $response->json('errors') ?? 'OneSignal rejected the credentials or notification request.'];
+        }
+
+        return ['ok' => true, 'message' => 'OneSignal App ID and API key are valid. No push notification was sent.'];
     }
 
     private function testQdrant(IntegrationConfig $config): array

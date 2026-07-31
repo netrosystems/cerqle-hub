@@ -6,6 +6,7 @@ use App\Models\Client;
 use App\Models\Currency;
 use App\Models\Locale;
 use App\Models\SystemSetting;
+use App\Services\OneSignalService;
 use App\Models\User;
 use App\Models\Workspace;
 use App\Modules\Broadcasting\Models\UsageMeter;
@@ -108,7 +109,7 @@ class HandleInertiaRequests extends Middleware
     private function oneSignalPublicConfig(): array
     {
         try {
-            $appId = config('services.onesignal.app_id', '');
+            $appId = app(OneSignalService::class)->publicAppId();
 
             return [
                 'app_id' => $appId,

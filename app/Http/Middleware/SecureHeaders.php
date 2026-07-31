@@ -3,6 +3,7 @@
 namespace App\Http\Middleware;
 
 use App\Modules\Integrations\Services\CredentialResolver;
+use App\Services\OneSignalService;
 use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -79,7 +80,7 @@ class SecureHeaders
     private function thirdPartyScriptSources(): string
     {
         $extra = ' https://static.cloudflareinsights.com';
-        if (filled(config('services.onesignal.app_id'))) {
+        if ($this->oneSignalEnabled()) {
             // SDK loads from cdn; runtime sync/scripts also come from api.* (see OneSignal v16 CSP docs).
             $extra .= ' https://cdn.onesignal.com https://*.onesignal.com';
         }
@@ -93,7 +94,7 @@ class SecureHeaders
     /** OneSignal injects styles from the apex host (e.g. OneSignalSDK.page.styles.css). */
     private function thirdPartyStyleSources(): string
     {
-        if (! filled(config('services.onesignal.app_id'))) {
+        if (! $this->oneSignalEnabled()) {
             return '';
         }
 
@@ -111,7 +112,7 @@ class SecureHeaders
         if ($url) {
             $sources[] = parse_url($url, PHP_URL_HOST) ?: $url;
         }
-        if (filled(config('services.onesignal.app_id'))) {
+        if ($this->oneSignalEnabled()) {
             $sources[] = 'https://onesignal.com';
             $sources[] = 'https://*.onesignal.com';
         }
@@ -125,6 +126,15 @@ class SecureHeaders
         }
 
         return implode(' ', array_unique($sources));
+    }
+
+    private function oneSignalEnabled(): bool
+    {
+        try {
+            return filled(app(OneSignalService::class)->publicAppId());
+        } catch (\Throwable) {
+            return filled(config('services.onesignal.app_id'));
+        }
     }
 
     /** Allow Meta Login / Embedded Signup dialogs in iframes when the Meta App is configured. */

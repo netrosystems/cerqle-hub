@@ -6,6 +6,18 @@ import axios from 'axios';
 import { useTranslation } from 'react-i18next';
 
 const SETUP_GUIDES = {
+    onesignal: {
+        title: 'OneSignal Push Setup',
+        steps: [
+            'Create or open the Cerqle app in the OneSignal dashboard.',
+            'Under Settings → Keys & IDs, copy the OneSignal App ID and REST API Key into Cerqle.',
+            'Add cerqle.ai as the Web Push site URL in OneSignal and verify its HTTPS configuration.',
+            'Enable the integration here, then sign in as a Super Admin and allow browser notifications.',
+            'Use Test to validate the OneSignal App ID and API key. It does not send a notification to an administrator.',
+        ],
+        link: 'https://dashboard.onesignal.com',
+        linkLabel: 'Open OneSignal Dashboard',
+    },
     storage_local: {
         title: 'Local Storage Setup',
         steps: [
@@ -397,6 +409,7 @@ const CATEGORY_LABEL_KEYS = {
     'Social OAuth': 'integrations.cat_social_oauth',
     'Maps': 'integrations.cat_maps',
     'Vector Store': 'integrations.cat_vector_store',
+    'Notifications': 'Notifications',
 };
 
 const STATUS_ICONS = {
@@ -428,6 +441,7 @@ const BRAND = {
     llm_anthropic_default:  { bg: null, color: '#d4793b', logo: 'anthropic' },
     llm_gemini_default:     { bg: null, color: '#4285F4', logo: 'googlegemini' },
     qdrant:          { bg: null, color: '#DC143C', logo: 'qdrant' },
+    onesignal:       { bg: 'bg-red-100 dark:bg-red-900/40', color: '#e54b4d', icon: <span className="text-sm font-bold">1</span> },
 };
 
 const DEFAULT_BRAND = {
@@ -532,7 +546,7 @@ function ProviderCard({ item, onTest, onSetDefault, testing, settingDefault }) {
                         className="flex items-center gap-1 rounded-lg border border-neutral-200 dark:border-neutral-700 px-3 py-1.5 text-xs font-medium text-neutral-700 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-800 transition disabled:opacity-50"
                     >
                         <FlaskConical className="h-3 w-3" />
-                        {testing === item.provider ? t('integrations.testing') : t('integrations.test')}
+                        {testing === item.provider ? t('integrations.testing') : item.provider === 'onesignal' ? 'Test configuration' : t('integrations.test')}
                     </button>
                 )}
                 {isStorage && item.enabled && !isDefault && (

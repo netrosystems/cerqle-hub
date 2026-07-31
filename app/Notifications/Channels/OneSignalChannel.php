@@ -2,6 +2,7 @@
 
 namespace App\Notifications\Channels;
 
+use App\Models\User;
 use App\Services\OneSignalService;
 use Illuminate\Notifications\Notification;
 
@@ -16,6 +17,12 @@ class OneSignalChannel
 
     public function send(object $notifiable, Notification $notification): void
     {
+        // Cerqle's OneSignal app belongs to client-team users. Super Admin
+        // accounts are intentionally configuration-only and never receive push.
+        if (! $notifiable instanceof User) {
+            return;
+        }
+
         if (! method_exists($notification, 'toOneSignal')) {
             return;
         }
@@ -30,6 +37,6 @@ class OneSignalChannel
         $url            = $data['url'] ?? null;
         $conversationId = $data['conversation_id'] ?? null;
 
-        $this->service->sendToUser($notifiable->id, $title, $body, $url, $conversationId);
+        $this->service->sendToExternalId('user:'.$notifiable->id, $title, $body, $url, $conversationId);
     }
 }

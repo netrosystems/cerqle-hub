@@ -29,14 +29,18 @@ class NewMessageNotification extends Notification implements ShouldQueue
         // Email is intentionally not offered for new-message notifications: an
         // email per inbound message is too noisy. Use web push / OneSignal instead.
 
-        if ($this->isEnabled($notifiable, 'web_push')) {
+        $oneSignalConfigured = app(OneSignalChannel::class)->isConfigured();
+
+        // OneSignal is the primary push provider. Keep native VAPID only as a
+        // fallback for deployments that have not configured OneSignal yet.
+        if (! $oneSignalConfigured && $this->isEnabled($notifiable, 'web_push')) {
             $channels[] = WebPushChannel::class;
         }
 
         // OneSignal push: always send when configured so the user gets notified
         // even when the browser is closed. Client-side foregroundWillDisplay
         // suppresses the notification when the inbox is already open.
-        if (app(OneSignalChannel::class)->isConfigured()) {
+        if ($oneSignalConfigured && $this->isEnabled($notifiable, 'one_signal')) {
             $channels[] = OneSignalChannel::class;
         }
 

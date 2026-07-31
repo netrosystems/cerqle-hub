@@ -31,11 +31,13 @@ class MentionedInNoteNotification extends Notification implements ShouldQueue
             $channels[] = 'mail';
         }
 
-        if ($this->isEnabled($notifiable, 'web_push')) {
+        $oneSignalConfigured = app(OneSignalChannel::class)->isConfigured();
+
+        if (! $oneSignalConfigured && $this->isEnabled($notifiable, 'web_push')) {
             $channels[] = WebPushChannel::class;
         }
 
-        if ($this->isEnabled($notifiable, 'one_signal')) {
+        if ($oneSignalConfigured && $this->isEnabled($notifiable, 'one_signal')) {
             $channels[] = OneSignalChannel::class;
         }
 

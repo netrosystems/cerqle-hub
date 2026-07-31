@@ -96,7 +96,7 @@ class NotificationController extends Controller
         $validated = $request->validate([
             'preferences' => ['required', 'array'],
             'preferences.*.event' => ['required', 'string', 'max:100'],
-            'preferences.*.channel' => ['required', 'string', 'in:mail,web_push'],
+            'preferences.*.channel' => ['required', 'string', 'in:mail,web_push,one_signal'],
             'preferences.*.enabled' => ['required', 'boolean'],
         ]);
 
