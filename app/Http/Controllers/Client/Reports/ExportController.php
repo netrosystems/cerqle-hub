@@ -46,21 +46,27 @@ class ExportController extends Controller
         abort_if($campaign->workspace_id !== $request->user()->workspace_id, 403);
 
         return $this->streamCsv("campaign-{$campaign->id}-recipients.csv", function (Writer $csv) use ($campaign) {
-            $csv->insertOne(['Recipient ID', 'Contact ID', 'Status', 'Sent At', 'Delivered At', 'Read At', 'Failed Reason']);
+            $isSms = $campaign->channel === 'sms';
+            $csv->insertOne($isSms
+                ? ['Recipient ID', 'Contact ID', 'Status', 'Sent At', 'Delivered At', 'Failed Reason']
+                : ['Recipient ID', 'Contact ID', 'Status', 'Sent At', 'Delivered At', 'Read At', 'Failed Reason']);
 
             CampaignRecipient::where('campaign_id', $campaign->id)
                 ->orderBy('id')
-                ->chunk(500, function ($rows) use ($csv) {
+                ->chunk(500, function ($rows) use ($csv, $isSms) {
                     foreach ($rows as $r) {
-                        $csv->insertOne([
+                        $row = [
                             $r->id,
                             $r->contact_id,
-                            $r->status,
+                            $isSms && in_array($r->status, ['sent', 'read'], true) ? 'delivered' : $r->status,
                             $r->sent_at?->toIso8601String(),
-                            $r->delivered_at?->toIso8601String(),
-                            $r->read_at?->toIso8601String(),
-                            $r->failed_reason,
-                        ]);
+                            ($r->delivered_at ?? ($isSms ? $r->sent_at : null))?->toIso8601String(),
+                        ];
+                        if (! $isSms) {
+                            $row[] = $r->read_at?->toIso8601String();
+                        }
+                        $row[] = $r->failed_reason;
+                        $csv->insertOne($row);
                     }
                 });
         });

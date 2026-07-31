@@ -24,7 +24,7 @@ class ContactCapacity
             return null;
         }
 
-        $current = Contact::where('workspace_id', $workspaceId)->count();
+        $current = Contact::where('workspace_id', $workspaceId)->customerDirectory()->count();
 
         return max(0, (int) $limit - $current);
     }

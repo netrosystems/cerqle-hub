@@ -79,8 +79,8 @@ class DashboardController extends Controller
             $messagesIn = $this->messageCount($wsId, $from, $to, 'in');
             $messagesInPrev = $this->messageCount($wsId, $prevFrom, $prevTo, 'in');
 
-            $contactsNew = Contact::where('workspace_id', $wsId)->whereBetween('created_at', [$from, $to])->count();
-            $contactsNewPrev = Contact::where('workspace_id', $wsId)->whereBetween('created_at', [$prevFrom, $prevTo])->count();
+            $contactsNew = Contact::where('workspace_id', $wsId)->customerDirectory()->whereBetween('created_at', [$from, $to])->count();
+            $contactsNewPrev = Contact::where('workspace_id', $wsId)->customerDirectory()->whereBetween('created_at', [$prevFrom, $prevTo])->count();
 
             $convNew = Conversation::where('workspace_id', $wsId)->whereBetween('created_at', [$from, $to])->count();
             $convNewPrev = Conversation::where('workspace_id', $wsId)->whereBetween('created_at', [$prevFrom, $prevTo])->count();
@@ -92,7 +92,7 @@ class DashboardController extends Controller
                 'messages_out_delta' => $this->pctDelta($messagesOut, $messagesOutPrev),
                 'messages_in' => $messagesIn,
                 'messages_in_delta' => $this->pctDelta($messagesIn, $messagesInPrev),
-                'contacts_total' => Contact::where('workspace_id', $wsId)->count(),
+                'contacts_total' => Contact::where('workspace_id', $wsId)->customerDirectory()->count(),
                 'contacts_new' => $contactsNew,
                 'contacts_new_delta' => $this->pctDelta($contactsNew, $contactsNewPrev),
                 'conversations_open' => Conversation::where('workspace_id', $wsId)->whereIn('status', ['open', 'pending'])->count(),

@@ -127,10 +127,15 @@ class SendSmsCampaignMessageJob implements ShouldQueue
         }
 
         if ($result->success) {
+            $confirmedAt = now();
             $recipient->update([
-                'status' => 'sent',
+                // Most SMS gateways acknowledge accepted delivery immediately,
+                // but do not expose a read receipt. Treat that acknowledgement
+                // as Delivered rather than leaving the UI permanently at Sent.
+                'status' => 'delivered',
                 'provider_message_id' => $result->messageId,
-                'sent_at' => now(),
+                'sent_at' => $confirmedAt,
+                'delivered_at' => $confirmedAt,
                 'failed_reason' => null,
                 'failure_class' => null,
                 'claimed_at' => null,

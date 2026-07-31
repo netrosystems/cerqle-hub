@@ -76,7 +76,7 @@ class DashboardController extends Controller
                 'payments_this_month_cents' => $paymentsThisMonth,
                 'messages_period' => $messagesPeriod,
                 'messages_delta' => $this->pctDelta($messagesPeriod, $messagesPrev),
-                'contacts_total' => Contact::count(),
+                'contacts_total' => Contact::customerDirectory()->count(),
                 'conversations_total' => Conversation::count(),
             ],
             'charts' => [

@@ -12,17 +12,22 @@ use Illuminate\Support\Facades\Http;
 
 class ContactService
 {
+    private const CAMPAIGN_ONLY_SOURCES = ['campaign_csv', 'contact_list_csv'];
+
     public function __construct(private StorageManager $storageManager) {}
+
     /**
      * Upsert a contact by phone (E.164) within a workspace.
      * Falls back to email lookup if phone is absent.
      *
      * @param  bool  $dispatchCreatedEvent  Set false for bulk imports/syncs to avoid
-     *                                       firing contact.created automations + outbound
-     *                                       webhooks for thousands of historical records.
+     *                                      firing contact.created automations + outbound
+     *                                      webhooks for thousands of historical records.
      */
     public function upsert(int $workspaceId, array $data, bool $dispatchCreatedEvent = true): Contact
     {
+        $campaignOnly = in_array((string) ($data['source'] ?? ''), self::CAMPAIGN_ONLY_SOURCES, true);
+        $data['is_campaign_only'] = $campaignOnly;
         $lookup = [];
 
         if (! empty($data['phone_e164'])) {
@@ -40,7 +45,14 @@ class ContactService
             return $contact;
         }
 
-        $exists = Contact::withTrashed()->where($lookup)->exists();
+        $existing = Contact::withTrashed()->where($lookup)->first();
+        if ($existing && $campaignOnly && ! $existing->is_campaign_only) {
+            // An uploaded audience may reuse a real customer's phone number.
+            // Keep the CRM record entirely untouched: campaign imports must not
+            // demote it or replace its profile data with spreadsheet values.
+            return $existing;
+        }
+
         $contact = Contact::withTrashed()->updateOrCreate($lookup, array_merge($data, ['workspace_id' => $workspaceId]));
 
         // Restore soft-deleted contact so it appears in normal queries again.
@@ -48,7 +60,7 @@ class ContactService
             $contact->restore();
         }
 
-        if (! $exists && $dispatchCreatedEvent) {
+        if (! $existing && $dispatchCreatedEvent) {
             ContactCreated::dispatch($contact);
         }
 
@@ -218,6 +230,7 @@ class ContactService
     public function export(int $workspaceId): Collection
     {
         return Contact::where('workspace_id', $workspaceId)
+            ->customerDirectory()
             ->with('tags')
             ->get()
             ->map(fn (Contact $c) => [

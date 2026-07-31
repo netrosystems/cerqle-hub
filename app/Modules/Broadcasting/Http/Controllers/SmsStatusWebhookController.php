@@ -22,31 +22,31 @@ class SmsStatusWebhookController extends Controller
     public function handle(Request $request, string $provider): Response
     {
         match ($provider) {
-            'twilio'      => $this->verifyTwilio($request),
-            'nexmo'       => $this->verifyNexmo($request),
+            'twilio' => $this->verifyTwilio($request),
+            'nexmo' => $this->verifyNexmo($request),
             'messagebird' => $this->verifyMessageBird($request),
-            'smsbd'       => $this->verifySmsBd($request),
-            'reve'        => $this->verifyReve($request),
-            'alaris'      => $this->verifyGenericToken($request, 'alaris'),
-            'bulksmsbd'   => $this->verifyGenericToken($request, 'bulksmsbd'),
-            'sms_dot_bd'  => null, // sms.net.bd does not sign DLR callbacks
-            'mimsms'      => $this->verifyGenericToken($request, 'mimsms'),
-            'fast2sms'    => $this->verifyGenericToken($request, 'fast2sms'),
-            default       => abort(404),
+            'smsbd' => $this->verifySmsBd($request),
+            'reve' => $this->verifyReve($request),
+            'alaris' => $this->verifyGenericToken($request, 'alaris'),
+            'bulksmsbd' => $this->verifyGenericToken($request, 'bulksmsbd'),
+            'sms_dot_bd' => null, // sms.net.bd does not sign DLR callbacks
+            'mimsms' => $this->verifyGenericToken($request, 'mimsms'),
+            'fast2sms' => $this->verifyGenericToken($request, 'fast2sms'),
+            default => abort(404),
         };
 
         [$msgId, $status] = match ($provider) {
-            'twilio'      => [$request->input('MessageSid'), $this->mapTwilioStatus($request->input('MessageStatus'))],
-            'nexmo'       => [$request->input('messageId'), $this->mapNexmoStatus($request->input('status'))],
+            'twilio' => [$request->input('MessageSid'), $this->mapTwilioStatus($request->input('MessageStatus'))],
+            'nexmo' => [$request->input('messageId'), $this->mapNexmoStatus($request->input('status'))],
             'messagebird' => [$request->input('id'), $this->mapMessageBirdStatus($request->input('status'))],
-            'smsbd'       => [$request->input('Message_ID') ?? $request->input('msgid'), $this->mapSmsBdStatus($request->input('Delivery_Status') ?? $request->input('status'))],
-            'reve'        => [$request->input('message_id'), $this->mapReveStatus($request->input('status') ?? $request->input('delivery_status'))],
-            'alaris'      => [$request->input('dlvrMsgId') ?? $request->input('messageId') ?? $request->input('message_id'), $this->mapSmsBdStatus($request->input('dlvrMsgStat') ?? $request->input('status') ?? $request->input('delivery_status'))],
-            'bulksmsbd'   => [$request->input('message_id'), $this->mapSmsBdStatus($request->input('status') ?? $request->input('delivery_status'))],
-            'sms_dot_bd'  => [$request->input('batch_id') ?? $request->input('message_id'), $this->mapSmsBdStatus($request->input('status'))],
-            'mimsms'      => [$request->input('message_id'), $this->mapSmsBdStatus($request->input('status') ?? $request->input('delivery_status'))],
-            'fast2sms'    => [$request->input('request_id'), $this->mapFast2SmsStatus($request->input('status'))],
-            default       => [null, null],
+            'smsbd' => [$request->input('Message_ID') ?? $request->input('msgid'), $this->mapSmsBdStatus($request->input('Delivery_Status') ?? $request->input('status'))],
+            'reve' => [$request->input('message_id'), $this->mapReveStatus($request->input('status') ?? $request->input('delivery_status'))],
+            'alaris' => [$request->input('dlvrMsgId') ?? $request->input('messageId') ?? $request->input('message_id'), $this->mapSmsBdStatus($request->input('dlvrMsgStat') ?? $request->input('status') ?? $request->input('delivery_status'))],
+            'bulksmsbd' => [$request->input('message_id'), $this->mapSmsBdStatus($request->input('status') ?? $request->input('delivery_status'))],
+            'sms_dot_bd' => [$request->input('batch_id') ?? $request->input('message_id'), $this->mapSmsBdStatus($request->input('status'))],
+            'mimsms' => [$request->input('message_id'), $this->mapSmsBdStatus($request->input('status') ?? $request->input('delivery_status'))],
+            'fast2sms' => [$request->input('request_id'), $this->mapFast2SmsStatus($request->input('status'))],
+            default => [null, null],
         };
 
         if (! $msgId || ! $status) {
@@ -62,7 +62,9 @@ class SmsStatusWebhookController extends Controller
             'queued' => 'queued',
             'sent' => 'sent',
             'delivered' => 'delivered',
-            'read' => 'read',
+            // SMS does not support a recipient read receipt. A provider that
+            // reports this value is treated as a delivery confirmation.
+            'read' => 'delivered',
             'failed' => 'failed',
         ];
         $mapped = $statusMap[$status] ?? null;
@@ -71,7 +73,7 @@ class SmsStatusWebhookController extends Controller
             $recipient = CampaignRecipient::where('provider_message_id', $msgId)->first();
             if ($recipient) {
                 // Status priority — never downgrade.
-                $priority = ['queued' => 0, 'sent' => 1, 'delivered' => 2, 'read' => 3, 'failed' => 4];
+                $priority = ['queued' => 0, 'sent' => 1, 'delivered' => 2, 'failed' => 3];
                 $current = $priority[$recipient->status] ?? 0;
                 $next = $priority[$mapped] ?? 0;
 
@@ -88,17 +90,6 @@ class SmsStatusWebhookController extends Controller
                         }
                         if (! $recipient->delivered_at) {
                             $patch['delivered_at'] = $now;
-                        }
-                    }
-                    if ($mapped === 'read') {
-                        if (! $recipient->sent_at) {
-                            $patch['sent_at'] = $now;
-                        }
-                        if (! $recipient->delivered_at) {
-                            $patch['delivered_at'] = $now;
-                        }
-                        if (! $recipient->read_at) {
-                            $patch['read_at'] = $now;
                         }
                     }
                     if ($mapped === 'failed') {
@@ -124,6 +115,7 @@ class SmsStatusWebhookController extends Controller
         $secret = config('services.nexmo.api_secret') ?? config('services.vonage.api_secret') ?? null;
         if (! $secret) {
             abort_if(app()->environment('production'), 503, 'Vonage webhook secret is not configured');
+
             return;
         }
 
@@ -152,6 +144,7 @@ class SmsStatusWebhookController extends Controller
         $secret = config('services.messagebird.signing_key') ?? null;
         if (! $secret) {
             abort_if(app()->environment('production'), 503, 'MessageBird webhook signing key is not configured');
+
             return;
         }
 
@@ -180,6 +173,7 @@ class SmsStatusWebhookController extends Controller
         $authToken = config('services.twilio.auth_token') ?? null;
         if (! $authToken) {
             abort_if(app()->environment('production'), 503, 'Twilio webhook auth token is not configured');
+
             return;
         }
 
@@ -232,6 +226,7 @@ class SmsStatusWebhookController extends Controller
         $secret = config('services.smsbd.webhook_secret');
         if (! $secret) {
             abort_if(app()->environment('production'), 503, 'SMSBD webhook secret is not configured');
+
             return;
         }
         $token = $request->input('token') ?: $request->header('X-Smsbd-Token', '');
@@ -243,6 +238,7 @@ class SmsStatusWebhookController extends Controller
         $secret = config("services.{$key}.webhook_secret");
         if (! $secret) {
             abort_if(app()->environment('production'), 503, ucfirst($key).' webhook secret is not configured');
+
             return;
         }
         $token = $request->input('token') ?: $request->header('X-Webhook-Token', '');
@@ -254,6 +250,7 @@ class SmsStatusWebhookController extends Controller
         $secret = config('services.reve.webhook_secret');
         if (! $secret) {
             abort_if(app()->environment('production'), 503, 'REVE webhook secret is not configured');
+
             return;
         }
         $token = $request->header('X-Reve-Token') ?: $request->input('token', '');

@@ -117,11 +117,26 @@ class ImportContactsToListJob implements ShouldQueue
             ->whereIn('phone_e164', $phones)
             ->pluck('id', 'phone_e164');
 
-        Contact::query()->upsert(
+        // A spreadsheet recipient may have the same number as an existing CRM
+        // customer. Do not overwrite that customer's profile with campaign data.
+        $crmCustomerPhones = Contact::withTrashed()
+            ->where('workspace_id', $operation->workspace_id)
+            ->customerDirectory()
+            ->whereIn('phone_e164', $phones)
+            ->pluck('phone_e164')
+            ->all();
+        $campaignAudienceRows = array_values(array_filter(
             $rows,
-            ['workspace_id', 'phone_e164'],
-            ['first_name', 'last_name', 'email', 'country', 'language', 'opt_in_sms', 'source', 'deleted_at', 'updated_at']
-        );
+            fn (array $row) => ! in_array($row['phone_e164'], $crmCustomerPhones, true)
+        ));
+
+        if ($campaignAudienceRows !== []) {
+            Contact::query()->upsert(
+                $campaignAudienceRows,
+                ['workspace_id', 'phone_e164'],
+                ['first_name', 'last_name', 'email', 'country', 'language', 'opt_in_sms', 'source', 'deleted_at', 'updated_at']
+            );
+        }
 
         $contacts = Contact::where('workspace_id', $operation->workspace_id)
             ->whereIn('phone_e164', $phones)
@@ -150,8 +165,8 @@ class ImportContactsToListJob implements ShouldQueue
 
     private function normaliseRow(array $row, int $workspaceId): ?array
     {
-        $phone = preg_replace('/[^\d+]/', '', trim((string) ($row['phone_e164'] ?? '')));
-        if (! is_string($phone) || ! preg_match('/^\+[1-9]\d{7,14}$/', $phone)) {
+        $phone = $this->normaliseInternationalPhone((string) ($row['phone_e164'] ?? ''));
+        if ($phone === null) {
             return null;
         }
 
@@ -168,10 +183,42 @@ class ImportContactsToListJob implements ShouldQueue
             'language' => mb_substr(strtolower(trim((string) ($row['language'] ?? ''))), 0, 8) ?: null,
             'opt_in_sms' => filter_var($row['opt_in_sms'] ?? true, FILTER_VALIDATE_BOOL),
             'source' => 'contact_list_csv',
+            'is_campaign_only' => true,
             'deleted_at' => null,
             'created_at' => $now,
             'updated_at' => $now,
         ];
+    }
+
+    /**
+     * Normalise common international-number formats to E.164 without making a
+     * country-specific guess. Local/national-only values are rejected because
+     * they cannot be sent safely in a global SMS campaign.
+     */
+    private function normaliseInternationalPhone(string $value): ?string
+    {
+        $trimmed = trim($value);
+        if ($trimmed === '') {
+            return null;
+        }
+
+        $digits = preg_replace('/\D/', '', $trimmed);
+        if (! is_string($digits) || $digits === '') {
+            return null;
+        }
+
+        if (str_starts_with($trimmed, '+')) {
+            $phone = '+'.$digits;
+        } elseif (str_starts_with($digits, '00')) {
+            $phone = '+'.substr($digits, 2);
+        } elseif (preg_match('/^[1-9]\d{9,14}$/', $digits) === 1) {
+            // International number supplied without +, e.g. 96170123456.
+            $phone = '+'.$digits;
+        } else {
+            return null;
+        }
+
+        return preg_match('/^\+[1-9]\d{7,14}$/', $phone) === 1 ? $phone : null;
     }
 
     public function failed(\Throwable $exception): void

@@ -23,6 +23,7 @@ class CampaignReportController extends Controller
         $campaign->updateTotals();
 
         $total = CampaignRecipient::where('campaign_id', $campaign->id)->count();
+        $isSms = $campaign->channel === 'sms';
         $sent = CampaignRecipient::where('campaign_id', $campaign->id)
             ->whereIn('status', ['sent', 'delivered', 'read'])
             ->count();
@@ -32,6 +33,13 @@ class CampaignReportController extends Controller
         $read = CampaignRecipient::where('campaign_id', $campaign->id)
             ->where('status', 'read')
             ->count();
+        if ($isSms) {
+            // Successful gateway submissions are the delivery signal available
+            // for SMS. SMS has no meaningful recipient read status.
+            $delivered = $sent;
+            $sent = 0;
+            $read = 0;
+        }
         $failed = CampaignRecipient::where('campaign_id', $campaign->id)
             ->where('status', 'failed')
             ->count();
@@ -56,9 +64,18 @@ class CampaignReportController extends Controller
             'clicked_pct' => $total > 0 ? round(($clicked / $total) * 100, 1) : 0,
         ];
 
+        $statusFilter = (string) $request->input('status', '');
         $recipientsQuery = CampaignRecipient::where('campaign_id', $campaign->id)
             ->with(['contact:id,first_name,last_name,phone_e164,email'])
-            ->when($request->input('status'), fn ($q, $s) => $q->where('status', $s))
+            ->when($statusFilter !== '', function ($query) use ($isSms, $statusFilter) {
+                if ($isSms && $statusFilter === 'delivered') {
+                    $query->whereIn('status', ['sent', 'delivered', 'read']);
+
+                    return;
+                }
+
+                $query->where('status', $statusFilter);
+            })
             ->orderByDesc('updated_at');
 
         $recipients = $recipientsQuery->paginate(50)->withQueryString();
@@ -70,11 +87,28 @@ class CampaignReportController extends Controller
             'campaign' => $campaign->only('id', 'uuid', 'name', 'channel', 'status', 'created_at'),
             'kpis' => $kpis,
             'funnel' => $analytics->campaignFunnel($campaign->id),
-            'deliveryOverTime' => $analytics->campaignDeliveryOverTime($campaign->id),
+            'deliveryOverTime' => $this->normaliseSmsDeliverySeries(
+                $analytics->campaignDeliveryOverTime($campaign->id),
+                $isSms,
+            ),
             'failedReasons' => $analytics->campaignFailedReasons($campaign->id),
             'lag' => $lag,
             'recipients' => $recipients,
             'filters' => $request->only('status'),
         ]);
+    }
+
+    /** @param array<int, array{hour: string, sent: int, delivered: int, read: int}> $series */
+    private function normaliseSmsDeliverySeries(array $series, bool $isSms): array
+    {
+        if (! $isSms) {
+            return $series;
+        }
+
+        return array_map(fn (array $point) => array_merge($point, [
+            'sent' => 0,
+            'delivered' => (int) ($point['sent'] ?? 0) + (int) ($point['delivered'] ?? 0) + (int) ($point['read'] ?? 0),
+            'read' => 0,
+        ]), $series);
     }
 }

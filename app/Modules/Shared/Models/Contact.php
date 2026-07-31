@@ -5,6 +5,7 @@ namespace App\Modules\Shared\Models;
 use App\Services\StorageManager;
 use App\Support\Concerns\MasksDemoData;
 use Database\Factories\ContactFactory;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
@@ -30,6 +31,7 @@ use Illuminate\Support\Str;
  * @property array<string, mixed>|null $custom_fields
  * @property Carbon|null $last_seen_at
  * @property string|null $source
+ * @property bool $is_campaign_only
  * @property int|null $lead_id
  * @property-read string $full_name
  * @property-read string|null $avatar_url
@@ -82,7 +84,7 @@ class Contact extends Model
     protected $fillable = [
         'workspace_id', 'phone_e164', 'email', 'first_name', 'last_name',
         'avatar', 'country', 'language', 'opt_in_whatsapp', 'opt_in_sms', 'opt_in_email',
-        'custom_fields', 'last_seen_at', 'source', 'lead_id',
+        'custom_fields', 'last_seen_at', 'source', 'is_campaign_only', 'lead_id',
     ];
 
     protected function casts(): array
@@ -93,7 +95,18 @@ class Contact extends Model
             'opt_in_email' => 'boolean',
             'custom_fields' => 'array',
             'last_seen_at' => 'datetime',
+            'is_campaign_only' => 'boolean',
         ];
+    }
+
+    public function scopeCustomerDirectory(Builder $query): Builder
+    {
+        return $query->where('is_campaign_only', false);
+    }
+
+    public function scopeCampaignOnly(Builder $query): Builder
+    {
+        return $query->where('is_campaign_only', true);
     }
 
     public function tags(): BelongsToMany

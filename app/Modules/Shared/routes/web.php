@@ -24,8 +24,10 @@ Route::middleware(['web', 'client-app'])->prefix('app')->name('client.')->group(
     Route::post('/segments', [SegmentController::class, 'store'])->name('segments.store');
     Route::put('/segments/{segment}', [SegmentController::class, 'update'])->name('segments.update');
     Route::delete('/segments/{segment}', [SegmentController::class, 'destroy'])->name('segments.destroy');
+    Route::get('/segments/contact-list-sample.csv', [SegmentController::class, 'downloadSampleCsv'])->name('segments.contacts.sample-csv');
     Route::get('/segments/{segment}/contacts', [SegmentController::class, 'manageContacts'])->name('segments.contacts');
     Route::post('/segments/{segment}/contacts', [SegmentController::class, 'attachContacts'])->name('segments.contacts.attach');
     Route::post('/segments/{segment}/contacts/import', [SegmentController::class, 'importContacts'])->name('segments.contacts.import');
+    Route::delete('/segments/{segment}/contacts', [SegmentController::class, 'detachAllContacts'])->name('segments.contacts.detach-all');
     Route::delete('/segments/{segment}/contacts/{contact}', [SegmentController::class, 'detachContact'])->name('segments.contacts.detach');
 });

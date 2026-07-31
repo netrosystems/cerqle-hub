@@ -35,6 +35,7 @@ export default function CampaignReportShow({
 }) {
     const { t } = useTranslation();
     const userTz = usePage().props.timezone || 'Asia/Dhaka';
+    const isSms = campaign.channel === 'sms';
     const [statusFilter, setStatusFilter] = useState(filters.status ?? '');
 
     const applyFilter = (status) => {
@@ -79,17 +80,17 @@ export default function CampaignReportShow({
                 </div>
 
                 {/* KPI strip */}
-                <div className="grid grid-cols-2 gap-4 lg:grid-cols-6">
+                <div className={`grid grid-cols-2 gap-4 ${isSms ? 'lg:grid-cols-5' : 'lg:grid-cols-6'}`}>
                     <KpiCard label={t('reports.kpi_total_recipients')} value={kpis.total} />
                     <KpiCard label={t('reports.kpi_delivered')} value={kpis.delivered_pct} unit="%" trend="up" />
-                    <KpiCard label={t('reports.kpi_read')} value={kpis.read_pct} unit="%" trend="up" />
+                    {!isSms && <KpiCard label={t('reports.kpi_read')} value={kpis.read_pct} unit="%" trend="up" />}
                     <KpiCard label={t('reports.kpi_failed')} value={kpis.failed_pct} unit="%" trend="down" />
                     <KpiCard label={t('reports.kpi_clicked')} value={kpis.clicked_pct ?? 0} unit="%" />
                     <KpiCard label={t('reports.kpi_opted_out')} value={kpis.opted_out ?? 0} />
                 </div>
 
                 {/* Status lag */}
-                {(lag?.sent_to_delivered || lag?.delivered_to_read || lag?.sent_to_read) ? (
+                {!isSms && (lag?.sent_to_delivered || lag?.delivered_to_read || lag?.sent_to_read) ? (
                     <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4">
                         <h3 className="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3 flex items-center gap-2">
                             <Clock className="h-4 w-4" /> {t('reports.status_timeline')}
@@ -122,8 +123,8 @@ export default function CampaignReportShow({
                             <LineChart
                                 data={deliveryOverTime}
                                 xKey="hour"
-                                yKeys={['sent', 'delivered', 'read']}
-                                labels={{ sent: t('reports.series_sent'), delivered: t('reports.series_delivered'), read: t('reports.series_read') }}
+                                yKeys={isSms ? ['delivered'] : ['sent', 'delivered', 'read']}
+                                labels={isSms ? { delivered: t('reports.series_delivered') } : { sent: t('reports.series_sent'), delivered: t('reports.series_delivered'), read: t('reports.series_read') }}
                                 height={250}
                             />
                         ) : (
@@ -157,7 +158,7 @@ export default function CampaignReportShow({
                                     className="text-xs rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200"
                                 >
                                     <option value="">{t('reports.all_statuses')}</option>
-                                    {['queued', 'sent', 'delivered', 'read', 'failed'].map((s) => (
+                                    {(isSms ? ['queued', 'delivered', 'failed'] : ['queued', 'sent', 'delivered', 'read', 'failed']).map((s) => (
                                         <option key={s} value={s}>
                                             {s}
                                         </option>
@@ -181,9 +182,9 @@ export default function CampaignReportShow({
                                         <th className="pb-2 text-left text-xs text-gray-500 dark:text-gray-400">
                                             {t('reports.col_delivered_at')}
                                         </th>
-                                        <th className="pb-2 text-left text-xs text-gray-500 dark:text-gray-400">
+                                        {!isSms && <th className="pb-2 text-left text-xs text-gray-500 dark:text-gray-400">
                                             {t('reports.col_read_at')}
-                                        </th>
+                                        </th>}
                                         <th className="pb-2 text-left text-xs text-gray-500 dark:text-gray-400">
                                             {t('reports.col_reason')}
                                         </th>
@@ -208,23 +209,23 @@ export default function CampaignReportShow({
                                                 <td className="py-2">
                                                     <span
                                                         className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
-                                                            STATUS_COLORS[r.status] ?? ''
+                                                            STATUS_COLORS[isSms && ['sent', 'read'].includes(r.status) ? 'delivered' : r.status] ?? ''
                                                         }`}
                                                     >
-                                                        {r.status}
+                                                        {isSms && ['sent', 'read'].includes(r.status) ? 'delivered' : r.status}
                                                     </span>
                                                 </td>
                                                 <td className="py-2 text-gray-500">
                                                     {r.sent_at ? formatInTz(r.sent_at, userTz) : '—'}
                                                 </td>
                                                 <td className="py-2 text-gray-500">
-                                                    {r.delivered_at
-                                                        ? formatInTz(r.delivered_at, userTz)
+                                                    {r.delivered_at || (isSms && r.sent_at)
+                                                        ? formatInTz(r.delivered_at ?? r.sent_at, userTz)
                                                         : '—'}
                                                 </td>
-                                                <td className="py-2 text-gray-500">
+                                                {!isSms && <td className="py-2 text-gray-500">
                                                     {r.read_at ? formatInTz(r.read_at, userTz) : '—'}
-                                                </td>
+                                                </td>}
                                                 <td className="py-2 text-gray-500 max-w-xs truncate" title={r.failed_reason ?? ''}>
                                                     {r.failed_reason ?? '—'}
                                                 </td>
@@ -233,7 +234,7 @@ export default function CampaignReportShow({
                                     })}
                                     {recipients.data.length === 0 && (
                                         <tr>
-                                            <td colSpan={6} className="py-6 text-center text-gray-400">
+                                            <td colSpan={isSms ? 5 : 6} className="py-6 text-center text-gray-400">
                                                 {t('reports.no_recipients')}
                                             </td>
                                         </tr>

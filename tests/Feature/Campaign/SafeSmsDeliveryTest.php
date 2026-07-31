@@ -238,7 +238,8 @@ class SafeSmsDeliveryTest extends TestCase
 
         $this->assertSame('failed', $recipients[0]->fresh()->status);
         $this->assertSame('no_route', $recipients[0]->fresh()->failure_class);
-        $this->assertSame('sent', $recipients[1]->fresh()->status);
+        $this->assertSame('delivered', $recipients[1]->fresh()->status);
+        $this->assertNotNull($recipients[1]->fresh()->delivered_at);
         $this->assertSame('sending', $campaign->fresh()->status);
         $this->assertSame('active', $step->fresh()->status);
     }
@@ -278,6 +279,8 @@ class SafeSmsDeliveryTest extends TestCase
     {
         Event::fake([CampaignCompleted::class]);
         [$campaign, $step, $recipients] = $this->sendingCampaign(2);
+        // Pre-change SMS rows may still be stored as sent. Reporting must
+        // normalize those successful submissions as delivered as well.
         $recipients[0]->update(['status' => 'sent', 'sent_at' => now(), 'claimed_at' => null]);
         $recipients[1]->update([
             'status' => 'failed',
@@ -290,7 +293,8 @@ class SafeSmsDeliveryTest extends TestCase
 
         $campaign->refresh();
         $this->assertSame('completed_with_failures', $campaign->status);
-        $this->assertSame(1, $campaign->totals_json['sent']);
+        $this->assertSame(1, $campaign->totals_json['delivered']);
+        $this->assertSame(0, $campaign->totals_json['sent']);
         $this->assertSame(1, $campaign->totals_json['failed']);
         $this->assertSame('completed', $step->fresh()->status);
         Event::assertDispatched(CampaignCompleted::class);

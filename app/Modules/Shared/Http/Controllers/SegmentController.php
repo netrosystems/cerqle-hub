@@ -13,6 +13,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class SegmentController extends Controller
 {
@@ -79,11 +80,13 @@ class SegmentController extends Controller
         $search = trim((string) $request->input('search', ''));
 
         $segmentContacts = $segment->contacts()
+            ->where('contacts.is_campaign_only', false)
             ->orderByDesc('contacts.id')
             ->paginate(25, ['contacts.id', 'contacts.uuid', 'first_name', 'last_name', 'phone_e164', 'email', 'avatar'], 'members_page')
             ->withQueryString();
 
         $availableQuery = Contact::where('workspace_id', $workspaceId)
+            ->customerDirectory()
             ->when($search !== '', fn ($q) => $q->where(function ($q) use ($search) {
                 $q->where('first_name', 'like', '%'.$search.'%')
                     ->orWhere('last_name', 'like', '%'.$search.'%')
@@ -103,6 +106,7 @@ class SegmentController extends Controller
             'segmentContacts' => $segmentContacts,
             'availableContacts' => $allContacts,
             'availableCount' => $availableCount,
+            'uploadedAudienceCount' => $segment->contacts()->where('contacts.is_campaign_only', true)->count(),
             'filters' => ['search' => $search],
             'operations' => ContactListOperation::where('workspace_id', $workspaceId)
                 ->where('segment_id', $segment->id)
@@ -128,6 +132,7 @@ class SegmentController extends Controller
         if ($validated['selection'] === 'all') {
             $search = trim((string) ($validated['search'] ?? ''));
             $query = Contact::where('workspace_id', $workspaceId)
+                ->customerDirectory()
                 ->when($search !== '', fn ($q) => $q->where(function ($q) use ($search) {
                     $q->where('first_name', 'like', '%'.$search.'%')
                         ->orWhere('last_name', 'like', '%'.$search.'%')
@@ -154,6 +159,7 @@ class SegmentController extends Controller
         }
 
         $contactIds = Contact::where('workspace_id', $workspaceId)
+            ->customerDirectory()
             ->whereIn('id', $validated['contact_ids'])
             ->pluck('id');
         $segment->contacts()->syncWithoutDetaching($contactIds);
@@ -184,6 +190,39 @@ class SegmentController extends Controller
         ImportContactsToListJob::dispatch($operation->id);
 
         return back()->with('success', 'CSV accepted. Contacts will be validated and added in the background.');
+    }
+
+    public function downloadSampleCsv(): StreamedResponse
+    {
+        return response()->streamDownload(function (): void {
+            $output = fopen('php://output', 'wb');
+            fputcsv($output, ['phone_e164', 'first_name', 'last_name', 'email', 'country', 'language', 'opt_in_sms']);
+            fputcsv($output, ['+96170123456', 'Ada', 'Lovelace', 'ada@example.com', 'LB', 'en', 'true']);
+            fputcsv($output, ['+8801712345678', 'Rahim', 'Ahmed', 'rahim@example.com', 'BD', 'bn', 'true']);
+            fclose($output);
+        }, 'cerqle-contact-list-sample.csv', [
+            'Content-Type' => 'text/csv; charset=UTF-8',
+        ]);
+    }
+
+    public function detachAllContacts(Request $request, Segment $segment): RedirectResponse
+    {
+        $this->authorise($request, $segment);
+        abort_if($segment->type !== 'static', 403);
+
+        // This only removes CRM contacts from this list. It never deletes a
+        // customer record, and keeps the separately-uploaded campaign audience.
+        $segment->contacts()
+            ->customerDirectory()
+            ->select('contacts.id')
+            ->orderBy('contacts.id')
+            ->chunkById(1000, function ($contacts) use ($segment): void {
+                $segment->contacts()->detach($contacts->pluck('id')->all());
+            }, 'contacts.id', 'id');
+
+        $segment->update(['contact_count' => $segment->contacts()->count()]);
+
+        return back()->with('success', 'All existing contacts were removed from this contact list. Customer records were not deleted.');
     }
 
     public function detachContact(Request $request, Segment $segment, Contact $contact): RedirectResponse

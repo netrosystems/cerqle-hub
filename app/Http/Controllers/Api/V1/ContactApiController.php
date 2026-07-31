@@ -27,6 +27,7 @@ class ContactApiController extends WorkspaceScopedController
 
         $query = Contact::with('tags')
             ->where('workspace_id', $wsId)
+            ->customerDirectory()
             ->latest('id');
 
         if ($request->filled('search')) {
@@ -89,6 +90,7 @@ class ContactApiController extends WorkspaceScopedController
     {
         $contact = Contact::with('tags')
             ->where('workspace_id', $this->workspaceId($request))
+            ->customerDirectory()
             ->find($id);
 
         if (! $contact) {
@@ -103,7 +105,7 @@ class ContactApiController extends WorkspaceScopedController
      */
     public function update(Request $request, int $id): ContactResource|JsonResponse
     {
-        $contact = Contact::where('workspace_id', $this->workspaceId($request))->find($id);
+        $contact = Contact::where('workspace_id', $this->workspaceId($request))->customerDirectory()->find($id);
 
         if (! $contact) {
             return response()->json(['error' => 'Contact not found.'], 404);
@@ -135,7 +137,7 @@ class ContactApiController extends WorkspaceScopedController
      */
     public function destroy(Request $request, int $id): JsonResponse
     {
-        $contact = Contact::where('workspace_id', $this->workspaceId($request))->find($id);
+        $contact = Contact::where('workspace_id', $this->workspaceId($request))->customerDirectory()->find($id);
 
         if (! $contact) {
             return response()->json(['error' => 'Contact not found.'], 404);

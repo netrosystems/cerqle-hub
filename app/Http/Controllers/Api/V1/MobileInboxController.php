@@ -121,6 +121,7 @@ class MobileInboxController extends WorkspaceScopedController
         $q = $request->input('q', '');
 
         $contacts = Contact::where('workspace_id', $wsId)
+            ->customerDirectory()
             ->where(function ($query) use ($q) {
                 $query->where('first_name', 'like', "%{$q}%")
                     ->orWhere('last_name', 'like', "%{$q}%")
@@ -149,7 +150,7 @@ class MobileInboxController extends WorkspaceScopedController
     {
         $wsId = $this->workspaceId($request);
 
-        $contact = Contact::where('workspace_id', $wsId)->findOrFail($id);
+        $contact = Contact::where('workspace_id', $wsId)->customerDirectory()->findOrFail($id);
 
         $conversations = $contact->conversations()
             ->with('channelAccount')

@@ -388,7 +388,7 @@ class LaunchCampaignJob implements ShouldQueue
                     'opt_in_sms' => $this->coerceBool($row['opt_in_sms'] ?? true),
                     'opt_in_email' => $this->coerceBool($row['opt_in_email'] ?? true),
                     'source' => 'campaign_csv',
-                ]);
+                ], false);
                 $contactIds[] = $contact->id;
             } catch (\Throwable $e) {
                 Log::channel('json')->info('campaign.csv.row_failed', [

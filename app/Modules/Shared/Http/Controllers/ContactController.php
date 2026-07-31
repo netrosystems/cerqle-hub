@@ -30,6 +30,7 @@ class ContactController extends Controller
         $workspaceId = $request->user()->current_workspace_id ?? $request->user()->workspace_id;
 
         $contacts = Contact::where('workspace_id', $workspaceId)
+            ->customerDirectory()
             ->with('tags')
             ->when($request->search, fn ($q) => $q->where(function ($q) use ($request) {
                 $q->where('first_name', 'like', '%'.$request->search.'%')
@@ -176,7 +177,7 @@ class ContactController extends Controller
         $path = $this->storageManager->prefixedPath('contact-avatars/'.$file->hashName());
         $stored = $this->storageManager->disk()->putFileAs(dirname($path), $file, basename($path));
         if ($stored === false) {
-            throw \Illuminate\Validation\ValidationException::withMessages([
+            throw ValidationException::withMessages([
                 'avatar' => 'The avatar could not be written to the configured storage provider.',
             ]);
         }
@@ -280,6 +281,7 @@ class ContactController extends Controller
         ]);
 
         $deleted = Contact::where('workspace_id', $workspaceId)
+            ->customerDirectory()
             ->whereIn('uuid', $validated['uuids'])
             ->delete();
 
@@ -291,6 +293,7 @@ class ContactController extends Controller
         $workspaceId = $request->user()->current_workspace_id ?? $request->user()->workspace_id;
 
         $contacts = Contact::where('workspace_id', $workspaceId)
+            ->customerDirectory()
             ->with('tags')
             ->when($request->uuids, fn ($q) => $q->whereIn('uuid', explode(',', $request->uuids)))
             ->when($request->search, fn ($q) => $q->where(function ($q) use ($request) {
@@ -328,5 +331,6 @@ class ContactController extends Controller
     {
         $workspaceId = $request->user()->current_workspace_id ?? $request->user()->workspace_id;
         abort_unless((int) $contact->workspace_id === (int) $workspaceId, 403);
+        abort_if($contact->is_campaign_only, 404);
     }
 }

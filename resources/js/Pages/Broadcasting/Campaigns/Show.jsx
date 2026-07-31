@@ -51,8 +51,8 @@ function useCountdown(target) {
     const [remaining, setRemaining] = useState(() => calc(target));
     useEffect(() => {
         if (!target) return;
-        const id = setInterval(() => setRemaining(calc(target)), 1000);
-        return () => clearInterval(id);
+        const id = window.setInterval(() => setRemaining(calc(target)), 1000);
+        return () => window.clearInterval(id);
     }, [target]);
     return remaining;
 }
@@ -73,6 +73,7 @@ export default function CampaignShow({ campaign, sample = [], reportUrl }) {
     const { props } = usePage();
     const userTz = props.timezone || browserTz() || 'Asia/Dhaka';
     const totals = campaign.totals_json ?? {};
+    const isSms = campaign.channel === 'sms';
     const total = totals.total || 1;
     const processed =
         (totals.sent ?? 0) + (totals.delivered ?? 0) + (totals.read ?? 0) + (totals.failed ?? 0);
@@ -84,10 +85,10 @@ export default function CampaignShow({ campaign, sample = [], reportUrl }) {
     // Auto-refresh while a campaign is actively sending so the user sees live progress.
     useEffect(() => {
         if (!['queued', 'waiting_capacity', 'preparing', 'sending', 'retrying'].includes(campaign.status)) return;
-        const id = setInterval(() => {
+        const id = window.setInterval(() => {
             router.reload({ only: ['campaign', 'sample'] });
         }, 8000);
-        return () => clearInterval(id);
+        return () => window.clearInterval(id);
     }, [campaign.status]);
 
     const countdown = useCountdown(
@@ -96,10 +97,10 @@ export default function CampaignShow({ campaign, sample = [], reportUrl }) {
 
     const metrics = [
         { key: 'total', label: t('campaign.metric_total'), value: totals.total ?? 0, color: 'bg-neutral-500' },
-        { key: 'sent', label: t('campaign.metric_sent'), value: totals.sent ?? 0, color: 'bg-blue-500' },
+        ...(!isSms ? [{ key: 'sent', label: t('campaign.metric_sent'), value: totals.sent ?? 0, color: 'bg-blue-500' }] : []),
         { key: 'retrying', label: 'Retry scheduled', value: totals.retrying ?? 0, color: 'bg-amber-500' },
         { key: 'delivered', label: t('campaign.metric_delivered'), value: totals.delivered ?? 0, color: 'bg-green-500' },
-        { key: 'read', label: t('campaign.metric_read'), value: totals.read ?? 0, color: 'bg-purple-500' },
+        ...(!isSms ? [{ key: 'read', label: t('campaign.metric_read'), value: totals.read ?? 0, color: 'bg-purple-500' }] : []),
         { key: 'failed', label: t('campaign.metric_failed'), value: totals.failed ?? 0, color: 'bg-red-500' },
     ];
 

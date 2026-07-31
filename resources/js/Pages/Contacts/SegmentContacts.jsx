@@ -38,12 +38,13 @@ function OperationStatus({ operation }) {
             ? 'bg-red-50 text-red-700 dark:bg-red-950/30 dark:text-red-300'
             : 'bg-blue-50 text-blue-700 dark:bg-blue-950/30 dark:text-blue-300';
     const percent = operation.total ? Math.min(100, Math.round((operation.processed / operation.total) * 100)) : null;
+    const valid = Math.max(0, Number(operation.processed || 0) - Number(operation.skipped || 0));
 
     return (
         <div className={`rounded-lg px-3 py-2 text-xs ${tone}`}>
             <div className="flex items-center justify-between gap-3">
                 <span className="font-medium">{operation.type === 'csv_import' ? 'CSV import' : 'Add all contacts'} · {operation.status}</span>
-                <span>{operation.processed.toLocaleString()} processed · {operation.added.toLocaleString()} added</span>
+                <span>{valid.toLocaleString()} valid · {Number(operation.skipped || 0).toLocaleString()} skipped</span>
             </div>
             {percent !== null && operation.status !== 'completed' && (
                 <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-black/10">
@@ -55,7 +56,7 @@ function OperationStatus({ operation }) {
     );
 }
 
-export default function SegmentContacts({ segment, segmentContacts, availableContacts, availableCount, filters, operations }) {
+export default function SegmentContacts({ segment, segmentContacts, availableContacts, availableCount, uploadedAudienceCount, filters, operations }) {
     const { props } = usePage();
     const [tab, setTab] = useState('existing');
     const [selected, setSelected] = useState([]);
@@ -71,7 +72,7 @@ export default function SegmentContacts({ segment, segmentContacts, availableCon
 
     useEffect(() => {
         if (!hasRunningOperation) return undefined;
-        const timer = window.setInterval(() => router.reload({ only: ['operations', 'segment', 'segmentContacts', 'availableContacts', 'availableCount'] }), 3000);
+        const timer = window.setInterval(() => router.reload({ only: ['operations', 'segment', 'segmentContacts', 'availableContacts', 'availableCount', 'uploadedAudienceCount'] }), 3000);
         return () => window.clearInterval(timer);
     }, [hasRunningOperation]);
 
@@ -125,7 +126,7 @@ export default function SegmentContacts({ segment, segmentContacts, availableCon
                         <div>
                             <h2 className="text-xl font-semibold text-neutral-900 dark:text-neutral-100">Add Contacts to “{segment.name}”</h2>
                             <p className="mt-0.5 text-sm text-neutral-500 dark:text-neutral-400">
-                                Add a few contacts, select every matching contact, or import a CSV without keeping this page open.
+                                Existing customers remain in the CRM. CSV uploads are stored as a separate campaign-only audience.
                             </p>
                         </div>
                     </div>
@@ -143,6 +144,13 @@ export default function SegmentContacts({ segment, segmentContacts, availableCon
                 {operations.length > 0 && (
                     <div className="space-y-2">
                         {operations.map(operation => <OperationStatus key={operation.id} operation={operation} />)}
+                    </div>
+                )}
+
+                {uploadedAudienceCount > 0 && (
+                    <div className="rounded-xl border border-violet-200 bg-violet-50 px-4 py-3 text-sm text-violet-800 dark:border-violet-900 dark:bg-violet-950/30 dark:text-violet-200">
+                        <strong>{uploadedAudienceCount.toLocaleString()} uploaded campaign recipients</strong>
+                        <span className="ml-1">are available to campaigns through this contact list and are intentionally excluded from the main customer directory.</span>
                     </div>
                 )}
 
@@ -199,8 +207,17 @@ export default function SegmentContacts({ segment, segmentContacts, availableCon
 
                         <section className="overflow-hidden rounded-xl border border-neutral-200 bg-white dark:border-neutral-700 dark:bg-neutral-900">
                             <div className="border-b border-neutral-100 px-4 py-3 dark:border-neutral-800">
-                                <h3 className="font-semibold text-neutral-900 dark:text-neutral-100">Already in this list</h3>
-                                <p className="text-xs text-neutral-500">{segmentContacts.total.toLocaleString()} total</p>
+                                <div className="flex items-center justify-between gap-3">
+                                    <div>
+                                        <h3 className="font-semibold text-neutral-900 dark:text-neutral-100">Already in this list</h3>
+                                        <p className="text-xs text-neutral-500">{segmentContacts.total.toLocaleString()} existing customer{segmentContacts.total === 1 ? '' : 's'}</p>
+                                    </div>
+                                    {segmentContacts.total > 0 && (
+                                        <button type="button" onClick={() => confirm('Remove all existing contacts from this list? Their customer records will not be deleted.') && router.delete(route('client.segments.contacts.detach-all', segment.id), { preserveScroll: true })} className="inline-flex items-center gap-1.5 rounded-lg border border-red-200 px-2.5 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 dark:border-red-900/60 dark:text-red-300 dark:hover:bg-red-950/30">
+                                            <Trash2 className="h-3.5 w-3.5" /> Remove all
+                                        </button>
+                                    )}
+                                </div>
                             </div>
                             <div className="divide-y divide-neutral-100 dark:divide-neutral-800">
                                 {segmentContacts.data.map(contact => (
@@ -222,7 +239,7 @@ export default function SegmentContacts({ segment, segmentContacts, availableCon
                             <div className="rounded-xl border-2 border-dashed border-neutral-300 p-8 text-center dark:border-neutral-600">
                                 <Upload className="mx-auto h-9 w-9 text-brand-600" />
                                 <h3 className="mt-3 font-semibold text-neutral-900 dark:text-neutral-100">Import a large contact list</h3>
-                                <p className="mt-1 text-sm text-neutral-500">CSV files are processed in 1,000-row chunks in the background. Closing this page will not stop the import.</p>
+                                <p className="mt-1 text-sm text-neutral-500">CSV files are scanned and processed in 1,000-row chunks. The live result shows campaign-ready numbers and skipped rows. They are added only to this campaign audience, never to Contacts or the support customer directory.</p>
                                 <form onSubmit={uploadCsv} className="mt-5 space-y-3">
                                     <input type="file" accept=".csv,text/csv" required onChange={event => csvForm.setData('file', event.target.files?.[0] ?? null)} className="block w-full text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-brand-50 file:px-4 file:py-2 file:font-medium file:text-brand-700" />
                                     <button disabled={csvForm.processing || !csvForm.data.file} className="rounded-lg bg-brand-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-40">
@@ -232,8 +249,11 @@ export default function SegmentContacts({ segment, segmentContacts, availableCon
                             </div>
                             <div className="rounded-lg bg-neutral-50 p-4 text-sm text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300">
                                 <p className="font-medium text-neutral-900 dark:text-neutral-100">CSV format</p>
-                                <p className="mt-1">Required: <code>phone_e164</code> (for example <code>+96170123456</code>). Optional: <code>first_name</code>, <code>last_name</code>, <code>email</code>, <code>country</code>, <code>language</code>, <code>opt_in_sms</code>.</p>
-                                <p className="mt-2">Duplicate phone numbers are updated instead of duplicated. Invalid rows are skipped and reported in the progress summary.</p>
+                                <p className="mt-1">Required: <code>phone_e164</code>. International formats such as <code>+96170123456</code>, <code>0096170123456</code>, and <code>96170123456</code> are normalized automatically. Optional: <code>first_name</code>, <code>last_name</code>, <code>email</code>, <code>country</code>, <code>language</code>, <code>opt_in_sms</code>.</p>
+                                <p className="mt-2">Local-only numbers without a country code, malformed rows, and duplicates are skipped. If a phone already belongs to a real customer, that customer remains in the CRM.</p>
+                                <a href={route('client.segments.contacts.sample-csv')} className="mt-3 inline-flex items-center gap-1.5 font-medium text-brand-700 hover:text-brand-800 dark:text-brand-300">
+                                    <FileSpreadsheet className="h-4 w-4" /> Download sample CSV
+                                </a>
                             </div>
                         </div>
                     </section>

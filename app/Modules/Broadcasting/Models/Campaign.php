@@ -104,6 +104,18 @@ class Campaign extends Model
             ->whereNotNull('opted_out_at')
             ->count();
 
+        $sent = $counts['sent'] ?? 0;
+        $delivered = $counts['delivered'] ?? 0;
+        $read = $counts['read'] ?? 0;
+
+        if ($this->channel === 'sms') {
+            // Older SMS recipients may still be stored as sent. They represent
+            // the same successful gateway acknowledgement as Delivered.
+            $delivered += $sent + $read;
+            $sent = 0;
+            $read = 0;
+        }
+
         $this->update([
             'totals_json' => [
                 'total' => array_sum($counts),
@@ -111,9 +123,9 @@ class Campaign extends Model
                     + ($counts['dispatching'] ?? 0)
                     + ($counts['sending'] ?? 0),
                 'retrying' => $counts['retrying'] ?? 0,
-                'sent' => $counts['sent'] ?? 0,
-                'delivered' => $counts['delivered'] ?? 0,
-                'read' => $counts['read'] ?? 0,
+                'sent' => $sent,
+                'delivered' => $delivered,
+                'read' => $read,
                 'failed' => $counts['failed'] ?? 0,
                 'clicked' => $clicked,
                 'unsubscribed' => $unsubscribed,

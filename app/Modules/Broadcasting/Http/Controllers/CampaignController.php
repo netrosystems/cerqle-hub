@@ -173,9 +173,9 @@ class CampaignController extends Controller
     {
         $this->authorise($request, $campaign);
 
-        // Only recalculate totals for campaigns that are still changing.
-        // Completed/failed/draft campaigns have stable totals stored in totals_json.
-        if (in_array($campaign->status, [
+        // SMS totals also normalize older successful "sent" rows as Delivered,
+        // so recalculate whenever an SMS campaign is opened.
+        if ($campaign->channel === 'sms' || in_array($campaign->status, [
             'queued', 'waiting_capacity', 'preparing', 'sending', 'retrying', 'paused', 'safety_paused',
         ], true)) {
             $campaign->updateTotals();
