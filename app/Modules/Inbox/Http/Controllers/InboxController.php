@@ -59,6 +59,13 @@ class InboxController extends Controller
         ]);
     }
 
+    public function emailIndex(Request $request): Response
+    {
+        $request->merge(['channel' => 'email']);
+
+        return $this->index($request);
+    }
+
     public function pollConversations(Request $request): JsonResponse
     {
         $workspaceId = $request->user()->current_workspace_id ?? $request->user()->workspace_id;

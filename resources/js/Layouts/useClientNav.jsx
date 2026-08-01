@@ -5,7 +5,7 @@ import {
     LayoutDashboard, CreditCard, Package, FileText, Users, Settings,
     Layers, Webhook, Key, BookOpen, Image, Radio, Inbox, Bot, Database,
     Zap, Share2, Tag, LifeBuoy, MessageSquare,
-    MessageCircle,
+    MessageCircle, Mail,
 } from 'lucide-react';
 
 const iconClass = 'h-4 w-4';
@@ -91,7 +91,9 @@ export default function useClientNav() {
 
     const inboxItems = [
         { label: t('nav.inbox'),          href: safeRoute('client.inbox.index'),               icon: <Inbox className={iconClass} />,         activePattern: 'client.inbox.index' },
+        { label: t('nav.master_email_inbox', { defaultValue: 'Master Email Inbox' }), href: safeRoute('client.inbox.email-inbox'), icon: <Mail className={iconClass} />, activePattern: 'client.inbox.email-inbox' },
         { label: t('nav.channel_setup'),  href: safeRoute('client.inbox.setup'),               icon: <Inbox className={iconClass} />,         activePattern: 'client.inbox.setup' },
+        { label: t('nav.email_setup', { defaultValue: 'Email Setup' }), href: safeRoute('client.inbox.email.index'), icon: <Mail className={iconClass} />, activePattern: 'client.inbox.email.*' },
     ];
 
     const chatbotSetupItems = [

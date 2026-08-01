@@ -2,6 +2,7 @@
 
 namespace App\Modules\Inbox;
 
+use App\Modules\Inbox\Services\EmailDriver;
 use App\Modules\Inbox\Services\InstagramDriver;
 use App\Modules\Inbox\Services\MessengerDriver;
 use App\Modules\Inbox\Services\WebchatDriver;
@@ -24,5 +25,6 @@ class InboxServiceProvider extends ServiceProvider
         $manager->register('messenger', MessengerDriver::class);
         $manager->register('instagram', InstagramDriver::class);
         $manager->register('webchat', WebchatDriver::class);
+        $manager->register('email', EmailDriver::class);
     }
 }

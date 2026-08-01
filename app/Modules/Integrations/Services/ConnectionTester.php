@@ -17,6 +17,7 @@ class ConnectionTester
         try {
             $result = match (true) {
                 $config->provider === 'meta_app' => $this->testMeta($config),
+                $config->provider === 'oauth_microsoft_365' => $this->testMicrosoftOAuth($config),
                 str_starts_with($config->provider, 'oauth_') => $this->testOAuth($config),
                 str_starts_with($config->provider, 'llm_') => $this->testLlm($config),
                 str_starts_with($config->provider, 'sms_') => $this->testSms($config),
@@ -92,6 +93,20 @@ class ConnectionTester
             'ok' => false,
             'message' => 'Credential presence confirmed, but this provider cannot validate an OAuth client secret without a real user authorization. Complete one sandbox connect flow before enabling it for customers.',
         ];
+    }
+
+    private function testMicrosoftOAuth(IntegrationConfig $config): array
+    {
+        $credentials = $config->credentials ?? [];
+        if (empty($credentials['client_id']) || empty($credentials['client_secret'])) {
+            return ['ok' => false, 'message' => 'Application ID and Client Secret are required.'];
+        }
+        $tenant = trim((string) ($credentials['tenant'] ?? 'common')) ?: 'common';
+        $response = HttpFacade::timeout(10)->get('https://login.microsoftonline.com/'.rawurlencode($tenant).'/v2.0/.well-known/openid-configuration');
+
+        return $response->successful() && $response->json('token_endpoint')
+            ? ['ok' => true, 'message' => 'Microsoft tenant and OAuth app fields are configured. Connect a mailbox to validate the client secret and delegated Mail permissions.']
+            : ['ok' => false, 'message' => 'Microsoft tenant is invalid or the identity service is unavailable.'];
     }
 
     private function testLlm(IntegrationConfig $config): array

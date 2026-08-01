@@ -176,14 +176,9 @@
 
         <!-- Facebook JS SDK — loaded eagerly when Meta App is configured -->
         <div id="fb-root"></div>
-        @php
-            // Guarded: integration_configs may be unreadable during first-run install.
-            try {
-                $metaAppId = \App\Modules\Integrations\Services\CredentialResolver::system()->meta()?->appId();
-            } catch (\Throwable) {
-                $metaAppId = null;
-            }
-        @endphp
+        {{-- Inline assignment survives Blade's compiled include scope and is safe
+             while the integration table is unavailable during first-run setup. --}}
+        @php($metaAppId = rescue(fn () => \App\Modules\Integrations\Services\CredentialResolver::system()->meta()?->appId(), null, false))
         @if($metaAppId)
         <script>
             window.fbAsyncInit = function() {

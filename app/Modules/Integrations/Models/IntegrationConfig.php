@@ -18,6 +18,7 @@ class IntegrationConfig extends Model
         'llm_anthropic_default',
         'llm_gemini_default',
         'google_workspace',
+        'oauth_microsoft_365',
         'onesignal',
         'qdrant',
         'storage_local',
@@ -49,6 +50,7 @@ class IntegrationConfig extends Model
         'llm_anthropic_default' => 'Anthropic Claude (Default)',
         'llm_gemini_default' => 'Google Gemini (Default)',
         'google_workspace' => 'Google Workspace (Sheets / Docs / Calendar / Meet)',
+        'oauth_microsoft_365' => 'Microsoft 365 Mail OAuth',
         'onesignal' => 'OneSignal Push Notifications',
         'qdrant' => 'Qdrant Vector Store',
         'storage_local' => 'Local Storage (server disk)',
@@ -69,6 +71,7 @@ class IntegrationConfig extends Model
         'llm_anthropic_default' => 'AI / LLM',
         'llm_gemini_default' => 'AI / LLM',
         'google_workspace' => 'Google Workspace',
+        'oauth_microsoft_365' => 'Email OAuth',
         'onesignal' => 'Notifications',
         'qdrant' => 'Vector Store',
         'storage_local' => 'Storage',
@@ -106,6 +109,11 @@ class IntegrationConfig extends Model
         'oauth_bigcommerce' => [
             ['key' => 'client_id',     'label' => 'Client ID',     'type' => 'text',     'required' => true,  'hint' => 'From your BigCommerce Dev Portal app'],
             ['key' => 'client_secret', 'label' => 'Client Secret', 'type' => 'password', 'required' => true],
+        ],
+        'oauth_microsoft_365' => [
+            ['key' => 'client_id', 'label' => 'Application (Client) ID', 'type' => 'text', 'required' => true],
+            ['key' => 'client_secret', 'label' => 'Client Secret', 'type' => 'password', 'required' => true],
+            ['key' => 'tenant', 'label' => 'Tenant', 'type' => 'text', 'required' => false, 'hint' => 'Use common for work, school, and personal Microsoft accounts; organizations for work/school only.'],
         ],
         'llm_openai_default' => [
             ['key' => 'api_key',        'label' => 'API Key',        'type' => 'password', 'required' => true],

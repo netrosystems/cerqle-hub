@@ -4,6 +4,8 @@ use App\Http\Controllers\Admin\CronSetupController;
 use App\Modules\Broadcasting\Jobs\LaunchScheduledCampaignsJob;
 use App\Modules\Broadcasting\Jobs\RecoverSmsCampaignsJob;
 use App\Modules\Broadcasting\Models\UsageMeter;
+use App\Modules\Inbox\Jobs\SyncEmailAccountJob;
+use App\Modules\Shared\Models\ChannelAccount;
 use App\Modules\Social\Jobs\DispatchScheduledPostsJob;
 use App\Modules\Social\Jobs\RefreshSocialTokensJob;
 use App\Modules\Whatsapp\Jobs\TemplateSyncJob;
@@ -37,6 +39,13 @@ Schedule::job(new RecoverSmsCampaignsJob, 'broadcast')
     ->everyMinute()
     ->name('recover-sms-campaigns')
     ->withoutOverlapping();
+
+Schedule::call(function () {
+    ChannelAccount::where('channel', 'email')
+        ->where('status', 'active')
+        ->pluck('id')
+        ->each(fn (int $id) => SyncEmailAccountJob::dispatch($id)->onQueue('default'));
+})->everyMinute()->name('sync-email-inboxes')->withoutOverlapping();
 
 // Sync WhatsApp templates from Meta (once per day)
 Schedule::call(function () {

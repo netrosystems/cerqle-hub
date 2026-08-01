@@ -2,6 +2,7 @@
 
 use App\Modules\Inbox\Http\Controllers\CannedReplyController;
 use App\Modules\Inbox\Http\Controllers\ChatWidgetController;
+use App\Modules\Inbox\Http\Controllers\EmailAccountController;
 use App\Modules\Inbox\Http\Controllers\InboxController;
 use App\Modules\Inbox\Http\Controllers\InboxSetupController;
 use App\Modules\Inbox\Http\Controllers\InternalNoteController;
@@ -10,6 +11,7 @@ use Illuminate\Support\Facades\Route;
 
 Route::middleware(['web', 'client-app'])->prefix('app/inbox')->name('client.inbox.')->group(function () {
     Route::get('/', [InboxController::class, 'index'])->name('index');
+    Route::get('/email', [InboxController::class, 'emailIndex'])->name('email-inbox');
     Route::get('/poll', [InboxController::class, 'pollConversations'])->name('poll');
     Route::get('/contacts/search', [InboxController::class, 'contactSearch'])->name('contacts.search');
     Route::get('/channel-accounts', [InboxController::class, 'channelAccounts'])->name('channel-accounts');
@@ -57,4 +59,11 @@ Route::middleware(['web', 'client-app'])->prefix('app/inbox')->name('client.inbo
     Route::post('/setup/embedded-signup/messenger', [InboxSetupController::class, 'embeddedSignupMessenger'])->name('setup.embedded-signup.messenger');
     Route::patch('/setup/{channelAccount}/chatbot', [InboxSetupController::class, 'assignChatbot'])->name('setup.assign-chatbot');
     Route::delete('/setup/{channelAccount}', [InboxSetupController::class, 'destroy'])->name('setup.destroy');
+
+    Route::get('/email-setup', [EmailAccountController::class, 'index'])->name('email.index');
+    Route::get('/email-setup/microsoft/connect', [EmailAccountController::class, 'connectMicrosoft'])->name('email.microsoft.connect');
+    Route::get('/email-setup/microsoft/callback', [EmailAccountController::class, 'microsoftCallback'])->name('email.microsoft.callback');
+    Route::post('/email-setup/imap-smtp', [EmailAccountController::class, 'storeGeneric'])->name('email.generic.store');
+    Route::post('/email-setup/{channelAccount}/sync', [EmailAccountController::class, 'sync'])->name('email.sync');
+    Route::delete('/email-setup/{channelAccount}', [EmailAccountController::class, 'destroy'])->name('email.destroy');
 });
