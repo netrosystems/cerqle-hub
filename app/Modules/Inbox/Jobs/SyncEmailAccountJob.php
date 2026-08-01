@@ -4,6 +4,7 @@ namespace App\Modules\Inbox\Jobs;
 
 use App\Events\MessageReceived;
 use App\Modules\Inbox\Services\GenericMailboxClient;
+use App\Modules\Inbox\Services\GoogleGmailClient;
 use App\Modules\Inbox\Services\MicrosoftGraphMailClient;
 use App\Modules\Shared\Models\ChannelAccount;
 use App\Modules\Shared\Models\Contact;
@@ -40,7 +41,7 @@ class SyncEmailAccountJob implements ShouldBeUnique, ShouldQueue
 
     public function __construct(public readonly int $channelAccountId) {}
 
-    public function handle(MicrosoftGraphMailClient $microsoft, GenericMailboxClient $generic): void
+    public function handle(MicrosoftGraphMailClient $microsoft, GoogleGmailClient $google, GenericMailboxClient $generic): void
     {
         $account = ChannelAccount::where('channel', 'email')->where('status', 'active')->find($this->channelAccountId);
         if (! $account) {
@@ -48,9 +49,11 @@ class SyncEmailAccountJob implements ShouldBeUnique, ShouldQueue
         }
 
         try {
-            $items = $account->provider === 'microsoft_365'
-                ? $microsoft->syncInbox($account)
-                : $generic->messages($account);
+            $items = match ($account->provider) {
+                'microsoft_365' => $microsoft->syncInbox($account),
+                'gmail' => $google->syncInbox($account),
+                default => $generic->messages($account),
+            };
             foreach ($items as $item) {
                 $this->ingest($account, $item);
             }
@@ -110,6 +113,7 @@ class SyncEmailAccountJob implements ShouldBeUnique, ShouldQueue
             'payload' => [
                 'subject' => (string) ($item['subject'] ?? '(no subject)'),
                 'internet_message_id' => (string) ($item['internetMessageId'] ?? ''),
+                'provider_thread_id' => (string) ($item['conversationId'] ?? ''),
                 'has_attachments' => (bool) ($item['hasAttachments'] ?? false),
             ],
             'status' => 'delivered',

@@ -61,9 +61,54 @@ class InboxController extends Controller
 
     public function emailIndex(Request $request): Response
     {
-        $request->merge(['channel' => 'email']);
+        $workspaceId = (int) ($request->user()->current_workspace_id ?? $request->user()->workspace_id);
+        $selected = null;
+        $messages = collect();
 
-        return $this->index($request);
+        if ($request->filled('conversation')) {
+            $selected = Conversation::where('workspace_id', $workspaceId)
+                ->where('uuid', $request->string('conversation')->toString())
+                ->whereHas('channelAccount', fn ($query) => $query->where('channel', 'email'))
+                ->with(['contact', 'channelAccount', 'labels', 'latestInboundMessage', 'lastHumanReply.user:id,name,avatar'])
+                ->firstOrFail();
+            $messages = $selected->messages()
+                ->with('user:id,name,avatar')
+                ->latest('sent_at')
+                ->limit(200)
+                ->get()
+                ->reverse()
+                ->values();
+            if ($selected->unread_count > 0) {
+                $selected->update(['unread_count' => 0]);
+            }
+        }
+
+        $mailbox = $this->emailInboxData($request, $workspaceId);
+        $accounts = ChannelAccount::where('workspace_id', $workspaceId)
+            ->where('channel', 'email')
+            ->where('status', 'active')
+            ->orderBy('display_name')
+            ->get(['id', 'provider', 'display_name', 'meta_json'])
+            ->map(fn (ChannelAccount $account) => [
+                'id' => $account->id,
+                'provider' => $account->provider,
+                'display_name' => $account->display_name,
+                'email' => $account->meta_json['email'] ?? null,
+            ]);
+
+        return Inertia::render('Inbox/EmailInbox', [
+            ...$mailbox,
+            'accounts' => $accounts,
+            'selectedConversation' => $selected,
+            'messages' => $messages,
+        ]);
+    }
+
+    public function pollEmailConversations(Request $request): JsonResponse
+    {
+        $workspaceId = (int) ($request->user()->current_workspace_id ?? $request->user()->workspace_id);
+
+        return response()->json($this->emailInboxData($request, $workspaceId));
     }
 
     public function pollConversations(Request $request): JsonResponse
@@ -741,6 +786,49 @@ class InboxController extends Controller
             ->when($request->folder === 'snoozed', fn ($q) => $q->where('status', 'snoozed'))
             ->when($request->label, fn ($q) => $q->whereHas('labels', fn ($q) => $q->where('inbox_labels.id', $request->label)))
             ->orderByDesc('last_message_at');
+    }
+
+    private function emailInboxData(Request $request, int $workspaceId): array
+    {
+        $folder = in_array($request->string('folder')->toString(), ['inbox', 'unread', 'sent', 'resolved', 'all'], true)
+            ? $request->string('folder')->toString()
+            : 'inbox';
+        $accountId = $request->integer('account_id') ?: null;
+        $search = trim($request->string('search')->toString());
+
+        $base = Conversation::where('workspace_id', $workspaceId)
+            ->whereHas('channelAccount', fn ($query) => $query->where('channel', 'email'));
+        $accountBase = (clone $base)
+            ->when($accountId, fn ($query) => $query->where('channel_account_id', $accountId));
+
+        $query = (clone $accountBase)
+            ->with(['contact', 'channelAccount', 'lastMessage', 'latestInboundMessage', 'lastHumanReply.user:id,name,avatar', 'labels'])
+            ->when($search !== '', function ($query) use ($search): void {
+                $query->where(function ($query) use ($search): void {
+                    $query->whereHas('contact', fn ($contact) => $contact->where(fn ($contact) => $contact
+                        ->where('first_name', 'like', "%{$search}%")
+                        ->orWhere('last_name', 'like', "%{$search}%")
+                        ->orWhere('email', 'like', "%{$search}%")))
+                        ->orWhereHas('messages', fn ($message) => $message->where('body', 'like', "%{$search}%"));
+                });
+            })
+            ->when($folder === 'inbox', fn ($query) => $query->where('status', '!=', 'resolved'))
+            ->when($folder === 'unread', fn ($query) => $query->where('unread_count', '>', 0))
+            ->when($folder === 'sent', fn ($query) => $query->whereHas('messages', fn ($message) => $message->where('direction', 'out')))
+            ->when($folder === 'resolved', fn ($query) => $query->where('status', 'resolved'))
+            ->orderByDesc('last_message_at');
+
+        return [
+            'conversations' => $query->paginate(50)->withQueryString(),
+            'filters' => ['folder' => $folder, 'account_id' => $accountId, 'search' => $search],
+            'counts' => [
+                'inbox' => (clone $accountBase)->where('status', '!=', 'resolved')->count(),
+                'unread' => (clone $accountBase)->where('unread_count', '>', 0)->count(),
+                'sent' => (clone $accountBase)->whereHas('messages', fn ($message) => $message->where('direction', 'out'))->count(),
+                'resolved' => (clone $accountBase)->where('status', 'resolved')->count(),
+                'all' => (clone $accountBase)->count(),
+            ],
+        ];
     }
 
     private function authorise(Request $request, Conversation $conversation): void

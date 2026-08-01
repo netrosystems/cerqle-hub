@@ -12,6 +12,7 @@ use Illuminate\Support\Facades\Route;
 Route::middleware(['web', 'client-app'])->prefix('app/inbox')->name('client.inbox.')->group(function () {
     Route::get('/', [InboxController::class, 'index'])->name('index');
     Route::get('/email', [InboxController::class, 'emailIndex'])->name('email-inbox');
+    Route::get('/email/poll', [InboxController::class, 'pollEmailConversations'])->name('email.poll');
     Route::get('/poll', [InboxController::class, 'pollConversations'])->name('poll');
     Route::get('/contacts/search', [InboxController::class, 'contactSearch'])->name('contacts.search');
     Route::get('/channel-accounts', [InboxController::class, 'channelAccounts'])->name('channel-accounts');
@@ -61,6 +62,8 @@ Route::middleware(['web', 'client-app'])->prefix('app/inbox')->name('client.inbo
     Route::delete('/setup/{channelAccount}', [InboxSetupController::class, 'destroy'])->name('setup.destroy');
 
     Route::get('/email-setup', [EmailAccountController::class, 'index'])->name('email.index');
+    Route::get('/email-setup/google/connect', [EmailAccountController::class, 'connectGoogle'])->name('email.google.connect');
+    Route::get('/email-setup/google/callback', [EmailAccountController::class, 'googleCallback'])->name('email.google.callback');
     Route::get('/email-setup/microsoft/connect', [EmailAccountController::class, 'connectMicrosoft'])->name('email.microsoft.connect');
     Route::get('/email-setup/microsoft/callback', [EmailAccountController::class, 'microsoftCallback'])->name('email.microsoft.callback');
     Route::post('/email-setup/imap-smtp', [EmailAccountController::class, 'storeGeneric'])->name('email.generic.store');

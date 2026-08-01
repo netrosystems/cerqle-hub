@@ -73,6 +73,8 @@ class IntegrationConfigController extends Controller
                 'oauth_tiktok' => route('client.social.oauth.callback', 'tiktok'),
                 'oauth_shopify' => route('client.ecommerce.oauth.shopify.callback'),
                 'oauth_bigcommerce' => route('client.ecommerce.oauth.bigcommerce.callback'),
+                'oauth_google_mail' => route('client.inbox.email.google.callback'),
+                'oauth_microsoft_365' => route('client.inbox.email.microsoft.callback'),
                 default => null,
             },
             'config' => [
