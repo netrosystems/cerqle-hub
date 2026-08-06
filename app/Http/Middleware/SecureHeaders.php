@@ -71,9 +71,15 @@ class SecureHeaders
             return '';
         }
 
-        // Vite default port 5173, plus the next auto-selected port when 5173 is already busy.
+        // Vite default port 5173, plus the next auto-selected ports when 5173 is already busy.
         // Do not use http://[::1]:5173 — invalid in script-src for Chromium and triggers console noise.
-        return ' http://localhost:5173 http://127.0.0.1:5173 http://localhost:5174 http://127.0.0.1:5174';
+        $ports = [5173, 5174, 5175, 5176];
+        $sources = '';
+        foreach ($ports as $port) {
+            $sources .= " http://localhost:{$port} http://127.0.0.1:{$port}";
+        }
+
+        return $sources;
     }
 
     /** OneSignal (when configured), Meta JS SDK, and Cloudflare Web Analytics / beacon scripts. */

@@ -29,5 +29,6 @@ Route::middleware(['web', 'client-app'])->prefix('app')->name('client.')->group(
     Route::post('/segments/{segment}/contacts', [SegmentController::class, 'attachContacts'])->name('segments.contacts.attach');
     Route::post('/segments/{segment}/contacts/import', [SegmentController::class, 'importContacts'])->name('segments.contacts.import');
     Route::delete('/segments/{segment}/contacts', [SegmentController::class, 'detachAllContacts'])->name('segments.contacts.detach-all');
+    Route::delete('/segments/{segment}/contacts/clear', [SegmentController::class, 'clearList'])->name('segments.contacts.clear');
     Route::delete('/segments/{segment}/contacts/{contact}', [SegmentController::class, 'detachContact'])->name('segments.contacts.detach');
 });

@@ -79,10 +79,36 @@ class SegmentController extends Controller
 
         $search = trim((string) $request->input('search', ''));
 
-        $segmentContacts = $segment->contacts()
+        $existingContactsCount = $segment->contacts()
             ->where('contacts.is_campaign_only', false)
+            ->count();
+        $uploadedContactsCount = $segment->contacts()
+            ->where('contacts.is_campaign_only', true)
+            ->count();
+
+        // Single, merged "already in this list" view: real customers first, then
+        // uploaded CSV recipients. Each row is tagged so the UI can render a
+        // source chip without second queries.
+        $listContacts = $segment->contacts()
+            ->when($search !== '', fn ($q) => $q->where(function ($q) use ($search) {
+                $q->where('contacts.first_name', 'like', '%'.$search.'%')
+                    ->orWhere('contacts.last_name', 'like', '%'.$search.'%')
+                    ->orWhere('contacts.phone_e164', 'like', '%'.$search.'%')
+                    ->orWhere('contacts.email', 'like', '%'.$search.'%');
+            }))
+            ->orderByDesc('contacts.is_campaign_only')
             ->orderByDesc('contacts.id')
-            ->paginate(25, ['contacts.id', 'contacts.uuid', 'first_name', 'last_name', 'phone_e164', 'email', 'avatar'], 'members_page')
+            ->paginate(25, ['contacts.id', 'contacts.uuid', 'first_name', 'last_name', 'phone_e164', 'email', 'avatar', 'is_campaign_only'], 'list_page')
+            ->through(fn ($contact) => [
+                'id' => $contact->id,
+                'uuid' => $contact->uuid,
+                'first_name' => $contact->first_name,
+                'last_name' => $contact->last_name,
+                'phone_e164' => $contact->phone_e164,
+                'email' => $contact->email,
+                'avatar' => $contact->avatar,
+                'source' => $contact->is_campaign_only ? 'uploaded' : 'existing',
+            ])
             ->withQueryString();
 
         $availableQuery = Contact::where('workspace_id', $workspaceId)
@@ -103,10 +129,11 @@ class SegmentController extends Controller
 
         return Inertia::render('Contacts/SegmentContacts', [
             'segment' => $segment,
-            'segmentContacts' => $segmentContacts,
+            'listContacts' => $listContacts,
+            'existingContactsCount' => $existingContactsCount,
+            'uploadedContactsCount' => $uploadedContactsCount,
             'availableContacts' => $allContacts,
             'availableCount' => $availableCount,
-            'uploadedAudienceCount' => $segment->contacts()->where('contacts.is_campaign_only', true)->count(),
             'filters' => ['search' => $search],
             'operations' => ContactListOperation::where('workspace_id', $workspaceId)
                 ->where('segment_id', $segment->id)
@@ -234,6 +261,30 @@ class SegmentController extends Controller
         $segment->update(['contact_count' => $segment->contacts()->count()]);
 
         return back()->with('success', 'Contact removed from the contact list.');
+    }
+
+    public function clearList(Request $request, Segment $segment): RedirectResponse
+    {
+        $this->authorise($request, $segment);
+        abort_if($segment->type !== 'static', 403);
+
+        $before = $segment->contacts()->count();
+
+        // Detach in chunks so very large lists don't blow up memory.
+        // Note: this only removes the pivot rows; it never deletes the
+        // underlying Contact records (CRM customers stay in the directory,
+        // uploaded recipients stay in the contact table but lose their
+        // membership in this list).
+        $segment->contacts()
+            ->select('contacts.id')
+            ->orderBy('contacts.id')
+            ->chunkById(1000, function ($contacts) use ($segment): void {
+                $segment->contacts()->detach($contacts->pluck('id')->all());
+            }, 'contacts.id', 'id');
+
+        $segment->update(['contact_count' => 0]);
+
+        return back()->with('success', "Removed {$before} contact(s) from this contact list. Customer records were not deleted.");
     }
 
     private function authorise(Request $request, Segment $segment): void

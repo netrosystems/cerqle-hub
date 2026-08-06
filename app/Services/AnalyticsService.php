@@ -545,7 +545,11 @@ class AnalyticsService
      */
     public function newClientsPerWeek(int $weeks = 12): array
     {
-        $rows = Client::selectRaw("DATE_FORMAT(created_at, '%Y-%u') as week, COUNT(*) as clients")
+        $weekExpression = DB::connection()->getDriverName() === 'sqlite'
+            ? "strftime('%Y-%W', created_at)"
+            : "DATE_FORMAT(created_at, '%Y-%u')";
+
+        $rows = Client::selectRaw("{$weekExpression} as week, COUNT(*) as clients")
             ->where('created_at', '>=', now()->subWeeks($weeks))
             ->groupBy('week')
             ->orderBy('week')

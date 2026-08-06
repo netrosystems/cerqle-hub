@@ -79,10 +79,59 @@ class ContactListBulkManagementTest extends TestCase
         $this->assertSame(0, Contact::where('workspace_id', $workspace->id)->customerDirectory()->count());
         $this->assertSame(2, $list->contacts()->count());
         $this->assertSame(1, $operation->fresh()->skipped);
+        $this->assertSame(0, $operation->fresh()->skipped_existing_customer);
         $this->assertSame('completed', $operation->fresh()->status);
         $this->assertDatabaseHas('contacts', ['workspace_id' => $workspace->id, 'phone_e164' => '+96170111111']);
         $this->assertDatabaseHas('contacts', ['workspace_id' => $workspace->id, 'phone_e164' => '+96170222222']);
         Storage::disk('local')->assertMissing($operation->source_path);
+    }
+
+    public function test_csv_import_reports_rows_that_match_an_existing_customer_separately(): void
+    {
+        Queue::fake();
+        Storage::fake('local');
+        ['user' => $user, 'workspace' => $workspace] = $this->createWorkspaceContext();
+        $list = Segment::create(['workspace_id' => $workspace->id, 'name' => 'CSV list', 'type' => 'static']);
+        Contact::create(['workspace_id' => $workspace->id, 'phone_e164' => '+96170555555', 'first_name' => 'Real']);
+        $csv = "phone_e164,first_name,email,opt_in_sms\n0096170555555,Override,over@example.test,true\n96170666666,New,new@example.test,true\n";
+
+        $this->actingAs($user)->post(route('client.segments.contacts.import', $list), [
+            'file' => UploadedFile::fake()->createWithContent('contacts.csv', $csv),
+        ])->assertRedirect();
+
+        $operation = ContactListOperation::firstOrFail();
+        (new ImportContactsToListJob($operation->id))->handle();
+        $operation->refresh();
+
+        // The "Real" customer stays untouched; only the truly new number is
+        // attached to the list, but the operation still reports the overlap
+        // explicitly so the UI can explain the gap.
+        $this->assertSame('Real', Contact::where('phone_e164', '+96170555555')->first()->first_name);
+        $this->assertSame(1, $list->contacts()->count());
+        $this->assertSame(2, $operation->processed);
+        $this->assertSame(1, $operation->added);
+        $this->assertSame(1, $operation->skipped_existing_customer);
+        $this->assertSame(0, $operation->skipped);
+    }
+
+    public function test_manage_contacts_renders_a_merged_list_with_source_tags(): void
+    {
+        ['user' => $user, 'workspace' => $workspace] = $this->createWorkspaceContext();
+        $list = Segment::create(['workspace_id' => $workspace->id, 'name' => 'Mixed', 'type' => 'static']);
+        $existing = Contact::create(['workspace_id' => $workspace->id, 'phone_e164' => '+12025550199']);
+        $uploaded = Contact::create(['workspace_id' => $workspace->id, 'phone_e164' => '+96170999999', 'is_campaign_only' => true]);
+        $list->contacts()->sync([$existing->id, $uploaded->id]);
+        $list->update(['contact_count' => 2]);
+
+        $response = $this->actingAs($user)->get(route('client.segments.contacts', $list))->assertOk();
+
+        $response->assertInertia(fn ($page) => $page
+            ->component('Contacts/SegmentContacts')
+            ->where('existingContactsCount', 1)
+            ->where('uploadedContactsCount', 1)
+            ->where('listContacts.total', 2)
+            ->has('listContacts.data', 2)
+        );
     }
 
     public function test_client_can_remove_all_existing_contacts_from_a_contact_list_without_deleting_them(): void
@@ -100,6 +149,32 @@ class ContactListBulkManagementTest extends TestCase
         $this->assertTrue($list->fresh()->contacts()->whereKey($uploaded->id)->exists());
         $this->assertDatabaseHas('contacts', ['id' => $first->id]);
         $this->assertDatabaseHas('contacts', ['id' => $second->id]);
+    }
+
+    public function test_client_can_clear_an_entire_contact_list_without_deleting_any_contacts(): void
+    {
+        ['user' => $user, 'workspace' => $workspace] = $this->createWorkspaceContext();
+        $list = Segment::create(['workspace_id' => $workspace->id, 'name' => 'All recipients', 'type' => 'static']);
+        $customer = Contact::create(['workspace_id' => $workspace->id, 'phone_e164' => '+12025550111', 'first_name' => 'CRM', 'source' => 'manual']);
+        $uploaded = Contact::create(['workspace_id' => $workspace->id, 'phone_e164' => '+96170999999', 'is_campaign_only' => true]);
+        $list->contacts()->sync([$customer->id, $uploaded->id]);
+
+        $this->actingAs($user)->delete(route('client.segments.contacts.clear', $list))->assertRedirect();
+
+        $list->refresh();
+        $this->assertSame(0, $list->contacts()->count());
+        $this->assertSame(0, (int) $list->contact_count);
+        // No contact record is deleted.
+        $this->assertDatabaseHas('contacts', ['id' => $customer->id]);
+        $this->assertDatabaseHas('contacts', ['id' => $uploaded->id]);
+    }
+
+    public function test_clearing_a_contact_list_rejects_dynamic_segments(): void
+    {
+        ['user' => $user, 'workspace' => $workspace] = $this->createWorkspaceContext();
+        $list = Segment::create(['workspace_id' => $workspace->id, 'name' => 'Dynamic', 'type' => 'dynamic']);
+
+        $this->actingAs($user)->delete(route('client.segments.contacts.clear', $list))->assertForbidden();
     }
 
     public function test_client_can_download_the_contact_list_csv_sample(): void
@@ -153,5 +228,92 @@ class ContactListBulkManagementTest extends TestCase
         $this->assertFalse($customer->fresh()->is_campaign_only);
         $this->assertSame('Real', $customer->fresh()->first_name);
         $this->assertSame(1, Contact::where('workspace_id', $workspace->id)->customerDirectory()->count());
+    }
+
+    public function test_csv_import_accepts_all_real_number_shapes_and_normalises_them_to_e164(): void
+    {
+        Queue::fake();
+        Storage::fake('local');
+        ['user' => $user, 'workspace' => $workspace] = $this->createWorkspaceContext();
+        $list = Segment::create(['workspace_id' => $workspace->id, 'name' => 'Normalisation', 'type' => 'static']);
+        // All four shapes should normalise to a real E.164 number:
+        //   +96170123456           — already E.164
+        //   0096170654321          — 00 international prefix
+        //   961707654321           — bare international digits
+        //   070111222 with country — national number, default country from file
+        $csv = "phone_e164,first_name,country\n+96170123456,Ada,LB\n0096170654321,Grace,LB\n961707654321,Marie,LB\n070111222,Jana,LB\n";
+
+        $this->actingAs($user)->post(route('client.segments.contacts.import', $list), [
+            'file' => UploadedFile::fake()->createWithContent('contacts.csv', $csv),
+        ])->assertRedirect();
+
+        $operation = ContactListOperation::firstOrFail();
+        (new ImportContactsToListJob($operation->id))->handle();
+        $operation->refresh();
+
+        $this->assertSame(4, $operation->added);
+        $this->assertSame(0, $operation->skipped);
+        $this->assertSame(0, $operation->skipped_invalid_phone);
+        $this->assertSame(0, $operation->skipped_malformed_row);
+        $this->assertSame(0, $operation->skipped_duplicate_in_file);
+        $this->assertSame(4, $list->fresh()->contacts()->count());
+        $this->assertDatabaseHas('contacts', ['workspace_id' => $workspace->id, 'phone_e164' => '+96170123456', 'first_name' => 'Ada']);
+        $this->assertDatabaseHas('contacts', ['workspace_id' => $workspace->id, 'phone_e164' => '+96170654321']);
+        $this->assertDatabaseHas('contacts', ['workspace_id' => $workspace->id, 'phone_e164' => '+961707654321', 'first_name' => 'Marie']);
+        $this->assertDatabaseHas('contacts', ['workspace_id' => $workspace->id, 'phone_e164' => '+96170111222', 'first_name' => 'Jana']);
+    }
+
+    public function test_csv_import_rejects_national_numbers_without_a_country_column(): void
+    {
+        Queue::fake();
+        Storage::fake('local');
+        ['user' => $user, 'workspace' => $workspace] = $this->createWorkspaceContext();
+        $list = Segment::create(['workspace_id' => $workspace->id, 'name' => 'Strict', 'type' => 'static']);
+        // 070123456 is "national" without a country column — we cannot place
+        // it safely, so it must be reported as an invalid phone, not silently
+        // dropped.
+        $csv = "phone_e164,first_name\n070123456,Local\n0096170123456,Intl\n";
+
+        $this->actingAs($user)->post(route('client.segments.contacts.import', $list), [
+            'file' => UploadedFile::fake()->createWithContent('contacts.csv', $csv),
+        ])->assertRedirect();
+
+        $operation = ContactListOperation::firstOrFail();
+        (new ImportContactsToListJob($operation->id))->handle();
+        $operation->refresh();
+
+        $this->assertSame(1, $operation->added);
+        $this->assertSame(1, $operation->skipped_invalid_phone);
+        $this->assertSame(0, $operation->skipped_malformed_row);
+        $this->assertSame(0, $operation->skipped_duplicate_in_file);
+        $this->assertSame(1, $operation->skipped);
+        $this->assertDatabaseHas('contacts', ['workspace_id' => $workspace->id, 'phone_e164' => '+96170123456']);
+        $this->assertDatabaseMissing('contacts', ['workspace_id' => $workspace->id, 'phone_e164' => '+9617012345']);
+    }
+
+    public function test_csv_import_splits_rejections_into_phone_row_and_duplicate_buckets(): void
+    {
+        Queue::fake();
+        Storage::fake('local');
+        ['user' => $user, 'workspace' => $workspace] = $this->createWorkspaceContext();
+        $list = Segment::create(['workspace_id' => $workspace->id, 'name' => 'Breakdown', 'type' => 'static']);
+        // 1 valid, 1 invalid phone, 1 malformed row (wrong column count),
+        // 1 in-file duplicate of the valid row.
+        $csv = "phone_e164,first_name\n+96170123456,Valid\nnot-a-phone,Bad\n+96170123456,Valid\n+96170888888,Extra,Extra\n";
+
+        $this->actingAs($user)->post(route('client.segments.contacts.import', $list), [
+            'file' => UploadedFile::fake()->createWithContent('contacts.csv', $csv),
+        ])->assertRedirect();
+
+        $operation = ContactListOperation::firstOrFail();
+        (new ImportContactsToListJob($operation->id))->handle();
+        $operation->refresh();
+
+        $this->assertSame(1, $operation->added);
+        $this->assertSame(1, $operation->skipped_invalid_phone);
+        $this->assertSame(1, $operation->skipped_malformed_row);
+        $this->assertSame(1, $operation->skipped_duplicate_in_file);
+        $this->assertSame(3, $operation->skipped);
+        $this->assertSame(1, $list->fresh()->contacts()->count());
     }
 }
