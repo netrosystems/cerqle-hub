@@ -243,17 +243,6 @@ class WhatsappDriver implements ChannelDriverInterface
 
         $workspaceId = (int) $channelAccount->workspace_id;
 
-        $contact = $this->contactService->upsert($workspaceId, [
-            'phone_e164' => '+'.$fromPhone,
-            'opt_in_whatsapp' => true,
-            'source' => 'whatsapp_inbound',
-        ]);
-
-        $conversation = Conversation::firstOrCreate(
-            ['workspace_id' => $workspaceId, 'contact_id' => $contact->id, 'channel_account_id' => $channelAccount?->id],
-            ['status' => 'open', 'external_thread_id' => $fromPhone]
-        );
-
         $type = $msg['type'] ?? 'text';
         $interactive = is_array($msg['interactive'] ?? null) ? $msg['interactive'] : [];
         $textBlock = is_array($msg['text'] ?? null) ? $msg['text'] : [];
@@ -266,6 +255,31 @@ class WhatsappDriver implements ChannelDriverInterface
             ?? (is_array($msg[$type] ?? null) && ! isset($msg[$type][0]) ? ($msg[$type]['caption'] ?? null) : null)
             ?? ($msg['caption'] ?? null)
             ?? ($msg['errors'][0]['title'] ?? null);
+
+        // Inbound consent detection. Three outcomes:
+        //   true   — body matches an opt-in keyword → opt_in_sms = true
+        //   false  — body matches an opt-out keyword → opt_in_sms = false
+        //   null   — no signal → leave opt_in_sms alone (do NOT touch it)
+        $consentDecision = $this->detectConsentDecision($body);
+
+        $contact = $this->contactService->upsert($workspaceId, [
+            'phone_e164' => '+'.$fromPhone,
+            'opt_in_whatsapp' => true,
+            'source' => 'whatsapp_inbound',
+        ]);
+
+        // Apply the consent decision in a second pass so that opt-OUT
+        // (true → false) and opt-IN (false → true) both work even when the
+        // contact already exists with an opposite value.
+        if ($consentDecision !== null) {
+            $contact->opt_in_sms = $consentDecision;
+            $contact->save();
+        }
+
+        $conversation = Conversation::firstOrCreate(
+            ['workspace_id' => $workspaceId, 'contact_id' => $contact->id, 'channel_account_id' => $channelAccount?->id],
+            ['status' => 'open', 'external_thread_id' => $fromPhone]
+        );
 
         // Type-specific body fallbacks so conversation preview is meaningful
         if ($body === null || $body === '') {
@@ -400,5 +414,103 @@ class WhatsappDriver implements ChannelDriverInterface
 
             $recipient->update($patch);
         }
+    }
+
+    /**
+     * Detect whether an inbound WhatsApp body carries an SMS opt-in or
+     * opt-out signal. The body is the same human-readable string we use
+     * for conversation previews, so this works for plain text, button
+     * reply titles, list reply titles and quick-reply buttons.
+     *
+     * Returns:
+     *   true   — opt-IN keyword found  → caller should set opt_in_sms = true
+     *   false  — opt-OUT keyword found → caller should set opt_in_sms = false
+     *   null   — no signal              → caller must not touch opt_in_sms
+     *
+     * Matching is case-insensitive, trim-tolerant and operates on the first
+     * word / token of the body so "STOP please don't text me" still matches
+     * STOP. A second pass looks for whole-word matches anywhere in the body
+     * (so "Yes, sign me up" matches `yes`) but uses word boundaries so we
+     * never fire on partial substrings ("Just a normal question" must NOT
+     * match `no`).
+     */
+    private function detectConsentDecision(?string $body): ?bool
+    {
+        if ($body === null) {
+            return null;
+        }
+
+        $trimmed = trim($body);
+        if ($trimmed === '') {
+            return null;
+        }
+
+        $optInKeywords = config('whatsapp.sms_optin_keywords', []);
+        $optOutKeywords = config('whatsapp.sms_optout_keywords', []);
+
+        // Pass 1: first-token match. Cheap, unambiguous, and matches the
+        // industry-standard behaviour for one-word reply keywords.
+        $firstToken = strtolower(strtok($trimmed, " \t\n\r\0\x0B,.;:!?"));
+        if ($firstToken !== false) {
+            if (in_array($firstToken, $optInKeywords, true)) {
+                return true;
+            }
+            if (in_array($firstToken, $optOutKeywords, true)) {
+                return false;
+            }
+        }
+
+        // Pass 2: word-boundary match anywhere in the body. This is the
+        // place where "Yes, please subscribe me" picks up `yes` and where
+        // Arabic keywords (which do not have whitespace token boundaries)
+        // still get matched. The boundary check is what stops "no" inside
+        // "normal" from firing.
+        $bodyLower = mb_strtolower($trimmed);
+
+        foreach ($optInKeywords as $kw) {
+            if ($kw === '') {
+                continue;
+            }
+            if ($this->keywordMatchesBody($kw, $bodyLower)) {
+                return true;
+            }
+        }
+        foreach ($optOutKeywords as $kw) {
+            if ($kw === '') {
+                continue;
+            }
+            if ($this->keywordMatchesBody($kw, $bodyLower)) {
+                return false;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Decide whether a keyword appears in a body. Latin keywords must be
+     * surrounded by non-letter characters (or be at the boundary). Non-Latin
+     * keywords (Arabic, Hebrew, etc.) are matched without boundaries because
+     * the scripts themselves supply natural word separators — Arabic letters
+     * do not collide with Latin letters in a body.
+     */
+    private function keywordMatchesBody(string $keyword, string $bodyLower): bool
+    {
+        $needle = mb_strtolower($keyword);
+
+        if ($needle === '') {
+            return false;
+        }
+
+        // Latin keyword → enforce word boundary so "no" doesn't match "normal".
+        if (preg_match('/^[A-Za-z0-9\-]+$/u', $needle)) {
+            $pattern = '/(?<![\p{L}\p{N}])'.preg_quote($needle, '/').'(?![\p{L}\p{N}])/iu';
+
+            return preg_match($pattern, $bodyLower) === 1;
+        }
+
+        // Non-Latin keyword → plain substring is good enough; scripts are
+        // mutually disjoint so "إيقاف" will never collide with English text.
+        return mb_stripos($bodyLower, $needle) !== false;
     }
 }
