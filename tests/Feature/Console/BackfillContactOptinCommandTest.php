@@ -74,10 +74,21 @@ class BackfillContactOptinCommandTest extends TestCase
         $this->assertSame(0, (int) $noPhone->fresh()->opt_in_sms);
     }
 
-    public function test_skips_campaign_only_rows(): void
+    public function test_includes_campaign_only_contact_list_csv_rows(): void
     {
-        $campaignOnly = $this->makeContact([
+        // A contact_list_csv upload IS the operator's campaign-ready list.
+        // The original CSV is the documented SMS consent on file, so these
+        // rows MUST be flipped even though is_campaign_only = true. They
+        // would otherwise be silently invisible to SMS campaigns.
+        $campaignOnlyCsv = $this->makeContact([
             'source' => 'contact_list_csv',
+            'opt_in_sms' => false,
+            'is_campaign_only' => true,
+        ]);
+        // Sanity: a campaign-only row from a non-consent source is still
+        // excluded — we filter by `source`, not by the is_campaign_only flag.
+        $campaignOnlyOther = $this->makeContact([
+            'source' => 'whatsapp_inbound',
             'opt_in_sms' => false,
             'is_campaign_only' => true,
         ]);
@@ -85,7 +96,10 @@ class BackfillContactOptinCommandTest extends TestCase
         $this->artisan('contacts:backfill-optin', ['--apply' => true])
             ->assertExitCode(0);
 
-        $this->assertSame(0, (int) $campaignOnly->fresh()->opt_in_sms);
+        $this->assertSame(1, (int) $campaignOnlyCsv->fresh()->opt_in_sms,
+            'contact_list_csv campaign-only row must be opted in');
+        $this->assertSame(0, (int) $campaignOnlyOther->fresh()->opt_in_sms,
+            'non-consent source must remain untouched');
     }
 
     public function test_workspace_filter_limits_scope(): void

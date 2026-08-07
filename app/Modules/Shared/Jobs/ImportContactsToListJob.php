@@ -5,6 +5,7 @@ namespace App\Modules\Shared\Jobs;
 use App\Modules\Shared\Models\Contact;
 use App\Modules\Shared\Models\ContactListOperation;
 use App\Modules\Shared\Models\Segment;
+use App\Modules\Shared\Services\ContactService;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\DB;
@@ -31,6 +32,7 @@ class ImportContactsToListJob implements ShouldQueue
             ->where('workspace_id', $operation->workspace_id)
             ->where('type', 'static')
             ->firstOrFail();
+        $contactService = app(ContactService::class);
 
         $operation->update(['status' => 'processing', 'started_at' => now(), 'error_message' => null]);
         $path = Storage::disk('local')->path((string) $operation->source_path);
@@ -76,7 +78,7 @@ class ImportContactsToListJob implements ShouldQueue
                 $defaultCountry = $rowCountry;
             }
 
-            $normalised = $this->normaliseRow($combined ?: [], $operation->workspace_id, $defaultCountry);
+            $normalised = $this->normaliseRow($combined ?: [], $operation->workspace_id, $defaultCountry, $contactService);
             if ($normalised === null) {
                 $pendingInvalid++;
                 $this->flushSkippedCounts($operation, $pendingInvalid, $pendingMalformed, $pendingDuplicate);
@@ -196,7 +198,7 @@ class ImportContactsToListJob implements ShouldQueue
         }, $headers);
     }
 
-    private function normaliseRow(array $row, int $workspaceId, ?string $defaultCountry): ?array
+    private function normaliseRow(array $row, int $workspaceId, ?string $defaultCountry, ContactService $contactService): ?array
     {
         $phone = $this->normaliseInternationalPhone((string) ($row['phone_e164'] ?? ''), $defaultCountry);
         if ($phone === null) {
@@ -218,7 +220,9 @@ class ImportContactsToListJob implements ShouldQueue
             'last_name' => mb_substr(trim((string) ($row['last_name'] ?? '')), 0, 128) ?: null,
             'country' => $country ? mb_substr($country, 0, 4) : null,
             'language' => mb_substr(strtolower(trim((string) ($row['language'] ?? ''))), 0, 8) ?: null,
-            'opt_in_sms' => filter_var($row['opt_in_sms'] ?? true, FILTER_VALIDATE_BOOL),
+            // Uploading a contact list IS the consent signal. Only honor
+            // explicit opt-out tokens (see ContactService::coerceOptIn).
+            'opt_in_sms' => $contactService->coerceOptIn($row['opt_in_sms'] ?? null),
             'source' => 'contact_list_csv',
             'is_campaign_only' => true,
             'deleted_at' => null,

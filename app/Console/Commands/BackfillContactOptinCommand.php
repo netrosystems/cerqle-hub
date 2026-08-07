@@ -39,9 +39,10 @@ use Illuminate\Database\Eloquent\Builder;
  *     imports). Anything we did not get consent for is left alone.
  *   * Skips contacts without a phone number — opting in a phone-less row
  *     is a no-op for SMS.
- *   * Skips `is_campaign_only = true` rows (audience-uploads attached to a
- *     single list — those are scoped by design and should not be promoted
- *     to the CRM's customer directory implicitly).
+ *   * Includes `is_campaign_only = true` rows from consent-bearing sources
+ *     (contact_list_csv). List uploads are exactly the operator's campaign
+ *     audience, so they belong in scope — leaving them out hid the SMS
+ *     consent that was on file in the original CSV.
  *   * `--dry-run` is the default expectation on a production run; you must
  *     pass `--apply` to write changes.
  *
@@ -141,11 +142,12 @@ class BackfillContactOptinCommand extends Command
      */
     private function baseQuery(array $sources): Builder
     {
+        // NOTE: `is_campaign_only = true` is intentionally NOT excluded.
+        // A contact_list_csv upload IS the operator's campaign-ready list,
+        // and the original CSV is the documented SMS consent. Excluding
+        // these rows hid thousands of legitimately opted-in contacts.
         return Contact::query()
-            ->whereIn('source', $sources)
-            // Skip campaign-only uploads — those are scoped to a single list
-            // and intentionally hidden from the customer directory.
-            ->where('is_campaign_only', false);
+            ->whereIn('source', $sources);
     }
 
     /**

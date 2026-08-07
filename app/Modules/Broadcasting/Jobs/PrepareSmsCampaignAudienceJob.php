@@ -147,7 +147,7 @@ class PrepareSmsCampaignAudienceJob implements ShouldQueue
                         'last_name' => $row['last_name'] ?? null,
                         'country' => $row['country'] ?? null,
                         'language' => $row['language'] ?? null,
-                        'opt_in_sms' => $this->coerceBool($row['opt_in_sms'] ?? true),
+                        'opt_in_sms' => $service->coerceOptIn($row['opt_in_sms'] ?? null),
                         'source' => 'campaign_csv',
                     ], false);
                     if ($contact->opt_in_sms && filled($contact->phone_e164)) {
@@ -201,15 +201,6 @@ class PrepareSmsCampaignAudienceJob implements ShouldQueue
         ]);
 
         PumpSmsCampaignJob::dispatch($campaign->id)->onQueue('broadcast');
-    }
-
-    private function coerceBool(mixed $value): bool
-    {
-        if (is_bool($value)) {
-            return $value;
-        }
-
-        return in_array(strtolower((string) $value), ['1', 'true', 'yes', 'y', 'on'], true);
     }
 
     public function failed(\Throwable $exception): void

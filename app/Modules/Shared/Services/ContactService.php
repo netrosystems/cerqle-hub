@@ -14,7 +14,58 @@ class ContactService
 {
     private const CAMPAIGN_ONLY_SOURCES = ['campaign_csv', 'contact_list_csv'];
 
+    /**
+     * Strings that mean "the contact explicitly opted out" when a CSV cell
+     * carries one of these. Matching is case-insensitive and trims whitespace.
+     * Includes English and Arabic negatives — `/لا/` is the Arabic "no".
+     *
+     * Anything outside this whitelist is treated as opt-IN. The rationale:
+     * uploading a contact into a campaign list is itself a consent signal.
+     * The operator's deliberate act of uploading is the legal ground; if they
+     * intentionally meant to opt out a row, they will type one of these
+     * words. A blank cell, an unknown word, or a missing column should
+     * never flip a row to opted-out just because the parser didn't
+     * recognise the cell.
+     */
+    private const OPT_OUT_TOKENS = [
+        '0', 'false', 'no', 'off', 'n', 'f',
+        'unsubscribe', 'optout', 'opt-out', 'remove', 'exclude',
+        'لا', 'كلا', 'أوقف', 'ايقاف', 'إيقاف', 'توقف', 'الغاء', 'إلغاء',
+    ];
+
     public function __construct(private StorageManager $storageManager) {}
+
+    /**
+     * Coerce a raw CSV cell value into a boolean opt-in flag.
+     *
+     * Rules:
+     *   - null / missing key          → true   (uploading = consent)
+     *   - true / 1 / "1" / "true"     → true
+     *   - empty string after trim     → true   (operator left it blank)
+     *   - string in OPT_OUT_TOKENS    → false  (explicit opt-out)
+     *   - any other non-empty string  → true   (assume consent)
+     *
+     * This is the inverse of filter_var(..., FILTER_VALIDATE_BOOL), which
+     * returned false for *any* string it didn't explicitly recognise. That
+     * behaviour silently opted contacts out when the operator wrote Arabic,
+     * left a cell blank, or used a slightly different word — which is wrong
+     * because the operator's act of uploading the list IS the consent.
+     */
+    public function coerceOptIn(mixed $raw): bool
+    {
+        if (is_bool($raw)) {
+            return $raw;
+        }
+        if ($raw === null) {
+            return true;
+        }
+        $normalised = strtolower(trim((string) $raw));
+        if ($normalised === '') {
+            return true;
+        }
+
+        return ! in_array($normalised, self::OPT_OUT_TOKENS, true);
+    }
 
     /**
      * Upsert a contact by phone (E.164) within a workspace.
