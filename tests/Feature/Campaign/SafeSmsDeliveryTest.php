@@ -193,11 +193,12 @@ class SafeSmsDeliveryTest extends TestCase
     }
 
     #[Test]
-    public function the_pump_never_claims_beyond_its_rolling_buffer(): void
+    public function the_pump_claims_only_into_the_rolling_buffer(): void
     {
         Queue::fake();
         config(['broadcasting.sms.dispatch_buffer' => 25]);
-        [$campaign, $step, $inFlight] = $this->sendingCampaign(25);
+        // 24 in-flight already occupy 24 of the 25-slot buffer.
+        [$campaign, $step] = $this->sendingCampaign(24);
         $contacts = Contact::factory()->count(10)->create([
             'workspace_id' => $campaign->workspace_id,
             'opt_in_sms' => true,
@@ -214,14 +215,224 @@ class SafeSmsDeliveryTest extends TestCase
 
         (new PumpSmsCampaignJob($campaign->id))->handle();
 
+        // Buffer had room for one slot, so exactly one queued recipient was
+        // claimed. The other nine must stay queued until a worker frees up.
         $this->assertSame(25, CampaignRecipient::where('campaign_id', $campaign->id)
             ->whereIn('status', ['dispatching', 'sending'])
             ->count());
-        $this->assertSame(10, CampaignRecipient::where('campaign_id', $campaign->id)
+        $this->assertSame(9, CampaignRecipient::where('campaign_id', $campaign->id)
             ->where('status', 'queued')
             ->count());
-        Queue::assertNotPushed(SendSmsCampaignMessageJob::class);
-        $this->assertCount(25, $inFlight);
+        Queue::assertPushed(SendSmsCampaignMessageJob::class, 1);
+    }
+
+    #[Test]
+    public function the_pump_drains_the_full_step_one_after_one_iteration(): void
+    {
+        Queue::fake();
+        // A safety-check step pre-assigns its recipients at preparation time.
+        // The pump's job is to drain every queued row in the active step, not
+        // to enforce the recipient limit at dispatch time.
+        [, $workspace] = $this->workspaceWithProvider();
+        $resolved = SmsDriverManager::resolveForWorkspace($workspace->id);
+        $campaign = Campaign::factory()->create([
+            'workspace_id' => $workspace->id,
+            'channel' => 'sms',
+            'status' => 'sending',
+            'audience_type' => 'contact_list',
+            'provider_key' => $resolved->providerKey,
+            'payload_json' => ['body' => 'Hello {{first_name}}'],
+            'audience_prepared_at' => now(),
+        ]);
+        $step = CampaignStep::create([
+            'campaign_id' => $campaign->id,
+            'position' => 1,
+            'name' => 'Safety check',
+            'recipient_limit' => 100,
+            'delay_after_previous_seconds' => 0,
+            'rate_per_second' => 5,
+            'status' => 'active',
+            'started_at' => now(),
+        ]);
+        $contacts = Contact::factory()->count(100)->create([
+            'workspace_id' => $workspace->id,
+            'opt_in_sms' => true,
+        ]);
+        foreach ($contacts as $contact) {
+            CampaignRecipient::create([
+                'campaign_id' => $campaign->id,
+                'campaign_step_id' => $step->id,
+                'contact_id' => $contact->id,
+                'status' => 'queued',
+                'idempotency_key' => (string) Str::uuid(),
+            ]);
+        }
+
+        // First iteration can claim up to the buffer (25). Subsequent ones
+        // drain whatever is left. After enough ticks every row is dispatched.
+        for ($i = 0; $i < 6; $i++) {
+            (new PumpSmsCampaignJob($campaign->id))->handle();
+            // Workers would normally advance queued -> delivering here.
+            CampaignRecipient::where('campaign_id', $campaign->id)
+                ->where('status', 'dispatching')
+                ->update(['status' => 'delivered', 'delivered_at' => now(), 'claimed_at' => null]);
+        }
+
+        $this->assertSame(
+            0,
+            CampaignRecipient::where('campaign_id', $campaign->id)
+                ->where('status', 'queued')
+                ->count(),
+        );
+        Queue::assertPushed(SendSmsCampaignMessageJob::class, 100);
+    }
+
+    #[Test]
+    public function retrying_recipients_do_not_starve_freshly_queued_ones(): void
+    {
+        // The previous behaviour claimed the lowest IDs first, which meant
+        // failed recipients at IDs 1-25 monopolised the buffer forever and
+        // never let IDs 26+ get a chance. The pump now prioritises queued.
+        Queue::fake();
+        config(['broadcasting.sms.dispatch_buffer' => 5]);
+        [, $workspace] = $this->workspaceWithProvider();
+        $resolved = SmsDriverManager::resolveForWorkspace($workspace->id);
+        $campaign = Campaign::factory()->create([
+            'workspace_id' => $workspace->id,
+            'channel' => 'sms',
+            'status' => 'sending',
+            'audience_type' => 'contact_list',
+            'provider_key' => $resolved->providerKey,
+            'payload_json' => ['body' => 'Hi'],
+            'audience_prepared_at' => now(),
+        ]);
+        $step = CampaignStep::create([
+            'campaign_id' => $campaign->id,
+            'position' => 1,
+            'name' => 'Delivery',
+            'recipient_limit' => null,
+            'delay_after_previous_seconds' => 0,
+            'rate_per_second' => 5,
+            'status' => 'active',
+            'started_at' => now(),
+        ]);
+        // Twenty-five recipients already failed and are parked in retrying.
+        // The buffer is also capped at 5, so we can verify the priority.
+        $failingContacts = Contact::factory()->count(25)->create([
+            'workspace_id' => $workspace->id,
+            'opt_in_sms' => true,
+        ]);
+        foreach ($failingContacts as $contact) {
+            CampaignRecipient::create([
+                'campaign_id' => $campaign->id,
+                'campaign_step_id' => $step->id,
+                'contact_id' => $contact->id,
+                'status' => 'retrying',
+                'attempts' => 1,
+                'next_attempt_at' => now()->subSecond(),
+                'idempotency_key' => (string) Str::uuid(),
+            ]);
+        }
+        // Five freshly queued recipients must take all five slots even though
+        // they have higher IDs than the failing rows.
+        $freshContacts = Contact::factory()->count(5)->create([
+            'workspace_id' => $workspace->id,
+            'opt_in_sms' => true,
+        ]);
+        foreach ($freshContacts as $contact) {
+            CampaignRecipient::create([
+                'campaign_id' => $campaign->id,
+                'campaign_step_id' => $step->id,
+                'contact_id' => $contact->id,
+                'status' => 'queued',
+                'idempotency_key' => (string) Str::uuid(),
+            ]);
+        }
+
+        (new PumpSmsCampaignJob($campaign->id))->handle();
+
+        $claimedQueued = CampaignRecipient::where('campaign_id', $campaign->id)
+            ->where('status', 'dispatching')
+            ->whereIn('contact_id', $freshContacts->pluck('id'))
+            ->count();
+        $claimedRetrying = CampaignRecipient::where('campaign_id', $campaign->id)
+            ->where('status', 'dispatching')
+            ->whereIn('contact_id', $failingContacts->pluck('id'))
+            ->count();
+
+        // Every queued recipient must be claimed before any retrying row.
+        $this->assertSame(5, $claimedQueued);
+        $this->assertSame(0, $claimedRetrying);
+    }
+
+    #[Test]
+    public function a_step_completes_when_its_queue_is_empty_even_with_retries_pending(): void
+    {
+        // Retries should not block the next step. Once the queued pool drains,
+        // the active step is marked completed and the pump moves on. Retries
+        // keep running in the background and feed the finaliser.
+        [, $workspace] = $this->workspaceWithProvider();
+        $resolved = SmsDriverManager::resolveForWorkspace($workspace->id);
+        $campaign = Campaign::factory()->create([
+            'workspace_id' => $workspace->id,
+            'channel' => 'sms',
+            'status' => 'sending',
+            'audience_type' => 'contact_list',
+            'provider_key' => $resolved->providerKey,
+            'payload_json' => ['body' => 'Hi'],
+            'audience_prepared_at' => now(),
+        ]);
+        $first = CampaignStep::create([
+            'campaign_id' => $campaign->id,
+            'position' => 1,
+            'name' => 'Safety check',
+            'recipient_limit' => 1,
+            'delay_after_previous_seconds' => 0,
+            'rate_per_second' => 5,
+            'status' => 'active',
+            'started_at' => now(),
+        ]);
+        $second = CampaignStep::create([
+            'campaign_id' => $campaign->id,
+            'position' => 2,
+            'name' => 'Remaining',
+            'recipient_limit' => null,
+            'delay_after_previous_seconds' => 600,
+            'rate_per_second' => 5,
+            'status' => 'pending',
+        ]);
+        $delivered = Contact::factory()->create([
+            'workspace_id' => $workspace->id,
+            'opt_in_sms' => true,
+        ]);
+        $deliveredRow = CampaignRecipient::create([
+            'campaign_id' => $campaign->id,
+            'campaign_step_id' => $first->id,
+            'contact_id' => $delivered->id,
+            'status' => 'delivered',
+            'delivered_at' => now(),
+            'idempotency_key' => (string) Str::uuid(),
+        ]);
+        $stillRetrying = Contact::factory()->create([
+            'workspace_id' => $workspace->id,
+            'opt_in_sms' => true,
+        ]);
+        CampaignRecipient::create([
+            'campaign_id' => $campaign->id,
+            'campaign_step_id' => $first->id,
+            'contact_id' => $stillRetrying->id,
+            'status' => 'retrying',
+            'attempts' => 2,
+            'next_attempt_at' => now()->addSeconds(60),
+            'failure_class' => 'temporary',
+            'idempotency_key' => (string) Str::uuid(),
+        ]);
+
+        (new PumpSmsCampaignJob($campaign->id))->handle();
+
+        $this->assertSame('completed', $first->fresh()->status);
+        $this->assertNotNull($second->fresh()->scheduled_at);
+        $this->assertSame('sending', $campaign->fresh()->status);
     }
 
     #[Test]
@@ -257,6 +468,30 @@ class SafeSmsDeliveryTest extends TestCase
         $this->assertSame('temporary', $recipient->failure_class);
         $this->assertNotNull($recipient->next_attempt_at);
         $this->assertSame(1, $recipient->attempts);
+        // The retry horizon is at least the floor; 30s by default. Tight
+        // loops (a 3 s backoff) used to recycle the same recipient and starve
+        // the rest of the audience.
+        $this->assertGreaterThanOrEqual(
+            now()->addSeconds(29),
+            $recipient->next_attempt_at,
+        );
+    }
+
+    #[Test]
+    public function retry_backoff_never_drops_below_the_floor(): void
+    {
+        Http::fake(['*' => Http::response(['error' => 'Service unavailable'], 503)]);
+        config(['broadcasting.sms.minimum_retry_seconds' => 45]);
+        [, , $recipients] = $this->sendingCampaign(1);
+
+        app()->call([new SendSmsCampaignMessageJob($recipients[0]->id), 'handle']);
+        $recipient = $recipients[0]->fresh();
+
+        $this->assertSame('retrying', $recipient->status);
+        $this->assertGreaterThanOrEqual(
+            now()->addSeconds(44),
+            $recipient->next_attempt_at,
+        );
     }
 
     #[Test]

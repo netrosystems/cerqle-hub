@@ -23,7 +23,9 @@ class PumpSmsCampaignJob implements ShouldQueue
 
     public function middleware(): array
     {
-        return [(new WithoutOverlapping('sms-pump:'.$this->campaignId))->releaseAfter(1)->expireAfter(120)];
+        // expireAfter(30) keeps a wedged worker from holding the lock for two
+        // minutes. The recover job re-dispatches us every minute if needed.
+        return [(new WithoutOverlapping('sms-pump:'.$this->campaignId))->releaseAfter(1)->expireAfter(30)];
     }
 
     public function handle(): void
@@ -39,7 +41,7 @@ class PumpSmsCampaignJob implements ShouldQueue
             ->where('claimed_at', '<', now()->subSeconds($claimTimeout))
             ->update([
                 'status' => 'retrying',
-                'next_attempt_at' => now(),
+                'next_attempt_at' => now()->addSeconds(min(60, $claimTimeout)),
                 'failure_class' => 'stale_claim',
                 'failed_reason' => 'Recovered after a worker stopped before sending.',
             ]);
@@ -67,30 +69,44 @@ class PumpSmsCampaignJob implements ShouldQueue
 
         if ($ids !== []) {
             $campaign->update(['status' => 'sending', 'pause_reason' => null]);
+            // Re-arm on a sub-second tick so the buffer drains at provider rate.
+            // A worker freeing a slot triggers a fresh claim within 200 ms.
             $this->dispatchAgain($campaign, 1);
 
             return;
         }
 
-        $unsettled = CampaignRecipient::where('campaign_step_id', $step->id)
-            ->whereIn('status', ['queued', 'dispatching', 'sending', 'retrying'])
+        // The pool is fully settled: every queued recipient has been claimed at
+        // least once. We can advance the step even if some retries are still in
+        // flight — they continue in the background and feed the finaliser.
+        $stillQueuedOrInFlight = CampaignRecipient::where('campaign_step_id', $step->id)
+            ->whereIn('status', ['queued', 'dispatching', 'sending'])
             ->exists();
 
-        if ($unsettled) {
-            $onlyRetries = ! CampaignRecipient::where('campaign_step_id', $step->id)
-                ->whereIn('status', ['queued', 'dispatching', 'sending'])
-                ->exists();
-            $campaign->update(['status' => $onlyRetries ? 'retrying' : 'sending']);
-            $this->dispatchAgain($campaign, $this->secondsUntilNextRetry($step));
+        if ($stillQueuedOrInFlight) {
+            $campaign->update(['status' => 'sending']);
+            // Workers may be near completion; re-check in one second rather
+            // than waiting on the retry horizon.
+            $this->dispatchAgain($campaign, 1);
 
             return;
         }
 
+        $hasPendingRetries = CampaignRecipient::where('campaign_step_id', $step->id)
+            ->where('status', 'retrying')
+            ->exists();
+
         $step->update(['status' => 'completed', 'completed_at' => now()]);
+
         /** @var CampaignStep|null $next */
         $next = $campaign->steps()->where('status', 'pending')->orderBy('position')->first();
         if (! $next) {
-            FinalizeCampaignJob::dispatch($campaign->id)->onQueue('broadcast');
+            if ($hasPendingRetries) {
+                $campaign->update(['status' => 'retrying', 'pause_reason' => null]);
+                $this->dispatchAgain($campaign, $this->secondsUntilNextRetry($step));
+            } else {
+                FinalizeCampaignJob::dispatch($campaign->id)->onQueue('broadcast');
+            }
 
             return;
         }
@@ -110,42 +126,70 @@ class PumpSmsCampaignJob implements ShouldQueue
         $buffer = max(1, (int) config('broadcasting.sms.dispatch_buffer', 25));
 
         return DB::transaction(function () use ($campaign, $step, $buffer) {
-            $inFlight = CampaignRecipient::where('campaign_id', $campaign->id)
+            // In-flight workers occupy dispatching or sending. Count without an
+            // artificial LIMIT — the previous code capped the count at the
+            // buffer which masked the real occupancy and made the buffer feel
+            // permanently full.
+            $inFlight = (int) CampaignRecipient::where('campaign_id', $campaign->id)
                 ->where('campaign_step_id', $step->id)
                 ->whereIn('status', ['dispatching', 'sending'])
-                ->limit($buffer)
                 ->lockForUpdate()
-                ->pluck('id')
                 ->count();
+
             $available = max(0, $buffer - $inFlight);
             if ($available === 0) {
                 return [];
             }
 
-            $ids = CampaignRecipient::where('campaign_id', $campaign->id)
-                ->where('campaign_step_id', $step->id)
-                ->where(function ($query) {
-                    $query->where('status', 'queued')
-                        ->orWhere(function ($retry) {
-                            $retry->where('status', 'retrying')
-                                ->where('next_attempt_at', '<=', now());
-                        });
-                })
-                ->orderBy('id')
-                ->limit($available)
-                ->lockForUpdate()
-                ->pluck('id')
-                ->map(fn ($id) => (int) $id)
-                ->all();
+            // Prioritise freshly queued recipients over retrying ones. Without
+            // this, the retrying rows (which carry the lowest IDs because they
+            // were claimed first) monopolise the buffer and starve the rest
+            // of the step. Once queued is empty, fall through to due retries.
+            $queuedIds = $this->claimWhere(
+                $campaign,
+                $step,
+                $available,
+                fn ($q) => $q->where('status', 'queued'),
+            );
 
-            if ($ids !== []) {
-                CampaignRecipient::whereIn('id', $ids)
-                    ->whereIn('status', ['queued', 'retrying'])
-                    ->update(['status' => 'dispatching', 'claimed_at' => now()]);
+            $remaining = $available - count($queuedIds);
+            if ($remaining <= 0) {
+                return $queuedIds;
             }
 
-            return $ids;
+            $retryIds = $this->claimWhere(
+                $campaign,
+                $step,
+                $remaining,
+                fn ($q) => $q->where('status', 'retrying')->where('next_attempt_at', '<=', now()),
+            );
+
+            return array_merge($queuedIds, $retryIds);
         }, 5);
+    }
+
+    /**
+     * @param  \Closure(\Illuminate\Database\Query\Builder): void  $constraint
+     * @return array<int, int>
+     */
+    private function claimWhere(Campaign $campaign, CampaignStep $step, int $limit, \Closure $constraint): array
+    {
+        $query = CampaignRecipient::query()
+            ->where('campaign_id', $campaign->id)
+            ->where('campaign_step_id', $step->id)
+            ->where($constraint)
+            ->orderBy('id')
+            ->limit($limit);
+
+        $ids = $query->lockForUpdate()->pluck('id')->map(fn ($id) => (int) $id)->all();
+
+        if ($ids !== []) {
+            CampaignRecipient::whereIn('id', $ids)
+                ->whereIn('status', ['queued', 'retrying'])
+                ->update(['status' => 'dispatching', 'claimed_at' => now()]);
+        }
+
+        return $ids;
     }
 
     private function secondsUntilNextRetry(CampaignStep $step): int

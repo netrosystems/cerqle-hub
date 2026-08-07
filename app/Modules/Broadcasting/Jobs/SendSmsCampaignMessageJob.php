@@ -157,19 +157,22 @@ class SendSmsCampaignMessageJob implements ShouldQueue
 
         $decision = $classifier->classify($result);
         $retryDelays = array_values((array) config('broadcasting.sms.retry_delays', [3, 15, 60, 300, 900]));
+        // 30 seconds is the absolute floor between retries. Tight loops (the
+        // historical default of 3 s) cause the pump to recycle the same
+        // failing recipients instead of draining the rest of the audience.
+        $retryFloor = max(30, (int) config('broadcasting.sms.minimum_retry_seconds', 30));
         $canRetry = $decision->retryable && $recipient->attempts <= count($retryDelays);
+        $retryDelayIndex = min(max(0, $recipient->attempts - 1), max(0, count($retryDelays) - 1));
+        $retryDelay = (int) ($retryDelays[$retryDelayIndex] ?? 900);
         $delay = $canRetry
-            ? max((int) ($result->retryAfterSeconds ?? 0), (int) ($retryDelays[$recipient->attempts - 1] ?? 900))
+            ? max($retryFloor, (int) ($result->retryAfterSeconds ?? 0), $retryDelay)
             : null;
 
         // Systemic failures pause the campaign after a short streak, but each
         // recipient still obeys the finite retry budget. This prevents an
         // invalid credential from creating an immortal retry loop.
         $shouldRetry = $canRetry || ($decision->systemic && $recipient->attempts <= count($retryDelays));
-        $systemicDelay = (int) ($retryDelays[min(
-            max(0, $recipient->attempts - 1),
-            max(0, count($retryDelays) - 1),
-        )] ?? 900);
+        $systemicDelay = max($retryFloor, $retryDelay);
 
         $recipient->update([
             'status' => $shouldRetry ? 'retrying' : 'failed',
@@ -210,9 +213,13 @@ class SendSmsCampaignMessageJob implements ShouldQueue
 
     private function deferForRateLimit(CampaignRecipient $recipient, int $waitMicroseconds): void
     {
+        // Floor at 1 second so we never spin the same recipient inside a
+        // smaller window. The provider's far-future release is already
+        // reserved when the worker picked the slot.
+        $seconds = max(1, (int) ceil($waitMicroseconds / 1_000_000));
         $recipient->update([
             'status' => 'retrying',
-            'next_attempt_at' => now()->addSeconds(max(1, (int) ceil($waitMicroseconds / 1_000_000))),
+            'next_attempt_at' => now()->addSeconds($seconds),
             'claimed_at' => null,
             'failure_class' => 'rate_limit_wait',
             'failed_reason' => 'Waiting for shared SMS provider capacity.',
