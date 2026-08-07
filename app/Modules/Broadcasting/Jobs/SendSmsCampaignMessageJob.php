@@ -6,6 +6,7 @@ use App\Modules\Broadcasting\Models\Campaign;
 use App\Modules\Broadcasting\Models\CampaignRecipient;
 use App\Modules\Broadcasting\Models\UsageMeter;
 use App\Modules\Broadcasting\Services\CampaignPersonalizer;
+use App\Modules\Broadcasting\Services\CampaignStepService;
 use App\Modules\Broadcasting\Services\Sms\SmsDispatchRateLimiter;
 use App\Modules\Broadcasting\Services\Sms\SmsDriverManager;
 use App\Modules\Broadcasting\Services\Sms\SmsFailureClassifier;
@@ -37,6 +38,7 @@ class SendSmsCampaignMessageJob implements ShouldQueue
         SmsDispatchRateLimiter $limiter,
         SmsFailureClassifier $classifier,
         SmsCampaignCapacityService $capacity,
+        CampaignStepService $steps,
     ): void {
         $recipient = CampaignRecipient::with(['campaign', 'contact', 'step'])->find($this->recipientId);
         if (! $recipient || ! $recipient->campaign || ! $recipient->contact) {
@@ -73,7 +75,14 @@ class SendSmsCampaignMessageJob implements ShouldQueue
             return;
         }
 
-        $rate = min(5, max(1, (int) ($recipient->step?->rate_per_second ?? 5)));
+        // The step's stored rate was already clamped to the position-aware
+        // max during CampaignStepService::normalise() (provider rate for
+        // step 1, platform rate for everything after). Re-clamp at runtime
+        // so a step rate that slipped past the normaliser — or a cap change
+        // between save and dispatch — cannot exceed the live policy.
+        $position = (int) ($recipient->step?->position ?? 1);
+        $maximum = $steps->maxRateForStep($position);
+        $rate = min($maximum, max(1, (int) ($recipient->step?->rate_per_second ?? $maximum)));
         $reservation = $limiter->reserve($resolved->providerKey, $rate);
         if (! $reservation->reserved) {
             $this->deferForRateLimit($recipient, $reservation->waitMicroseconds);

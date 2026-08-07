@@ -83,6 +83,12 @@ class CampaignController extends Controller
     {
         $workspaceId = $this->workspaceId($request);
 
+        // Hard cap for the validation rule. The actual per-step cap is
+        // enforced in CampaignStepService::maxRateForStep (step 1 is the
+        // safety check, capped at the provider rate; later steps can climb
+        // up to this platform rate).
+        $platformRate = max(1, (int) config('broadcasting.sms.platform_rate_per_second', 20));
+
         $validated = $request->validate([
             'uuid' => ['nullable', 'string', 'uuid'],
             'name' => ['required', 'string', 'max:128'],
@@ -98,7 +104,7 @@ class CampaignController extends Controller
             'delivery_steps.*.name' => ['required', 'string', 'max:80'],
             'delivery_steps.*.recipient_limit' => ['nullable', 'integer', 'min:1'],
             'delivery_steps.*.delay_after_previous_seconds' => ['required', 'integer', 'min:0', 'max:86400'],
-            'delivery_steps.*.rate_per_second' => ['required', 'integer', 'min:1', 'max:5'],
+            'delivery_steps.*.rate_per_second' => ['required', 'integer', 'min:1', 'max:'.$platformRate],
         ]);
 
         $fields = array_filter([
@@ -405,6 +411,12 @@ class CampaignController extends Controller
 
     private function validateCampaign(Request $request): array
     {
+        // Hard cap for the validation rule. The actual per-step cap is
+        // enforced in CampaignStepService::maxRateForStep (step 1 is the
+        // safety check, capped at the provider rate; later steps can climb
+        // up to this platform rate).
+        $platformRate = max(1, (int) config('broadcasting.sms.platform_rate_per_second', 20));
+
         return $request->validate([
             'name' => ['required', 'string', 'max:128'],
             'channel' => ['required', 'in:whatsapp,sms'],
@@ -419,7 +431,7 @@ class CampaignController extends Controller
             'delivery_steps.*.name' => ['required', 'string', 'max:80'],
             'delivery_steps.*.recipient_limit' => ['nullable', 'integer', 'min:1'],
             'delivery_steps.*.delay_after_previous_seconds' => ['required', 'integer', 'min:0', 'max:86400'],
-            'delivery_steps.*.rate_per_second' => ['required', 'integer', 'min:1', 'max:5'],
+            'delivery_steps.*.rate_per_second' => ['required', 'integer', 'min:1', 'max:'.$platformRate],
         ]);
     }
 

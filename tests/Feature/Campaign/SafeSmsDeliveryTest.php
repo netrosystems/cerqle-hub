@@ -553,7 +553,59 @@ class SafeSmsDeliveryTest extends TestCase
         $this->assertSame(600, $campaign->steps[1]->delay_after_previous_seconds);
         $this->assertSame($campaign->steps[0]->id, $service->forOrdinal($campaign, 100)->id);
         $this->assertSame($campaign->steps[1]->id, $service->forOrdinal($campaign, 1_000_000)->id);
-        $this->assertLessThanOrEqual(5, $campaign->steps->max('rate_per_second'));
+        // Step 1 (safety check) is capped at the provider rate; later steps
+        // can climb to the platform rate for high-volume campaigns.
+        $this->assertLessThanOrEqual($service->maxRateForStep(1), (int) $campaign->steps[0]->rate_per_second);
+        $this->assertLessThanOrEqual($service->maxRateForStep(2), (int) $campaign->steps[1]->rate_per_second);
+        $this->assertSame($service->maxRateForStep(1), (int) $campaign->steps[0]->rate_per_second);
+        $this->assertSame($service->maxRateForStep(2), (int) $campaign->steps[1]->rate_per_second);
+    }
+
+    #[Test]
+    public function step_normalisation_lets_step_two_plus_scale_up_to_the_platform_cap(): void
+    {
+        [, $workspace] = $this->workspaceWithProvider();
+        $campaign = Campaign::factory()->create([
+            'workspace_id' => $workspace->id,
+            'channel' => 'sms',
+            'status' => 'draft',
+        ]);
+        $service = app(CampaignStepService::class);
+
+        // Operator wants step 1 at 5 TPS and step 2 at 15 TPS. The
+        // normaliser should accept step 2's higher value as-is.
+        $service->sync($campaign, [
+            ['name' => 'Safety', 'recipient_limit' => 100, 'delay_after_previous_seconds' => 0, 'rate_per_second' => 5],
+            ['name' => 'Bulk', 'recipient_limit' => null, 'delay_after_previous_seconds' => 600, 'rate_per_second' => 15],
+        ]);
+
+        $campaign->load('steps');
+        $this->assertSame(5, (int) $campaign->steps[0]->rate_per_second);
+        $this->assertSame(15, (int) $campaign->steps[1]->rate_per_second);
+    }
+
+    #[Test]
+    public function step_normalisation_clamps_step_one_to_the_provider_rate_even_if_submitted_higher(): void
+    {
+        [, $workspace] = $this->workspaceWithProvider();
+        $campaign = Campaign::factory()->create([
+            'workspace_id' => $workspace->id,
+            'channel' => 'sms',
+            'status' => 'draft',
+        ]);
+        $service = app(CampaignStepService::class);
+        $providerCap = $service->maxRateForStep(1);
+
+        // Defence-in-depth: if a stale wizard or API client submits step 1
+        // with a rate above the provider cap, the normaliser pulls it down.
+        $service->sync($campaign, [
+            ['name' => 'Safety', 'recipient_limit' => 100, 'delay_after_previous_seconds' => 0, 'rate_per_second' => $providerCap + 50],
+            ['name' => 'Bulk', 'recipient_limit' => null, 'delay_after_previous_seconds' => 600, 'rate_per_second' => 10],
+        ]);
+
+        $campaign->load('steps');
+        $this->assertSame($providerCap, (int) $campaign->steps[0]->rate_per_second);
+        $this->assertSame(10, (int) $campaign->steps[1]->rate_per_second);
     }
 
     /**

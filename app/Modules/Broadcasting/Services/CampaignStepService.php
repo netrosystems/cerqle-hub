@@ -53,27 +53,28 @@ class CampaignStepService
                     'name' => 'Safety check',
                     'recipient_limit' => 100,
                     'delay_after_previous_seconds' => 0,
-                    'rate_per_second' => 5,
+                    'rate_per_second' => $this->maxRateForStep(1),
                 ],
                 [
                     'name' => 'Remaining contacts',
                     'recipient_limit' => null,
                     'delay_after_previous_seconds' => 600,
-                    'rate_per_second' => 5,
+                    'rate_per_second' => $this->maxRateForStep(2),
                 ],
             ];
         }
 
-        $maximum = max(1, (int) config('broadcasting.sms.provider_rate_per_second', 5));
         $out = [];
         foreach (array_slice($steps, 0, 10) as $index => $step) {
+            $position = $index + 1;
+            $maximum = $this->maxRateForStep($position);
             $out[] = [
-                'name' => trim((string) ($step['name'] ?? 'Step '.($index + 1))) ?: 'Step '.($index + 1),
+                'name' => trim((string) ($step['name'] ?? 'Step '.$position)) ?: 'Step '.$position,
                 'recipient_limit' => filled($step['recipient_limit'] ?? null)
                     ? max(1, (int) $step['recipient_limit'])
                     : null,
                 'delay_after_previous_seconds' => min(86400, max(0, (int) ($step['delay_after_previous_seconds'] ?? 0))),
-                'rate_per_second' => min($maximum, max(1, (int) ($step['rate_per_second'] ?? 5))),
+                'rate_per_second' => min($maximum, max(1, (int) ($step['rate_per_second'] ?? $maximum))),
             ];
         }
 
@@ -81,6 +82,26 @@ class CampaignStepService
         $out[array_key_last($out)]['recipient_limit'] = null;
 
         return $out;
+    }
+
+    /**
+     * Maximum rate per second a step at the given position may use.
+     *
+     * Position 1 is the "safety check" step: it always caps at the provider
+     * rate (default 5 TPS) so a handful of bad numbers can't trigger a
+     * provider-level rate-limit block before we know the audience is clean.
+     * Every later step can scale up to the platform rate (default 20 TPS),
+     * which is the limit shared across all campaigns touching the provider.
+     * Raise `SMS_PLATFORM_RATE_PER_SECOND` in env when a higher-tier
+     * provider is wired in.
+     */
+    public function maxRateForStep(int $position): int
+    {
+        if ($position <= 1) {
+            return max(1, (int) config('broadcasting.sms.provider_rate_per_second', 5));
+        }
+
+        return max(1, (int) config('broadcasting.sms.platform_rate_per_second', 20));
     }
 
     public function forOrdinal(Campaign $campaign, int $ordinal): CampaignStep
