@@ -4,20 +4,21 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | Inbound SMS opt-in keywords
+    | Inbound WhatsApp opt-in keywords
     |--------------------------------------------------------------------------
     |
-    | When a contact sends one of these keywords (case-insensitive, matched
-    | on the first word of the message body), the contact is opted in for
-    | SMS marketing from the WhatsApp inbox. This is the consent path used
-    | by Twilio, MessageBird and most US carriers for "text-to-join".
+    | When a contact sends one of these keywords on the WhatsApp channel
+    | (case-insensitive, matched on the first word of the message body,
+    | including button-reply titles and list-reply titles), the contact is
+    | opted in for WhatsApp marketing. This is the WhatsApp-channel consent
+    | path — it does NOT, and legally cannot, grant SMS consent.
     |
     | Add or remove keywords here without redeploying the driver — the
     | driver reads from config() each time it processes a message.
     |
     */
 
-    'sms_optin_keywords' => [
+    'optin_keywords' => [
         // English
         'start', 'yes', 'y', 'subscribe', 'subs', 'optin', 'opt-in', 'unstop', 'on',
         // Arabic (whitespace-tolerant matching inside the driver)
@@ -26,17 +27,20 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | Inbound SMS opt-out keywords
+    | Inbound WhatsApp opt-out keywords
     |--------------------------------------------------------------------------
     |
-    | Carriers (especially US carriers) require that STOP, STOPALL,
-    | UNSUBSCRIBE, CANCEL, END and QUIT are honoured across every text.
-    | We mirror that list here. Adding the standard set is non-negotiable;
-    | removal may put you in violation of carrier and CTIA guidelines.
+    | When a contact sends one of these keywords on the WhatsApp channel,
+    | the contact is opted out of WhatsApp marketing only. SMS consent is a
+    | separate channel and is never affected by what happens here.
+    |
+    | We mirror the CTIA / carrier-mandated STOP family for consistency,
+    | even though WhatsApp Business API has its own opt-out surface — being
+    | conservative here keeps the legal posture identical across channels.
     |
     */
 
-    'sms_optout_keywords' => [
+    'optout_keywords' => [
         // English — the CTIA / carrier-mandated set.
         'stop', 'stopall', 'unsubscribe', 'cancel', 'end', 'quit',
         'optout', 'opt-out', 'no', 'off',

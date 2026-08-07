@@ -257,22 +257,49 @@ class WhatsappDriver implements ChannelDriverInterface
             ?? ($msg['errors'][0]['title'] ?? null);
 
         // Inbound consent detection. Three outcomes:
-        //   true   — body matches an opt-in keyword → opt_in_sms = true
-        //   false  — body matches an opt-out keyword → opt_in_sms = false
-        //   null   — no signal → leave opt_in_sms alone (do NOT touch it)
+        //   true   — body matches an opt-in keyword → opt_in_whatsapp = true
+        //   false  — body matches an opt-out keyword → opt_in_whatsapp = false
+        //   null   — no signal → leave opt_in_whatsapp alone (do NOT touch it)
+        //
+        // CRITICAL: this is a WhatsApp inbox, so the consent applies to the
+        // WhatsApp channel only. opt_in_sms is a separate, independent signal
+        // and must never be flipped from here — sending STOP on WhatsApp does
+        // not (and legally cannot) revoke consent to receive SMS.
         $consentDecision = $this->detectConsentDecision($body);
 
-        $contact = $this->contactService->upsert($workspaceId, [
-            'phone_e164' => '+'.$fromPhone,
-            'opt_in_whatsapp' => true,
+        // Look up before upsert so we know whether this is a brand-new
+        // contact. opt_in_whatsapp must default to true ONLY for first-time
+        // contacts (the first inbound message is implicit WhatsApp-channel
+        // consent under Meta's policy). On subsequent messages we leave
+        // opt_in_whatsapp alone unless the body itself is a consent signal —
+        // otherwise a benign follow-up would silently re-opt-in a contact
+        // who previously sent STOP.
+        $e164 = '+'.$fromPhone;
+        $isNew = ! Contact::withTrashed()
+            ->where('workspace_id', $workspaceId)
+            ->where('phone_e164', $e164)
+            ->exists();
+
+        $upsertData = [
+            'phone_e164' => $e164,
             'source' => 'whatsapp_inbound',
-        ]);
+        ];
+        if ($isNew) {
+            // First-time WhatsApp contact: opt-in to the WhatsApp channel
+            // by default. Will be overridden below if the body itself is
+            // an opt-out keyword (e.g. contact sends STOP as their very
+            // first message, which the carrier-style contract allows).
+            $upsertData['opt_in_whatsapp'] = true;
+        }
+
+        $contact = $this->contactService->upsert($workspaceId, $upsertData);
 
         // Apply the consent decision in a second pass so that opt-OUT
         // (true → false) and opt-IN (false → true) both work even when the
-        // contact already exists with an opposite value.
+        // contact already exists with an opposite value. This is the ONLY
+        // place that touches opt_in_whatsapp for an existing contact.
         if ($consentDecision !== null) {
-            $contact->opt_in_sms = $consentDecision;
+            $contact->opt_in_whatsapp = $consentDecision;
             $contact->save();
         }
 
@@ -445,8 +472,8 @@ class WhatsappDriver implements ChannelDriverInterface
             return null;
         }
 
-        $optInKeywords = config('whatsapp.sms_optin_keywords', []);
-        $optOutKeywords = config('whatsapp.sms_optout_keywords', []);
+        $optInKeywords = config('whatsapp.optin_keywords', []);
+        $optOutKeywords = config('whatsapp.optout_keywords', []);
 
         // Pass 1: first-token match. Cheap, unambiguous, and matches the
         // industry-standard behaviour for one-word reply keywords.

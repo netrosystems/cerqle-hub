@@ -7,10 +7,10 @@ use Illuminate\Console\Command;
 use Illuminate\Database\Eloquent\Builder;
 
 /**
- * Backfill opt_in_sms / opt_in_whatsapp / opt_in_email on existing contacts
- * that were created via paths which never set the flag (legacy WhatsApp
- * inbox, ecommerce webhooks, etc.) but DO have documented consent on file
- * (imported via CSV with a consent column, or added manually).
+ * Backfill opt_in_sms on existing contacts that were created via paths
+ * which never set the flag (legacy WhatsApp inbox, ecommerce webhooks,
+ * etc.) but DO have documented SMS consent on file (imported via CSV
+ * with an opt_in_sms column, or added manually).
  *
  * Why this command exists
  * ------------------------
@@ -20,15 +20,25 @@ use Illuminate\Database\Eloquent\Builder;
  * consent-light entry points, the second number is a tiny fraction of the
  * first and the campaign looks broken when it isn't.
  *
+ * Channel scope: SMS ONLY.
+ * ------------------------
+ * Each opt_in_* column documents consent for a specific channel. CSV imports
+ * only carry an `opt_in_sms` column on file, so this command flips
+ * `opt_in_sms` and nothing else. WhatsApp consent is recorded separately by
+ * the WhatsApp driver the first time the contact messages the inbox. There
+ * is no email-campaign feature in this product, so `opt_in_email` is left
+ * alone — touching it would have no observable effect but would be
+ * semantically wrong.
+ *
  * Safety rails
  * ------------
- *   * Only flips flags to TRUE. Never to false — explicit opt-outs are
+ *   * Only flips opt_in_sms to TRUE. Never to false — explicit opt-outs are
  *     sacred and must be honoured even if they look wrong.
- *   * Only touches rows whose `source` is in the consent-bearing set
+ *   * Only touches rows whose `source` is in the SMS-consent-bearing set
  *     (CSV list imports, CSV campaign audiences, manual CRM entries, bulk
  *     imports). Anything we did not get consent for is left alone.
- *   * Skips contacts without a phone number — opting in a row with no
- *     phone number is a no-op for SMS but a real problem for WhatsApp/email.
+ *   * Skips contacts without a phone number — opting in a phone-less row
+ *     is a no-op for SMS.
  *   * Skips `is_campaign_only = true` rows (audience-uploads attached to a
  *     single list — those are scoped by design and should not be promoted
  *     to the CRM's customer directory implicitly).
@@ -40,12 +50,11 @@ use Illuminate\Database\Eloquent\Builder;
  *   php artisan contacts:backfill-optin --dry-run
  *   php artisan contacts:backfill-optin --apply --workspace=42
  *   php artisan contacts:backfill-optin --apply --source=contact_list_csv
- *   php artisan contacts:backfill-optin --apply --channels=sms,whatsapp
  */
 class BackfillContactOptinCommand extends Command
 {
     /**
-     * Sources that carry explicit, documented consent on file.
+     * Sources that carry explicit, documented SMS consent on file.
      * Order matters only for the display in --help output.
      */
     private const CONSENT_BEARING_SOURCES = [
@@ -55,22 +64,14 @@ class BackfillContactOptinCommand extends Command
         'manual',            // operator added the contact via the CRM form
     ];
 
-    /**
-     * Channels we can opt in. opt_in_email already defaults to true in the
-     * schema, so it's listed for completeness but contributes nothing unless
-     * a false row from a legacy import sneaks in.
-     */
-    private const CHANNELS = ['sms', 'whatsapp', 'email'];
-
     protected $signature = 'contacts:backfill-optin
         {--dry-run : Print what would change without writing anything (default behaviour)}
         {--apply : Commit the changes; required to write}
         {--workspace= : Limit to one workspace id}
         {--source=* : Only backfill rows whose `source` is in this list (defaults to every consent-bearing source)}
-        {--channel=* : Only flip the listed channels (defaults to sms,whatsapp,email)}
         {--batch=500 : Update batch size for the bulk update}';
 
-    protected $description = 'Backfill opt_in_sms / opt_in_whatsapp / opt_in_email on contacts imported via consent-bearing sources';
+    protected $description = 'Backfill opt_in_sms on contacts imported via SMS consent-bearing sources';
 
     public function handle(): int
     {
@@ -86,15 +87,6 @@ class BackfillContactOptinCommand extends Command
             return self::INVALID;
         }
 
-        $channels = $this->option('channel');
-        $channels = $channels === [] ? self::CHANNELS : array_values(array_intersect($channels, self::CHANNELS));
-
-        if ($channels === []) {
-            $this->error('No valid channels selected. Allowed: '.implode(', ', self::CHANNELS));
-
-            return self::INVALID;
-        }
-
         $batch = max(50, (int) $this->option('batch'));
 
         $this->info('');
@@ -103,7 +95,7 @@ class BackfillContactOptinCommand extends Command
             $dryRun ? '<fg=yellow>(DRY RUN — pass --apply to commit)</>' : '<fg=red>(APPLYING — writes to the database)</>'
         ));
         $this->line('  sources : '.implode(', ', $sources));
-        $this->line('  channels: '.implode(', ', $channels));
+        $this->line('  channel : opt_in_sms (only — WhatsApp consent is recorded by the inbox driver, email is unused)');
         $this->line('  scope   : '.($this->option('workspace') ? 'workspace='.$this->option('workspace') : 'ALL workspaces'));
         $this->info('');
 
@@ -113,21 +105,16 @@ class BackfillContactOptinCommand extends Command
             $base->where('workspace_id', (int) $this->option('workspace'));
         }
 
-        // Counts per channel BEFORE the change, so the summary is useful.
-        $beforeByChannel = [];
-        foreach ($channels as $channel) {
-            $column = "opt_in_{$channel}";
-            $beforeByChannel[$channel] = (clone $base)
-                ->whereNotNull('phone_e164')
-                ->where($column, true)
-                ->count();
-        }
-        $totalCandidates = (clone $base)->count();
+        // Counts BEFORE the change so the operator sees what they're about to flip.
+        $withPhone = (clone $base)->whereNotNull('phone_e164');
+        $candidatesWithPhone = (clone $withPhone)->count();
+        $currentlyOptedIn = (clone $withPhone)->where('opt_in_sms', true)->count();
+        $wouldFlip = $candidatesWithPhone - $currentlyOptedIn;
 
-        $this->line(sprintf('  candidates in scope: <fg=white>%d</>', $totalCandidates));
-        foreach ($beforeByChannel as $channel => $count) {
-            $this->line(sprintf('  currently opted-in for %-8s: <fg=white>%d</>', $channel, $count));
-        }
+        $this->line(sprintf('  candidates in scope  : <fg=white>%d</>', (clone $base)->count()));
+        $this->line(sprintf('  with a phone number  : <fg=white>%d</>', $candidatesWithPhone));
+        $this->line(sprintf('  already opted in SMS : <fg=white>%d</>', $currentlyOptedIn));
+        $this->line(sprintf('  would flip to opted-in: <fg=white>%d</>', $wouldFlip));
         $this->info('');
 
         if ($dryRun) {
@@ -137,23 +124,11 @@ class BackfillContactOptinCommand extends Command
             return self::SUCCESS;
         }
 
-        $updatedByChannel = [];
-        foreach ($channels as $channel) {
-            $column = "opt_in_{$channel}";
-            // Only flip contacts that already have a phone number — opting in
-            // a phone-less row is harmless for SMS but pollutes segments later.
-            $query = (clone $base)
-                ->whereNotNull('phone_e164')
-                ->where($column, false);
-
-            $updated = $this->updateInBatches($query, $batch, [$column => true]);
-            $updatedByChannel[$channel] = $updated;
-        }
+        $query = (clone $withPhone)->where('opt_in_sms', false);
+        $updated = $this->updateInBatches($query, $batch, ['opt_in_sms' => true]);
 
         $this->info('  <fg=cyan;options=bold>Results</>');
-        foreach ($updatedByChannel as $channel => $count) {
-            $this->line(sprintf('  opted-in for %-8s: <fg=green>%d</> contacts updated', $channel, $count));
-        }
+        $this->line(sprintf('  opted-in for SMS: <fg=green>%d</> contacts updated', $updated));
         $this->info('');
         $this->line('  <fg=gray>Run again with --dry-run to confirm there is nothing left to backfill.</>');
         $this->info('');

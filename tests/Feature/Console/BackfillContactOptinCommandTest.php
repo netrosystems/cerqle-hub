@@ -115,8 +115,12 @@ class BackfillContactOptinCommandTest extends TestCase
         $this->assertSame(0, (int) $csv->fresh()->opt_in_sms);
     }
 
-    public function test_channel_filter_only_flips_listed_channels(): void
+    public function test_only_touches_opt_in_sms_and_leaves_whatsapp_and_email_alone(): void
     {
+        // WhatsApp and email consent are independent channels. The backfill
+        // is only valid for SMS (the only channel with documented consent
+        // on file for these source values), so opt_in_whatsapp and
+        // opt_in_email must never be flipped by this command.
         $row = $this->makeContact([
             'source' => 'contact_list_csv',
             'opt_in_sms' => false,
@@ -124,15 +128,33 @@ class BackfillContactOptinCommandTest extends TestCase
             'opt_in_email' => false,
         ]);
 
-        $this->artisan('contacts:backfill-optin', [
-            '--apply' => true,
-            '--channel' => ['sms'],
-        ])->assertExitCode(0);
+        $this->artisan('contacts:backfill-optin', ['--apply' => true])
+            ->assertExitCode(0);
 
         $row->refresh();
-        $this->assertSame(1, (int) $row->opt_in_sms);
-        $this->assertSame(0, (int) $row->opt_in_whatsapp);
-        $this->assertSame(0, (int) $row->opt_in_email);
+        $this->assertSame(1, (int) $row->opt_in_sms, 'opt_in_sms should be flipped');
+        $this->assertSame(0, (int) $row->opt_in_whatsapp, 'opt_in_whatsapp must NOT be touched by SMS backfill');
+        $this->assertSame(0, (int) $row->opt_in_email, 'opt_in_email must NOT be touched by SMS backfill');
+    }
+
+    public function test_a_contact_with_no_source_is_left_untouched(): void
+    {
+        // Sanity check: a contact whose `source` is not in the consent-bearing
+        // set should not be flipped, even when opt_in_sms is false. This
+        // guards against accidentally widening the scope of the command.
+        $row = $this->makeContact([
+            'source' => 'whatsapp_inbound',
+            'opt_in_sms' => false,
+            'opt_in_whatsapp' => true,
+            'opt_in_email' => false,
+        ]);
+
+        $this->artisan('contacts:backfill-optin', ['--apply' => true])
+            ->assertExitCode(0);
+
+        $row->refresh();
+        $this->assertSame(0, (int) $row->opt_in_sms, 'source whatsapp_inbound is not SMS-consent-bearing');
+        $this->assertSame(1, (int) $row->opt_in_whatsapp, 'opt_in_whatsapp must remain untouched');
     }
 
     public function test_is_idempotent_when_run_twice(): void

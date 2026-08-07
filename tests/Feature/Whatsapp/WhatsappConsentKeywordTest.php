@@ -17,7 +17,14 @@ use Tests\TestCase;
  * fresh workspace. Because contact opt-in is a legal signal, the driver
  * must opt them in only when an explicit consent keyword is sent and must
  * opt them out only when an explicit opt-out keyword is sent. Anything
- * else must leave the existing opt_in_sms value alone.
+ * else must leave the existing opt_in_whatsapp value alone.
+ *
+ * CRITICAL INVARIANT under test here: SMS and WhatsApp are independent
+ * consent channels. Consent (or revocation) given on WhatsApp MUST only
+ * touch opt_in_whatsapp, never opt_in_sms. Every test in this file
+ * therefore asserts the column that should move AND the column that must
+ * stay put, so that a future regression that re-introduces the
+ * cross-contamination bug will fail loudly.
  */
 class WhatsappConsentKeywordTest extends TestCase
 {
@@ -86,14 +93,14 @@ class WhatsappConsentKeywordTest extends TestCase
     }
 
     #[Test]
-    public function optin_keyword_in_plain_text_opts_the_contact_in(): void
+    public function optin_keyword_in_plain_text_opts_the_contact_in_on_whatsapp_only(): void
     {
         $waba = $this->makeWaba();
         $this->postInbound($waba, 'START');
 
         $contact = Contact::where('phone_e164', '+8801900000001')->firstOrFail();
-        $this->assertTrue((bool) $contact->opt_in_sms);
-        $this->assertTrue((bool) $contact->opt_in_whatsapp);
+        $this->assertTrue((bool) $contact->opt_in_whatsapp, 'WhatsApp opt-in should be granted');
+        $this->assertFalse((bool) $contact->opt_in_sms, 'SMS consent must NEVER come from a WhatsApp message');
     }
 
     #[Test]
@@ -103,15 +110,17 @@ class WhatsappConsentKeywordTest extends TestCase
         $this->postInbound($waba, 'yes please sign me up');
 
         $contact = Contact::where('phone_e164', '+8801900000001')->firstOrFail();
-        $this->assertTrue((bool) $contact->opt_in_sms);
+        $this->assertTrue((bool) $contact->opt_in_whatsapp);
+        $this->assertFalse((bool) $contact->opt_in_sms);
     }
 
     #[Test]
-    public function optout_keyword_opts_the_contact_out_even_if_previously_opted_in(): void
+    public function optout_keyword_opts_the_contact_out_of_whatsapp_only(): void
     {
         $waba = $this->makeWaba();
 
-        // Pre-seed an opted-in contact at this phone number.
+        // Pre-seed: opted in on BOTH channels. We will then send STOP on
+        // WhatsApp — opt_in_whatsapp must drop, opt_in_sms must NOT.
         Contact::create([
             'workspace_id' => $waba->workspace_id,
             'phone_e164' => '+8801900000001',
@@ -123,22 +132,23 @@ class WhatsappConsentKeywordTest extends TestCase
         $this->postInbound($waba, 'STOP');
 
         $contact = Contact::where('phone_e164', '+8801900000001')->firstOrFail();
-        $this->assertFalse((bool) $contact->opt_in_sms);
-        $this->assertTrue((bool) $contact->opt_in_whatsapp);
+        $this->assertFalse((bool) $contact->opt_in_whatsapp, 'WhatsApp opt-out should revoke WhatsApp consent');
+        $this->assertTrue((bool) $contact->opt_in_sms, 'SMS consent must survive a WhatsApp STOP — independent channel');
     }
 
     #[Test]
-    public function arabic_optin_keyword_opts_the_contact_in(): void
+    public function arabic_optin_keyword_opts_the_contact_in_on_whatsapp_only(): void
     {
         $waba = $this->makeWaba();
         $this->postInbound($waba, 'اشتراك');
 
         $contact = Contact::where('phone_e164', '+8801900000001')->firstOrFail();
-        $this->assertTrue((bool) $contact->opt_in_sms);
+        $this->assertTrue((bool) $contact->opt_in_whatsapp);
+        $this->assertFalse((bool) $contact->opt_in_sms);
     }
 
     #[Test]
-    public function arabic_optout_keyword_opts_the_contact_out(): void
+    public function arabic_optout_keyword_opts_the_contact_out_of_whatsapp_only(): void
     {
         $waba = $this->makeWaba();
         Contact::create([
@@ -152,32 +162,34 @@ class WhatsappConsentKeywordTest extends TestCase
         $this->postInbound($waba, 'إيقاف');
 
         $contact = Contact::where('phone_e164', '+8801900000001')->firstOrFail();
-        $this->assertFalse((bool) $contact->opt_in_sms);
+        $this->assertFalse((bool) $contact->opt_in_whatsapp);
+        $this->assertTrue((bool) $contact->opt_in_sms);
     }
 
     #[Test]
-    public function no_keyword_leaves_opt_in_sms_at_its_existing_value(): void
+    public function no_keyword_leaves_opt_in_whatsapp_at_its_existing_value(): void
     {
         $waba = $this->makeWaba();
 
-        // Pre-seed an explicitly opted-OUT contact — must stay opted out
-        // even though they just messaged us.
+        // Pre-seed: explicitly opted-OUT on WhatsApp, opted-IN on SMS. A
+        // normal conversational message must touch neither.
         Contact::create([
             'workspace_id' => $waba->workspace_id,
             'phone_e164' => '+8801900000001',
-            'opt_in_sms' => false,
-            'opt_in_whatsapp' => true,
+            'opt_in_sms' => true,
+            'opt_in_whatsapp' => false,
             'source' => 'manual',
         ]);
 
         $this->postInbound($waba, 'Just a normal question about my order');
 
         $contact = Contact::where('phone_e164', '+8801900000001')->firstOrFail();
-        $this->assertFalse((bool) $contact->opt_in_sms);
+        $this->assertFalse((bool) $contact->opt_in_whatsapp);
+        $this->assertTrue((bool) $contact->opt_in_sms);
     }
 
     #[Test]
-    public function optin_keyword_in_button_reply_title_counts_as_consent(): void
+    public function optin_keyword_in_button_reply_title_counts_as_consent_on_whatsapp_only(): void
     {
         $waba = $this->makeWaba();
 
@@ -209,11 +221,12 @@ class WhatsappConsentKeywordTest extends TestCase
         $this->postJson("/webhooks/whatsapp/{$this->verifyToken}", $payload)->assertStatus(200);
 
         $contact = Contact::where('phone_e164', '+8801900000001')->firstOrFail();
-        $this->assertTrue((bool) $contact->opt_in_sms);
+        $this->assertTrue((bool) $contact->opt_in_whatsapp);
+        $this->assertFalse((bool) $contact->opt_in_sms);
     }
 
     #[Test]
-    public function optout_keyword_in_list_reply_title_counts_as_opt_out(): void
+    public function optout_keyword_in_list_reply_title_opts_contact_out_of_whatsapp_only(): void
     {
         $waba = $this->makeWaba();
         Contact::create([
@@ -252,13 +265,25 @@ class WhatsappConsentKeywordTest extends TestCase
         $this->postJson("/webhooks/whatsapp/{$this->verifyToken}", $payload)->assertStatus(200);
 
         $contact = Contact::where('phone_e164', '+8801900000001')->firstOrFail();
-        $this->assertFalse((bool) $contact->opt_in_sms);
+        $this->assertFalse((bool) $contact->opt_in_whatsapp);
+        $this->assertTrue((bool) $contact->opt_in_sms);
     }
 
     #[Test]
-    public function empty_body_leaves_opt_in_sms_alone(): void
+    public function empty_body_on_existing_contact_leaves_opt_in_whatsapp_alone(): void
     {
         $waba = $this->makeWaba();
+
+        // Pre-seed an explicitly opted-OUT contact who already exists on the
+        // workspace. The follow-up image message must NOT silently re-opt
+        // them in just because they happened to send something.
+        Contact::create([
+            'workspace_id' => $waba->workspace_id,
+            'phone_e164' => '+8801900000001',
+            'opt_in_sms' => true,
+            'opt_in_whatsapp' => false,
+            'source' => 'import',
+        ]);
 
         $payload = [
             'object' => 'whatsapp_business_account',
@@ -284,9 +309,8 @@ class WhatsappConsentKeywordTest extends TestCase
 
         $this->postJson("/webhooks/whatsapp/{$this->verifyToken}", $payload)->assertStatus(200);
 
-        // New contact, no signal — opt_in_sms must remain at its schema default (false).
         $contact = Contact::where('phone_e164', '+8801900000001')->firstOrFail();
-        $this->assertFalse((bool) $contact->opt_in_sms);
-        $this->assertTrue((bool) $contact->opt_in_whatsapp);
+        $this->assertFalse((bool) $contact->opt_in_whatsapp, 'A non-keyword follow-up from an opted-out contact must not re-opt them in');
+        $this->assertTrue((bool) $contact->opt_in_sms, 'SMS consent must not be touched by a WhatsApp message');
     }
 }
