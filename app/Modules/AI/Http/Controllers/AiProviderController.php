@@ -10,6 +10,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -29,7 +30,10 @@ class AiProviderController extends Controller
             'default_model_embed' => $configs->get($p)?->default_model_embed ?? '',
         ]);
 
-        return Inertia::render('AI/Providers/Index', ['providers' => $list]);
+        return Inertia::render('AI/Providers/Index', [
+            'providers' => $list,
+            'activeProvider' => $list->firstWhere('enabled', true)['provider'] ?? null,
+        ]);
     }
 
     public function update(Request $request, string $provider): RedirectResponse
@@ -44,27 +48,44 @@ class AiProviderController extends Controller
             'enabled' => ['boolean'],
         ]);
 
-        $config = AiProviderConfig::firstOrNew(['workspace_id' => $workspaceId, 'provider' => $provider]);
-        $creds = $config->credentials ?? [];
+        $enabled = (bool) ($validated['enabled'] ?? false);
 
-        if (! empty($validated['api_key']) && ! preg_match('/^•+/', $validated['api_key'])) {
-            $creds['api_key'] = $validated['api_key'];
-        }
+        DB::transaction(function () use ($workspaceId, $provider, $validated, $enabled): void {
+            // Lock the workspace's provider settings as one unit. This makes
+            // choosing a new provider atomic even if two teammates save from
+            // different browser sessions at the same time.
+            AiProviderConfig::where('workspace_id', $workspaceId)->lockForUpdate()->get();
+            $config = AiProviderConfig::firstOrNew(['workspace_id' => $workspaceId, 'provider' => $provider]);
+            $creds = $config->credentials ?? [];
 
-        if (($validated['enabled'] ?? false) && empty($creds['api_key'])) {
-            throw \Illuminate\Validation\ValidationException::withMessages([
-                'api_key' => 'An API key is required before this provider can be enabled.',
-            ]);
-        }
+            if (! empty($validated['api_key']) && ! preg_match('/^•+/', $validated['api_key'])) {
+                $creds['api_key'] = $validated['api_key'];
+            }
 
-        $config->fill([
-            'credentials' => $creds,
-            'default_model_chat' => $validated['default_model_chat'] ?? $config->default_model_chat,
-            'default_model_embed' => $validated['default_model_embed'] ?? $config->default_model_embed,
-            'enabled' => (bool) $validated['enabled'],
-        ])->save();
+            if ($enabled && empty($creds['api_key'])) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'api_key' => 'An API key is required before this provider can be enabled.',
+                ]);
+            }
 
-        return back()->with('success', ucfirst($provider).' configuration saved.');
+            if ($enabled) {
+                AiProviderConfig::where('workspace_id', $workspaceId)
+                    ->where('provider', '!=', $provider)
+                    ->where('enabled', true)
+                    ->update(['enabled' => false, 'updated_at' => now()]);
+            }
+
+            $config->fill([
+                'credentials' => $creds,
+                'default_model_chat' => $validated['default_model_chat'] ?? $config->default_model_chat,
+                'default_model_embed' => $validated['default_model_embed'] ?? $config->default_model_embed,
+                'enabled' => $enabled,
+            ])->save();
+        });
+
+        return back()->with('success', $enabled
+            ? ucfirst($provider).' is now the active AI provider. Other providers were disabled.'
+            : ucfirst($provider).' configuration saved.');
     }
 
     public function test(Request $request, string $provider): JsonResponse

@@ -111,7 +111,7 @@ const PROVIDER_INFO = {
     gemini:    { label: 'Gemini',    Icon: GeminiLogo,    models: ['gemini-3.5-flash', 'gemini-3.1-flash-lite', 'gemini-3.1-pro-preview'], embedModels: ['gemini-embedding-2'] },
 };
 
-function ProviderCard({ provider }) {
+function ProviderCard({ provider, activeProvider }) {
     const { t } = useTranslation();
     const [showKey, setShowKey] = useState(false);
     const [testing, setTesting] = useState(false);
@@ -207,10 +207,22 @@ function ProviderCard({ provider }) {
                         {info.models?.map(m => <option key={m} value={m}>{m}</option>)}
                     </select>
                 </div>
-                <label className="flex items-center gap-2 text-sm cursor-pointer">
-                    <input type="checkbox" checked={data.enabled} onChange={e => setData('enabled', e.target.checked)} className="rounded" />
+                <label className={`flex items-center gap-2 text-sm ${activeProvider && activeProvider !== provider.provider ? 'cursor-not-allowed text-neutral-400 dark:text-neutral-500' : 'cursor-pointer'}`}>
+                    <input
+                        type="checkbox"
+                        checked={data.enabled}
+                        disabled={Boolean(activeProvider && activeProvider !== provider.provider)}
+                        onChange={e => setData('enabled', e.target.checked)}
+                        className="rounded disabled:cursor-not-allowed"
+                    />
                     {t('common.enabled')}
+                    {provider.enabled && <span className="text-xs font-medium text-brand-700 dark:text-brand-300">Active</span>}
                 </label>
+                {activeProvider && activeProvider !== provider.provider && (
+                    <p className="-mt-1 text-xs text-neutral-500 dark:text-neutral-400">
+                        Disable {PROVIDER_INFO[activeProvider]?.label ?? activeProvider} before enabling this provider.
+                    </p>
+                )}
                 <div className="grid grid-cols-2 gap-2">
                     <button type="submit" disabled={processing || testing} className="rounded-lg bg-brand-600 px-3 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-60 transition">
                         {processing ? t('ai.saving') : t('common.save')}
@@ -244,7 +256,7 @@ function ProviderCard({ provider }) {
     );
 }
 
-export default function AiProvidersIndex({ providers }) {
+export default function AiProvidersIndex({ providers, activeProvider }) {
     const { t } = useTranslation();
     const { props } = usePage();
     const flash = props.flash ?? {};
@@ -258,6 +270,10 @@ export default function AiProvidersIndex({ providers }) {
                     <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">{t('ai.provider_settings_subtitle')}</p>
                 </div>
                 {flash.success && <div className="rounded-lg bg-green-50 dark:bg-green-900/30 text-green-800 dark:text-green-200 px-4 py-2 text-sm">{flash.success}</div>}
+                <div className="rounded-lg border border-brand-200 bg-brand-50 px-4 py-3 text-sm text-brand-800 dark:border-brand-900/60 dark:bg-brand-950/30 dark:text-brand-200">
+                    <strong>One active provider at a time.</strong> Enabling a provider makes it the workspace default and automatically disables the others.
+                    {activeProvider && <span className="ml-1">Current: <strong>{PROVIDER_INFO[activeProvider]?.label ?? activeProvider}</strong>.</span>}
+                </div>
                 <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                     {providers.length === 0 ? (
                         <div className="col-span-full">
@@ -268,7 +284,7 @@ export default function AiProvidersIndex({ providers }) {
                             />
                         </div>
                     ) : (
-                        providers.map(p => <ProviderCard key={p.provider} provider={p} />)
+                        providers.map(p => <ProviderCard key={p.provider} provider={p} activeProvider={activeProvider} />)
                     )}
                 </div>
             </div>
