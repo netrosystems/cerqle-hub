@@ -256,7 +256,7 @@ class MobileConversationController extends WorkspaceScopedController
 
         $assignedTo = null;
         if ($request->user_id) {
-            $assignedTo = User::where('workspace_id', $conversation->workspace_id)->find($request->user_id);
+            $assignedTo = User::inWorkspace($conversation->workspace_id)->find($request->user_id);
             abort_unless($assignedTo, 422, 'User not found in workspace.');
         }
 

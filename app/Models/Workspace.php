@@ -53,10 +53,6 @@ class Workspace extends Model
     /** Whether the given user can access this workspace (owner or member). */
     public function isAccessibleBy(User $user): bool
     {
-        if ($this->owner_id === $user->id) {
-            return true;
-        }
-
-        return $this->members()->where('user_id', $user->id)->exists();
+        return $user->canAccessWorkspace($this);
     }
 }

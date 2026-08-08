@@ -22,7 +22,7 @@ class SendAutomationFailedNotification
             return;
         }
 
-        $recipients = User::where('workspace_id', $workspaceId)->get();
+        $recipients = User::inWorkspace($workspaceId)->get();
 
         if ($recipients->isEmpty()) {
             return;

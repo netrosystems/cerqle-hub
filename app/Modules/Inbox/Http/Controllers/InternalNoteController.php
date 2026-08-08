@@ -36,7 +36,7 @@ class InternalNoteController extends Controller
         $mentionedUsers = collect();
 
         if (! empty($mentionedUsernames)) {
-            $mentionedUsers = User::where('workspace_id', $conversation->workspace_id)
+        $mentionedUsers = User::inWorkspace($conversation->workspace_id)
                 ->whereIn('name', $mentionedUsernames)
                 ->get();
         }

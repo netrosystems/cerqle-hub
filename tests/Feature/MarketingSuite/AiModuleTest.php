@@ -125,6 +125,43 @@ class AiModuleTest extends TestCase
     }
 
     #[Test]
+    public function sitemap_and_faq_sources_can_no_longer_be_added(): void
+    {
+        [$user, $workspace] = $this->createUserWithWorkspace();
+        $kb = AiKnowledgeBase::factory()->create(['workspace_id' => $workspace->id]);
+
+        foreach (['sitemap' => 'https://example.com/sitemap.xml', 'faq' => 'Question and answer'] as $sourceType => $sourceRef) {
+            $this->actingAs($user)
+                ->from("/app/ai/knowledge-bases/{$kb->uuid}")
+                ->post("/app/ai/knowledge-bases/{$kb->uuid}/documents", [
+                    'source_type' => $sourceType,
+                    'source_ref' => $sourceRef,
+                ])
+                ->assertRedirect("/app/ai/knowledge-bases/{$kb->uuid}")
+                ->assertSessionHasErrors('source_type');
+        }
+
+        $this->assertDatabaseCount('ai_kb_documents', 0);
+    }
+
+    #[Test]
+    public function file_source_requires_an_uploaded_file(): void
+    {
+        [$user, $workspace] = $this->createUserWithWorkspace();
+        $kb = AiKnowledgeBase::factory()->create(['workspace_id' => $workspace->id]);
+
+        $this->actingAs($user)
+            ->from("/app/ai/knowledge-bases/{$kb->uuid}")
+            ->post("/app/ai/knowledge-bases/{$kb->uuid}/documents", [
+                'source_type' => 'file',
+            ])
+            ->assertRedirect("/app/ai/knowledge-bases/{$kb->uuid}")
+            ->assertSessionHasErrors('file');
+
+        $this->assertDatabaseCount('ai_kb_documents', 0);
+    }
+
+    #[Test]
     public function creating_chatbot_stores_in_database(): void
     {
         [$user] = $this->createUserWithWorkspace();

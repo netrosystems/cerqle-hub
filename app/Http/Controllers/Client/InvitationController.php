@@ -5,13 +5,14 @@ namespace App\Http\Controllers\Client;
 use App\Http\Controllers\Controller;
 use App\Models\Invitation;
 use App\Services\Mail\MailService;
+use App\Services\WorkspaceMembershipService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 
 class InvitationController extends Controller
 {
-    public function __construct(private MailService $mail) {}
+    public function __construct(private MailService $mail, private WorkspaceMembershipService $memberships) {}
 
     /**
      * Send an email invite to a team member.
@@ -24,13 +25,22 @@ class InvitationController extends Controller
             abort(403);
         }
 
-        $request->validate([
+        $validated = $request->validate([
             'email' => ['required', 'email', 'max:255'],
             'client_role' => ['required', 'in:administrator,staff'],
+            'workspace_assignments' => ['required', 'array', 'min:1'],
+            'workspace_assignments.*.workspace_id' => ['required', 'integer'],
+            'workspace_assignments.*.role' => ['required', 'in:administrator,staff'],
         ]);
 
+        $client = $user->client;
+        if (! $client) {
+            abort(404);
+        }
+        $this->memberships->validateAssignments($client, $validated['workspace_assignments']);
+
         // Check if there's already a pending invite
-        $existing = Invitation::where('email', $request->email)
+        $existing = Invitation::where('email', $validated['email'])
             ->where('client_id', $user->client_id)
             ->whereNull('accepted_at')
             ->where('expires_at', '>', now())
@@ -42,12 +52,15 @@ class InvitationController extends Controller
 
         $invitation = Invitation::create([
             'client_id' => $user->client_id,
-            'email' => $request->email,
-            'client_role' => $request->client_role,
+            'email' => $validated['email'],
+            'client_role' => $validated['client_role'],
             'token' => Str::random(64),
             'invited_by' => $user->id,
             'expires_at' => now()->addDays(7),
         ]);
+        $invitation->workspaces()->sync(collect($validated['workspace_assignments'])->mapWithKeys(fn (array $assignment) => [
+            (int) $assignment['workspace_id'] => ['role' => $assignment['role']],
+        ])->all());
 
         $inviteUrl = route('auth.invitations.show', ['token' => $invitation->token]);
 
@@ -59,7 +72,7 @@ class InvitationController extends Controller
             'expires_days' => 7,
         ]);
 
-        return back()->with('success', 'Invitation sent to '.$request->email);
+        return back()->with('success', 'Invitation sent to '.$validated['email']);
     }
 
     /**

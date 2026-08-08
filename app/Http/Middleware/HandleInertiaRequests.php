@@ -268,6 +268,22 @@ class HandleInertiaRequests extends Middleware
             }
             try {
                 $workspacesForSwitcher = $user->accessibleWorkspaces()->map(fn ($w) => ['id' => $w->id, 'name' => $w->name])->values()->all();
+                // A membership can be removed while the user still has an old
+                // workspace ID in their session. Fall back immediately instead
+                // of rendering data from a workspace they no longer access.
+                if (! $currentWorkspace && $workspacesForSwitcher !== []) {
+                    $fallbackId = $workspacesForSwitcher[0]['id'];
+                    $fallback = Workspace::with('client')->find($fallbackId);
+                    if ($fallback) {
+                        $request->session()->put('current_workspace_id', $fallback->id);
+                        if ((int) $user->workspace_id !== (int) $fallback->id) {
+                            $user->forceFill(['workspace_id' => $fallback->id])->saveQuietly();
+                        }
+                        $workspaceId = $fallback->id;
+                        $currentWorkspace = ['id' => $fallback->id, 'name' => $fallback->name];
+                        $plan = $fallback->client?->activePlan();
+                    }
+                }
             } catch (\Throwable $e) {
                 $workspacesForSwitcher = [];
             }

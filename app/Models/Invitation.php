@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 
 class Invitation extends Model
 {
@@ -31,6 +32,14 @@ class Invitation extends Model
     public function invitedBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'invited_by');
+    }
+
+    /** Workspaces and roles that will be granted when this invitation is accepted. */
+    public function workspaces(): BelongsToMany
+    {
+        return $this->belongsToMany(Workspace::class, 'invitation_workspace')
+            ->withPivot('role')
+            ->withTimestamps();
     }
 
     public function isPending(): bool

@@ -18,7 +18,7 @@ class DispatchOutboundWebhookListener
     public function handleContactCreated(ContactCreated $event): void
     {
         $contact = $event->contact;
-        $user = User::where('workspace_id', $contact->workspace_id)->first();
+        $user = User::inWorkspace($contact->workspace_id)->first();
         if (! $user) {
             return;
         }
@@ -43,7 +43,7 @@ class DispatchOutboundWebhookListener
             return;
         }
 
-        $user = User::where('workspace_id', $conversation->workspace_id)->first();
+        $user = User::inWorkspace($conversation->workspace_id)->first();
         if (! $user) {
             return;
         }
@@ -64,7 +64,7 @@ class DispatchOutboundWebhookListener
     public function handleCampaignCompleted(CampaignCompleted $event): void
     {
         $campaign = $event->campaign;
-        $user = User::where('workspace_id', $campaign->workspace_id)->first();
+        $user = User::inWorkspace($campaign->workspace_id)->first();
         if (! $user) {
             return;
         }

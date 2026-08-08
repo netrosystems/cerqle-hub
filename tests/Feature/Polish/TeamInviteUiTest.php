@@ -41,6 +41,10 @@ class TeamInviteUiTest extends TestCase
         $response = $this->actingAs($user)->post(route('client.invitations.store'), [
             'email' => 'newuser@example.com',
             'client_role' => 'staff',
+            'workspace_assignments' => [[
+                'workspace_id' => $ctx['workspace']->id,
+                'role' => 'staff',
+            ]],
         ]);
 
         $response->assertRedirect();

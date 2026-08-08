@@ -28,7 +28,7 @@ class SendNewMessageNotification
             $recipients = User::where('id', $conversation->assigned_user_id)->get();
         } else {
             $workspaceId = $conversation->workspace_id;
-            $recipients = User::where('workspace_id', $workspaceId)->get();
+            $recipients = User::inWorkspace($workspaceId)->get();
         }
 
         if ($recipients->isEmpty()) {

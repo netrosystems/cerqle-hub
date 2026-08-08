@@ -35,7 +35,7 @@ class ConversationHandoverService
         });
 
         if ($created) {
-            User::where('workspace_id', $conversation->workspace_id)
+            User::inWorkspace($conversation->workspace_id)
                 ->each(fn (User $member) => $member->notify(
                     new ConversationHandoverNotification($conversation, $reason)
                 ));

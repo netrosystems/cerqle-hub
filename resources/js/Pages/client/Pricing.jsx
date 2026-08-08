@@ -187,7 +187,7 @@ export default function Pricing({
                     })}
                 </div>
 
-                {gateways.length > 0 && is_authenticated && (
+                {configuredGateways.length === 0 && gateways.length > 0 && is_authenticated && (
                     <div className="rounded-soft-lg border border-soft border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800 px-4 py-3 text-sm text-neutral-600 dark:text-neutral-300">
                         <span className="font-medium">{t('pricing.gateways_label')} </span>
                         {gateways.map((g) => (

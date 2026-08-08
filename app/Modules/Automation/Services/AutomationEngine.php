@@ -1045,7 +1045,7 @@ class AutomationEngine
 
         $user = null;
         if (! empty($data['user_id'])) {
-            $user = User::where('workspace_id', $workspaceId)->find($data['user_id']);
+            $user = User::inWorkspace($workspaceId)->find($data['user_id']);
             if (! $user) {
                 return ['status' => 'error', 'message' => 'Assigned user not found in workspace.'];
             }

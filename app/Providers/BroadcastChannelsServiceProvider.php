@@ -3,7 +3,6 @@
 namespace App\Providers;
 
 use App\Models\User;
-use App\Models\Workspace;
 use App\Modules\Shared\Models\Conversation;
 use Illuminate\Support\Facades\Broadcast;
 use Illuminate\Support\Facades\Log;
@@ -95,37 +94,20 @@ class BroadcastChannelsServiceProvider extends ServiceProvider
     }
 
     /**
-     * Whether the user can access the given workspace. Mirrors InboxController::authorise
-     * (current/primary workspace), plus pivot membership, ownership and same-client.
+     * Whether the user can access the given workspace. Access must be explicit:
+     * belonging to the same client is not enough to subscribe to another
+     * workspace's realtime data.
      */
     public static function userCanAccessWorkspace(User $user, int $workspaceId): bool
     {
-        if ((int) $user->workspace_id === $workspaceId) {
+        if ($user->canAccessWorkspace($workspaceId)) {
             return true;
-        }
-
-        $current = $user->current_workspace_id ?? null;
-        if ($current && (int) $current === $workspaceId) {
-            return true;
-        }
-
-        if ($user->accessibleWorkspaces()->contains('id', $workspaceId)) {
-            return true;
-        }
-
-        if ($user->client_id) {
-            $belongsToClient = Workspace::where('id', $workspaceId)
-                ->where('client_id', $user->client_id)
-                ->exists();
-            if ($belongsToClient) {
-                return true;
-            }
         }
 
         Log::warning('broadcast.auth.denied workspace access check', [
             'user_id' => $user->id,
             'user_workspace_id' => $user->workspace_id,
-            'user_current_workspace_id' => $current,
+            'user_current_workspace_id' => null,
             'user_client_id' => $user->client_id,
             'requested_workspace_id' => $workspaceId,
         ]);

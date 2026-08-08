@@ -8,8 +8,72 @@ import { Users, Pencil, Trash2, UserPlus, Mail, X } from 'lucide-react';
 const STATUS_ACTIVE    = 'active';
 const CLIENT_ROLE_ADMIN = 'administrator';
 const CLIENT_ROLE_STAFF = 'staff';
+const WORKSPACE_ROLE_ADMIN = 'administrator';
+const WORKSPACE_ROLE_STAFF = 'staff';
 
-export default function TeamIndex({ users = [], client = {}, invitations = [] }) {
+function WorkspaceAssignments({ workspaces = [], value = [], onChange, error, lockedWorkspaceIds = [] }) {
+    const byWorkspace = Object.fromEntries(value.map((assignment) => [Number(assignment.workspace_id), assignment]));
+    const locked = new Set(lockedWorkspaceIds.map(Number));
+
+    const toggleWorkspace = (workspaceId, checked) => {
+        const id = Number(workspaceId);
+        if (locked.has(id)) return;
+        if (checked) {
+            onChange([...value, { workspace_id: id, role: WORKSPACE_ROLE_STAFF }]);
+            return;
+        }
+        onChange(value.filter((assignment) => Number(assignment.workspace_id) !== id));
+    };
+
+    const setRole = (workspaceId, role) => {
+        const id = Number(workspaceId);
+        onChange(value.map((assignment) => Number(assignment.workspace_id) === id ? { ...assignment, role } : assignment));
+    };
+
+    return (
+        <div>
+            <div className="mb-1 flex items-center justify-between gap-3">
+                <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300">Workspace access</label>
+                <span className="text-xs text-neutral-500">Select one or more workspaces</span>
+            </div>
+            <div className="divide-y divide-neutral-200 overflow-hidden rounded-lg border border-neutral-300 dark:divide-neutral-700 dark:border-neutral-600">
+                {workspaces.map((workspace) => {
+                    const assignment = byWorkspace[workspace.id];
+                    const isLocked = locked.has(Number(workspace.id));
+                    return (
+                        <div key={workspace.id} className="flex flex-wrap items-center justify-between gap-3 px-3 py-2.5">
+                            <label className="flex min-w-0 items-center gap-2 text-sm font-medium text-neutral-800 dark:text-neutral-100">
+                                <input
+                                    type="checkbox"
+                                    checked={Boolean(assignment) || isLocked}
+                                    disabled={isLocked}
+                                    onChange={(event) => toggleWorkspace(workspace.id, event.target.checked)}
+                                    className="rounded border-neutral-300 text-brand-600 focus:ring-brand-500"
+                                />
+                                <span className="truncate">{workspace.name}{isLocked ? ' (Owner)' : ''}</span>
+                            </label>
+                            {assignment && (
+                                <select
+                                    value={assignment.role}
+                                    onChange={(event) => setRole(workspace.id, event.target.value)}
+                                    className="rounded-md border border-neutral-300 bg-white px-2 py-1 text-sm dark:border-neutral-600 dark:bg-neutral-800"
+                                    aria-label={`Role in ${workspace.name}`}
+                                >
+                                    <option value={WORKSPACE_ROLE_STAFF}>Staff</option>
+                                    <option value={WORKSPACE_ROLE_ADMIN}>Administrator</option>
+                                </select>
+                            )}
+                        </div>
+                    );
+                })}
+            </div>
+            <p className="mt-1.5 text-xs text-neutral-500">Access is isolated per workspace. Removing a workspace here does not remove the person from their other workspaces.</p>
+            {error && <p className="mt-1 text-xs text-coral-600">{error}</p>}
+        </div>
+    );
+}
+
+export default function TeamIndex({ users = [], client = {}, invitations = [], workspaces = [] }) {
     const { t } = useTranslation();
     const { flash = {} } = usePage().props;
     const [addOpen, setAddOpen]         = useState(false);
@@ -18,7 +82,7 @@ export default function TeamIndex({ users = [], client = {}, invitations = [] })
     const [editUser, setEditUser]       = useState(null);
     const [deleteConfirm, setDeleteConfirm] = useState(null);
 
-    const inviteForm = useForm({ email: '', client_role: CLIENT_ROLE_STAFF });
+    const inviteForm = useForm({ email: '', client_role: CLIENT_ROLE_STAFF, workspace_assignments: [] });
 
     const submitInvite = (e) => {
         e.preventDefault();
@@ -39,6 +103,7 @@ export default function TeamIndex({ users = [], client = {}, invitations = [] })
         password_confirmation: '',
         client_role: CLIENT_ROLE_STAFF,
         status: STATUS_ACTIVE,
+        workspace_assignments: [],
     });
 
     const editForm = useForm({
@@ -48,11 +113,12 @@ export default function TeamIndex({ users = [], client = {}, invitations = [] })
         password_confirmation: '',
         client_role: CLIENT_ROLE_STAFF,
         status: STATUS_ACTIVE,
+        workspace_assignments: [],
     });
 
     const openAdd = () => {
         addForm.reset();
-        addForm.setData({ client_role: CLIENT_ROLE_STAFF, status: STATUS_ACTIVE });
+        addForm.setData({ client_role: CLIENT_ROLE_STAFF, status: STATUS_ACTIVE, workspace_assignments: [] });
         setAddOpen(true);
     };
 
@@ -76,6 +142,7 @@ export default function TeamIndex({ users = [], client = {}, invitations = [] })
             password_confirmation: '',
             client_role: u.client_role || CLIENT_ROLE_STAFF,
             status: u.status,
+            workspace_assignments: (u.workspace_assignments || []).map(({ workspace_id, role }) => ({ workspace_id, role })),
         });
         setEditOpen(true);
     };
@@ -152,6 +219,9 @@ export default function TeamIndex({ users = [], client = {}, invitations = [] })
                                         {t('client.role') || 'Role'}
                                     </th>
                                     <th className="px-4 py-3 text-left text-xs font-medium text-neutral-500 uppercase">
+                                        Workspace access
+                                    </th>
+                                    <th className="px-4 py-3 text-left text-xs font-medium text-neutral-500 uppercase">
                                         {t('client.status') || 'Status'}
                                     </th>
                                     {(
@@ -174,6 +244,15 @@ export default function TeamIndex({ users = [], client = {}, invitations = [] })
                                             <span className="inline-flex rounded-full px-2 py-0.5 text-xs font-medium bg-brand-50 dark:bg-brand-900/30 text-brand-800 dark:text-brand-300">
                                                 {u.client_role === CLIENT_ROLE_ADMIN ? (t('admin.administrator') || 'Administrator') : (t('admin.staff') || 'Staff')}
                                             </span>
+                                        </td>
+                                        <td className="px-4 py-3 text-sm text-neutral-600 dark:text-neutral-300">
+                                            <div className="flex flex-wrap gap-1.5">
+                                                {(u.workspace_assignments || []).map((assignment) => (
+                                                    <span key={assignment.workspace_id} className="inline-flex rounded-full bg-neutral-100 px-2 py-0.5 text-xs dark:bg-neutral-700">
+                                                        {assignment.name} · {assignment.role === WORKSPACE_ROLE_ADMIN ? 'Admin' : 'Staff'}
+                                                    </span>
+                                                ))}
+                                            </div>
                                         </td>
                                         <td className="px-4 py-3">
                                             <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
@@ -231,6 +310,13 @@ export default function TeamIndex({ users = [], client = {}, invitations = [] })
                                     <div>
                                         <span className="text-sm font-medium text-neutral-800 dark:text-neutral-200">{inv.email}</span>
                                         <span className="ml-2 text-xs text-neutral-500 dark:text-neutral-400 capitalize">{inv.client_role}</span>
+                                        <div className="mt-1 flex flex-wrap gap-1">
+                                            {(inv.workspace_assignments || []).map((assignment) => (
+                                                <span key={assignment.workspace_id} className="rounded bg-neutral-100 px-1.5 py-0.5 text-[11px] text-neutral-600 dark:bg-neutral-700 dark:text-neutral-300">
+                                                    {assignment.name} · {assignment.role}
+                                                </span>
+                                            ))}
+                                        </div>
                                     </div>
                                     <button
                                         onClick={() => revokeInvitation(inv.id)}
@@ -262,6 +348,12 @@ export default function TeamIndex({ users = [], client = {}, invitations = [] })
                                 />
                                 {inviteForm.errors.email && <p className="text-coral-600 text-xs mt-1">{inviteForm.errors.email}</p>}
                             </div>
+                            <WorkspaceAssignments
+                                workspaces={workspaces}
+                                value={inviteForm.data.workspace_assignments}
+                                onChange={(assignments) => inviteForm.setData('workspace_assignments', assignments)}
+                                error={inviteForm.errors.workspace_assignments}
+                            />
                             <div>
                                 <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">{t('client.role') || 'Role'}</label>
                                 <select
@@ -294,6 +386,12 @@ export default function TeamIndex({ users = [], client = {}, invitations = [] })
                                     <input type="text" value={addForm.data.name} onChange={e => addForm.setData('name', e.target.value)} className="w-full rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm" required />
                                     {addForm.errors.name && <p className="text-coral-600 text-xs mt-1">{addForm.errors.name}</p>}
                                 </div>
+                                <WorkspaceAssignments
+                                    workspaces={workspaces}
+                                    value={addForm.data.workspace_assignments}
+                                    onChange={(assignments) => addForm.setData('workspace_assignments', assignments)}
+                                    error={addForm.errors.workspace_assignments}
+                                />
                                 <div>
                                     <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">{t('client.email') || 'Email'}</label>
                                     <input type="email" value={addForm.data.email} onChange={e => addForm.setData('email', e.target.value)} className="w-full rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm" required />
@@ -338,6 +436,13 @@ export default function TeamIndex({ users = [], client = {}, invitations = [] })
                                     <input type="email" value={editForm.data.email} onChange={e => editForm.setData('email', e.target.value)} className="w-full rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm" required />
                                     {editForm.errors.email && <p className="text-coral-600 text-xs mt-1">{editForm.errors.email}</p>}
                                 </div>
+                                <WorkspaceAssignments
+                                    workspaces={workspaces}
+                                    value={editForm.data.workspace_assignments}
+                                    onChange={(assignments) => editForm.setData('workspace_assignments', assignments)}
+                                    error={editForm.errors.workspace_assignments}
+                                    lockedWorkspaceIds={workspaces.filter((workspace) => Number(workspace.owner_id) === Number(editUser?.id)).map((workspace) => workspace.id)}
+                                />
                                 <div>
                                     <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">{t('team.password_leave_blank')}</label>
                                     <PasswordInput value={editForm.data.password} onChange={e => editForm.setData('password', e.target.value)} />

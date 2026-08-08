@@ -143,7 +143,7 @@ class InboxController extends Controller
         $allLabels = InboxLabel::where('workspace_id', $workspaceId)->orderBy('name')->get(['id', 'name', 'color']);
 
         // Team members for agent assignment
-        $teamMembers = User::where('workspace_id', $workspaceId)
+        $teamMembers = User::inWorkspace($workspaceId)
             ->select('id', 'name', 'email')
             ->orderBy('name')
             ->get();
@@ -509,7 +509,7 @@ class InboxController extends Controller
 
         $assignedTo = null;
         if ($request->user_id) {
-            $assignedTo = User::where('workspace_id', $conversation->workspace_id)
+            $assignedTo = User::inWorkspace($conversation->workspace_id)
                 ->find($request->user_id);
             abort_unless($assignedTo, 422);
         }

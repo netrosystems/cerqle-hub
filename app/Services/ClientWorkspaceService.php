@@ -27,8 +27,12 @@ class ClientWorkspaceService
     }
 
     /**
-     * Attach a client-scoped user to the client's workspace(s): claim unowned default workspace for the first
-     * administrator, add others as members, and set primary workspace_id when missing.
+     * Initialise a client-scoped user without widening their access.
+     *
+     * Workspace assignments are deliberate: client administrators select them
+     * when adding/inviting a member. This method only preserves an existing
+     * active assignment, or makes the first administrator the owner of the
+     * orphan default workspace.
      */
     public function syncClientUser(User $user): void
     {
@@ -55,13 +59,13 @@ class ClientWorkspaceService
             }
         }
 
-        foreach ($workspaces as $workspace) {
-            if ($workspace->isAccessibleBy($user)) {
-                continue;
+        if ($user->workspace_id) {
+            $activeWorkspace = $workspaces->firstWhere('id', $user->workspace_id);
+            if ($activeWorkspace && ! $activeWorkspace->isAccessibleBy($user)) {
+                $activeWorkspace->members()->syncWithoutDetaching([
+                    $user->id => ['role' => $activeWorkspace->owner_id === $user->id ? 'owner' : 'staff'],
+                ]);
             }
-            $workspace->members()->syncWithoutDetaching([
-                $user->id => ['role' => 'member'],
-            ]);
         }
 
         $user->refresh();

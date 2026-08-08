@@ -9,6 +9,7 @@ use Illuminate\Auth\Notifications\ResetPassword;
 use Illuminate\Auth\Notifications\VerifyEmail;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
@@ -159,6 +160,48 @@ class User extends Authenticatable implements MustVerifyEmail
         $member = $this->workspaces()->get();
 
         return $owned->merge($member)->unique('id');
+    }
+
+    /**
+     * Restrict a user query to people explicitly assigned to a workspace.
+     *
+     * Do not use users.workspace_id for this: it represents the user's active
+     * workspace and changes when they use the workspace switcher. Membership is
+     * the source of truth for visibility, notifications and agent assignment.
+     *
+     * @param Builder<User> $query
+     * @return Builder<User>
+     */
+    public function scopeInWorkspace(Builder $query, int $workspaceId): Builder
+    {
+        return $query->where(function (Builder $query) use ($workspaceId) {
+            $query->whereHas('workspaces', fn (Builder $workspaces) => $workspaces->whereKey($workspaceId))
+                ->orWhereHas('ownedWorkspaces', fn (Builder $workspaces) => $workspaces->whereKey($workspaceId));
+        });
+    }
+
+    public function workspaceRole(int|Workspace $workspace): ?string
+    {
+        $workspaceId = $workspace instanceof Workspace ? $workspace->id : $workspace;
+
+        if ($workspace instanceof Workspace && (int) $workspace->owner_id === (int) $this->id) {
+            return 'owner';
+        }
+
+        if (! ($workspace instanceof Workspace)) {
+            $workspace = Workspace::find($workspaceId);
+        }
+
+        if ($workspace && (int) $workspace->owner_id === (int) $this->id) {
+            return 'owner';
+        }
+
+        return $this->workspaces()->whereKey($workspaceId)->value('workspace_user.role');
+    }
+
+    public function canAccessWorkspace(int|Workspace $workspace): bool
+    {
+        return $this->workspaceRole($workspace) !== null;
     }
 
     // -------------------------------------------------------------------------

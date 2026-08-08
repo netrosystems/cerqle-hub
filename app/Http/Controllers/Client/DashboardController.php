@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Client;
 use App\Http\Controllers\Controller;
 use App\Models\ClientSubscription;
 use App\Models\Subscription;
+use App\Models\Workspace;
 use App\Modules\Automation\Models\Automation;
 use App\Modules\Broadcasting\Models\Campaign;
 use App\Modules\Shared\Models\Contact;
@@ -53,7 +54,10 @@ class DashboardController extends Controller
             }
         }
 
-        $teamMembersCount = $user->client ? $user->client->users()->count() : 1;
+        // Seats are measured per workspace. A person assigned to three
+        // workspaces consumes one seat in each of those workspaces.
+        $activeWorkspace = $user->workspace_id ? Workspace::find($user->workspace_id) : null;
+        $teamMembersCount = $activeWorkspace ? $activeWorkspace->members()->count() : 1;
         $teamMembersLimit = $effective?->plan?->limits['users'] ?? null;
 
         $workspacesCount = $user->accessibleWorkspaces()->count();

@@ -22,6 +22,9 @@ class AiKnowledgeBaseController extends Controller
 
     private const SUPPORTED_FILE_LABEL = 'PDF, TXT, MD, CSV, DOCX, JSON';
 
+    /** Application ceiling. The active PHP-FPM limit may be lower. */
+    private const UPLOAD_MAX_KB = 20 * 1024;
+
     public function __construct(
         private StorageManager $storage,
         private EmbeddingStore $embeddings,
@@ -48,6 +51,7 @@ class AiKnowledgeBaseController extends Controller
             'kb' => $kb,
             'kbUploadMaxKb' => $kbUploadMaxKb,
             'kbUploadMaxMb' => round($kbUploadMaxKb / 1024, 1),
+            'kbAppUploadMaxMb' => self::UPLOAD_MAX_KB / 1024,
         ]);
     }
 
@@ -114,19 +118,25 @@ class AiKnowledgeBaseController extends Controller
         $this->authorise($request, $kb);
 
         $sourceType = (string) $request->input('source_type');
-        if (in_array($sourceType, ['url', 'sitemap'], true)) {
+        if ($sourceType === 'url') {
             $request->merge([
                 'source_ref' => $this->normaliseSourceUrl((string) $request->input('source_ref')),
             ]);
         }
 
         $validated = $request->validate([
-            'source_type' => ['required', 'in:file,url,text,sitemap,faq'],
+            'source_type' => ['required', 'in:file,url,text'],
             'source_ref' => $this->sourceRefRules((string) $request->input('source_type')),
             'title' => ['nullable', 'string', 'max:256'],
         ]);
 
         // Handle file upload
+        if ($sourceType === 'file' && ! $request->hasFile('file')) {
+            return back()->withErrors([
+                'file' => 'Choose a supported file before adding it to the knowledge base.',
+            ]);
+        }
+
         if ($request->hasFile('file')) {
             $request->validate([
                 'file' => [
@@ -210,7 +220,6 @@ class AiKnowledgeBaseController extends Controller
 
     private function kbUploadMaxKb(): int
     {
-        $appMaxKb = 20 * 1024;
         $serverMaxKb = min(
             $this->iniSizeToKb(ini_get('upload_max_filesize')),
             $this->iniSizeToKb(ini_get('post_max_size')),
@@ -220,7 +229,7 @@ class AiKnowledgeBaseController extends Controller
         // limit does not get rejected by the web server before Laravel sees it.
         $serverMaxKb = max(1024, $serverMaxKb - 512);
 
-        return min($appMaxKb, $serverMaxKb);
+        return min(self::UPLOAD_MAX_KB, $serverMaxKb);
     }
 
     private function fileValidationMessages(): array
@@ -255,9 +264,8 @@ class AiKnowledgeBaseController extends Controller
     private function sourceRefRules(string $sourceType): array
     {
         return match ($sourceType) {
-            'url', 'sitemap' => ['required', 'url', 'max:2048'],
+            'url' => ['required', 'url', 'max:2048'],
             'text' => ['required', 'string', 'max:200000'],
-            'faq' => ['required', 'string', 'max:200000'],
             'file' => ['nullable', 'string', 'max:512'],
             default => ['nullable', 'string', 'max:512'],
         };

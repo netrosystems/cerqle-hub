@@ -465,7 +465,7 @@ class StripeGateway implements AddonBillingGatewayInterface, BillingGatewayInter
         // In-app / push notification to every workspace member.
         $workspace = Workspace::where('owner_id', $subscription->user_id)->first();
         $members = $workspace
-            ? User::where('workspace_id', $workspace->id)->get()
+            ? User::inWorkspace($workspace->id)->get()
             : collect([$subscription->user]);
 
         foreach ($members as $member) {

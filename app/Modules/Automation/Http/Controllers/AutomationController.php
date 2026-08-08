@@ -91,7 +91,7 @@ class AutomationController extends Controller
             'subflows' => Automation::where('workspace_id', $workspaceId)
                 ->where('id', '!=', $currentAutomationId)
                 ->orderBy('name')->get(['uuid', 'name', 'status'])->values(),
-            'agents' => User::where('workspace_id', $workspaceId)
+            'agents' => User::inWorkspace($workspaceId)
                 ->orderBy('name')->get(['id', 'name'])->values(),
             'stores' => EcommerceStore::where('workspace_id', $workspaceId)
                 ->get(['id', 'platform', 'name'])->values(),

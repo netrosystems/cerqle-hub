@@ -36,7 +36,7 @@ class MobileInboxController extends WorkspaceScopedController
             ->orderBy('display_name')
             ->get(['id', 'channel', 'display_name', 'phone_number_id']);
 
-        $teamMembers = User::where('workspace_id', $wsId)
+        $teamMembers = User::inWorkspace($wsId)
             ->orderBy('name')
             ->get(['id', 'name', 'email']);
 
