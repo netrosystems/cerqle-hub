@@ -585,6 +585,32 @@ class SafeSmsDeliveryTest extends TestCase
     }
 
     #[Test]
+    public function the_high_volume_profile_keeps_the_safety_step_at_five_and_caps_bulk_at_180_tps(): void
+    {
+        config([
+            'broadcasting.sms.safety_rate_per_second' => 5,
+            'broadcasting.sms.provider_rate_per_second' => 180,
+            'broadcasting.sms.platform_rate_per_second' => 180,
+        ]);
+        [, $workspace] = $this->workspaceWithProvider();
+        $campaign = Campaign::factory()->create([
+            'workspace_id' => $workspace->id,
+            'channel' => 'sms',
+            'status' => 'draft',
+        ]);
+        $service = app(CampaignStepService::class);
+
+        $service->sync($campaign, [
+            ['name' => 'Safety', 'recipient_limit' => 100, 'delay_after_previous_seconds' => 0, 'rate_per_second' => 180],
+            ['name' => 'Bulk', 'recipient_limit' => null, 'delay_after_previous_seconds' => 600, 'rate_per_second' => 250],
+        ]);
+
+        $campaign->load('steps');
+        $this->assertSame(5, (int) $campaign->steps[0]->rate_per_second);
+        $this->assertSame(180, (int) $campaign->steps[1]->rate_per_second);
+    }
+
+    #[Test]
     public function step_normalisation_clamps_step_one_to_the_provider_rate_even_if_submitted_higher(): void
     {
         [, $workspace] = $this->workspaceWithProvider();

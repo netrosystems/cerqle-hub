@@ -79,7 +79,8 @@ export default function CampaignShow({ campaign, sample = [], reportUrl }) {
         (totals.sent ?? 0) + (totals.delivered ?? 0) + (totals.read ?? 0) + (totals.failed ?? 0);
     const remaining = Math.max(0, (totals.total ?? campaign.estimated_recipients ?? 0) - processed);
     const activeStep = campaign.steps?.find((step) => step.status === 'active');
-    const activeRate = Math.max(1, Math.min(5, activeStep?.rate_per_second ?? 5));
+    const activeRate = Math.max(1, Number(activeStep?.rate_per_second) || 5);
+    const bulkRate = Math.max(5, ...(campaign.steps ?? []).map((step) => Number(step.rate_per_second) || 0));
     const etaHours = remaining > 0 ? remaining / activeRate / 3600 : 0;
 
     // Auto-refresh while a campaign is actively sending so the user sees live progress.
@@ -217,7 +218,7 @@ export default function CampaignShow({ campaign, sample = [], reportUrl }) {
                             <div>
                                 <h3 className="font-medium text-neutral-800 dark:text-neutral-200">Safe delivery plan</h3>
                                 <p className="mt-1 text-xs text-neutral-500">
-                                    Provider-wide limit: {activeRate} SMS/sec · minimum {Math.ceil(1000 / activeRate)} ms between starts
+                                    Active rate: {activeRate} SMS/sec · gateway bulk ceiling: {bulkRate} SMS/sec
                                 </p>
                             </div>
                             <div className="text-right text-xs text-neutral-500">

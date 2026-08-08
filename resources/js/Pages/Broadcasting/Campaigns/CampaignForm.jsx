@@ -52,7 +52,7 @@ function FieldError({ message }) {
     );
 }
 
-function defaultInitialData(campaign, userTz) {
+function defaultInitialData(campaign, userTz, smsDeliveryLimits) {
     const fallbackTz = userTz || browserTz() || 'Asia/Dhaka';
     if (campaign) {
         const tz = campaign.timezone || fallbackTz;
@@ -80,13 +80,16 @@ function defaultInitialData(campaign, userTz) {
             timezone: tz,
             delivery_steps:
                 campaign.steps?.length > 0
-                    ? campaign.steps.map((step) => ({
+                    ? campaign.steps.map((step, index) => ({
                           name: step.name,
                           recipient_limit: step.recipient_limit,
                           delay_after_previous_seconds: step.delay_after_previous_seconds ?? 0,
-                          rate_per_second: Math.min(5, Math.max(1, step.rate_per_second ?? 5)),
+                          rate_per_second: Math.min(
+                              index === 0 ? smsDeliveryLimits.safetyRate : smsDeliveryLimits.bulkRate,
+                              Math.max(1, step.rate_per_second ?? 5),
+                          ),
                       }))
-                    : defaultDeliverySteps(),
+                    : defaultDeliverySteps(smsDeliveryLimits),
         };
     }
 
@@ -100,23 +103,23 @@ function defaultInitialData(campaign, userTz) {
         payload_json: { subject: '', body: '', from_email: '', from_name: '', reply_to: '', track_opens: true, track_clicks: false },
         schedule_at: '',
         timezone: fallbackTz,
-        delivery_steps: defaultDeliverySteps(),
+        delivery_steps: defaultDeliverySteps(smsDeliveryLimits),
     };
 }
 
-function defaultDeliverySteps() {
+function defaultDeliverySteps(smsDeliveryLimits) {
     return [
         {
             name: 'Safety check',
             recipient_limit: 100,
             delay_after_previous_seconds: 0,
-            rate_per_second: 5,
+            rate_per_second: smsDeliveryLimits.safetyRate,
         },
         {
             name: 'Remaining contacts',
             recipient_limit: null,
             delay_after_previous_seconds: 600,
-            rate_per_second: 5,
+            rate_per_second: smsDeliveryLimits.bulkRate,
         },
     ];
 }
@@ -275,6 +278,7 @@ export default function CampaignForm({
     segments = [],
     tags = [],
     contactTokens = [],
+    smsDeliveryLimits = { safetyRate: 5, bulkRate: 180, speedOptions: [1, 2, 3, 4, 5, 10, 25, 50, 75, 100, 125, 150, 160, 180] },
 }) {
     const { t } = useTranslation();
     const [step, setStep] = useState(0);
@@ -290,7 +294,10 @@ export default function CampaignForm({
     const [testTo, setTestTo] = useState({ phone_e164: '', email: '', sending: false, result: null });
 
     const userTz = usePage().props.timezone || browserTz() || 'Asia/Dhaka';
-    const initialData = useMemo(() => defaultInitialData(campaign, userTz), [campaign?.id]);
+    const initialData = useMemo(
+        () => defaultInitialData(campaign, userTz, smsDeliveryLimits),
+        [campaign?.id, smsDeliveryLimits.safetyRate, smsDeliveryLimits.bulkRate],
+    );
     const { data, setData, post, patch, processing, errors, transform } = useForm(initialData);
 
     // Templates filtered to the selected phone number's WABA.
@@ -626,6 +633,7 @@ export default function CampaignForm({
                                 setData={setData}
                                 errors={errors}
                                 audienceCount={audiencePreview.deliverable}
+                                smsDeliveryLimits={smsDeliveryLimits}
                             />
                         )}
 
@@ -1146,7 +1154,7 @@ function ContentStep({
     );
 }
 
-function ScheduleStep({ data, setData, errors, audienceCount = 0 }) {
+function ScheduleStep({ data, setData, errors, audienceCount = 0, smsDeliveryLimits }) {
     const { t } = useTranslation();
     // Build a friendly preview that proves what UTC instant we'll persist.
     const tz = data.timezone || browserTz();
@@ -1154,7 +1162,7 @@ function ScheduleStep({ data, setData, errors, audienceCount = 0 }) {
     const localPreview = utcIso ? formatInTz(utcIso, tz) : null;
     const browserPreview =
         utcIso && tz !== browserTz() ? formatInTz(utcIso, browserTz()) : null;
-    const deliverySteps = data.delivery_steps?.length ? data.delivery_steps : defaultDeliverySteps();
+    const deliverySteps = data.delivery_steps?.length ? data.delivery_steps : defaultDeliverySteps(smsDeliveryLimits);
     const estimatedSeconds =
         deliverySteps.reduce((total, step, index) => {
             const previousLimits = deliverySteps
@@ -1166,7 +1174,10 @@ function ScheduleStep({ data, setData, errors, audienceCount = 0 }) {
                     : Math.min(Number(step.recipient_limit) || 0, Math.max(0, audienceCount - previousLimits));
             return (
                 total +
-                contacts / Math.max(1, Math.min(5, Number(step.rate_per_second) || 5)) +
+                contacts / Math.max(
+                    1,
+                    Math.min(index === 0 ? smsDeliveryLimits.safetyRate : smsDeliveryLimits.bulkRate, Number(step.rate_per_second) || 5),
+                ) +
                 Number(step.delay_after_previous_seconds || 0)
             );
         }, 0);
@@ -1191,7 +1202,7 @@ function ScheduleStep({ data, setData, errors, audienceCount = 0 }) {
             name: `Step ${next.length + 1}`,
             recipient_limit: null,
             delay_after_previous_seconds: 600,
-            rate_per_second: 5,
+            rate_per_second: smsDeliveryLimits.bulkRate,
         });
         setData('delivery_steps', next);
     };
@@ -1271,9 +1282,8 @@ function ScheduleStep({ data, setData, errors, audienceCount = 0 }) {
                                 Safe delivery plan
                             </h4>
                             <p className="mt-1 max-w-2xl text-xs text-neutral-500 dark:text-neutral-400">
-                                Messages are released individually. Five per second means a minimum
-                                200 ms gap between provider requests, shared by every campaign using
-                                the same SMS account.
+                                Step 1 stays at {smsDeliveryLimits.safetyRate} SMS/sec. Later steps can use up to
+                                {' '}{smsDeliveryLimits.bulkRate} SMS/sec, shared by every campaign using the same SMS account.
                             </p>
                         </div>
                         <div className="rounded-lg bg-emerald-50 px-3 py-2 text-right dark:bg-emerald-950/30">
@@ -1353,14 +1363,20 @@ function ScheduleStep({ data, setData, errors, audienceCount = 0 }) {
                                                 value={deliveryStep.rate_per_second}
                                                 onChange={(event) =>
                                                     updateDeliveryStep(index, {
-                                                        rate_per_second: Math.min(5, Math.max(1, Number(event.target.value))),
+                                                        rate_per_second: Math.min(
+                                                            index === 0 ? smsDeliveryLimits.safetyRate : smsDeliveryLimits.bulkRate,
+                                                            Math.max(1, Number(event.target.value)),
+                                                        ),
                                                     })
                                                 }
                                                 className={inputClass}
                                             >
-                                                {[1, 2, 3, 4, 5].map((rate) => (
+                                                {(index === 0
+                                                    ? smsDeliveryLimits.speedOptions.filter((rate) => rate <= smsDeliveryLimits.safetyRate)
+                                                    : smsDeliveryLimits.speedOptions
+                                                ).map((rate) => (
                                                     <option key={rate} value={rate}>
-                                                        {rate} SMS/sec ({Math.ceil(1000 / rate)} ms gap)
+                                                        {rate} SMS/sec ({rate >= 1000 ? '< 1' : Math.ceil(1000 / rate)} ms gap)
                                                     </option>
                                                 ))}
                                             </select>
@@ -1408,7 +1424,7 @@ function ScheduleStep({ data, setData, errors, audienceCount = 0 }) {
                     <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
                         Campaigns with 10,000 or more recipients receive exclusive access to the
                         provider account. Other campaigns wait for capacity and cannot multiply the
-                        five-per-second limit.
+                        {` ${smsDeliveryLimits.bulkRate}-per-second`} provider limit.
                     </div>
                     <FieldError message={errors.delivery_steps} />
                 </div>

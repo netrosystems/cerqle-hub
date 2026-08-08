@@ -7,7 +7,9 @@ use Illuminate\Support\Facades\DB;
 
 /**
  * Reserves start times atomically. Workers may run concurrently, but provider
- * requests still begin at least 200 ms apart when the rate is 5 TPS.
+ * requests remain globally rate-limited even when many queue workers send in
+ * parallel. The initial safety step still runs at 5 TPS; bulk steps may use
+ * the verified 180 TPS ceiling.
  */
 class SmsDispatchRateLimiter
 {
@@ -15,9 +17,9 @@ class SmsDispatchRateLimiter
     {
         $providerRate = min(
             max(1, $campaignRate),
-            max(1, (int) config('broadcasting.sms.provider_rate_per_second', 5)),
+            max(1, (int) config('broadcasting.sms.provider_rate_per_second', 180)),
         );
-        $platformRate = max(1, (int) config('broadcasting.sms.platform_rate_per_second', 20));
+        $platformRate = max(1, (int) config('broadcasting.sms.platform_rate_per_second', 180));
 
         return $this->reserveMany(
             [

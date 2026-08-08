@@ -87,21 +87,22 @@ class CampaignStepService
     /**
      * Maximum rate per second a step at the given position may use.
      *
-     * Position 1 is the "safety check" step: it always caps at the provider
-     * rate (default 5 TPS) so a handful of bad numbers can't trigger a
-     * provider-level rate-limit block before we know the audience is clean.
-     * Every later step can scale up to the platform rate (default 20 TPS),
-     * which is the limit shared across all campaigns touching the provider.
-     * Raise `SMS_PLATFORM_RATE_PER_SECOND` in env when a higher-tier
-     * provider is wired in.
+     * Position 1 is the "safety check" step: it is deliberately capped at
+     * 5 TPS by default so a handful of bad numbers cannot trigger a
+     * provider-level rate-limit block before the route is known-good. Every
+     * later step can use the verified gateway ceiling (180 TPS by default),
+     * shared across all campaigns using the same provider credentials.
      */
     public function maxRateForStep(int $position): int
     {
         if ($position <= 1) {
-            return max(1, (int) config('broadcasting.sms.provider_rate_per_second', 5));
+            return max(1, (int) config('broadcasting.sms.safety_rate_per_second', 5));
         }
 
-        return max(1, (int) config('broadcasting.sms.platform_rate_per_second', 20));
+        return max(1, min(
+            (int) config('broadcasting.sms.provider_rate_per_second', 180),
+            (int) config('broadcasting.sms.platform_rate_per_second', 180),
+        ));
     }
 
     public function forOrdinal(Campaign $campaign, int $ordinal): CampaignStep

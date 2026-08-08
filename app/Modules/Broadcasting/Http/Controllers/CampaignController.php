@@ -85,9 +85,9 @@ class CampaignController extends Controller
 
         // Hard cap for the validation rule. The actual per-step cap is
         // enforced in CampaignStepService::maxRateForStep (step 1 is the
-        // safety check, capped at the provider rate; later steps can climb
-        // up to this platform rate).
-        $platformRate = max(1, (int) config('broadcasting.sms.platform_rate_per_second', 20));
+        // safety check, capped at the safety rate; later steps can climb up
+        // to the configured provider/platform ceiling).
+        $platformRate = max(1, (int) config('broadcasting.sms.platform_rate_per_second', 180));
 
         $validated = $request->validate([
             'uuid' => ['nullable', 'string', 'uuid'],
@@ -413,9 +413,9 @@ class CampaignController extends Controller
     {
         // Hard cap for the validation rule. The actual per-step cap is
         // enforced in CampaignStepService::maxRateForStep (step 1 is the
-        // safety check, capped at the provider rate; later steps can climb
-        // up to this platform rate).
-        $platformRate = max(1, (int) config('broadcasting.sms.platform_rate_per_second', 20));
+        // safety check, capped at the safety rate; later steps can climb up
+        // to the configured provider/platform ceiling).
+        $platformRate = max(1, (int) config('broadcasting.sms.platform_rate_per_second', 180));
 
         return $request->validate([
             'name' => ['required', 'string', 'max:128'],
@@ -507,6 +507,26 @@ class CampaignController extends Controller
             'segments' => $segments,
             'tags' => $tags,
             'contactTokens' => CampaignPersonalizer::availableContactTokens(),
+            'smsDeliveryLimits' => $this->smsDeliveryLimits(),
+        ];
+    }
+
+    /** @return array{safetyRate: int, bulkRate: int, speedOptions: array<int, int>} */
+    private function smsDeliveryLimits(): array
+    {
+        $steps = app(CampaignStepService::class);
+        $safetyRate = $steps->maxRateForStep(1);
+        $bulkRate = $steps->maxRateForStep(2);
+        $options = array_values(array_unique(array_filter(
+            [1, 2, 3, 4, 5, 10, 25, 50, 75, 100, 125, 150, 160, 180, $bulkRate],
+            fn (int $rate) => $rate <= $bulkRate,
+        )));
+        sort($options);
+
+        return [
+            'safetyRate' => $safetyRate,
+            'bulkRate' => $bulkRate,
+            'speedOptions' => $options,
         ];
     }
 
