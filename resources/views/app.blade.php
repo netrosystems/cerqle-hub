@@ -197,7 +197,7 @@
 
         {{-- Public Cerqle website chat widget. Keep this off authenticated app,
              admin, and installer screens so it cannot create duplicate inboxes. --}}
-        @if(isset($page['component']) && str_starts_with($page['component'], 'marketing/'))
+        @if(isset($page['component']) && ($page['component'] === 'Welcome' || str_starts_with($page['component'], 'marketing/')))
         <script src="https://cerqle.ai/widgets/chat/vjtvefTu02ELq9oxGOA5B8iCqpEg2Ifw.js" async></script>
         @endif
 
