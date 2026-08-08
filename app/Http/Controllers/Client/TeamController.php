@@ -32,14 +32,12 @@ class TeamController extends Controller
 
         $users = $client->users()
             ->with(['workspaces' => fn ($query) => $query->where('client_id', $client->id)->orderBy('name')])
-            ->orderByRaw("CASE WHEN client_role = 'administrator' THEN 0 ELSE 1 END")
             ->orderBy('name')
             ->get()
             ->map(fn (User $u) => [
                 'id' => $u->id,
                 'name' => $u->name,
                 'email' => $u->email,
-                'client_role' => $u->client_role ?? 'staff',
                 'status' => $u->status ?? 'active',
                 'created_at' => $u->created_at->toIso8601String(),
                 'workspace_assignments' => $u->workspaces->map(fn (Workspace $workspace) => [
@@ -71,7 +69,6 @@ class TeamController extends Controller
                 ->map(fn (Invitation $inv) => [
                     'id' => $inv->id,
                     'email' => $inv->email,
-                    'client_role' => $inv->client_role,
                     'expires_at' => $inv->expires_at->toIso8601String(),
                     'workspace_assignments' => $inv->workspaces->map(fn (Workspace $workspace) => [
                         'workspace_id' => $workspace->id,
@@ -99,7 +96,6 @@ class TeamController extends Controller
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'email', 'max:255', Rule::unique('users', 'email')],
             'password' => ['required', 'string', 'min:8', 'confirmed'],
-            'client_role' => ['required', 'string', 'in:administrator,staff'],
             'status' => ['required', 'string', 'in:active,inactive'],
             'workspace_assignments' => ['required', 'array', 'min:1'],
             'workspace_assignments.*.workspace_id' => ['required', 'integer'],
@@ -113,7 +109,9 @@ class TeamController extends Controller
                 'password' => $validated['password'],
                 'role' => User::ROLE_CLIENT,
                 'client_id' => $client->id,
-                'client_role' => $validated['client_role'],
+                // Workspace roles control permissions. New team members do not
+                // receive organization-wide administration privileges.
+                'client_role' => User::CLIENT_ROLE_STAFF,
                 'status' => $validated['status'],
             ]);
 
@@ -139,24 +137,15 @@ class TeamController extends Controller
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'email', 'max:255', Rule::unique('users', 'email')->ignore($member->id)],
             'password' => ['nullable', 'string', 'min:8', 'confirmed'],
-            'client_role' => ['required', 'string', 'in:administrator,staff'],
             'status' => ['required', 'string', 'in:active,inactive'],
             'workspace_assignments' => ['required', 'array', 'min:1'],
             'workspace_assignments.*.workspace_id' => ['required', 'integer'],
             'workspace_assignments.*.role' => ['required', 'in:administrator,staff'],
         ]);
 
-        $adminCount = $client->users()->where('client_role', User::CLIENT_ROLE_ADMINISTRATOR)->count();
-        if ($member->client_role === User::CLIENT_ROLE_ADMINISTRATOR
-            && $validated['client_role'] !== User::CLIENT_ROLE_ADMINISTRATOR
-            && $adminCount <= 1) {
-            return redirect()->route('client.team.index')->with('error', __('Cannot demote the last administrator.'));
-        }
-
         DB::transaction(function () use ($member, $client, $validated): void {
             $member->name = $validated['name'];
             $member->email = $validated['email'];
-            $member->client_role = $validated['client_role'];
             $member->status = $validated['status'];
             if (! empty($validated['password'])) {
                 $member->password = $validated['password'];

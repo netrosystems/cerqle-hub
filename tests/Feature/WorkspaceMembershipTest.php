@@ -30,7 +30,6 @@ class WorkspaceMembershipTest extends TestCase
             'email' => 'first-only@example.com',
             'password' => 'password123',
             'password_confirmation' => 'password123',
-            'client_role' => 'staff',
             'status' => 'active',
             'workspace_assignments' => [[
                 'workspace_id' => $first->id,
@@ -39,6 +38,7 @@ class WorkspaceMembershipTest extends TestCase
         ])->assertRedirect(route('client.team.index'));
 
         $member = User::where('email', 'first-only@example.com')->sole();
+        $this->assertSame(User::CLIENT_ROLE_STAFF, $member->client_role);
         $this->assertTrue($member->canAccessWorkspace($first));
         $this->assertFalse($member->canAccessWorkspace($second));
         $this->assertSame([$first->id], $member->accessibleWorkspaces()->pluck('id')->all());
@@ -67,7 +67,6 @@ class WorkspaceMembershipTest extends TestCase
         $payload = [
             'name' => $member->name,
             'email' => $member->email,
-            'client_role' => 'staff',
             'status' => 'active',
             'workspace_assignments' => [[
                 'workspace_id' => $second->id,
@@ -117,7 +116,6 @@ class WorkspaceMembershipTest extends TestCase
         $this->actingAs($admin)->put(route('client.team.update', $admin), [
             'name' => $admin->name,
             'email' => $admin->email,
-            'client_role' => User::CLIENT_ROLE_ADMINISTRATOR,
             'status' => User::STATUS_ACTIVE,
             'workspace_assignments' => [[
                 'workspace_id' => $otherWorkspace->id,
@@ -160,5 +158,25 @@ class WorkspaceMembershipTest extends TestCase
         $this->assertTrue($member->canAccessWorkspace($first));
         $this->assertFalse($member->canAccessWorkspace($second));
         $this->assertSame('administrator', $member->workspaceRole($first));
+        $this->assertSame(User::CLIENT_ROLE_STAFF, $member->client_role);
+    }
+
+    public function test_invitation_ignores_a_posted_organization_role(): void
+    {
+        $ctx = $this->createWorkspaceContext([], ['client_role' => User::CLIENT_ROLE_ADMINISTRATOR]);
+
+        $this->actingAs($ctx['user'])->post(route('client.invitations.store'), [
+            'email' => 'workspace-admin@example.com',
+            // This must not elevate an invitee outside their selected workspaces.
+            'client_role' => User::CLIENT_ROLE_ADMINISTRATOR,
+            'workspace_assignments' => [[
+                'workspace_id' => $ctx['workspace']->id,
+                'role' => 'administrator',
+            ]],
+        ])->assertRedirect();
+
+        $invitation = Invitation::where('email', 'workspace-admin@example.com')->sole();
+        $this->assertSame(User::CLIENT_ROLE_STAFF, $invitation->client_role);
+        $this->assertSame('administrator', $invitation->workspaces()->first()->pivot->role);
     }
 }

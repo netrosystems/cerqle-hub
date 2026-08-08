@@ -65,10 +65,8 @@ class InvitationController extends Controller
             if ($invitation->client_id && ! $user->client_id) {
                 $user->update([
                     'client_id' => $invitation->client_id,
-                    'client_role' => $invitation->client_role ?? User::CLIENT_ROLE_STAFF,
+                    'client_role' => User::CLIENT_ROLE_STAFF,
                 ]);
-            } elseif ($invitation->client_id) {
-                $user->update(['client_role' => $invitation->client_role ?? $user->client_role]);
             }
         } else {
             $user = User::create([
@@ -78,7 +76,7 @@ class InvitationController extends Controller
                 'role' => 'client',
                 'status' => 'active',
                 'client_id' => $invitation->client_id,
-                'client_role' => $invitation->client_role ?? User::CLIENT_ROLE_STAFF,
+                'client_role' => User::CLIENT_ROLE_STAFF,
                 'email_verified_at' => now(),
             ]);
 

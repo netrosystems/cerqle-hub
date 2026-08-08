@@ -195,6 +195,12 @@
             src="https://connect.facebook.net/en_US/sdk.js"></script>
         @endif
 
+        {{-- Public Cerqle website chat widget. Keep this off authenticated app,
+             admin, and installer screens so it cannot create duplicate inboxes. --}}
+        @if(isset($page['component']) && str_starts_with($page['component'], 'marketing/'))
+        <script src="https://cerqle.ai/widgets/chat/vjtvefTu02ELq9oxGOA5B8iCqpEg2Ifw.js" async></script>
+        @endif
+
         <!-- Scripts -->
         @routes
         @viteReactRefresh

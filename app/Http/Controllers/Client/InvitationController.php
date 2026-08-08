@@ -27,7 +27,6 @@ class InvitationController extends Controller
 
         $validated = $request->validate([
             'email' => ['required', 'email', 'max:255'],
-            'client_role' => ['required', 'in:administrator,staff'],
             'workspace_assignments' => ['required', 'array', 'min:1'],
             'workspace_assignments.*.workspace_id' => ['required', 'integer'],
             'workspace_assignments.*.role' => ['required', 'in:administrator,staff'],
@@ -53,7 +52,9 @@ class InvitationController extends Controller
         $invitation = Invitation::create([
             'client_id' => $user->client_id,
             'email' => $validated['email'],
-            'client_role' => $validated['client_role'],
+            // Workspace roles are the only roles granted through the team UI.
+            // Every invited team member remains an organization-level staff user.
+            'client_role' => \App\Models\User::CLIENT_ROLE_STAFF,
             'token' => Str::random(64),
             'invited_by' => $user->id,
             'expires_at' => now()->addDays(7),

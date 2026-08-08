@@ -6,8 +6,6 @@ import { useTranslation } from 'react-i18next';
 import { Users, Pencil, Trash2, UserPlus, Mail, X } from 'lucide-react';
 
 const STATUS_ACTIVE    = 'active';
-const CLIENT_ROLE_ADMIN = 'administrator';
-const CLIENT_ROLE_STAFF = 'staff';
 const WORKSPACE_ROLE_ADMIN = 'administrator';
 const WORKSPACE_ROLE_STAFF = 'staff';
 
@@ -82,7 +80,7 @@ export default function TeamIndex({ users = [], client = {}, invitations = [], w
     const [editUser, setEditUser]       = useState(null);
     const [deleteConfirm, setDeleteConfirm] = useState(null);
 
-    const inviteForm = useForm({ email: '', client_role: CLIENT_ROLE_STAFF, workspace_assignments: [] });
+    const inviteForm = useForm({ email: '', workspace_assignments: [] });
 
     const submitInvite = (e) => {
         e.preventDefault();
@@ -101,7 +99,6 @@ export default function TeamIndex({ users = [], client = {}, invitations = [], w
         email: '',
         password: '',
         password_confirmation: '',
-        client_role: CLIENT_ROLE_STAFF,
         status: STATUS_ACTIVE,
         workspace_assignments: [],
     });
@@ -111,14 +108,13 @@ export default function TeamIndex({ users = [], client = {}, invitations = [], w
         email: '',
         password: '',
         password_confirmation: '',
-        client_role: CLIENT_ROLE_STAFF,
         status: STATUS_ACTIVE,
         workspace_assignments: [],
     });
 
     const openAdd = () => {
         addForm.reset();
-        addForm.setData({ client_role: CLIENT_ROLE_STAFF, status: STATUS_ACTIVE, workspace_assignments: [] });
+        addForm.setData({ status: STATUS_ACTIVE, workspace_assignments: [] });
         setAddOpen(true);
     };
 
@@ -140,7 +136,6 @@ export default function TeamIndex({ users = [], client = {}, invitations = [], w
             email: u.email,
             password: '',
             password_confirmation: '',
-            client_role: u.client_role || CLIENT_ROLE_STAFF,
             status: u.status,
             workspace_assignments: (u.workspace_assignments || []).map(({ workspace_id, role }) => ({ workspace_id, role })),
         });
@@ -216,9 +211,6 @@ export default function TeamIndex({ users = [], client = {}, invitations = [], w
                                         {t('client.email') || 'Email'}
                                     </th>
                                     <th className="px-4 py-3 text-left text-xs font-medium text-neutral-500 uppercase">
-                                        {t('client.role') || 'Role'}
-                                    </th>
-                                    <th className="px-4 py-3 text-left text-xs font-medium text-neutral-500 uppercase">
                                         Workspace access
                                     </th>
                                     <th className="px-4 py-3 text-left text-xs font-medium text-neutral-500 uppercase">
@@ -239,11 +231,6 @@ export default function TeamIndex({ users = [], client = {}, invitations = [], w
                                         </td>
                                         <td className="px-4 py-3 text-sm text-neutral-600 dark:text-neutral-300">
                                             {u.email}
-                                        </td>
-                                        <td className="px-4 py-3">
-                                            <span className="inline-flex rounded-full px-2 py-0.5 text-xs font-medium bg-brand-50 dark:bg-brand-900/30 text-brand-800 dark:text-brand-300">
-                                                {u.client_role === CLIENT_ROLE_ADMIN ? (t('admin.administrator') || 'Administrator') : (t('admin.staff') || 'Staff')}
-                                            </span>
                                         </td>
                                         <td className="px-4 py-3 text-sm text-neutral-600 dark:text-neutral-300">
                                             <div className="flex flex-wrap gap-1.5">
@@ -309,7 +296,6 @@ export default function TeamIndex({ users = [], client = {}, invitations = [], w
                                 <li key={inv.id} className="flex items-center justify-between px-4 py-3">
                                     <div>
                                         <span className="text-sm font-medium text-neutral-800 dark:text-neutral-200">{inv.email}</span>
-                                        <span className="ml-2 text-xs text-neutral-500 dark:text-neutral-400 capitalize">{inv.client_role}</span>
                                         <div className="mt-1 flex flex-wrap gap-1">
                                             {(inv.workspace_assignments || []).map((assignment) => (
                                                 <span key={assignment.workspace_id} className="rounded bg-neutral-100 px-1.5 py-0.5 text-[11px] text-neutral-600 dark:bg-neutral-700 dark:text-neutral-300">
@@ -354,17 +340,6 @@ export default function TeamIndex({ users = [], client = {}, invitations = [], w
                                 onChange={(assignments) => inviteForm.setData('workspace_assignments', assignments)}
                                 error={inviteForm.errors.workspace_assignments}
                             />
-                            <div>
-                                <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">{t('client.role') || 'Role'}</label>
-                                <select
-                                    value={inviteForm.data.client_role}
-                                    onChange={e => inviteForm.setData('client_role', e.target.value)}
-                                    className="w-full rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm"
-                                >
-                                    <option value={CLIENT_ROLE_STAFF}>{t('admin.staff') || 'Staff'}</option>
-                                    <option value={CLIENT_ROLE_ADMIN}>{t('admin.administrator') || 'Administrator'}</option>
-                                </select>
-                            </div>
                         </form>
                     </Modal.Body>
                     <Modal.Footer>
@@ -406,13 +381,6 @@ export default function TeamIndex({ users = [], client = {}, invitations = [], w
                                     <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">{t('client.password_confirmation') || 'Confirm password'}</label>
                                     <PasswordInput value={addForm.data.password_confirmation} onChange={e => addForm.setData('password_confirmation', e.target.value)} />
                                 </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">{t('client.role') || 'Role'}</label>
-                                    <select value={addForm.data.client_role} onChange={e => addForm.setData('client_role', e.target.value)} className="w-full rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm">
-                                        <option value={CLIENT_ROLE_STAFF}>{t('admin.staff') || 'Staff'}</option>
-                                        <option value={CLIENT_ROLE_ADMIN}>{t('admin.administrator') || 'Administrator'}</option>
-                                    </select>
-                                </div>
                         </form>
                     </Modal.Body>
                     <Modal.Footer>
@@ -447,13 +415,6 @@ export default function TeamIndex({ users = [], client = {}, invitations = [], w
                                     <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">{t('team.password_leave_blank')}</label>
                                     <PasswordInput value={editForm.data.password} onChange={e => editForm.setData('password', e.target.value)} />
                                     {editForm.errors.password && <p className="text-coral-600 text-xs mt-1">{editForm.errors.password}</p>}
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">{t('client.role') || 'Role'}</label>
-                                    <select value={editForm.data.client_role} onChange={e => editForm.setData('client_role', e.target.value)} className="w-full rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm">
-                                        <option value={CLIENT_ROLE_STAFF}>{t('admin.staff') || 'Staff'}</option>
-                                        <option value={CLIENT_ROLE_ADMIN}>{t('admin.administrator') || 'Administrator'}</option>
-                                    </select>
                                 </div>
                                 <div>
                                     <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">{t('client.status') || 'Status'}</label>
