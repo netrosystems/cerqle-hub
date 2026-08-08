@@ -7,6 +7,7 @@ use App\Models\SmtpConfiguration;
 use App\Modules\Broadcasting\Jobs\LaunchCampaignJob;
 use App\Modules\Broadcasting\Models\Campaign;
 use App\Modules\Broadcasting\Models\CampaignRecipient;
+use App\Modules\Broadcasting\Models\SmsProviderConfig;
 use App\Modules\Broadcasting\Models\UsageMeter;
 use App\Modules\Broadcasting\Models\WorkspaceSmtpConfig;
 use App\Modules\Broadcasting\Services\CampaignPersonalizer;
@@ -94,6 +95,7 @@ class CampaignController extends Controller
             'name' => ['required', 'string', 'max:128'],
             'channel' => ['required', 'in:whatsapp,sms'],
             'whatsapp_phone_number_id' => ['nullable', 'string'],
+            'sms_provider' => ['nullable', 'string', 'in:'.implode(',', SmsProviderController::CLIENT_VISIBLE_PROVIDERS)],
             'audience_type' => ['nullable', 'in:segment,contact_list,tag,csv'],
             'audience_ref' => ['nullable', 'string'],
             'template_ref' => ['nullable', 'array'],
@@ -111,6 +113,7 @@ class CampaignController extends Controller
             'name' => $validated['name'],
             'channel' => $validated['channel'],
             'whatsapp_phone_number_id' => $validated['whatsapp_phone_number_id'] ?? null,
+            'sms_provider' => $validated['sms_provider'] ?? null,
             'audience_type' => $validated['audience_type'] ?? null,
             'audience_ref' => $validated['audience_ref'] ?? null,
             'template_ref' => $validated['template_ref'] ?? null,
@@ -154,7 +157,7 @@ class CampaignController extends Controller
         return Inertia::render('Broadcasting/Campaigns/Edit', array_merge(
             $this->wizardProps($request),
             ['campaign' => array_merge($campaign->only(
-                'id', 'uuid', 'name', 'channel', 'whatsapp_phone_number_id', 'audience_type', 'audience_ref',
+                'id', 'uuid', 'name', 'channel', 'whatsapp_phone_number_id', 'sms_provider', 'audience_type', 'audience_ref',
                 'template_ref', 'payload_json', 'schedule_at', 'timezone', 'status',
             ), ['steps' => $campaign->steps])],
         ));
@@ -397,7 +400,7 @@ class CampaignController extends Controller
             return;
         }
 
-        foreach (['channel', 'audience_type', 'audience_ref'] as $field) {
+        foreach (['channel', 'sms_provider', 'audience_type', 'audience_ref'] as $field) {
             if (array_key_exists($field, $validated) && (string) $validated[$field] !== (string) $campaign->{$field}) {
                 abort(422, 'Channel and audience cannot change after campaign recipients have been prepared.');
             }
@@ -417,10 +420,11 @@ class CampaignController extends Controller
         // to the configured provider/platform ceiling).
         $platformRate = max(1, (int) config('broadcasting.sms.platform_rate_per_second', 180));
 
-        return $request->validate([
+        $validated = $request->validate([
             'name' => ['required', 'string', 'max:128'],
             'channel' => ['required', 'in:whatsapp,sms'],
             'whatsapp_phone_number_id' => ['nullable', 'string'],
+            'sms_provider' => ['nullable', 'string', 'in:'.implode(',', SmsProviderController::CLIENT_VISIBLE_PROVIDERS)],
             'audience_type' => ['required', 'in:segment,contact_list,tag,csv'],
             'audience_ref' => ['nullable', 'string'],
             'template_ref' => ['nullable', 'array'],
@@ -433,6 +437,20 @@ class CampaignController extends Controller
             'delivery_steps.*.delay_after_previous_seconds' => ['required', 'integer', 'min:0', 'max:86400'],
             'delivery_steps.*.rate_per_second' => ['required', 'integer', 'min:1', 'max:'.$platformRate],
         ]);
+
+        if ($validated['channel'] === 'sms') {
+            if (blank($validated['sms_provider'] ?? null)) {
+                abort(422, 'Choose a configured SMS provider for this campaign.');
+            }
+
+            try {
+                SmsDriverManager::resolveForWorkspace($this->workspaceId($request), $validated['sms_provider']);
+            } catch (\Throwable) {
+                abort(422, 'This SMS provider is not configured. Configure it in SMS Gateways first.');
+            }
+        }
+
+        return $validated;
     }
 
     /**
@@ -508,6 +526,7 @@ class CampaignController extends Controller
             'tags' => $tags,
             'contactTokens' => CampaignPersonalizer::availableContactTokens(),
             'smsDeliveryLimits' => $this->smsDeliveryLimits(),
+            'smsProviders' => $this->configuredSmsProviders($workspaceId),
         ];
     }
 
@@ -528,6 +547,28 @@ class CampaignController extends Controller
             'bulkRate' => $bulkRate,
             'speedOptions' => $options,
         ];
+    }
+
+    /** @return array<int, array{provider: string, label: string, throughputTps: int, default: bool}> */
+    private function configuredSmsProviders(int $workspaceId): array
+    {
+        return SmsProviderConfig::where('workspace_id', $workspaceId)
+            ->whereIn('provider', SmsProviderController::CLIENT_VISIBLE_PROVIDERS)
+            ->get()
+            ->filter(fn (SmsProviderConfig $config) => ! empty($config->credentials))
+            ->map(function (SmsProviderConfig $config): array {
+                $resolved = SmsDriverManager::resolvedFromConfig($config);
+
+                return [
+                    'provider' => $config->provider,
+                    'label' => SmsProviderController::LABELS[$config->provider] ?? ucfirst($config->provider),
+                    'throughputTps' => $resolved->throughputTps,
+                    'default' => (bool) $config->default,
+                ];
+            })
+            ->sortByDesc('default')
+            ->values()
+            ->all();
     }
 
     /**

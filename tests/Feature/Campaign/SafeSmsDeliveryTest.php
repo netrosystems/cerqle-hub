@@ -611,6 +611,59 @@ class SafeSmsDeliveryTest extends TestCase
     }
 
     #[Test]
+    public function a_campaign_uses_its_selected_provider_and_never_exceeds_that_provider_ceiling(): void
+    {
+        [, $workspace] = $this->workspaceWithProvider();
+        SmsProviderConfig::create([
+            'workspace_id' => $workspace->id,
+            'provider' => 'twilio',
+            'credentials' => [
+                'account_sid' => 'AC-test',
+                'auth_token' => 'secret',
+                'from_number' => '+15555550123',
+            ],
+            // The provider's sender type has been confirmed for 25 TPS.
+            'throughput_tps' => 25,
+        ]);
+
+        $campaign = Campaign::factory()->create([
+            'workspace_id' => $workspace->id,
+            'channel' => 'sms',
+            'sms_provider' => 'twilio',
+            'status' => 'draft',
+        ]);
+
+        $resolved = SmsDriverManager::resolveForWorkspace($workspace->id, 'twilio');
+        $this->assertSame('twilio', $resolved->provider);
+        $this->assertSame(25, $resolved->throughputTps);
+
+        app(CampaignStepService::class)->sync($campaign, [
+            ['name' => 'Safety', 'recipient_limit' => 100, 'delay_after_previous_seconds' => 0, 'rate_per_second' => 25],
+            ['name' => 'Bulk', 'recipient_limit' => null, 'delay_after_previous_seconds' => 600, 'rate_per_second' => 180],
+        ]);
+
+        $campaign->load('steps');
+        $this->assertSame(5, (int) $campaign->steps[0]->rate_per_second);
+        $this->assertSame(25, (int) $campaign->steps[1]->rate_per_second);
+    }
+
+    #[Test]
+    public function unconfigured_twilio_uses_a_conservative_one_tps_default(): void
+    {
+        [, $workspace] = $this->workspaceWithProvider();
+        SmsProviderConfig::create([
+            'workspace_id' => $workspace->id,
+            'provider' => 'twilio',
+            'credentials' => [
+                'account_sid' => 'AC-test-default',
+                'auth_token' => 'secret',
+            ],
+        ]);
+
+        $this->assertSame(1, SmsDriverManager::resolveForWorkspace($workspace->id, 'twilio')->throughputTps);
+    }
+
+    #[Test]
     public function step_normalisation_clamps_step_one_to_the_provider_rate_even_if_submitted_higher(): void
     {
         [, $workspace] = $this->workspaceWithProvider();

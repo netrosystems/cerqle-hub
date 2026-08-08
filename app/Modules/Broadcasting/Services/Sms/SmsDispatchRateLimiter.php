@@ -13,11 +13,11 @@ use Illuminate\Support\Facades\DB;
  */
 class SmsDispatchRateLimiter
 {
-    public function reserve(string $providerKey, int $campaignRate): SmsRateReservation
+    public function reserve(string $providerKey, int $campaignRate, ?int $providerMaximum = null): SmsRateReservation
     {
         $providerRate = min(
             max(1, $campaignRate),
-            max(1, (int) config('broadcasting.sms.provider_rate_per_second', 180)),
+            max(1, (int) ($providerMaximum ?? config('broadcasting.sms.provider_rate_per_second', 180))),
         );
         $platformRate = max(1, (int) config('broadcasting.sms.platform_rate_per_second', 180));
 

@@ -120,7 +120,7 @@ class LaunchCampaignJob implements ShouldQueue
     private function launchSms(Campaign $campaign): void
     {
         try {
-            $resolved = SmsDriverManager::resolveForWorkspace($campaign->workspace_id);
+            $resolved = SmsDriverManager::resolveForWorkspace($campaign->workspace_id, $campaign->sms_provider);
         } catch (\Throwable $exception) {
             $campaign->update([
                 'status' => 'safety_paused',

@@ -52,7 +52,7 @@ function FieldError({ message }) {
     );
 }
 
-function defaultInitialData(campaign, userTz, smsDeliveryLimits) {
+function defaultInitialData(campaign, userTz, smsDeliveryLimits, defaultSmsProvider = '') {
     const fallbackTz = userTz || browserTz() || 'Asia/Dhaka';
     if (campaign) {
         const tz = campaign.timezone || fallbackTz;
@@ -60,6 +60,7 @@ function defaultInitialData(campaign, userTz, smsDeliveryLimits) {
             name: campaign.name ?? '',
             channel: campaign.channel ?? 'whatsapp',
             whatsapp_phone_number_id: campaign.whatsapp_phone_number_id ?? '',
+            sms_provider: campaign.sms_provider ?? defaultSmsProvider,
             audience_type: campaign.audience_type ?? 'segment',
             audience_ref: campaign.audience_ref ?? '',
             template_ref: {
@@ -97,6 +98,7 @@ function defaultInitialData(campaign, userTz, smsDeliveryLimits) {
         name: '',
         channel: 'whatsapp',
         whatsapp_phone_number_id: '',
+        sms_provider: defaultSmsProvider,
         audience_type: 'segment',
         audience_ref: '',
         template_ref: { name: '', language: 'en', components: [] },
@@ -279,6 +281,7 @@ export default function CampaignForm({
     tags = [],
     contactTokens = [],
     smsDeliveryLimits = { safetyRate: 5, bulkRate: 180, speedOptions: [1, 2, 3, 4, 5, 10, 25, 50, 75, 100, 125, 150, 160, 180] },
+    smsProviders = [],
 }) {
     const { t } = useTranslation();
     const [step, setStep] = useState(0);
@@ -294,11 +297,36 @@ export default function CampaignForm({
     const [testTo, setTestTo] = useState({ phone_e164: '', email: '', sending: false, result: null });
 
     const userTz = usePage().props.timezone || browserTz() || 'Asia/Dhaka';
+    const defaultSmsProvider = smsProviders.find((provider) => provider.default)?.provider ?? smsProviders[0]?.provider ?? '';
     const initialData = useMemo(
-        () => defaultInitialData(campaign, userTz, smsDeliveryLimits),
-        [campaign?.id, smsDeliveryLimits.safetyRate, smsDeliveryLimits.bulkRate],
+        () => defaultInitialData(campaign, userTz, smsDeliveryLimits, defaultSmsProvider),
+        [campaign?.id, smsDeliveryLimits.safetyRate, smsDeliveryLimits.bulkRate, defaultSmsProvider],
     );
     const { data, setData, post, patch, processing, errors, transform } = useForm(initialData);
+    const selectedSmsProvider = smsProviders.find((provider) => provider.provider === data.sms_provider);
+    const activeSmsDeliveryLimits = useMemo(() => {
+        const bulkRate = Math.max(1, Math.min(
+            Number(selectedSmsProvider?.throughputTps) || smsDeliveryLimits.bulkRate,
+            smsDeliveryLimits.bulkRate,
+        ));
+        const safetyRate = Math.min(smsDeliveryLimits.safetyRate, bulkRate);
+        return {
+            safetyRate,
+            bulkRate,
+            speedOptions: (smsDeliveryLimits.speedOptions ?? []).filter((rate) => rate <= bulkRate),
+        };
+    }, [selectedSmsProvider?.provider, selectedSmsProvider?.throughputTps, smsDeliveryLimits]);
+
+    useEffect(() => {
+        if (data.channel !== 'sms') return;
+        setData('delivery_steps', (data.delivery_steps ?? []).map((deliveryStep, index) => ({
+            ...deliveryStep,
+            rate_per_second: Math.min(
+                index === 0 ? activeSmsDeliveryLimits.safetyRate : activeSmsDeliveryLimits.bulkRate,
+                Math.max(1, Number(deliveryStep.rate_per_second) || 1),
+            ),
+        })));
+    }, [data.sms_provider]); // eslint-disable-line react-hooks/exhaustive-deps
 
     // Templates filtered to the selected phone number's WABA.
     const filteredTemplates = useMemo(() => {
@@ -459,6 +487,7 @@ export default function CampaignForm({
     const isStepValid = useMemo(() => {
         if (step === 0) {
             if (!data.name.trim() || !data.channel) return false;
+            if (data.channel === 'sms' && !data.sms_provider) return false;
             // When WhatsApp is selected and there are multiple numbers, one must be chosen.
             if (data.channel === 'whatsapp' && whatsappPhoneNumbers.length > 1 && !data.whatsapp_phone_number_id) {
                 return false;
@@ -598,6 +627,7 @@ export default function CampaignForm({
                                 setData={setData}
                                 errors={errors}
                                 whatsappPhoneNumbers={whatsappPhoneNumbers}
+                                smsProviders={smsProviders}
                             />
                         )}
 
@@ -633,7 +663,7 @@ export default function CampaignForm({
                                 setData={setData}
                                 errors={errors}
                                 audienceCount={audiencePreview.deliverable}
-                                smsDeliveryLimits={smsDeliveryLimits}
+                                smsDeliveryLimits={activeSmsDeliveryLimits}
                             />
                         )}
 
@@ -727,7 +757,7 @@ export default function CampaignForm({
 
 // ─── Step components ──────────────────────────────────────────────────────────
 
-function ChannelStep({ data, setData, errors, whatsappPhoneNumbers = [] }) {
+function ChannelStep({ data, setData, errors, whatsappPhoneNumbers = [], smsProviders = [] }) {
     const { t } = useTranslation();
     return (
         <>
@@ -813,6 +843,43 @@ function ChannelStep({ data, setData, errors, whatsappPhoneNumbers = [] }) {
                         </div>
                     )}
                     <FieldError message={errors.whatsapp_phone_number_id} />
+                </div>
+            )}
+
+            {data.channel === 'sms' && (
+                <div>
+                    <label className="text-sm font-medium text-neutral-700 dark:text-neutral-300 block mb-2">
+                        SMS provider
+                    </label>
+                    {smsProviders.length === 0 ? (
+                        <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
+                            No SMS gateway is configured. Add and save a provider in SMS Gateways before creating this campaign.
+                        </div>
+                    ) : (
+                        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                            {smsProviders.map((provider) => {
+                                const active = data.sms_provider === provider.provider;
+                                return (
+                                    <button
+                                        key={provider.provider}
+                                        type="button"
+                                        onClick={() => setData('sms_provider', provider.provider)}
+                                        className={`rounded-xl border p-3 text-left transition ${
+                                            active
+                                                ? 'border-brand-600 bg-brand-50 dark:bg-brand-900/20'
+                                                : 'border-neutral-200 dark:border-neutral-700 hover:border-brand-300'
+                                        }`}
+                                    >
+                                        <span className="block text-sm font-semibold text-neutral-800 dark:text-neutral-100">{provider.label}</span>
+                                        <span className="mt-0.5 block text-xs text-neutral-500 dark:text-neutral-400">
+                                            Verified ceiling: {provider.throughputTps} SMS/sec
+                                        </span>
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    )}
+                    <FieldError message={errors.sms_provider} />
                 </div>
             )}
 

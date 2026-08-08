@@ -230,6 +230,7 @@ function ProviderCard({ provider }) {
     const { data, setData, put, processing, errors } = useForm({
         credentials: initialCredentials,
         sender_id: provider.sender_id ?? '',
+        throughput_tps: provider.throughput_tps ?? '',
         default: provider.default ?? false,
     });
 
@@ -319,6 +320,25 @@ function ProviderCard({ provider }) {
                         )}
                     </div>
                 ))}
+
+                <div>
+                    <label className="text-xs font-medium text-neutral-500 dark:text-neutral-400">
+                        Verified delivery throughput (SMS/sec)
+                    </label>
+                    <input
+                        type="number"
+                        min="1"
+                        max="180"
+                        value={data.throughput_tps}
+                        onChange={e => setData('throughput_tps', e.target.value)}
+                        placeholder={provider.provider === 'alaris' ? '180' : '1'}
+                        className="mt-1 w-full rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm"
+                    />
+                    <p className="mt-1 text-[11px] text-neutral-500 dark:text-neutral-400">
+                        Set this only to the rate confirmed by your provider and sender type. Until it is set, Cerqle uses a conservative provider default.
+                    </p>
+                    {errors.throughput_tps && <p className="mt-1 text-xs text-red-600">{errors.throughput_tps}</p>}
+                </div>
 
                 {provider.provider !== 'alaris' && <div>
                     <label className="text-xs font-medium text-neutral-500 dark:text-neutral-400">{t('sms.sender_id')}</label>

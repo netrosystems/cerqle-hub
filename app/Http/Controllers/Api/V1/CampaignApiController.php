@@ -5,10 +5,12 @@ namespace App\Http\Controllers\Api\V1;
 use App\Http\Resources\Api\V1\CampaignRecipientResource;
 use App\Http\Resources\Api\V1\CampaignResource;
 use App\Modules\Broadcasting\Jobs\LaunchCampaignJob;
+use App\Modules\Broadcasting\Http\Controllers\SmsProviderController;
 use App\Modules\Broadcasting\Models\Campaign;
 use App\Modules\Broadcasting\Models\CampaignRecipient;
 use App\Modules\Broadcasting\Models\UsageMeter;
 use App\Modules\Broadcasting\Services\CampaignStepService;
+use App\Modules\Broadcasting\Services\Sms\SmsDriverManager;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -51,11 +53,13 @@ class CampaignApiController extends WorkspaceScopedController
             'delivery_steps.*.name' => ['required', 'string', 'max:80'],
             'delivery_steps.*.recipient_limit' => ['nullable', 'integer', 'min:1'],
             'delivery_steps.*.delay_after_previous_seconds' => ['required', 'integer', 'min:0', 'max:86400'],
-            'delivery_steps.*.rate_per_second' => ['required', 'integer', 'min:1', 'max:5'],
+            'sms_provider' => ['nullable', 'string', 'in:'.implode(',', SmsProviderController::CLIENT_VISIBLE_PROVIDERS)],
+            'delivery_steps.*.rate_per_second' => ['required', 'integer', 'min:1', 'max:'.max(1, (int) config('broadcasting.sms.platform_rate_per_second', 180))],
         ]);
 
         // Default audience_type when omitted to keep DB enum happy.
         $validated['audience_type'] = $validated['audience_type'] ?? 'segment';
+        $this->assertSmsProviderIsConfigured($request, $validated['channel'], $validated['sms_provider'] ?? null);
 
         $steps = $validated['delivery_steps'] ?? null;
         unset($validated['delivery_steps']);
@@ -192,13 +196,19 @@ class CampaignApiController extends WorkspaceScopedController
             'delivery_steps.*.name' => ['required', 'string', 'max:80'],
             'delivery_steps.*.recipient_limit' => ['nullable', 'integer', 'min:1'],
             'delivery_steps.*.delay_after_previous_seconds' => ['required', 'integer', 'min:0', 'max:86400'],
-            'delivery_steps.*.rate_per_second' => ['required', 'integer', 'min:1', 'max:5'],
+            'sms_provider' => ['nullable', 'string', 'in:'.implode(',', SmsProviderController::CLIENT_VISIBLE_PROVIDERS)],
+            'delivery_steps.*.rate_per_second' => ['required', 'integer', 'min:1', 'max:'.max(1, (int) config('broadcasting.sms.platform_rate_per_second', 180))],
         ]);
 
         $steps = $validated['delivery_steps'] ?? null;
         unset($validated['delivery_steps']);
+        $this->assertSmsProviderIsConfigured(
+            $request,
+            $validated['channel'] ?? $campaign->channel,
+            $validated['sms_provider'] ?? $campaign->sms_provider,
+        );
         if ($campaign->recipients()->exists()) {
-            foreach (['channel', 'audience_type', 'audience_ref'] as $field) {
+            foreach (['channel', 'sms_provider', 'audience_type', 'audience_ref'] as $field) {
                 if (array_key_exists($field, $validated) && (string) $validated[$field] !== (string) $campaign->{$field}) {
                     return response()->json([
                         'error' => 'Channel and audience cannot change after campaign recipients have been prepared.',
@@ -210,5 +220,22 @@ class CampaignApiController extends WorkspaceScopedController
         app(CampaignStepService::class)->sync($campaign, $steps);
 
         return new CampaignResource($campaign->refresh()->load('steps'));
+    }
+
+    private function assertSmsProviderIsConfigured(Request $request, string $channel, ?string $provider): void
+    {
+        if ($channel !== 'sms') {
+            return;
+        }
+
+        if (blank($provider)) {
+            abort(422, 'Choose a configured SMS provider for this campaign.');
+        }
+
+        try {
+            SmsDriverManager::resolveForWorkspace($this->workspaceId($request), $provider);
+        } catch (\Throwable) {
+            abort(422, 'This SMS provider is not configured. Configure it in SMS Gateways first.');
+        }
     }
 }

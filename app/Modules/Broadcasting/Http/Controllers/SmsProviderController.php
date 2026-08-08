@@ -116,6 +116,7 @@ class SmsProviderController extends Controller
             'configured' => $configs->has($p) && ! empty($configs->get($p)->credentials),
             'default'    => $configs->get($p)?->default ?? false,
             'sender_id'  => $configs->get($p)?->sender_id ?? '',
+            'throughput_tps' => $configs->get($p)?->throughput_tps,
             'masked'     => $configs->has($p) ? $this->mask($configs->get($p)->credentials ?? []) : [],
         ]);
 
@@ -131,7 +132,11 @@ class SmsProviderController extends Controller
         $workspaceId = $this->workspaceId($request);
         $fields = self::FIELDS[$provider];
 
-        $rules = ['sender_id' => ['nullable', 'string', 'max:64'], 'default' => ['boolean']];
+        $rules = [
+            'sender_id' => ['nullable', 'string', 'max:64'],
+            'throughput_tps' => ['nullable', 'integer', 'min:1', 'max:'.max(1, (int) config('broadcasting.sms.platform_rate_per_second', 180))],
+            'default' => ['boolean'],
+        ];
         foreach ($fields as $f) {
             $rules['credentials.'.$f['key']] = ['nullable', 'string', 'max:512'];
         }
@@ -196,6 +201,7 @@ class SmsProviderController extends Controller
         $config->fill([
             'credentials' => $merged,
             'sender_id'   => $validated['sender_id'] ?? $config->sender_id,
+            'throughput_tps' => $validated['throughput_tps'] ?? $config->throughput_tps,
             'default'     => (bool) ($validated['default'] ?? false),
         ])->save();
 

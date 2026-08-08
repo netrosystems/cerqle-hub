@@ -14,21 +14,27 @@ class SmsDriverManager
         return static::resolveForWorkspace($workspaceId)->driver;
     }
 
-    public static function resolveForWorkspace(int $workspaceId): ResolvedSmsDriver
+    public static function resolveForWorkspace(int $workspaceId, ?string $requestedProvider = null): ResolvedSmsDriver
     {
+        if ($requestedProvider !== null && $requestedProvider !== '') {
+            $config = SmsProviderConfig::where('workspace_id', $workspaceId)
+                ->where('provider', $requestedProvider)
+                ->first();
+
+            if (! $config || empty($config->credentials)) {
+                throw new RuntimeException('The selected SMS provider is not configured for this workspace.');
+            }
+
+            return static::resolvedFromConfig($config);
+        }
+
         // 1. Workspace-level default
         $config = SmsProviderConfig::where('workspace_id', $workspaceId)
             ->where('default', true)
             ->first();
 
         if ($config) {
-            $credentials = $config->credentials ?? [];
-
-            return new ResolvedSmsDriver(
-                $config->provider,
-                static::providerKey($config->provider, $credentials),
-                static::build($config->provider, $credentials),
-            );
+            return static::resolvedFromConfig($config);
         }
 
         // 2. Fall back to first configured system default (in priority order)
@@ -42,11 +48,41 @@ class SmsDriverManager
                     $provider,
                     static::providerKey($provider, $credentials),
                     static::build($provider, $credentials),
+                    static::defaultThroughputTps($provider),
                 );
             }
         }
 
         throw new RuntimeException('No SMS provider configured for workspace '.$workspaceId);
+    }
+
+    public static function resolvedFromConfig(SmsProviderConfig $config): ResolvedSmsDriver
+    {
+        $credentials = $config->credentials ?? [];
+
+        return new ResolvedSmsDriver(
+            $config->provider,
+            static::providerKey($config->provider, $credentials),
+            static::build($config->provider, $credentials),
+            min(
+                max(1, (int) config('broadcasting.sms.platform_rate_per_second', 180)),
+                max(1, (int) ($config->throughput_tps ?: static::defaultThroughputTps($config->provider))),
+            ),
+        );
+    }
+
+    /**
+     * Conservative defaults when we cannot inspect a sender's contractual
+     * throughput from credentials alone. A workspace administrator may set a
+     * confirmed ceiling in SMS Gateway Setup.
+     */
+    public static function defaultThroughputTps(string $provider): int
+    {
+        return match ($provider) {
+            'alaris' => max(1, (int) config('broadcasting.sms.provider_rate_per_second', 180)),
+            'twilio', 'amazon_sns' => 1,
+            default => 1,
+        };
     }
 
     /**

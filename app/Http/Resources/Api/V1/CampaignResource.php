@@ -15,6 +15,7 @@ class CampaignResource extends JsonResource
             'id' => $this->id,
             'name' => $this->name,
             'channel' => $this->channel,
+            'sms_provider' => $this->sms_provider,
             'status' => $this->status,
             'audience_type' => $this->audience_type,
             'audience_ref' => $this->audience_ref,

@@ -64,7 +64,7 @@ class SendSmsCampaignMessageJob implements ShouldQueue
             return;
         }
 
-        $resolved = SmsDriverManager::resolveForWorkspace($campaign->workspace_id);
+        $resolved = SmsDriverManager::resolveForWorkspace($campaign->workspace_id, $campaign->sms_provider);
         if (! hash_equals((string) $campaign->provider_key, $resolved->providerKey)) {
             $campaign->update([
                 'status' => 'safety_paused',
@@ -81,9 +81,9 @@ class SendSmsCampaignMessageJob implements ShouldQueue
         // so a step rate that slipped past the normaliser — or a cap change
         // between save and dispatch — cannot exceed the live policy.
         $position = (int) ($recipient->step?->position ?? 1);
-        $maximum = $steps->maxRateForStep($position);
+        $maximum = $steps->maxRateForStep($position, $resolved->throughputTps);
         $rate = min($maximum, max(1, (int) ($recipient->step?->rate_per_second ?? $maximum)));
-        $reservation = $limiter->reserve($resolved->providerKey, $rate);
+        $reservation = $limiter->reserve($resolved->providerKey, $rate, $resolved->throughputTps);
         if (! $reservation->reserved) {
             $this->deferForRateLimit($recipient, $reservation->waitMicroseconds);
 

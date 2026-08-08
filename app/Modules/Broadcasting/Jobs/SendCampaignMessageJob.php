@@ -354,7 +354,7 @@ class SendCampaignMessageJob implements ShouldQueue
      */
     private function sendSms(Campaign $campaign, Contact $contact, CampaignPersonalizer $personalizer): array
     {
-        $driver = SmsDriverManager::forWorkspace($campaign->workspace_id);
+        $driver = SmsDriverManager::resolveForWorkspace($campaign->workspace_id, $campaign->sms_provider)->driver;
         $body = $campaign->payload_json['body'] ?? '';
         $body = $personalizer->renderText($body, $contact);
 

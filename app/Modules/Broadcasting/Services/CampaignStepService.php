@@ -4,6 +4,7 @@ namespace App\Modules\Broadcasting\Services;
 
 use App\Modules\Broadcasting\Models\Campaign;
 use App\Modules\Broadcasting\Models\CampaignStep;
+use App\Modules\Broadcasting\Services\Sms\SmsDriverManager;
 
 class CampaignStepService
 {
@@ -24,7 +25,7 @@ class CampaignStepService
             return;
         }
 
-        $normalised = $this->normalise($steps);
+        $normalised = $this->normalise($steps, $this->bulkRateForCampaign($campaign));
         $keep = [];
         foreach ($normalised as $position => $step) {
             $model = CampaignStep::updateOrCreate(
@@ -45,7 +46,7 @@ class CampaignStepService
     }
 
     /** @return array<int, array<string, mixed>> */
-    public function normalise(?array $steps): array
+    public function normalise(?array $steps, ?int $bulkRate = null): array
     {
         if (empty($steps)) {
             return [
@@ -53,13 +54,13 @@ class CampaignStepService
                     'name' => 'Safety check',
                     'recipient_limit' => 100,
                     'delay_after_previous_seconds' => 0,
-                    'rate_per_second' => $this->maxRateForStep(1),
+                    'rate_per_second' => $this->maxRateForStep(1, $bulkRate),
                 ],
                 [
                     'name' => 'Remaining contacts',
                     'recipient_limit' => null,
                     'delay_after_previous_seconds' => 600,
-                    'rate_per_second' => $this->maxRateForStep(2),
+                    'rate_per_second' => $this->maxRateForStep(2, $bulkRate),
                 ],
             ];
         }
@@ -67,7 +68,7 @@ class CampaignStepService
         $out = [];
         foreach (array_slice($steps, 0, 10) as $index => $step) {
             $position = $index + 1;
-            $maximum = $this->maxRateForStep($position);
+            $maximum = $this->maxRateForStep($position, $bulkRate);
             $out[] = [
                 'name' => trim((string) ($step['name'] ?? 'Step '.$position)) ?: 'Step '.$position,
                 'recipient_limit' => filled($step['recipient_limit'] ?? null)
@@ -93,16 +94,28 @@ class CampaignStepService
      * later step can use the verified gateway ceiling (180 TPS by default),
      * shared across all campaigns using the same provider credentials.
      */
-    public function maxRateForStep(int $position): int
+    public function maxRateForStep(int $position, ?int $bulkRate = null): int
     {
         if ($position <= 1) {
             return max(1, (int) config('broadcasting.sms.safety_rate_per_second', 5));
         }
 
         return max(1, min(
-            (int) config('broadcasting.sms.provider_rate_per_second', 180),
+            $bulkRate ?? (int) config('broadcasting.sms.provider_rate_per_second', 180),
             (int) config('broadcasting.sms.platform_rate_per_second', 180),
         ));
+    }
+
+    private function bulkRateForCampaign(Campaign $campaign): int
+    {
+        try {
+            return SmsDriverManager::resolveForWorkspace($campaign->workspace_id, $campaign->sms_provider)->throughputTps;
+        } catch (\Throwable) {
+            // Validation prevents new selected-provider campaigns reaching this
+            // path unconfigured. Keep legacy drafts editable with the platform
+            // default until a gateway is selected.
+            return max(1, (int) config('broadcasting.sms.provider_rate_per_second', 180));
+        }
     }
 
     public function forOrdinal(Campaign $campaign, int $ordinal): CampaignStep

@@ -11,6 +11,7 @@ export default function CampaignWizard({
     tags = [],
     contactTokens = [],
     smsDeliveryLimits,
+    smsProviders = [],
 }) {
     const { t } = useTranslation();
     return (
@@ -37,6 +38,7 @@ export default function CampaignWizard({
                     tags={tags}
                     contactTokens={contactTokens}
                     smsDeliveryLimits={smsDeliveryLimits}
+                    smsProviders={smsProviders}
                 />
             </div>
         </ClientLayout>

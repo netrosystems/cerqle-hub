@@ -8,5 +8,6 @@ final class ResolvedSmsDriver
         public readonly string $provider,
         public readonly string $providerKey,
         public readonly SmsDriverInterface $driver,
+        public readonly int $throughputTps,
     ) {}
 }

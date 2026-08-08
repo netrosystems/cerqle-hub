@@ -9,7 +9,7 @@ class SmsProviderConfig extends Model
     protected $table = 'sms_provider_configs';
 
     protected $fillable = [
-        'workspace_id', 'provider', 'credentials', 'sender_id', 'default',
+        'workspace_id', 'provider', 'credentials', 'sender_id', 'throughput_tps', 'default',
     ];
 
     protected $hidden = ['credentials'];
@@ -18,6 +18,7 @@ class SmsProviderConfig extends Model
     {
         return [
             'credentials' => 'encrypted:array',
+            'throughput_tps' => 'integer',
             'default' => 'boolean',
         ];
     }
