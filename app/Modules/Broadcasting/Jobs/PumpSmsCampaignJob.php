@@ -123,7 +123,15 @@ class PumpSmsCampaignJob implements ShouldQueue
     /** @return array<int, int> */
     private function claimDueRecipients(Campaign $campaign, CampaignStep $step): array
     {
-        $buffer = max(1, (int) config('broadcasting.sms.dispatch_buffer', 25));
+        // Keep at least two seconds of work available at the active step's
+        // configured speed. An old environment value such as 25 would
+        // otherwise cap a 180 TPS campaign at roughly 25 sends/second because
+        // the pump runs once per second.
+        $targetRate = max(1, (int) $step->rate_per_second);
+        $configuredBuffer = max(1, (int) config('broadcasting.sms.dispatch_buffer', 360));
+        $buffer = $configuredBuffer >= $targetRate
+            ? $configuredBuffer
+            : max($configuredBuffer, $targetRate * 2);
 
         return DB::transaction(function () use ($campaign, $step, $buffer) {
             // In-flight workers occupy dispatching or sending. Count without an

@@ -59,7 +59,11 @@ class CampaignStepService
                 [
                     'name' => 'Remaining contacts',
                     'recipient_limit' => null,
-                    'delay_after_previous_seconds' => 600,
+                    // The safety step itself is sufficient for the default
+                    // plan. Do not silently add a ten-minute idle period
+                    // before bulk delivery; users who want a pause can add it
+                    // explicitly in the delivery-step editor.
+                    'delay_after_previous_seconds' => 0,
                     'rate_per_second' => $this->maxRateForStep(2, $bulkRate),
                 ],
             ];

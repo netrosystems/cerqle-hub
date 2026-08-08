@@ -42,7 +42,7 @@ class CampaignApiController extends WorkspaceScopedController
     {
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:200'],
-            'channel' => ['required', 'string', 'in:whatsapp,sms,email'],
+            'channel' => ['required', 'string', 'in:sms,email'],
             'audience_type' => ['nullable', 'string', 'in:segment,contact_list,tag,csv'],
             'audience_ref' => ['nullable', 'string'],
             'template_ref' => ['nullable', 'array'],
@@ -106,6 +106,10 @@ class CampaignApiController extends WorkspaceScopedController
 
         if (! in_array($campaign->status, ['draft', 'paused', 'safety_paused'])) {
             return response()->json(['error' => 'Campaign cannot be launched from status: '.$campaign->status.'.'], 422);
+        }
+
+        if ($campaign->channel === 'whatsapp') {
+            return response()->json(['error' => 'WhatsApp campaigns are coming soon and cannot be launched yet.'], 422);
         }
 
         $patch = ['status' => 'queued'];
@@ -185,7 +189,7 @@ class CampaignApiController extends WorkspaceScopedController
 
         $validated = $request->validate([
             'name' => ['sometimes', 'required', 'string', 'max:200'],
-            'channel' => ['sometimes', 'required', 'string', 'in:whatsapp,sms,email'],
+            'channel' => ['sometimes', 'required', 'string', 'in:sms,email'],
             'audience_type' => ['sometimes', 'required', 'string', 'in:segment,contact_list,tag,csv'],
             'audience_ref' => ['nullable', 'string'],
             'template_ref' => ['nullable', 'array'],

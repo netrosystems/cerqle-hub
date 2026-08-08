@@ -54,8 +54,8 @@ class AnalyticsApiController extends WorkspaceScopedController
 
         return response()->json([
             'data' => [
-                'funnel' => $this->analytics->campaignFunnel($campaign->id),
-                'delivery_over_time' => $this->analytics->campaignDeliveryOverTime($campaign->id),
+                'funnel' => $this->analytics->campaignFunnel($campaign->id, $campaign->channel),
+                'delivery_over_time' => $this->analytics->campaignDeliveryOverTime($campaign->id, $campaign->channel),
                 'failed_reasons' => $this->analytics->campaignFailedReasons($campaign->id),
             ],
         ]);

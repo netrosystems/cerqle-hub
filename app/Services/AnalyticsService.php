@@ -60,7 +60,7 @@ class AnalyticsService
      * Campaign delivery funnel: status bucket counts.
      * Returns: [['name' => 'Queued', 'value' => n], ...]
      */
-    public function campaignFunnel(int $campaignId): array
+    public function campaignFunnel(int $campaignId, ?string $channel = null): array
     {
         $counts = CampaignRecipient::where('campaign_id', $campaignId)
             ->selectRaw('status, COUNT(*) as total')
@@ -68,7 +68,17 @@ class AnalyticsService
             ->pluck('total', 'status')
             ->toArray();
 
-        $steps = ['queued', 'sent', 'delivered', 'read', 'failed'];
+        if (in_array($channel, ['sms', 'whatsapp'], true)) {
+            // These channels do not have a dependable recipient seen signal.
+            // Legacy `sent` / `read` rows represent completed delivery here.
+            $counts['delivered'] = (int) ($counts['delivered'] ?? 0)
+                + (int) ($counts['sent'] ?? 0)
+                + (int) ($counts['read'] ?? 0);
+            unset($counts['sent'], $counts['read']);
+            $steps = ['queued', 'delivered', 'failed'];
+        } else {
+            $steps = ['queued', 'sent', 'delivered', 'read', 'failed'];
+        }
 
         return array_values(array_filter(
             array_map(fn ($step) => [
@@ -83,7 +93,7 @@ class AnalyticsService
      * Hourly cumulative delivery curve for a campaign.
      * Returns: [['hour' => 'YYYY-MM-DD HH:00', 'sent' => n, 'delivered' => n, 'read' => n], ...]
      */
-    public function campaignDeliveryOverTime(int $campaignId): array
+    public function campaignDeliveryOverTime(int $campaignId, ?string $channel = null): array
     {
         $sent = CampaignRecipient::where('campaign_id', $campaignId)
             ->whereNotNull('sent_at')
@@ -110,12 +120,22 @@ class AnalyticsService
         ));
         sort($allHours);
 
-        return array_map(fn ($h) => [
+        $series = array_map(fn ($h) => [
             'hour' => $h,
             'sent' => (int) ($sent[$h] ?? 0),
             'delivered' => (int) ($delivered[$h] ?? 0),
             'read' => (int) ($read[$h] ?? 0),
         ], $allHours);
+
+        if (! in_array($channel, ['sms', 'whatsapp'], true)) {
+            return $series;
+        }
+
+        return array_map(fn (array $point) => array_merge($point, [
+            'sent' => 0,
+            'delivered' => (int) ($point['sent'] ?? 0) + (int) ($point['delivered'] ?? 0) + (int) ($point['read'] ?? 0),
+            'read' => 0,
+        ]), $series);
     }
 
     /**

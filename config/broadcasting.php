@@ -15,6 +15,10 @@ return [
         // Keep approximately two seconds of high-volume work claimed. The
         // gateway-wide limiter remains the authority on actual send starts.
         'dispatch_buffer' => (int) env('SMS_DISPATCH_BUFFER', 360),
+        // This value documents the number of persistent `broadcast` queue
+        // processes provisioned by deployment. It is displayed as a capacity
+        // diagnostic; Laravel cannot reliably discover Supervisor processes.
+        'broadcast_worker_count' => (int) env('SMS_BROADCAST_WORKER_COUNT', 48),
         'audience_chunk_size' => (int) env('SMS_AUDIENCE_CHUNK_SIZE', 2000),
         'claim_timeout_seconds' => (int) env('SMS_CLAIM_TIMEOUT_SECONDS', 180),
         'max_inline_rate_wait_microseconds' => (int) env('SMS_MAX_INLINE_RATE_WAIT_MICROSECONDS', 5000000),

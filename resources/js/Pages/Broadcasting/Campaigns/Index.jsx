@@ -112,7 +112,7 @@ export default function CampaignsIndex({ campaigns, filters }) {
                         className="rounded border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-1.5 text-sm"
                     >
                         <option value="">{t('campaign.all_channels')}</option>
-                        {['whatsapp', 'sms'].map((c) => (
+                        {['sms'].map((c) => (
                             <option key={c} value={c}>
                                 {CHANNEL_LABELS[c] ?? c}
                             </option>

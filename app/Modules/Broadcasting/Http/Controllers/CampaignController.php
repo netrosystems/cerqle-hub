@@ -93,7 +93,10 @@ class CampaignController extends Controller
         $validated = $request->validate([
             'uuid' => ['nullable', 'string', 'uuid'],
             'name' => ['required', 'string', 'max:128'],
-            'channel' => ['required', 'in:whatsapp,sms'],
+            // WhatsApp broadcasting is deliberately unavailable until its
+            // campaign workflow is completed and tested end-to-end. Existing
+            // WhatsApp campaigns remain readable for historic reporting.
+            'channel' => ['required', 'in:sms'],
             'whatsapp_phone_number_id' => ['nullable', 'string'],
             'sms_provider' => ['nullable', 'string', 'in:'.implode(',', SmsProviderController::CLIENT_VISIBLE_PROVIDERS)],
             'audience_type' => ['nullable', 'in:segment,contact_list,tag,csv'],
@@ -184,7 +187,7 @@ class CampaignController extends Controller
 
         // SMS totals also normalize older successful "sent" rows as Delivered,
         // so recalculate whenever an SMS campaign is opened.
-        if ($campaign->channel === 'sms' || in_array($campaign->status, [
+        if (in_array($campaign->channel, ['sms', 'whatsapp'], true) || in_array($campaign->status, [
             'queued', 'waiting_capacity', 'preparing', 'sending', 'retrying', 'paused', 'safety_paused',
         ], true)) {
             $campaign->updateTotals();
@@ -204,10 +207,33 @@ class CampaignController extends Controller
             ->limit(10)
             ->get();
 
+        $errors = CampaignRecipient::where('campaign_id', $campaign->id)
+            ->whereIn('status', ['failed', 'retrying'])
+            ->selectRaw("COALESCE(NULLIF(failure_class, ''), 'unknown') as class, COALESCE(NULLIF(failed_reason, ''), 'Unknown delivery error') as reason, COUNT(*) as total")
+            ->groupBy('class', 'reason')
+            ->orderByDesc('total')
+            ->limit(5)
+            ->get()
+            ->map(fn ($row) => [
+                'class' => $row->class,
+                'reason' => $row->reason,
+                'count' => (int) $row->total,
+                'help' => $this->failureHelp($row->class),
+            ])
+            ->values();
+        $errorClasses = $errors->pluck('class');
+
         return Inertia::render('Broadcasting/Campaigns/Show', [
             'campaign' => $campaign,
             'stats' => $recipientStats,
             'sample' => $sample,
+            'errorSummary' => [
+                'has_errors' => $errors->isNotEmpty(),
+                'has_provider_errors' => $errorClasses->intersect(['authentication', 'configuration', 'no_route', 'provider_rejection'])->isNotEmpty(),
+                'has_recipient_errors' => $errorClasses->contains('recipient'),
+                'has_retries' => $errorClasses->contains('rate_limit_wait') || CampaignRecipient::where('campaign_id', $campaign->id)->where('status', 'retrying')->exists(),
+                'items' => $errors,
+            ],
             'reportUrl' => route('client.reports.campaigns.show', $campaign->uuid),
         ]);
     }
@@ -226,9 +252,7 @@ class CampaignController extends Controller
             $patch['schedule_at'] = filled($value) ? $value : null;
         }
 
-        if ($campaign->channel === 'whatsapp') {
-            $this->assertWhatsAppCampaignReady($campaign);
-        }
+        abort_unless($campaign->channel === 'sms', 422, 'WhatsApp campaigns are coming soon and cannot be launched yet.');
 
         $campaign->update($patch);
         $campaign->refresh();
@@ -275,7 +299,7 @@ class CampaignController extends Controller
         $validated = $request->validate([
             'audience_type' => ['required', 'in:segment,contact_list,tag,csv'],
             'audience_ref' => ['nullable', 'string'],
-            'channel' => ['required', 'in:whatsapp,sms'],
+            'channel' => ['required', 'in:sms'],
         ]);
 
         $query = $this->audienceQueryForPreview(
@@ -394,6 +418,19 @@ class CampaignController extends Controller
         abort_unless((int) $campaign->workspace_id === (int) $workspaceId, 403);
     }
 
+    private function failureHelp(string $class): string
+    {
+        return match ($class) {
+            'no_route' => 'PROSMS has no approved route for this sender and destination. Ask the provider to enable the country/network route and confirm the Sender ID.',
+            'authentication' => 'Check the selected gateway credentials, then run its connection test.',
+            'configuration' => 'Check the gateway Sender ID, service type, and required provider settings.',
+            'recipient' => 'Correct the contact phone number or SMS consent before retrying.',
+            'rate_limit_wait' => 'The message is safely waiting for shared provider capacity.',
+            'temporary' => 'The provider did not respond reliably. Cerqle will retry this message automatically.',
+            default => 'Open the full report to review the provider response before retrying.',
+        };
+    }
+
     private function assertPreparedAudienceIsUnchanged(Campaign $campaign, array $validated): void
     {
         if (! $campaign->recipients()->exists()) {
@@ -422,7 +459,7 @@ class CampaignController extends Controller
 
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:128'],
-            'channel' => ['required', 'in:whatsapp,sms'],
+            'channel' => ['required', 'in:sms'],
             'whatsapp_phone_number_id' => ['nullable', 'string'],
             'sms_provider' => ['nullable', 'string', 'in:'.implode(',', SmsProviderController::CLIENT_VISIBLE_PROVIDERS)],
             'audience_type' => ['required', 'in:segment,contact_list,tag,csv'],
@@ -530,7 +567,7 @@ class CampaignController extends Controller
         ];
     }
 
-    /** @return array{safetyRate: int, bulkRate: int, speedOptions: array<int, int>} */
+    /** @return array{safetyRate: int, bulkRate: int, speedOptions: array<int, int>, workerCount: int, recommendedWorkerCount: int} */
     private function smsDeliveryLimits(): array
     {
         $steps = app(CampaignStepService::class);
@@ -546,6 +583,10 @@ class CampaignController extends Controller
             'safetyRate' => $safetyRate,
             'bulkRate' => $bulkRate,
             'speedOptions' => $options,
+            'workerCount' => max(1, (int) config('broadcasting.sms.broadcast_worker_count', 48)),
+            // At an assumed 250ms provider response time, four sends per
+            // second per worker is a realistic planning baseline.
+            'recommendedWorkerCount' => max(1, (int) ceil($bulkRate / 4)),
         ];
     }
 

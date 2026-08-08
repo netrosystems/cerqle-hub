@@ -108,9 +108,10 @@ class Campaign extends Model
         $delivered = $counts['delivered'] ?? 0;
         $read = $counts['read'] ?? 0;
 
-        if ($this->channel === 'sms') {
-            // Older SMS recipients may still be stored as sent. They represent
-            // the same successful gateway acknowledgement as Delivered.
+        if (in_array($this->channel, ['sms', 'whatsapp'], true)) {
+            // SMS and campaign-level WhatsApp delivery do not expose a
+            // trustworthy customer "seen" signal. Keep successful rows in the
+            // delivered bucket and do not surface a misleading read metric.
             $delivered += $sent + $read;
             $sent = 0;
             $read = 0;

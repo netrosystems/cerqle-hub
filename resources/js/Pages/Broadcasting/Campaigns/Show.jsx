@@ -11,6 +11,7 @@ import {
     Trash2,
     Clock,
     ExternalLink,
+    AlertCircle,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -68,15 +69,16 @@ function calc(target) {
     return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 }
 
-export default function CampaignShow({ campaign, sample = [], reportUrl }) {
+export default function CampaignShow({ campaign, sample = [], errorSummary = null, reportUrl }) {
     const { t } = useTranslation();
     const { props } = usePage();
     const userTz = props.timezone || browserTz() || 'Asia/Dhaka';
     const totals = campaign.totals_json ?? {};
     const isSms = campaign.channel === 'sms';
+    const supportsReadTracking = campaign.channel === 'email';
     const total = totals.total || 1;
     const processed =
-        (totals.sent ?? 0) + (totals.delivered ?? 0) + (totals.read ?? 0) + (totals.failed ?? 0);
+        (totals.sent ?? 0) + (totals.delivered ?? 0) + (supportsReadTracking ? (totals.read ?? 0) : 0) + (totals.failed ?? 0);
     const remaining = Math.max(0, (totals.total ?? campaign.estimated_recipients ?? 0) - processed);
     const activeStep = campaign.steps?.find((step) => step.status === 'active');
     const activeRate = Math.max(1, Number(activeStep?.rate_per_second) || 5);
@@ -101,7 +103,7 @@ export default function CampaignShow({ campaign, sample = [], reportUrl }) {
         ...(!isSms ? [{ key: 'sent', label: t('campaign.metric_sent'), value: totals.sent ?? 0, color: 'bg-blue-500' }] : []),
         { key: 'retrying', label: 'Retry scheduled', value: totals.retrying ?? 0, color: 'bg-amber-500' },
         { key: 'delivered', label: t('campaign.metric_delivered'), value: totals.delivered ?? 0, color: 'bg-green-500' },
-        ...(!isSms ? [{ key: 'read', label: t('campaign.metric_read'), value: totals.read ?? 0, color: 'bg-purple-500' }] : []),
+        ...(supportsReadTracking ? [{ key: 'read', label: t('campaign.metric_read'), value: totals.read ?? 0, color: 'bg-purple-500' }] : []),
         { key: 'failed', label: t('campaign.metric_failed'), value: totals.failed ?? 0, color: 'bg-red-500' },
     ];
 
@@ -115,7 +117,8 @@ export default function CampaignShow({ campaign, sample = [], reportUrl }) {
         }
     };
 
-    const canEdit = ['draft', 'queued', 'paused', 'safety_paused'].includes(campaign.status);
+    const campaignAvailable = campaign.channel !== 'whatsapp';
+    const canEdit = campaignAvailable && ['draft', 'queued', 'paused', 'safety_paused'].includes(campaign.status);
 
     return (
         <ClientLayout title={campaign.name}>
@@ -163,7 +166,7 @@ export default function CampaignShow({ campaign, sample = [], reportUrl }) {
                         >
                             <Trash2 className="h-4 w-4" /> {t('common.delete')}
                         </button>
-                        {campaign.status === 'draft' && (
+                        {campaignAvailable && campaign.status === 'draft' && (
                             <button
                                 onClick={handleLaunch}
                                 className="flex items-center gap-1.5 rounded-lg bg-green-600 px-3 py-2 text-sm font-medium text-white hover:bg-green-700 transition"
@@ -171,7 +174,7 @@ export default function CampaignShow({ campaign, sample = [], reportUrl }) {
                                 <Play className="h-4 w-4" /> {t('campaign.launch')}
                             </button>
                         )}
-                        {['preparing', 'sending', 'retrying'].includes(campaign.status) && (
+                        {campaignAvailable && ['preparing', 'sending', 'retrying'].includes(campaign.status) && (
                             <button
                                 onClick={handlePause}
                                 className="flex items-center gap-1.5 rounded-lg bg-orange-500 px-3 py-2 text-sm font-medium text-white hover:bg-orange-600 transition"
@@ -179,7 +182,7 @@ export default function CampaignShow({ campaign, sample = [], reportUrl }) {
                                 <Pause className="h-4 w-4" /> {t('campaign.pause')}
                             </button>
                         )}
-                        {['paused', 'safety_paused'].includes(campaign.status) && (
+                        {campaignAvailable && ['paused', 'safety_paused'].includes(campaign.status) && (
                             <button
                                 onClick={handleLaunch}
                                 className="flex items-center gap-1.5 rounded-lg bg-green-600 px-3 py-2 text-sm font-medium text-white hover:bg-green-700 transition"
@@ -189,6 +192,12 @@ export default function CampaignShow({ campaign, sample = [], reportUrl }) {
                         )}
                     </div>
                 </div>
+
+                {!campaignAvailable && (
+                    <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-100">
+                        WhatsApp campaigns are coming soon. This historical campaign remains available for reporting only.
+                    </div>
+                )}
 
                 {countdown && (
                     <div className="flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 dark:border-blue-800 dark:bg-blue-900/20 px-4 py-3 text-sm text-blue-800 dark:text-blue-200">
@@ -209,6 +218,26 @@ export default function CampaignShow({ campaign, sample = [], reportUrl }) {
                         }`}
                     >
                         {campaign.pause_reason}
+                    </div>
+                )}
+
+                {errorSummary?.has_errors && (
+                    <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-900 dark:border-red-900 dark:bg-red-950/30 dark:text-red-100">
+                        <div className="flex flex-wrap items-center gap-2 font-semibold">
+                            <AlertCircle className="h-4 w-4" /> Delivery issues detected
+                            {errorSummary.has_provider_errors && <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs dark:bg-red-900/60">Provider action needed</span>}
+                            {errorSummary.has_recipient_errors && <span className="rounded-full bg-orange-100 px-2 py-0.5 text-xs text-orange-800 dark:bg-orange-900/60 dark:text-orange-100">Invalid recipients</span>}
+                            {errorSummary.has_retries && <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-800 dark:bg-amber-900/60 dark:text-amber-100">Retries pending</span>}
+                        </div>
+                        <ul className="mt-2 space-y-1 text-xs">
+                            {(errorSummary.items ?? []).map((item) => (
+                                <li key={`${item.class}:${item.reason}`}>
+                                    <span className="font-semibold">{item.count}× {String(item.class).replaceAll('_', ' ')}:</span> {item.reason}
+                                    {item.help && <span className="block pl-3 text-red-700 dark:text-red-200">{item.help}</span>}
+                                </li>
+                            ))}
+                        </ul>
+                        {reportUrl && <a href={reportUrl} className="mt-3 inline-block font-medium underline">Open the full delivery report</a>}
                     </div>
                 )}
 
@@ -325,7 +354,10 @@ export default function CampaignShow({ campaign, sample = [], reportUrl }) {
                                             c.email ||
                                             `#${r.contact_id}`;
                                         const last =
-                                            r.read_at || r.delivered_at || r.sent_at || r.updated_at;
+                                            (supportsReadTracking ? r.read_at : null) || r.delivered_at || r.sent_at || r.updated_at;
+                                        const displayedStatus = !supportsReadTracking && ['sent', 'read'].includes(r.status)
+                                            ? 'delivered'
+                                            : r.status;
                                         return (
                                             <tr key={r.id}>
                                                 <td className="py-2 text-neutral-800 dark:text-neutral-200">
@@ -337,10 +369,10 @@ export default function CampaignShow({ campaign, sample = [], reportUrl }) {
                                                 <td className="py-2">
                                                     <span
                                                         className={`rounded-full px-2 py-0.5 text-xs ${
-                                                            STATUS_COLORS[r.status] ?? ''
+                                                            STATUS_COLORS[displayedStatus] ?? ''
                                                         }`}
                                                     >
-                                                        {r.status}
+                                                        {displayedStatus}
                                                     </span>
                                                     {r.status === 'failed' && r.failed_reason && (
                                                         <div className="mt-1 text-xs text-red-500 max-w-[200px]" title={r.failed_reason}>

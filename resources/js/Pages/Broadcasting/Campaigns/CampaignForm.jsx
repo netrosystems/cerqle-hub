@@ -35,7 +35,6 @@ const STEPS = [
 ];
 
 const CHANNEL_META = {
-    whatsapp: { label: 'WhatsApp', Icon: (p) => <ChannelBrandIcon channel="whatsapp" {...p} /> },
     sms: { label: 'SMS', Icon: (p) => <ChannelBrandIcon channel="sms" {...p} /> },
 };
 
@@ -58,7 +57,7 @@ function defaultInitialData(campaign, userTz, smsDeliveryLimits, defaultSmsProvi
         const tz = campaign.timezone || fallbackTz;
         return {
             name: campaign.name ?? '',
-            channel: campaign.channel ?? 'whatsapp',
+            channel: campaign.channel ?? 'sms',
             whatsapp_phone_number_id: campaign.whatsapp_phone_number_id ?? '',
             sms_provider: campaign.sms_provider ?? defaultSmsProvider,
             audience_type: campaign.audience_type ?? 'segment',
@@ -96,7 +95,7 @@ function defaultInitialData(campaign, userTz, smsDeliveryLimits, defaultSmsProvi
 
     return {
         name: '',
-        channel: 'whatsapp',
+        channel: 'sms',
         whatsapp_phone_number_id: '',
         sms_provider: defaultSmsProvider,
         audience_type: 'segment',
@@ -120,7 +119,7 @@ function defaultDeliverySteps(smsDeliveryLimits) {
         {
             name: 'Remaining contacts',
             recipient_limit: null,
-            delay_after_previous_seconds: 600,
+            delay_after_previous_seconds: 0,
             rate_per_second: smsDeliveryLimits.bulkRate,
         },
     ];
@@ -778,7 +777,7 @@ function ChannelStep({ data, setData, errors, whatsappPhoneNumbers = [], smsProv
                 <label className="text-sm font-medium text-neutral-700 dark:text-neutral-300 block mb-2">
                     {t('campaign.channel')}
                 </label>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                     {Object.entries(CHANNEL_META).map(([val, meta]) => {
                         const Brand = meta.Icon;
                         const active = data.channel === val;
@@ -798,6 +797,11 @@ function ChannelStep({ data, setData, errors, whatsappPhoneNumbers = [], smsProv
                             </button>
                         );
                     })}
+                    <div className="rounded-xl border border-dashed border-neutral-300 bg-neutral-50 p-4 text-center text-sm dark:border-neutral-700 dark:bg-neutral-800/50">
+                        <ChannelBrandIcon channel="whatsapp" className="mx-auto h-6 w-6 text-neutral-400" />
+                        <div className="mt-2 font-medium text-neutral-600 dark:text-neutral-300">WhatsApp</div>
+                        <div className="mt-1 text-xs text-neutral-500">Coming soon</div>
+                    </div>
                 </div>
                 <FieldError message={errors.channel} />
             </div>
@@ -1349,7 +1353,7 @@ function ScheduleStep({ data, setData, errors, audienceCount = 0, smsDeliveryLim
                                 Safe delivery plan
                             </h4>
                             <p className="mt-1 max-w-2xl text-xs text-neutral-500 dark:text-neutral-400">
-                                Step 1 stays at {smsDeliveryLimits.safetyRate} SMS/sec. Later steps can use up to
+                                Step 1 stays at {smsDeliveryLimits.safetyRate} SMS/sec for the first safety check. Later steps can use up to
                                 {' '}{smsDeliveryLimits.bulkRate} SMS/sec, shared by every campaign using the same SMS account.
                             </p>
                         </div>
@@ -1489,9 +1493,14 @@ function ScheduleStep({ data, setData, errors, audienceCount = 0, smsDeliveryLim
                     </button>
 
                     <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
-                        Campaigns with 10,000 or more recipients receive exclusive access to the
-                        provider account. Other campaigns wait for capacity and cannot multiply the
-                        {` ${smsDeliveryLimits.bulkRate}-per-second`} provider limit.
+                        The configured rate is a shared ceiling, not a guaranteed delivery rate. The first 100 contacts use the safety rate;
+                        provider response time and the number of active broadcast workers can reduce actual throughput. Campaigns with 10,000
+                        or more recipients receive exclusive access to the provider account, so other campaigns cannot multiply this limit.
+                        {smsDeliveryLimits.workerCount < smsDeliveryLimits.recommendedWorkerCount && (
+                            <span className="mt-2 block font-semibold">
+                                This server is configured for {smsDeliveryLimits.workerCount} broadcast workers; about {smsDeliveryLimits.recommendedWorkerCount} are recommended to sustain {smsDeliveryLimits.bulkRate} SMS/sec when the gateway responds in ~250ms.
+                            </span>
+                        )}
                     </div>
                     <FieldError message={errors.delivery_steps} />
                 </div>

@@ -550,7 +550,7 @@ class SafeSmsDeliveryTest extends TestCase
         $campaign->load('steps');
         $this->assertCount(2, $campaign->steps);
         $this->assertSame(100, $campaign->steps[0]->recipient_limit);
-        $this->assertSame(600, $campaign->steps[1]->delay_after_previous_seconds);
+        $this->assertSame(0, $campaign->steps[1]->delay_after_previous_seconds);
         $this->assertSame($campaign->steps[0]->id, $service->forOrdinal($campaign, 100)->id);
         $this->assertSame($campaign->steps[1]->id, $service->forOrdinal($campaign, 1_000_000)->id);
         // Step 1 (safety check) is capped at the provider rate; later steps

@@ -29,6 +29,7 @@ export default function CampaignReportShow({
     funnel,
     deliveryOverTime,
     failedReasons,
+    errorSummary = null,
     lag,
     recipients,
     filters,
@@ -36,6 +37,7 @@ export default function CampaignReportShow({
     const { t } = useTranslation();
     const userTz = usePage().props.timezone || 'Asia/Dhaka';
     const isSms = campaign.channel === 'sms';
+    const supportsReadTracking = campaign.channel === 'email';
     const [statusFilter, setStatusFilter] = useState(filters.status ?? '');
 
     const applyFilter = (status) => {
@@ -80,17 +82,17 @@ export default function CampaignReportShow({
                 </div>
 
                 {/* KPI strip */}
-                <div className={`grid grid-cols-2 gap-4 ${isSms ? 'lg:grid-cols-5' : 'lg:grid-cols-6'}`}>
+                <div className={`grid grid-cols-2 gap-4 ${supportsReadTracking ? 'lg:grid-cols-6' : 'lg:grid-cols-5'}`}>
                     <KpiCard label={t('reports.kpi_total_recipients')} value={kpis.total} />
                     <KpiCard label={t('reports.kpi_delivered')} value={kpis.delivered_pct} unit="%" trend="up" />
-                    {!isSms && <KpiCard label={t('reports.kpi_read')} value={kpis.read_pct} unit="%" trend="up" />}
+                    {supportsReadTracking && <KpiCard label={t('reports.kpi_read')} value={kpis.read_pct} unit="%" trend="up" />}
                     <KpiCard label={t('reports.kpi_failed')} value={kpis.failed_pct} unit="%" trend="down" />
                     <KpiCard label={t('reports.kpi_clicked')} value={kpis.clicked_pct ?? 0} unit="%" />
                     <KpiCard label={t('reports.kpi_opted_out')} value={kpis.opted_out ?? 0} />
                 </div>
 
                 {/* Status lag */}
-                {!isSms && (lag?.sent_to_delivered || lag?.delivered_to_read || lag?.sent_to_read) ? (
+                {supportsReadTracking && (lag?.sent_to_delivered || lag?.delivered_to_read || lag?.sent_to_read) ? (
                     <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4">
                         <h3 className="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3 flex items-center gap-2">
                             <Clock className="h-4 w-4" /> {t('reports.status_timeline')}
@@ -123,8 +125,8 @@ export default function CampaignReportShow({
                             <LineChart
                                 data={deliveryOverTime}
                                 xKey="hour"
-                                yKeys={isSms ? ['delivered'] : ['sent', 'delivered', 'read']}
-                                labels={isSms ? { delivered: t('reports.series_delivered') } : { sent: t('reports.series_sent'), delivered: t('reports.series_delivered'), read: t('reports.series_read') }}
+                                yKeys={supportsReadTracking ? ['sent', 'delivered', 'read'] : ['delivered']}
+                                labels={supportsReadTracking ? { sent: t('reports.series_sent'), delivered: t('reports.series_delivered'), read: t('reports.series_read') } : { delivered: t('reports.series_delivered') }}
                                 height={250}
                             />
                         ) : (
@@ -132,6 +134,16 @@ export default function CampaignReportShow({
                         )}
                     </div>
                 </div>
+
+                {errorSummary?.has_errors && (
+                    <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-900 dark:border-red-900 dark:bg-red-950/30 dark:text-red-100">
+                        <div className="font-semibold">Delivery issues need attention</div>
+                        <div className="mt-1 text-xs">{errorSummary.has_provider_errors ? 'Provider configuration or routing needs attention. ' : ''}{errorSummary.has_recipient_errors ? 'Some recipient details are invalid. ' : ''}{errorSummary.has_retries ? 'Some messages are queued for retry.' : ''}</div>
+                        <ul className="mt-3 space-y-1 text-xs">
+                            {(errorSummary.items ?? []).map((item) => <li key={`${item.class}:${item.reason}`}><span className="font-semibold">{item.count}× {String(item.class).replaceAll('_', ' ')}:</span> {item.reason}{item.help && <span className="block pl-3 text-red-700 dark:text-red-200">{item.help}</span>}</li>)}
+                        </ul>
+                    </div>
+                )}
 
                 {/* Failed reasons + recipients */}
                 <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
@@ -158,7 +170,7 @@ export default function CampaignReportShow({
                                     className="text-xs rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200"
                                 >
                                     <option value="">{t('reports.all_statuses')}</option>
-                                    {(isSms ? ['queued', 'delivered', 'failed'] : ['queued', 'sent', 'delivered', 'read', 'failed']).map((s) => (
+                                    {(supportsReadTracking ? ['queued', 'sent', 'delivered', 'read', 'failed'] : ['queued', 'delivered', 'failed']).map((s) => (
                                         <option key={s} value={s}>
                                             {s}
                                         </option>
@@ -182,7 +194,7 @@ export default function CampaignReportShow({
                                         <th className="pb-2 text-left text-xs text-gray-500 dark:text-gray-400">
                                             {t('reports.col_delivered_at')}
                                         </th>
-                                        {!isSms && <th className="pb-2 text-left text-xs text-gray-500 dark:text-gray-400">
+                                        {supportsReadTracking && <th className="pb-2 text-left text-xs text-gray-500 dark:text-gray-400">
                                             {t('reports.col_read_at')}
                                         </th>}
                                         <th className="pb-2 text-left text-xs text-gray-500 dark:text-gray-400">
@@ -209,21 +221,21 @@ export default function CampaignReportShow({
                                                 <td className="py-2">
                                                     <span
                                                         className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
-                                                            STATUS_COLORS[isSms && ['sent', 'read'].includes(r.status) ? 'delivered' : r.status] ?? ''
+                                                            STATUS_COLORS[!supportsReadTracking && ['sent', 'read'].includes(r.status) ? 'delivered' : r.status] ?? ''
                                                         }`}
                                                     >
-                                                        {isSms && ['sent', 'read'].includes(r.status) ? 'delivered' : r.status}
+                                                        {!supportsReadTracking && ['sent', 'read'].includes(r.status) ? 'delivered' : r.status}
                                                     </span>
                                                 </td>
                                                 <td className="py-2 text-gray-500">
                                                     {r.sent_at ? formatInTz(r.sent_at, userTz) : '—'}
                                                 </td>
                                                 <td className="py-2 text-gray-500">
-                                                    {r.delivered_at || (isSms && r.sent_at)
+                                                    {r.delivered_at || (!supportsReadTracking && r.sent_at)
                                                         ? formatInTz(r.delivered_at ?? r.sent_at, userTz)
                                                         : '—'}
                                                 </td>
-                                                {!isSms && <td className="py-2 text-gray-500">
+                                                {supportsReadTracking && <td className="py-2 text-gray-500">
                                                     {r.read_at ? formatInTz(r.read_at, userTz) : '—'}
                                                 </td>}
                                                 <td className="py-2 text-gray-500 max-w-xs truncate" title={r.failed_reason ?? ''}>
@@ -234,7 +246,7 @@ export default function CampaignReportShow({
                                     })}
                                     {recipients.data.length === 0 && (
                                         <tr>
-                                            <td colSpan={isSms ? 5 : 6} className="py-6 text-center text-gray-400">
+                                            <td colSpan={supportsReadTracking ? 6 : 5} className="py-6 text-center text-gray-400">
                                                 {t('reports.no_recipients')}
                                             </td>
                                         </tr>
