@@ -30,15 +30,12 @@ class SegmentApiController extends WorkspaceScopedController
     {
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:200'],
-            'type' => ['nullable', 'string', 'in:static,dynamic'],
-            'rules' => ['nullable', 'array'],
         ]);
 
         $segment = Segment::create([
             'workspace_id' => $this->workspaceId($request),
             'name' => $validated['name'],
-            'type' => $validated['type'] ?? 'static',
-            'rules_json' => $validated['rules'] ?? null,
+            'type' => 'static',
             'contact_count' => 0,
         ]);
 

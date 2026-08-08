@@ -5,10 +5,10 @@ namespace App\Modules\Shared\Http\Controllers;
 use App\Http\Controllers\Controller;
 use App\Modules\Shared\Jobs\AddContactsToListJob;
 use App\Modules\Shared\Jobs\ImportContactsToListJob;
+use App\Modules\Shared\Jobs\ValidateContactListCsvJob;
 use App\Modules\Shared\Models\Contact;
 use App\Modules\Shared\Models\ContactListOperation;
 use App\Modules\Shared\Models\Segment;
-use App\Modules\Shared\Services\SegmentResolver;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -17,7 +17,6 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class SegmentController extends Controller
 {
-    public function __construct(private SegmentResolver $resolver) {}
 
     public function index(Request $request): Response
     {
@@ -32,15 +31,12 @@ class SegmentController extends Controller
         $workspaceId = $request->user()->current_workspace_id ?? $request->user()->workspace_id;
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:128'],
-            'type' => ['required', 'in:static,dynamic'],
-            'rules_json' => ['nullable', 'array'],
         ]);
 
-        $segment = Segment::create(array_merge($validated, ['workspace_id' => $workspaceId]));
-
-        if ($segment->type === 'dynamic') {
-            $this->resolver->materialise($segment);
-        }
+        Segment::create(array_merge($validated, [
+            'workspace_id' => $workspaceId,
+            'type' => 'static',
+        ]));
 
         return back()->with('success', 'Contact list created.');
     }
@@ -50,13 +46,8 @@ class SegmentController extends Controller
         $this->authorise($request, $segment);
         $validated = $request->validate([
             'name' => ['sometimes', 'string', 'max:128'],
-            'rules_json' => ['nullable', 'array'],
         ]);
         $segment->update($validated);
-
-        if ($segment->type === 'dynamic') {
-            $this->resolver->materialise($segment);
-        }
 
         return back()->with('success', 'Contact list updated.');
     }
@@ -73,7 +64,6 @@ class SegmentController extends Controller
     public function manageContacts(Request $request, Segment $segment): Response
     {
         $this->authorise($request, $segment);
-        abort_if($segment->type !== 'static', 403, 'Only static contact lists support manual contact management.');
 
         $workspaceId = $request->user()->current_workspace_id ?? $request->user()->workspace_id;
 
@@ -146,7 +136,6 @@ class SegmentController extends Controller
     public function attachContacts(Request $request, Segment $segment): RedirectResponse
     {
         $this->authorise($request, $segment);
-        abort_if($segment->type !== 'static', 403);
 
         $workspaceId = (int) ($request->user()->current_workspace_id ?? $request->user()->workspace_id);
         $validated = $request->validate([
@@ -198,11 +187,11 @@ class SegmentController extends Controller
     public function importContacts(Request $request, Segment $segment): RedirectResponse
     {
         $this->authorise($request, $segment);
-        abort_if($segment->type !== 'static', 403);
 
         $workspaceId = (int) ($request->user()->current_workspace_id ?? $request->user()->workspace_id);
         $validated = $request->validate([
             'file' => ['required', 'file', 'mimes:csv,txt', 'max:102400'],
+            'default_country' => ['nullable', 'string', 'size:2'],
         ]);
         $path = $validated['file']->store('contact-list-imports', 'local');
 
@@ -210,13 +199,36 @@ class SegmentController extends Controller
             'workspace_id' => $workspaceId,
             'segment_id' => $segment->id,
             'created_by' => $request->user()->id,
-            'type' => 'csv_import',
+            'type' => 'csv_validation',
             'status' => 'queued',
             'source_path' => $path,
+            'options' => ['default_country' => strtoupper((string) ($validated['default_country'] ?? '')) ?: null],
         ]);
-        ImportContactsToListJob::dispatch($operation->id);
+        ValidateContactListCsvJob::dispatch($operation->id);
 
-        return back()->with('success', 'CSV accepted. Contacts will be validated and added in the background.');
+        return back()->with('success', 'CSV uploaded. We are validating it before any contact is added.');
+    }
+
+    public function confirmCsvImport(Request $request, Segment $segment, ContactListOperation $operation): RedirectResponse
+    {
+        $this->authorise($request, $segment);
+        abort_unless((int) $operation->workspace_id === (int) $segment->workspace_id && (int) $operation->segment_id === (int) $segment->id, 404);
+        abort_unless($operation->type === 'csv_validation' && $operation->status === 'completed', 422, 'This CSV is not ready to import.');
+        abort_unless((int) $operation->added > 0, 422, 'There are no valid new contacts to import from this CSV.');
+
+        $import = ContactListOperation::create([
+            'workspace_id' => $operation->workspace_id,
+            'segment_id' => $segment->id,
+            'created_by' => $request->user()->id,
+            'type' => 'csv_import',
+            'status' => 'queued',
+            'source_path' => $operation->source_path,
+            'options' => $operation->options,
+        ]);
+        ImportContactsToListJob::dispatch($import->id);
+        $operation->update(['status' => 'confirmed']);
+
+        return back()->with('success', number_format($operation->added).' validated contact(s) queued for import.');
     }
 
     public function downloadSampleCsv(): StreamedResponse
@@ -235,7 +247,6 @@ class SegmentController extends Controller
     public function detachAllContacts(Request $request, Segment $segment): RedirectResponse
     {
         $this->authorise($request, $segment);
-        abort_if($segment->type !== 'static', 403);
 
         // This only removes CRM contacts from this list. It never deletes a
         // customer record, and keeps the separately-uploaded campaign audience.
@@ -255,7 +266,6 @@ class SegmentController extends Controller
     public function detachContact(Request $request, Segment $segment, Contact $contact): RedirectResponse
     {
         $this->authorise($request, $segment);
-        abort_if($segment->type !== 'static', 403);
 
         $segment->contacts()->detach($contact->id);
         $segment->update(['contact_count' => $segment->contacts()->count()]);
@@ -266,7 +276,6 @@ class SegmentController extends Controller
     public function clearList(Request $request, Segment $segment): RedirectResponse
     {
         $this->authorise($request, $segment);
-        abort_if($segment->type !== 'static', 403);
 
         $before = $segment->contacts()->count();
 

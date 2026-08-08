@@ -11,6 +11,9 @@ use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use libphonenumber\NumberParseException;
+use libphonenumber\PhoneNumberFormat;
+use libphonenumber\PhoneNumberUtil;
 
 class ImportContactsToListJob implements ShouldQueue
 {
@@ -51,7 +54,8 @@ class ImportContactsToListJob implements ShouldQueue
         // numbers that don't have a + prefix. If only some rows have a country,
         // we seed the parser with the first one we see and reuse it.
         $seenInFile = [];
-        $defaultCountry = null;
+        $defaultCountry = strtoupper(trim((string) data_get($operation->options, 'default_country')));
+        $defaultCountry = $defaultCountry !== '' ? $defaultCountry : null;
         $hasCountryColumn = in_array('country', $headers, true);
 
         $buffer = [];
@@ -184,21 +188,22 @@ class ImportContactsToListJob implements ShouldQueue
         $operation->increment('skipped_existing_customer', count($crmCustomerPhones));
     }
 
-    private function normaliseHeaders(array $headers): array
+    public function normaliseHeaders(array $headers): array
     {
         return array_map(function ($header) {
             $key = Str::snake(strtolower(trim((string) $header)));
 
             return match ($key) {
-                'phone', 'mobile', 'mobile_number', 'phone_number' => 'phone_e164',
+                'phone', 'mobile', 'mobile_number', 'phone_number', 'telephone', 'cellphone', 'cell_phone' => 'phone_e164',
                 'firstname' => 'first_name',
                 'lastname' => 'last_name',
+                'opt_in_s_m_s', 'sms_opt_in', 'sms_consent' => 'opt_in_sms',
                 default => $key,
             };
         }, $headers);
     }
 
-    private function normaliseRow(array $row, int $workspaceId, ?string $defaultCountry, ContactService $contactService): ?array
+    public function normaliseRow(array $row, int $workspaceId, ?string $defaultCountry, ContactService $contactService): ?array
     {
         $phone = $this->normaliseInternationalPhone((string) ($row['phone_e164'] ?? ''), $defaultCountry);
         if ($phone === null) {
@@ -243,7 +248,7 @@ class ImportContactsToListJob implements ShouldQueue
      * Truly local numbers with no resolvable country are rejected because
      * we cannot send to them safely without a guess.
      */
-    private function normaliseInternationalPhone(string $value, ?string $defaultCountry = null): ?string
+    public function normaliseInternationalPhone(string $value, ?string $defaultCountry = null): ?string
     {
         $trimmed = trim($value);
         if ($trimmed === '') {
@@ -255,29 +260,35 @@ class ImportContactsToListJob implements ShouldQueue
             return null;
         }
 
+        $region = null;
         if (str_starts_with($trimmed, '+')) {
-            $phone = '+'.$digits;
+            $candidate = '+'.$digits;
         } elseif (str_starts_with($digits, '00')) {
-            $phone = '+'.substr($digits, 2);
-        } elseif (preg_match('/^[1-9]\d{9,14}$/', $digits) === 1) {
-            // Already an international number without the + sign.
-            $phone = '+'.$digits;
-        } elseif ($defaultCountry !== null && $defaultCountry !== '' && strlen($digits) >= 6 && strlen($digits) <= 14) {
-            // A "national" number we can place because the file gave us a
-            // (or we inferred a) default country. Strip a leading 0 that
-            // most national formats use.
-            $national = ltrim($digits, '0');
-            $countryDigits = $this->countryToCallingCode($defaultCountry);
-            if ($countryDigits === null || $national === '') {
-                return null;
-            }
-            $phone = '+'.$countryDigits.$national;
+            $candidate = '+'.substr($digits, 2);
+        } elseif ($defaultCountry !== null && $defaultCountry !== '') {
+            $callingCode = $this->countryToCallingCode($defaultCountry);
+            if ($callingCode === null) return null;
+
+            // A CSV frequently loses the + sign. If the value already starts
+            // with the selected country's calling code, treat it as
+            // international; otherwise parse it as a national number.
+            $candidate = str_starts_with($digits, $callingCode) ? '+'.$digits : $digits;
+            $region = $candidate === $digits ? $defaultCountry : null;
+        } elseif (preg_match('/^[1-9]\d{7,14}$/', $digits) === 1) {
+            $candidate = '+'.$digits;
         } else {
             return null;
         }
 
-        // Final E.164 sanity check: leading non-zero, 8–15 digits total.
-        return preg_match('/^\+[1-9]\d{7,14}$/', $phone) === 1 ? $phone : null;
+        try {
+            $utility = PhoneNumberUtil::getInstance();
+            $parsed = $utility->parse($candidate, $region);
+            if (! $utility->isValidNumber($parsed)) return null;
+
+            return $utility->format($parsed, PhoneNumberFormat::E164);
+        } catch (NumberParseException) {
+            return null;
+        }
     }
 
     /**
@@ -285,7 +296,7 @@ class ImportContactsToListJob implements ShouldQueue
      * calling code (e.g. "961"). Returns null for unknown codes — those rows
      * fall through to the safety check below.
      */
-    private function countryToCallingCode(string $country): ?string
+    public function countryToCallingCode(string $country): ?string
     {
         $codes = [
             'AC' => '247', 'AD' => '376', 'AE' => '971', 'AF' => '93', 'AG' => '1268',
@@ -341,6 +352,7 @@ class ImportContactsToListJob implements ShouldQueue
 
         return $codes[$country] ?? null;
     }
+
 
     public function failed(\Throwable $exception): void
     {

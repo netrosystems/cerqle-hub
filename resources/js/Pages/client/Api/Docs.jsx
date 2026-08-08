@@ -43,7 +43,7 @@ const ENDPOINTS = [
         groupKey: 'api.group_segments',
         items: [
             { method: 'GET', path: `${BASE}/segments`, descKey: 'api.ep_segments_list', scope: 'contacts:read' },
-            { method: 'POST', path: `${BASE}/segments`, descKey: 'api.ep_segments_create', scope: 'contacts:write', body: '{ "name": "VIP", "type": "static" }' },
+            { method: 'POST', path: `${BASE}/segments`, descKey: 'api.ep_segments_create', scope: 'contacts:write', body: '{ "name": "VIP" }' },
             { method: 'GET', path: `${BASE}/segments/{id}/contacts`, descKey: 'api.ep_segments_members', scope: 'contacts:read' },
         ],
     },

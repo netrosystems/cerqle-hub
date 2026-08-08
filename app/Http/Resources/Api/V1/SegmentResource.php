@@ -12,8 +12,6 @@ class SegmentResource extends JsonResource
         return [
             'id' => $this->id,
             'name' => $this->name,
-            'type' => $this->type,
-            'rules' => $this->rules_json ?? [],
             'contact_count' => (int) $this->contact_count,
             'workspace_id' => $this->workspace_id,
             'created_at' => $this->created_at->toIso8601String(),

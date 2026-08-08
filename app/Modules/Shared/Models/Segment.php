@@ -7,14 +7,11 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 
 class Segment extends Model
 {
-    protected $fillable = ['workspace_id', 'name', 'type', 'rules_json', 'contact_count'];
+    protected $fillable = ['workspace_id', 'name', 'type', 'contact_count'];
 
     protected function casts(): array
     {
-        return [
-            'rules_json' => 'array',
-            'contact_count' => 'integer',
-        ];
+        return ['contact_count' => 'integer'];
     }
 
     public function contacts(): BelongsToMany

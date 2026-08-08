@@ -5,12 +5,10 @@ namespace App\Modules\Broadcasting\Services;
 use App\Modules\Broadcasting\Models\Campaign;
 use App\Modules\Shared\Models\Contact;
 use App\Modules\Shared\Models\Segment;
-use App\Modules\Shared\Services\SegmentResolver;
 use Illuminate\Database\Eloquent\Builder;
 
 class CampaignAudienceService
 {
-    public function __construct(private readonly SegmentResolver $segments) {}
 
     public function query(Campaign $campaign): Builder
     {
@@ -73,7 +71,8 @@ class CampaignAudienceService
             ->find($campaign->audience_ref);
 
         return $segment
-            ? $this->segments->query($segment)
+            ? Contact::where('workspace_id', $campaign->workspace_id)
+                ->whereHas('segments', fn ($query) => $query->whereKey($segment->id))
             : Contact::whereRaw('1 = 0');
     }
 }

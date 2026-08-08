@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Modules\Shared\Jobs\AddContactsToListJob;
 use App\Modules\Shared\Jobs\ImportContactsToListJob;
+use App\Modules\Shared\Jobs\ValidateContactListCsvJob;
 use App\Modules\Shared\Models\Contact;
 use App\Modules\Shared\Models\ContactListOperation;
 use App\Modules\Shared\Models\Segment;
@@ -71,19 +72,34 @@ class ContactListBulkManagementTest extends TestCase
         ])->assertRedirect();
 
         $operation = ContactListOperation::firstOrFail();
+        Queue::assertPushed(ValidateContactListCsvJob::class);
+        (new ValidateContactListCsvJob($operation->id))->handle();
+        $operation->refresh();
+
+        // Validation must be non-mutating: clients review this result before
+        // their uploaded recipients become campaign contacts.
+        $this->assertSame('completed', $operation->status);
+        $this->assertSame('csv_validation', $operation->type);
+        $this->assertSame(2, $operation->added);
+        $this->assertSame(1, $operation->skipped);
+        $this->assertSame(0, Contact::where('workspace_id', $workspace->id)->count());
+
+        $this->actingAs($user)->post(route('client.segments.contacts.import.confirm', [$list, $operation]))
+            ->assertRedirect();
         Queue::assertPushed(ImportContactsToListJob::class);
-        (new ImportContactsToListJob($operation->id))->handle();
+        $import = ContactListOperation::where('type', 'csv_import')->firstOrFail();
+        (new ImportContactsToListJob($import->id))->handle();
 
         $this->assertSame(2, Contact::where('workspace_id', $workspace->id)->count());
         $this->assertSame(2, Contact::where('workspace_id', $workspace->id)->campaignOnly()->count());
         $this->assertSame(0, Contact::where('workspace_id', $workspace->id)->customerDirectory()->count());
         $this->assertSame(2, $list->contacts()->count());
-        $this->assertSame(1, $operation->fresh()->skipped);
-        $this->assertSame(0, $operation->fresh()->skipped_existing_customer);
-        $this->assertSame('completed', $operation->fresh()->status);
+        $this->assertSame(1, $import->fresh()->skipped);
+        $this->assertSame(0, $import->fresh()->skipped_existing_customer);
+        $this->assertSame('completed', $import->fresh()->status);
         $this->assertDatabaseHas('contacts', ['workspace_id' => $workspace->id, 'phone_e164' => '+96170111111']);
         $this->assertDatabaseHas('contacts', ['workspace_id' => $workspace->id, 'phone_e164' => '+96170222222']);
-        Storage::disk('local')->assertMissing($operation->source_path);
+        Storage::disk('local')->assertMissing($import->source_path);
     }
 
     public function test_csv_import_reports_rows_that_match_an_existing_customer_separately(): void
@@ -169,12 +185,30 @@ class ContactListBulkManagementTest extends TestCase
         $this->assertDatabaseHas('contacts', ['id' => $uploaded->id]);
     }
 
-    public function test_clearing_a_contact_list_rejects_dynamic_segments(): void
+    public function test_clearing_a_contact_list_is_not_gated_by_a_list_type(): void
     {
         ['user' => $user, 'workspace' => $workspace] = $this->createWorkspaceContext();
-        $list = Segment::create(['workspace_id' => $workspace->id, 'name' => 'Dynamic', 'type' => 'dynamic']);
+        $list = Segment::create(['workspace_id' => $workspace->id, 'name' => 'Empty']);
 
-        $this->actingAs($user)->delete(route('client.segments.contacts.clear', $list))->assertForbidden();
+        $this->actingAs($user)->delete(route('client.segments.contacts.clear', $list))->assertRedirect();
+    }
+
+    public function test_contact_lists_are_always_created_as_static(): void
+    {
+        ['user' => $user, 'workspace' => $workspace] = $this->createWorkspaceContext();
+
+        $this->actingAs($user)->post(route('client.segments.store'), [
+            'name' => 'SMS recipients',
+            // Legacy clients may still submit this field; it must have no
+            // effect now that dynamic lists are removed.
+            'type' => 'dynamic',
+        ])->assertRedirect();
+
+        $this->assertDatabaseHas('segments', [
+            'workspace_id' => $workspace->id,
+            'name' => 'SMS recipients',
+            'type' => 'static',
+        ]);
     }
 
     public function test_client_can_download_the_contact_list_csv_sample(): void
@@ -239,9 +273,9 @@ class ContactListBulkManagementTest extends TestCase
         // All four shapes should normalise to a real E.164 number:
         //   +96170123456           — already E.164
         //   0096170654321          — 00 international prefix
-        //   961707654321           — bare international digits
+        //   96170765432            — bare international digits
         //   070111222 with country — national number, default country from file
-        $csv = "phone_e164,first_name,country\n+96170123456,Ada,LB\n0096170654321,Grace,LB\n961707654321,Marie,LB\n070111222,Jana,LB\n";
+        $csv = "phone_e164,first_name,country\n+96170123456,Ada,LB\n0096170654321,Grace,LB\n96170765432,Marie,LB\n070111222,Jana,LB\n";
 
         $this->actingAs($user)->post(route('client.segments.contacts.import', $list), [
             'file' => UploadedFile::fake()->createWithContent('contacts.csv', $csv),
@@ -259,7 +293,7 @@ class ContactListBulkManagementTest extends TestCase
         $this->assertSame(4, $list->fresh()->contacts()->count());
         $this->assertDatabaseHas('contacts', ['workspace_id' => $workspace->id, 'phone_e164' => '+96170123456', 'first_name' => 'Ada']);
         $this->assertDatabaseHas('contacts', ['workspace_id' => $workspace->id, 'phone_e164' => '+96170654321']);
-        $this->assertDatabaseHas('contacts', ['workspace_id' => $workspace->id, 'phone_e164' => '+961707654321', 'first_name' => 'Marie']);
+        $this->assertDatabaseHas('contacts', ['workspace_id' => $workspace->id, 'phone_e164' => '+96170765432', 'first_name' => 'Marie']);
         $this->assertDatabaseHas('contacts', ['workspace_id' => $workspace->id, 'phone_e164' => '+96170111222', 'first_name' => 'Jana']);
     }
 

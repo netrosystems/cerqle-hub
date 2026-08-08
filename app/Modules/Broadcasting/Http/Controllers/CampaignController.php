@@ -17,7 +17,6 @@ use App\Modules\Broadcasting\Services\SmsCampaignCapacityService;
 use App\Modules\Shared\Models\Contact;
 use App\Modules\Shared\Models\ContactTag;
 use App\Modules\Shared\Models\Segment;
-use App\Modules\Shared\Services\SegmentResolver;
 use App\Modules\Whatsapp\Models\WhatsappBusinessAccount;
 use App\Modules\Whatsapp\Models\WhatsappTemplate;
 use App\Modules\Whatsapp\Services\CloudApiClient;
@@ -647,7 +646,8 @@ class CampaignController extends Controller
         $segment = Segment::where('workspace_id', $workspaceId)->find($ref);
 
         return $segment
-            ? app(SegmentResolver::class)->query($segment)
+            ? Contact::where('workspace_id', $workspaceId)
+                ->whereHas('segments', fn ($query) => $query->whereKey($segment->id))
             : Contact::whereRaw('1 = 0');
     }
 
@@ -661,11 +661,7 @@ class CampaignController extends Controller
         if (! $segment) {
             return [];
         }
-        if ($segment->type === 'static') {
-            return $segment->contacts()->pluck('contacts.id')->all();
-        }
-
-        return app(SegmentResolver::class)->query($segment)->pluck('id')->all();
+        return $segment->contacts()->pluck('contacts.id')->all();
     }
 
     /** @return array<int, int> */

@@ -54,8 +54,7 @@ return new class extends Migration
             $table->id();
             $table->unsignedBigInteger('workspace_id');
             $table->string('name', 128);
-            $table->enum('type', ['static', 'dynamic'])->default('static');
-            $table->json('rules_json')->nullable();
+            $table->enum('type', ['static'])->default('static');
             $table->unsignedInteger('contact_count')->default(0);
             $table->timestamps();
 

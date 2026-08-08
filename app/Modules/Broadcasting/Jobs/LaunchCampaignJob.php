@@ -11,7 +11,6 @@ use App\Modules\Broadcasting\Services\SmsCampaignCapacityService;
 use App\Modules\Shared\Models\Contact;
 use App\Modules\Shared\Models\Segment;
 use App\Modules\Shared\Services\ContactService;
-use App\Modules\Shared\Services\SegmentResolver;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -272,14 +271,7 @@ class LaunchCampaignJob implements ShouldQueue
             return [];
         }
 
-        if ($segment->type === 'static') {
-            return $segment->contacts()->pluck('contacts.id')->all();
-        }
-
-        return app(SegmentResolver::class)
-            ->query($segment)
-            ->pluck('id')
-            ->all();
+        return $segment->contacts()->pluck('contacts.id')->all();
     }
 
     /** @return array<int, int> */

@@ -47,8 +47,9 @@ function Pager({ page }) {
     );
 }
 
-function OperationStatus({ operation }) {
+function OperationStatus({ operation, confirmImport }) {
     const added = Number(operation.added || 0);
+    const validation = operation.options?.validation || {};
     const existingCustomerSkip = Number(operation.skipped_existing_customer || 0);
     const invalidPhone = Number(operation.skipped_invalid_phone || 0);
     const malformedRow = Number(operation.skipped_malformed_row || 0);
@@ -66,14 +67,15 @@ function OperationStatus({ operation }) {
             ? 'bg-red-50 text-red-700 dark:bg-red-950/30 dark:text-red-300'
             : 'bg-blue-50 text-blue-700 dark:bg-blue-950/30 dark:text-blue-300';
 
-    const showBreakdown = operation.type === 'csv_import' && totalRejected > 0;
+    const isValidation = operation.type === 'csv_validation';
+    const showBreakdown = (operation.type === 'csv_import' || isValidation) && totalRejected > 0;
 
     return (
         <div className={`rounded-lg px-3 py-2 text-xs ${tone}`}>
             <div className="flex flex-wrap items-center justify-between gap-2">
-                <span className="font-medium">{operation.type === 'csv_import' ? 'CSV import' : 'Add all contacts'} · {operation.status}</span>
+                <span className="font-medium">{isValidation ? 'CSV validation' : operation.type === 'csv_import' ? 'CSV import' : 'Add all contacts'} · {operation.status}</span>
                 <span className="flex flex-wrap gap-3">
-                    <span><strong className="font-semibold">{added.toLocaleString()}</strong> added</span>
+                    <span><strong className="font-semibold">{added.toLocaleString()}</strong> {isValidation ? 'ready to import' : 'added'}</span>
                     {totalRejected > 0 && (
                         <span><strong className="font-semibold">{totalRejected.toLocaleString()}</strong> rejected</span>
                     )}
@@ -81,8 +83,17 @@ function OperationStatus({ operation }) {
             </div>
             {showBreakdown && (
                 <p className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-[11px] opacity-90">
-                    {invalidPhone > 0 && (
-                        <span><strong className="font-semibold">{invalidPhone.toLocaleString()}</strong> invalid phone</span>
+                    {Number(validation.missing_phone || 0) > 0 && (
+                        <span><strong className="font-semibold">{Number(validation.missing_phone).toLocaleString()}</strong> blank phone</span>
+                    )}
+                    {Number(validation.missing_country || 0) > 0 && (
+                        <span><strong className="font-semibold">{Number(validation.missing_country).toLocaleString()}</strong> needs country</span>
+                    )}
+                    {Number(validation.invalid_country || 0) > 0 && (
+                        <span><strong className="font-semibold">{Number(validation.invalid_country).toLocaleString()}</strong> invalid country</span>
+                    )}
+                    {(Number(validation.invalid_phone || 0) > 0 || (!isValidation && invalidPhone > 0)) && (
+                        <span><strong className="font-semibold">{(Number(validation.invalid_phone || 0) || invalidPhone).toLocaleString()}</strong> invalid phone</span>
                     )}
                     {existingCustomerSkip > 0 && (
                         <span><strong className="font-semibold">{existingCustomerSkip.toLocaleString()}</strong> matched an existing customer</span>
@@ -104,6 +115,14 @@ function OperationStatus({ operation }) {
                 </div>
             )}
             {operation.error_message && <p className="mt-1">{operation.error_message}</p>}
+            {isValidation && operation.status === 'completed' && (
+                <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-current/15 pt-2">
+                    <span className="text-[11px]">No contacts have been added yet.</span>
+                    <button type="button" disabled={added === 0} onClick={() => confirmImport(operation)} className="rounded-md bg-brand-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-40">
+                        Import {added.toLocaleString()} validated contacts
+                    </button>
+                </div>
+            )}
         </div>
     );
 }
@@ -164,18 +183,22 @@ function CsvUploader({ csvForm, uploadCsv }) {
                 <div className="rounded-xl border-2 border-dashed border-neutral-300 p-6 text-center dark:border-neutral-600">
                     <Upload className="mx-auto h-9 w-9 text-brand-600" />
                     <h3 className="mt-3 font-semibold text-neutral-900 dark:text-neutral-100">Upload a CSV of recipients</h3>
-                    <p className="mt-1 text-sm text-neutral-500">CSV files are scanned and processed in 1,000-row chunks. Numbers are normalised accept <code>+96170123456</code>, <code>0096170123456</code>, <code>96170123456</code>, and national numbers like <code>070123456</code> when the file also carries a <code>country</code> column. The live result shows added recipients and a rejected breakdown: invalid phone, matched an existing customer, malformed row, duplicate in file.</p>
+                    <p className="mt-1 text-sm text-neutral-500">Your file is scanned first in 1,000-row chunks. Nothing is added until you review the accepted and rejected counts, then confirm the import.</p>
                     <form onSubmit={uploadCsv} className="mt-5 space-y-3">
                         <input type="file" accept=".csv,text/csv" required onChange={event => csvForm.setData('file', event.target.files?.[0] ?? null)} className="block w-full text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-brand-50 file:px-4 file:py-2 file:font-medium file:text-brand-700" />
+                        <label className="block text-left text-sm font-medium text-neutral-700 dark:text-neutral-200">
+                            Default country <span className="font-normal text-neutral-500">(only for national numbers without country code)</span>
+                            <input value={csvForm.data.default_country} onChange={event => csvForm.setData('default_country', event.target.value.toUpperCase().replace(/[^A-Z]/g, '').slice(0, 2))} placeholder="e.g. LB" maxLength={2} className="mt-1 block w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm uppercase dark:border-neutral-600 dark:bg-neutral-800" />
+                        </label>
                         <button disabled={csvForm.processing || !csvForm.data.file} className="rounded-lg bg-brand-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-40">
-                            {csvForm.processing ? 'Uploading…' : 'Upload and start import'}
+                            {csvForm.processing ? 'Uploading…' : 'Upload and validate'}
                         </button>
                     </form>
                 </div>
                 <div className="rounded-lg bg-neutral-50 p-4 text-sm text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300">
                     <p className="font-medium text-neutral-900 dark:text-neutral-100">CSV format</p>
-                    <p className="mt-1">Required: <code>phone_e164</code>. International formats such as <code>+96170123456</code>, <code>0096170123456</code>, and <code>96170123456</code> are normalized automatically. Optional: <code>first_name</code>, <code>last_name</code>, <code>email</code>, <code>country</code>, <code>language</code>, <code>opt_in_sms</code>.</p>
-                    <p className="mt-2">Numbers without a country code are rejected unless the row carries a <code>country</code> column (e.g. <code>LB</code>, <code>US</code>) that lets us place the number. Malformed rows, blank rows, and numbers that appear more than once in the same file are also reported separately. If a phone already belongs to a real customer, that customer remains in the CRM and the row is reported as “matched an existing customer”.</p>
+                    <p className="mt-1">Required: a <code>Phone</code>, <code>Mobile</code>, <code>Phone Number</code>, or <code>phone_e164</code> column. International formats such as <code>+96170123456</code>, <code>0096170123456</code>, and <code>96170123456</code> are normalized automatically. Optional: <code>first_name</code>, <code>last_name</code>, <code>email</code>, <code>country</code>, <code>language</code>, <code>opt_in_sms</code>.</p>
+                    <p className="mt-2">A national number needs either its own two-letter <code>country</code> value or the Default country above. Blank phones, malformed/invalid numbers, invalid country codes, duplicate rows, and numbers already belonging to CRM customers are counted separately before import.</p>
                     <a href={route('client.segments.contacts.sample-csv')} className="mt-3 inline-flex items-center gap-1.5 font-medium text-brand-700 hover:text-brand-800 dark:text-brand-300">
                         <FileSpreadsheet className="h-4 w-4" /> Download sample CSV
                     </a>
@@ -193,7 +216,7 @@ export default function SegmentContacts({ segment, listContacts, existingContact
     const [confirmingClearAll, setConfirmingClearAll] = useState(false);
     const [clearAllPhrase, setClearAllPhrase] = useState('');
     const searchTimer = useRef(null);
-    const csvForm = useForm({ file: null });
+    const csvForm = useForm({ file: null, default_country: '' });
     const currentPageIds = useMemo(() => availableContacts.data.map(contact => contact.id), [availableContacts.data]);
     const currentPageSelected = currentPageIds.length > 0 && currentPageIds.every(id => selected.includes(id));
     const liveOperations = operations.filter(operation => isLiveOperation(operation));
@@ -251,6 +274,10 @@ export default function SegmentContacts({ segment, listContacts, existingContact
         });
     };
 
+    const confirmImport = (operation) => {
+        router.post(route('client.segments.contacts.import.confirm', [segment.id, operation.id]), {}, { preserveScroll: true });
+    };
+
     return (
         <ClientLayout title={`Add Contacts · ${segment.name}`}>
             <Head title={`Add Contacts · ${segment.name}`} />
@@ -281,7 +308,7 @@ export default function SegmentContacts({ segment, listContacts, existingContact
 
                 {liveOperations.length > 0 && (
                     <div className="space-y-2">
-                        {liveOperations.map(operation => <OperationStatus key={operation.id} operation={operation} />)}
+                        {liveOperations.map(operation => <OperationStatus key={operation.id} operation={operation} confirmImport={confirmImport} />)}
                     </div>
                 )}
 

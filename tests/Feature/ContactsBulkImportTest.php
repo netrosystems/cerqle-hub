@@ -63,32 +63,6 @@ class ContactsBulkImportTest extends TestCase
         $this->assertSame(1, (int) $segment->contact_count);
     }
 
-    public function test_bulk_import_rejects_dynamic_segment_id(): void
-    {
-        ['user' => $user, 'workspace' => $workspace] = $this->createWorkspaceContext();
-        $segment = Segment::create([
-            'workspace_id' => $workspace->id,
-            'name' => 'Dynamic',
-            'type' => 'dynamic',
-            'rules_json' => ['combinator' => 'AND', 'conditions' => []],
-            'contact_count' => 0,
-        ]);
-
-        $this->actingAs($user)
-            ->from(route('client.contacts.bulk-import'))
-            ->withHeaders($this->inertiaHeaders())
-            ->post(route('client.contacts.bulk-store'), [
-                'rows' => [
-                    [
-                        'name' => 'Test',
-                        'phone_e164' => '+12025550199',
-                        'segment_id' => $segment->id,
-                    ],
-                ],
-            ])
-            ->assertInvalid(['rows.0.segment_id']);
-    }
-
     public function test_bulk_import_requires_at_least_one_phone_row(): void
     {
         ['user' => $user] = $this->createWorkspaceContext();
