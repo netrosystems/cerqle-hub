@@ -113,7 +113,13 @@
         "addons": "Addons",
         "website_widget": "Website Widget",
         "group_assets": "Group Assets",
-        "sign_in": "Sign In"
+        "sign_in": "Sign In",
+        "group_landing": "Landing",
+        "group_chatbot_setup": "Chatbot Setup",
+        "tutorials": "Tutorials",
+        "sms_campaigns": "SMS Campaigns",
+        "master_email_inbox": "Master Email Inbox",
+        "email_setup": "Email Setup"
     },
     "welcome": {
         "title": "AI দিয়ে ওয়েবসাইট বানান।",
@@ -394,7 +400,26 @@
             "start": "শুরু করুন",
             "templates": "টেমপ্লেট",
             "assign": "বরাদ্দ করুন",
-            "setup": "Setup"
+            "setup": "Setup",
+            "email": {
+                "index": "Index",
+                "poll": "Poll",
+                "sync": "Sync",
+                "destroy": "Destroy",
+                "generic": {
+                    "store": "Store"
+                },
+                "google": {
+                    "connect": "Connect"
+                },
+                "microsoft": {
+                    "connect": "Connect"
+                }
+            },
+            "messages": {
+                "poll": "Poll"
+            },
+            "poll": "Poll"
         },
         "ai": {
             "providers": {
@@ -2538,7 +2563,13 @@
         "date_prev": "Previous",
         "date_next": "Next",
         "date_time": "Time",
-        "date_today": "Today"
+        "date_today": "Today",
+        "cookie_title": "Cookie Title",
+        "cookie_policy": "Cookie Policy",
+        "cookie_manage_note": "Cookie Manage Note",
+        "cookie_accept_all": "Cookie Accept All",
+        "cookie_reject_all": "Cookie Reject All",
+        "cookie_manage": "Cookie Manage"
     },
     "inbox_ui": {
         "new_conversation": "নতুন কথোপকথন",
@@ -4056,6 +4087,9 @@
     "1": {
         "6": "6"
     },
+    "facebook": {
+        "com": "Com"
+    },
     "127": [
         [
             {
@@ -4063,9 +4097,6 @@
             }
         ]
     ],
-    "facebook": {
-        "com": "Com"
-    },
     "v20": [
         "0"
     ]

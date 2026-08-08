@@ -16,6 +16,11 @@ class ImpersonationController extends Controller
 
     public function stop(Request $request): RedirectResponse
     {
+        \Illuminate\Support\Facades\Log::info('ImpersonationController::stop', [
+            'session_token' => $request->session()->token(),
+            'csrf_header' => $request->header('X-CSRF-TOKEN'),
+            'impersonating' => $request->session()->get('impersonating'),
+        ]);
         if (! $request->session()->get('impersonating')) {
             return redirect()->route('admin.dashboard');
         }

@@ -21,6 +21,8 @@ class AnalyticsServiceTest extends TestCase
 
     private int $wsId;
 
+    private int $userId;
+
     protected function setUp(): void
     {
         parent::setUp();
@@ -28,6 +30,7 @@ class AnalyticsServiceTest extends TestCase
 
         $ctx = $this->createWorkspaceContext();
         $this->wsId = $ctx['workspace']->id;
+        $this->userId = $ctx['user']->id;
     }
 
     // ─── messageVolumeByChannel ────────────────────────────────────────────────
@@ -138,5 +141,45 @@ class AnalyticsServiceTest extends TestCase
         $this->assertIsArray($result);
         $openedTotal = array_sum(array_column($result, 'opened'));
         $this->assertGreaterThanOrEqual(1, $openedTotal);
+    }
+
+    public function test_agent_leaderboard_calculates_first_response_time_on_sqlite(): void
+    {
+        $conversation = Conversation::create([
+            'workspace_id' => $this->wsId,
+            'channel_account_id' => 1,
+            'contact_id' => 1,
+            'assigned_user_id' => $this->userId,
+            'status' => 'open',
+            'created_at' => now()->subMinutes(10),
+            'updated_at' => now()->subMinutes(10),
+        ]);
+        $inbound = Message::create([
+            'conversation_id' => $conversation->id,
+            'direction' => 'in',
+            'channel' => 'webchat',
+            'type' => 'text',
+            'body' => 'Need help',
+            'status' => 'received',
+        ]);
+        $inbound->forceFill([
+            'created_at' => now()->subMinutes(10),
+            'updated_at' => now()->subMinutes(10),
+        ])->saveQuietly();
+        Message::create([
+            'conversation_id' => $conversation->id,
+            'direction' => 'out',
+            'channel' => 'webchat',
+            'type' => 'text',
+            'body' => 'Hello',
+            'status' => 'sent',
+            'sent_at' => now()->subMinutes(5),
+        ]);
+
+        $result = $this->svc->agentLeaderboard($this->wsId, Carbon::now()->subDay(), Carbon::now());
+
+        $this->assertCount(1, $result);
+        $this->assertSame($this->userId, $result[0]['user_id']);
+        $this->assertEquals(5, $result[0]['avg_first_response_min']);
     }
 }

@@ -148,7 +148,9 @@
         "website_widget": "Website Chatbot",
         "addons": "Addons",
         "group_assets": "Group Assets",
-        "sign_in": "Sign In"
+        "sign_in": "Sign In",
+        "master_email_inbox": "Master Email Inbox",
+        "email_setup": "Email Setup"
     },
     "welcome": {
         "title": "Build websites with AI.",
@@ -429,7 +431,26 @@
             "start": "Start",
             "templates": "Templates",
             "assign": "Assign",
-            "setup": "Setup"
+            "setup": "Setup",
+            "email": {
+                "index": "Index",
+                "poll": "Poll",
+                "sync": "Sync",
+                "destroy": "Destroy",
+                "generic": {
+                    "store": "Store"
+                },
+                "google": {
+                    "connect": "Connect"
+                },
+                "microsoft": {
+                    "connect": "Connect"
+                }
+            },
+            "messages": {
+                "poll": "Poll"
+            },
+            "poll": "Poll"
         },
         "ai": {
             "providers": {
@@ -2643,7 +2664,13 @@
         "browse": "browse",
         "max_size_mb": "max {{max}} MB",
         "file_exceeds_limit": "File exceeds {{max}} MB limit.",
-        "upload_failed_retry": "Upload failed. Please try again."
+        "upload_failed_retry": "Upload failed. Please try again.",
+        "cookie_title": "Cookie Title",
+        "cookie_policy": "Cookie Policy",
+        "cookie_manage_note": "Cookie Manage Note",
+        "cookie_accept_all": "Cookie Accept All",
+        "cookie_reject_all": "Cookie Reject All",
+        "cookie_manage": "Cookie Manage"
     },
     "inbox_ui": {
         "new_conversation": "New Conversation",

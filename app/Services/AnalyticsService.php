@@ -351,7 +351,7 @@ class AnalyticsService
         $firstResponse = DB::select("
             SELECT
                 c.assigned_user_id,
-                AVG(TIMESTAMPDIFF(MINUTE, first_in.created_at, first_out.sent_at)) AS avg_first_response_min
+                AVG({$this->dateDifferenceExpression('minute', 'first_in.created_at', 'first_out.sent_at')}) AS avg_first_response_min
             FROM conversations c
             JOIN (
                 SELECT conversation_id, MIN(created_at) as created_at
@@ -382,6 +382,30 @@ class AnalyticsService
             'handled' => (int) $row->handled,
             'avg_first_response_min' => $responseMap[$row->assigned_user_id] ?? null,
         ])->sortByDesc('handled')->values()->toArray();
+    }
+
+    /**
+     * Return a portable elapsed-time expression for the application's supported
+     * databases. Local installations commonly use SQLite, while production uses
+     * MySQL; dashboards must support both.
+     */
+    private function dateDifferenceExpression(string $unit, string $start, string $end): string
+    {
+        $driver = DB::connection()->getDriverName();
+
+        return match ($driver) {
+            'sqlite' => match ($unit) {
+                'minute' => "((julianday({$end}) - julianday({$start})) * 1440)",
+                'second' => "((julianday({$end}) - julianday({$start})) * 86400)",
+                default => throw new \InvalidArgumentException("Unsupported time unit [{$unit}]."),
+            },
+            'pgsql' => match ($unit) {
+                'minute' => "EXTRACT(EPOCH FROM ({$end} - {$start})) / 60",
+                'second' => "EXTRACT(EPOCH FROM ({$end} - {$start}))",
+                default => throw new \InvalidArgumentException("Unsupported time unit [{$unit}]."),
+            },
+            default => 'TIMESTAMPDIFF('.strtoupper($unit).", {$start}, {$end})",
+        };
     }
 
     // ──────────────────────────────────────────────────────────────────────────────
