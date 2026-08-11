@@ -68,8 +68,13 @@ export default function MediaUpload({
             const validationMessage = Object.values(err?.response?.data?.errors ?? {})
                 .flat()
                 .find(Boolean);
+            const fileSizeMb = (file.size / 1024 / 1024).toFixed(1);
             const msg = err?.response?.status === 413
-                ? t('ui.file_exceeds_limit', { max: effectiveMaxSizeMb })
+                ? t('ui.server_rejected_upload', {
+                    size: fileSizeMb,
+                    max: effectiveMaxSizeMb,
+                    defaultValue: 'The web server rejected this {{size}} MB upload before it reached Cerqle. Increase the active Nginx request limit to at least {{max}} MB.',
+                })
                 :
                 err?.response?.data?.error ||
                 validationMessage ||

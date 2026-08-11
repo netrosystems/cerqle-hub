@@ -2664,6 +2664,7 @@
         "browse": "browse",
         "max_size_mb": "max {{max}} MB",
         "file_exceeds_limit": "File exceeds {{max}} MB limit.",
+        "server_rejected_upload": "The web server rejected this {{size}} MB upload before it reached Cerqle. Increase the active Nginx request limit to at least {{max}} MB.",
         "upload_failed_retry": "Upload failed. Please try again.",
         "cookie_title": "Cookie Title",
         "cookie_policy": "Cookie Policy",
