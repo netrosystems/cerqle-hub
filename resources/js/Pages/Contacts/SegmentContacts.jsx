@@ -176,7 +176,24 @@ function ExistingCustomerPicker({ availableContacts, availableCount, search, app
     );
 }
 
-function CsvUploader({ csvForm, uploadCsv }) {
+function CsvUploader({ csvForm, uploadCsv, importLimits }) {
+    const [fileError, setFileError] = useState('');
+    const maxFileMb = Number(importLimits?.maxFileMb || 20);
+    const maxRows = Number(importLimits?.maxRowsPerFile || 250000);
+    const maxFileBytes = maxFileMb * 1024 * 1024;
+
+    const chooseFile = (event) => {
+        const file = event.target.files?.[0] ?? null;
+        if (file && file.size > maxFileBytes) {
+            setFileError(`This file is ${Math.ceil(file.size / 1024 / 1024)} MB. The maximum is ${maxFileMb} MB. Split it into smaller CSV files and upload them one at a time.`);
+            csvForm.setData('file', null);
+            event.target.value = '';
+            return;
+        }
+        setFileError('');
+        csvForm.setData('file', file);
+    };
+
     return (
         <section className="flex h-full flex-col rounded-xl border border-neutral-200 bg-white p-6 dark:border-neutral-700 dark:bg-neutral-900">
             <div className="space-y-5">
@@ -184,8 +201,13 @@ function CsvUploader({ csvForm, uploadCsv }) {
                     <Upload className="mx-auto h-9 w-9 text-brand-600" />
                     <h3 className="mt-3 font-semibold text-neutral-900 dark:text-neutral-100">Upload a CSV of recipients</h3>
                     <p className="mt-1 text-sm text-neutral-500">Your file is scanned first in 1,000-row chunks. Nothing is added until you review the accepted and rejected counts, then confirm the import.</p>
+                    <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-left text-xs text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200">
+                        <strong>Per-file limit: {maxFileMb} MB or {maxRows.toLocaleString()} contacts.</strong>
+                        <span className="mt-1 block">For 1,000,000 contacts, split the audience into at least 4 CSV files and upload them to this same Contact List one at a time.</span>
+                    </div>
                     <form onSubmit={uploadCsv} className="mt-5 space-y-3">
-                        <input type="file" accept=".csv,text/csv" required onChange={event => csvForm.setData('file', event.target.files?.[0] ?? null)} className="block w-full text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-brand-50 file:px-4 file:py-2 file:font-medium file:text-brand-700" />
+                        <input type="file" accept=".csv,text/csv" required onChange={chooseFile} className="block w-full text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-brand-50 file:px-4 file:py-2 file:font-medium file:text-brand-700" />
+                        {fileError && <p className="rounded-lg bg-red-50 px-3 py-2 text-left text-xs font-medium text-red-700 dark:bg-red-950/30 dark:text-red-300">{fileError}</p>}
                         <label className="block text-left text-sm font-medium text-neutral-700 dark:text-neutral-200">
                             Default country <span className="font-normal text-neutral-500">(only for national numbers without country code)</span>
                             <input value={csvForm.data.default_country} onChange={event => csvForm.setData('default_country', event.target.value.toUpperCase().replace(/[^A-Z]/g, '').slice(0, 2))} placeholder="e.g. LB" maxLength={2} className="mt-1 block w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm uppercase dark:border-neutral-600 dark:bg-neutral-800" />
@@ -208,7 +230,7 @@ function CsvUploader({ csvForm, uploadCsv }) {
     );
 }
 
-export default function SegmentContacts({ segment, listContacts, existingContactsCount, uploadedContactsCount, availableContacts, availableCount, filters, operations }) {
+export default function SegmentContacts({ segment, listContacts, existingContactsCount, uploadedContactsCount, availableContacts, availableCount, filters, operations, importLimits }) {
     const { props } = usePage();
     const [selected, setSelected] = useState([]);
     const [selectAllMatching, setSelectAllMatching] = useState(false);
@@ -330,6 +352,7 @@ export default function SegmentContacts({ segment, listContacts, existingContact
                     <CsvUploader
                         csvForm={csvForm}
                         uploadCsv={uploadCsv}
+                        importLimits={importLimits}
                     />
                 </div>
 

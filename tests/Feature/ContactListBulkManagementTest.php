@@ -11,6 +11,7 @@ use App\Modules\Shared\Models\Segment;
 use App\Modules\Shared\Services\ContactService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
@@ -100,6 +101,54 @@ class ContactListBulkManagementTest extends TestCase
         $this->assertDatabaseHas('contacts', ['workspace_id' => $workspace->id, 'phone_e164' => '+96170111111']);
         $this->assertDatabaseHas('contacts', ['workspace_id' => $workspace->id, 'phone_e164' => '+96170222222']);
         Storage::disk('local')->assertMissing($import->source_path);
+    }
+
+    public function test_csv_upload_rejects_files_above_the_configured_limit_with_a_clear_message(): void
+    {
+        Storage::fake('local');
+        Config::set('contact_imports.max_file_mb', 1);
+        ['user' => $user, 'workspace' => $workspace] = $this->createWorkspaceContext();
+        $list = Segment::create(['workspace_id' => $workspace->id, 'name' => 'Limited', 'type' => 'static']);
+        $file = UploadedFile::fake()->create('contacts.csv', 1025, 'text/csv');
+
+        $this->actingAs($user)->post(route('client.segments.contacts.import', $list), [
+            'file' => $file,
+        ])->assertSessionHasErrors([
+            'file' => 'The CSV is too large. Upload a file no larger than 1 MB and split larger audiences into multiple files.',
+        ]);
+
+        $this->assertDatabaseCount('contact_list_operations', 0);
+    }
+
+    public function test_csv_validation_fails_cleanly_above_the_row_limit_and_deletes_the_file(): void
+    {
+        Storage::fake('local');
+        Config::set('contact_imports.max_rows_per_file', 2);
+        ['user' => $user, 'workspace' => $workspace] = $this->createWorkspaceContext();
+        $list = Segment::create(['workspace_id' => $workspace->id, 'name' => 'Row limited', 'type' => 'static']);
+        $path = 'contact-list-imports/too-many.csv';
+        Storage::disk('local')->put($path, "phone_e164\n+96170111111\n+96170222222\n+96170333333\n");
+        $operation = ContactListOperation::create([
+            'workspace_id' => $workspace->id,
+            'segment_id' => $list->id,
+            'created_by' => $user->id,
+            'type' => 'csv_validation',
+            'status' => 'queued',
+            'source_path' => $path,
+        ]);
+        $job = new ValidateContactListCsvJob($operation->id);
+
+        try {
+            $job->handle();
+            $this->fail('Expected the row limit to reject the CSV.');
+        } catch (\RuntimeException $exception) {
+            $job->failed($exception);
+        }
+
+        $operation->refresh();
+        $this->assertSame('failed', $operation->status);
+        $this->assertStringContainsString('2-contact limit', $operation->error_message);
+        Storage::disk('local')->assertMissing($path);
     }
 
     public function test_csv_import_reports_rows_that_match_an_existing_customer_separately(): void

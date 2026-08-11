@@ -17,7 +17,6 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class SegmentController extends Controller
 {
-
     public function index(Request $request): Response
     {
         $workspaceId = $request->user()->current_workspace_id ?? $request->user()->workspace_id;
@@ -125,6 +124,10 @@ class SegmentController extends Controller
             'availableContacts' => $allContacts,
             'availableCount' => $availableCount,
             'filters' => ['search' => $search],
+            'importLimits' => [
+                'maxFileMb' => (int) config('contact_imports.max_file_mb'),
+                'maxRowsPerFile' => (int) config('contact_imports.max_rows_per_file'),
+            ],
             'operations' => ContactListOperation::where('workspace_id', $workspaceId)
                 ->where('segment_id', $segment->id)
                 ->latest()
@@ -189,9 +192,12 @@ class SegmentController extends Controller
         $this->authorise($request, $segment);
 
         $workspaceId = (int) ($request->user()->current_workspace_id ?? $request->user()->workspace_id);
+        $maxFileKilobytes = (int) config('contact_imports.max_file_mb') * 1024;
         $validated = $request->validate([
-            'file' => ['required', 'file', 'mimes:csv,txt', 'max:102400'],
+            'file' => ['required', 'file', 'mimes:csv,txt', 'max:'.$maxFileKilobytes],
             'default_country' => ['nullable', 'string', 'size:2'],
+        ], [
+            'file.max' => 'The CSV is too large. Upload a file no larger than '.config('contact_imports.max_file_mb').' MB and split larger audiences into multiple files.',
         ]);
         $path = $validated['file']->store('contact-list-imports', 'local');
 

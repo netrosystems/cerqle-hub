@@ -356,7 +356,7 @@ export default function LandingLayout({ children }) {
 
                     <div className="pt-6 flex flex-col sm:flex-row items-center justify-between gap-4" style={{ borderTop: '1px solid rgba(255,255,255,0.08)' }}>
                         <p className="text-xs text-neutral-500">
-                            &copy; {new Date().getFullYear()} {appName}. {t('nav.all_rights_reserved')}
+                            &copy; 2026 Cerqle.ai (A Celimar Company). All rights reserved.
                         </p>
                         <button
                             type="button"

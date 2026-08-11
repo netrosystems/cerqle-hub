@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Media;
+use App\Models\User;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
@@ -59,13 +60,23 @@ class MediaService
     }
 
     /**
-     * Get storage quota in bytes from plan limits (storage_gb).
+     * Get storage quota in bytes from the plan's storage limit (stored in MB).
      */
-    public function quotaBytes(\App\Models\User $user): int
+    public function quotaBytes(User $user): int
     {
         $plan = $user->effectiveSubscription()?->plan;
-        $gb = $plan?->limitValue('storage_gb') ?? 1;
+        $limits = $plan?->limits;
 
-        return (int) ($gb * 1024 * 1024 * 1024);
+        if (is_array($limits) && array_key_exists('storage', $limits)) {
+            // A null plan limit represents unlimited storage.
+            if ($limits['storage'] === null) {
+                return PHP_INT_MAX;
+            }
+
+            return max(0, (int) $limits['storage']) * 1024 * 1024;
+        }
+
+        // Preserve a safe default for users without an assigned plan.
+        return 1024 * 1024 * 1024;
     }
 }

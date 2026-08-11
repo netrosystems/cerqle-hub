@@ -6,7 +6,6 @@ use App\Models\Client;
 use App\Models\Currency;
 use App\Models\Locale;
 use App\Models\SystemSetting;
-use App\Services\OneSignalService;
 use App\Models\User;
 use App\Models\Workspace;
 use App\Modules\Broadcasting\Models\UsageMeter;
@@ -14,8 +13,10 @@ use App\Modules\Integrations\Services\CredentialResolver;
 use App\Services\AddonEntitlementService;
 use App\Services\I18n\I18nFileService;
 use App\Services\OnboardingService;
+use App\Services\OneSignalService;
 use App\Services\ReleaseVersionService;
 use App\Services\StorageManager;
+use App\Services\UploadLimitService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
@@ -83,6 +84,9 @@ class HandleInertiaRequests extends Middleware
                 'release' => app(ReleaseVersionService::class)->current(),
                 'onboardingSummary' => null,
                 'entitlements' => ['developer_tools' => false],
+                'uploadLimits' => [
+                    'mediaMb' => app(UploadLimitService::class)->mediaMaxMegabytes(),
+                ],
             ];
         }
 
@@ -385,6 +389,9 @@ class HandleInertiaRequests extends Middleware
             'onesignal' => $this->oneSignalPublicConfig(),
             'firebase' => $this->firebasePublicConfig(),
             'metaAppId' => $this->metaAppId(),
+            'uploadLimits' => [
+                'mediaMb' => app(UploadLimitService::class)->mediaMaxMegabytes(),
+            ],
             'entitlements' => [
                 'developer_tools' => app(AddonEntitlementService::class)->enabledFor(
                     $user instanceof User ? $user : null,

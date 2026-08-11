@@ -5,15 +5,20 @@ namespace App\Http\Controllers\Client;
 use App\Http\Controllers\Controller;
 use App\Models\Media;
 use App\Services\MediaService;
+use App\Services\UploadLimitService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Inertia\Inertia;
 use Inertia\Response;
 
 class MediaController extends Controller
 {
-    public function __construct(private MediaService $mediaService) {}
+    public function __construct(
+        private MediaService $mediaService,
+        private UploadLimitService $uploadLimitService,
+    ) {}
 
     public function index(Request $request): Response
     {
@@ -48,7 +53,7 @@ class MediaController extends Controller
             // Allow-list of safe media types only. HTML/SVG/scripts are excluded
             // to prevent stored-XSS via files served from the app origin.
             'file' => [
-                'required', 'file', 'max:51200', // 50 MB max per file
+                'required', 'file', 'max:'.$this->uploadLimitService->mediaMaxKilobytes(),
                 'mimes:jpg,jpeg,png,gif,webp,pdf,doc,docx,xls,xlsx,ppt,pptx,csv,txt,mp3,wav,ogg,m4a,mp4,webm,mov',
             ],
             'collection' => ['nullable', 'string', 'max:64'],
@@ -62,7 +67,20 @@ class MediaController extends Controller
             return response()->json(['error' => __('Storage quota exceeded.')], 422);
         }
 
-        $media = $this->mediaService->store($validated['file'], $user, $validated['collection'] ?? 'default');
+        try {
+            $media = $this->mediaService->store($validated['file'], $user, $validated['collection'] ?? 'default');
+        } catch (\Throwable $e) {
+            Log::error('Media upload could not be stored.', [
+                'user_id' => $user->id,
+                'collection' => $validated['collection'] ?? 'default',
+                'filename' => $validated['file']->getClientOriginalName(),
+                'exception' => $e,
+            ]);
+
+            return response()->json([
+                'error' => __('The upload could not be saved. Check the configured storage provider and server write permissions.'),
+            ], 500);
+        }
 
         return response()->json([
             'id' => $media->id,

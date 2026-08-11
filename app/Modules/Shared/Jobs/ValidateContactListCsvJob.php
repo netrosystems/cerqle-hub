@@ -20,6 +20,7 @@ class ValidateContactListCsvJob implements ShouldQueue
     use Queueable;
 
     public int $timeout = 7200;
+
     public int $tries = 2;
 
     public function __construct(public int $operationId)
@@ -70,10 +71,13 @@ class ValidateContactListCsvJob implements ShouldQueue
             'existing_customer' => 0,
         ];
         $total = 0;
+        $maxRows = (int) config('contact_imports.max_rows_per_file');
         $buffer = [];
 
         $flush = function () use (&$buffer, &$summary, $operation): void {
-            if ($buffer === []) return;
+            if ($buffer === []) {
+                return;
+            }
             $phones = array_keys($buffer);
             $existing = Contact::withTrashed()
                 ->where('workspace_id', $operation->workspace_id)
@@ -83,17 +87,29 @@ class ValidateContactListCsvJob implements ShouldQueue
                 ->all();
             $existingLookup = array_fill_keys($existing, true);
             foreach ($phones as $phone) {
-                if (isset($existingLookup[$phone])) $summary['existing_customer']++;
-                else $summary['accepted']++;
+                if (isset($existingLookup[$phone])) {
+                    $summary['existing_customer']++;
+                } else {
+                    $summary['accepted']++;
+                }
             }
             $buffer = [];
         };
 
         while (($line = fgetcsv($handle)) !== false) {
-            if ($line === [null] || $line === [] || $line === ['']) continue;
+            if ($line === [null] || $line === [] || $line === ['']) {
+                continue;
+            }
             $total++;
+            if ($total > $maxRows) {
+                fclose($handle);
+                throw new \RuntimeException(
+                    'This CSV exceeds the '.number_format($maxRows).'-contact limit. Split the audience into smaller CSV files and upload each file to this same Contact List.'
+                );
+            }
             if (count($line) !== count($headers)) {
                 $summary['malformed_row']++;
+
                 continue;
             }
             $row = array_combine($headers, $line) ?: [];
@@ -103,10 +119,12 @@ class ValidateContactListCsvJob implements ShouldQueue
 
             if ($rawPhone === '') {
                 $summary['missing_phone']++;
+
                 continue;
             }
             if ($rowCountry !== '' && $normaliser->countryToCallingCode($rowCountry) === null) {
                 $summary['invalid_country']++;
+
                 continue;
             }
             $normalised = $normaliser->normaliseRow($row, $operation->workspace_id, $country, $contactService);
@@ -114,15 +132,19 @@ class ValidateContactListCsvJob implements ShouldQueue
                 $digits = preg_replace('/\D/', '', $rawPhone) ?: '';
                 $isInternational = str_starts_with($rawPhone, '+') || str_starts_with($digits, '00') || strlen($digits) >= 10;
                 $summary[$isInternational ? 'invalid_phone' : 'missing_country']++;
+
                 continue;
             }
             if (isset($seen[$normalised['phone_e164']])) {
                 $summary['duplicate_in_file']++;
+
                 continue;
             }
             $seen[$normalised['phone_e164']] = true;
             $buffer[$normalised['phone_e164']] = true;
-            if (count($buffer) >= 1000) $flush();
+            if (count($buffer) >= 1000) {
+                $flush();
+            }
 
             if ($total % 1000 === 0) {
                 $this->reportProgress($operation, $total, $summary);
@@ -161,7 +183,13 @@ class ValidateContactListCsvJob implements ShouldQueue
 
     public function failed(\Throwable $exception): void
     {
-        ContactListOperation::whereKey($this->operationId)->update([
+        $operation = ContactListOperation::find($this->operationId);
+        if ($operation === null) {
+            return;
+        }
+
+        Storage::disk('local')->delete((string) $operation->source_path);
+        $operation->update([
             'status' => 'failed',
             'error_message' => mb_substr($exception->getMessage(), 0, 2000),
             'finished_at' => now(),

@@ -179,7 +179,7 @@ function LeftPane({ variant, logoUrl }) {
 
             {/* Footer */}
             <p className="relative text-xs text-[#a99a86]">
-                &copy; {new Date().getFullYear()} {appName}. {t('nav.all_rights_reserved')}
+                &copy; 2026 Cerqle.ai (A Celimar Company). All rights reserved.
             </p>
         </div>
     );

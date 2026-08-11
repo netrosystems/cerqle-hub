@@ -2,6 +2,7 @@ import { useState, useRef, useCallback } from 'react';
 import axios from 'axios';
 import { Upload, Link, X, Image, FileText, Check, Loader2, AlertCircle } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { usePage } from '@inertiajs/react';
 
 /**
  * MediaUpload — dual-mode media input component.
@@ -21,7 +22,7 @@ export default function MediaUpload({
     value = '',
     onChange,
     accept = 'image/*',
-    maxSizeMb = 50,
+    maxSizeMb,
     label,
     placeholder = 'https://',
     collection = 'default',
@@ -29,6 +30,10 @@ export default function MediaUpload({
     className = '',
 }) {
     const { t } = useTranslation();
+    const { props } = usePage();
+    const configuredMaxSizeMb = Number(maxSizeMb ?? 50);
+    const serverMaxSizeMb = Number(props?.uploadLimits?.mediaMb ?? configuredMaxSizeMb);
+    const effectiveMaxSizeMb = Math.max(1, Math.min(configuredMaxSizeMb, serverMaxSizeMb));
     const [mode, setMode] = useState('upload'); // 'url' | 'upload'
     const [uploading, setUploading] = useState(false);
     const [error, setError] = useState(null);
@@ -40,8 +45,8 @@ export default function MediaUpload({
     const uploadFile = useCallback(async (file) => {
         if (!file) return;
 
-        if (file.size > maxSizeMb * 1024 * 1024) {
-            setError(t('ui.file_exceeds_limit', { max: maxSizeMb }));
+        if (file.size > effectiveMaxSizeMb * 1024 * 1024) {
+            setError(t('ui.file_exceeds_limit', { max: effectiveMaxSizeMb }));
             return;
         }
 
@@ -53,22 +58,28 @@ export default function MediaUpload({
             form.append('file', file);
             form.append('collection', collection);
 
-            const resp = await axios.post(route('client.media.store'), form, {
-                headers: { 'Content-Type': 'multipart/form-data' },
-            });
+            // Let the browser set the multipart boundary. Supplying Content-Type
+            // manually can produce an unreadable request body in some clients.
+            const resp = await axios.post(route('client.media.store'), form);
 
             onChange?.(resp.data.url);
             setMode('url');
         } catch (err) {
-            const msg =
+            const validationMessage = Object.values(err?.response?.data?.errors ?? {})
+                .flat()
+                .find(Boolean);
+            const msg = err?.response?.status === 413
+                ? t('ui.file_exceeds_limit', { max: effectiveMaxSizeMb })
+                :
                 err?.response?.data?.error ||
+                validationMessage ||
                 err?.response?.data?.message ||
                 t('ui.upload_failed_retry');
             setError(msg);
         } finally {
             setUploading(false);
         }
-    }, [collection, maxSizeMb, onChange, t]);
+    }, [collection, effectiveMaxSizeMb, onChange, t]);
 
     const handleFileChange = (e) => {
         const file = e.target.files?.[0];
@@ -174,7 +185,7 @@ export default function MediaUpload({
                                 {t('ui.drag_drop_or')} <span className="text-brand-600 dark:text-brand-400 font-medium">{t('ui.browse')}</span>
                             </span>
                             <span className="text-xs text-neutral-400">
-                                {accept} · {t('ui.max_size_mb', { max: maxSizeMb })}
+                                {accept} · {t('ui.max_size_mb', { max: effectiveMaxSizeMb })}
                             </span>
                         </>
                     )}

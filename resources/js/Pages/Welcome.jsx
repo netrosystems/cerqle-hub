@@ -539,7 +539,6 @@ function CtaBand({ landing, auth, canRegister }) {
 
 function Footer() {
     const { t } = useTranslation();
-    const year = new Date().getFullYear();
     const columns = [
         { title: t('landing_page_admin.footer_product', { defaultValue: 'Product' }), links: [
             { label: 'Products', href: '/products' },
@@ -568,7 +567,7 @@ function Footer() {
                 <div>
                     <img src="/cerqle-logo-white.svg" alt="Cerqle" className="h-7 w-auto" />
                     <p className="mt-4 max-w-xs text-sm leading-7 text-white/55">{t('landing.footer_tagline', { defaultValue: 'Omnichannel customer support, automated with AI.' })}</p>
-                    <p className="mt-8 text-xs text-white/40">&copy; {year} {t('nav.all_rights_reserved', { defaultValue: 'Cerqle.ai. All rights reserved.' })}</p>
+                    <p className="mt-8 text-xs text-white/40">&copy; 2026 Cerqle.ai (A Celimar Company). All rights reserved.</p>
                 </div>
                 {columns.map((column) => (
                     <div key={column.title}>
