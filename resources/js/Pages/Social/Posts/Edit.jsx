@@ -1,6 +1,7 @@
 import { Head, Link, useForm, usePage } from '@inertiajs/react';
 import ClientLayout from '@/Layouts/ClientLayout';
 import MediaUpload from '@/Components/MediaUpload';
+import YouTubeVideoSettings, { DEFAULT_YOUTUBE_OPTIONS } from '@/Components/YouTubeVideoSettings';
 import TimezonePicker from '@/Components/TimezonePicker';
 import { DatePicker } from '@/Components/ui';
 import { SocialBrandIcon } from '@/Components/BrandIcons';
@@ -9,11 +10,6 @@ import { useTranslation } from 'react-i18next';
 import { browserTz, tzLocalToUtcIso, formatInTz } from '@/Utils/datetime';
 
 const CHAR_LIMITS = { tiktok: 2200, linkedin: 3000, facebook: 63206, instagram: 2200, youtube: 5000 };
-
-const NETWORK_LABELS = {
-    facebook: 'Facebook', instagram: 'Instagram', linkedin: 'LinkedIn',
-    youtube: 'YouTube', tiktok: 'TikTok',
-};
 
 /** Convert a UTC datetime string to a `datetime-local` value in the given timezone. */
 function toLocalDatetime(utcStr, tz) {
@@ -47,6 +43,7 @@ export default function EditPost({ post, accounts }) {
         target_accounts: (post.target_accounts ?? []).map(String),
         scheduled_at:    toLocalDatetime(post.scheduled_at, postTz),
         timezone:        postTz,
+        youtube_options: { ...DEFAULT_YOUTUBE_OPTIONS, ...(post.youtube_options ?? {}) },
     });
 
     const toggleAccount = (id) => {
@@ -59,6 +56,9 @@ export default function EditPost({ post, accounts }) {
     const selectedNetworks = accounts
         .filter(a => data.target_accounts.includes(a.id.toString()))
         .map(a => a.network);
+    const requiresDirectVideo = selectedNetworks.some(network => ['youtube', 'tiktok'].includes(network));
+    const hasYoutube = selectedNetworks.includes('youtube');
+    const isYoutubeOnly = selectedNetworks.length === 1 && hasYoutube;
     const minCharLimit = selectedNetworks.length > 0
         ? Math.min(...selectedNetworks.map(n => CHAR_LIMITS[n] ?? 5000))
         : 5000;
@@ -153,21 +153,24 @@ export default function EditPost({ post, accounts }) {
                         {/* Title */}
                         <div>
                             <label className="block text-xs font-medium text-neutral-500 dark:text-neutral-400 mb-1">
-                                {t('social.title_label')} <span className="text-neutral-400">({t('common.optional')})</span>
+                                {hasYoutube ? t('social.youtube_video_title') : t('social.title_label')}{' '}
+                                {!hasYoutube && <span className="text-neutral-400">({t('common.optional')})</span>}
                             </label>
                             <input
                                 type="text"
                                 value={data.title}
                                 onChange={e => setData('title', e.target.value)}
                                 placeholder={t('social.edit_title_placeholder')}
+                                maxLength={hasYoutube ? 100 : 256}
                                 className="w-full rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm text-neutral-900 dark:text-neutral-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
                             />
+                            {errors.title && <p className="mt-1 text-xs text-red-500">{errors.title}</p>}
                         </div>
 
                         {/* Body */}
                         <div>
                             <div className="flex items-center justify-between mb-1">
-                                <label className="text-xs font-medium text-neutral-500 dark:text-neutral-400">{t('social.post_content')}</label>
+                                <label className="text-xs font-medium text-neutral-500 dark:text-neutral-400">{isYoutubeOnly ? t('social.youtube_description') : t('social.post_content')}</label>
                                 <span className={`text-xs ${data.body.length > minCharLimit ? 'text-red-500 font-medium' : 'text-neutral-400'}`}>
                                     {data.body.length} / {minCharLimit}
                                 </span>
@@ -176,7 +179,7 @@ export default function EditPost({ post, accounts }) {
                                 value={data.body}
                                 onChange={e => setData('body', e.target.value)}
                                 rows={8}
-                                placeholder={t('social.body_placeholder')}
+                                placeholder={isYoutubeOnly ? t('social.youtube_description_placeholder') : t('social.body_placeholder')}
                                 className="w-full rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm text-neutral-900 dark:text-neutral-100 resize-none focus:outline-none focus:ring-2 focus:ring-brand-500"
                             />
                             {errors.body && <p className="mt-1 text-xs text-red-500">{errors.body}</p>}
@@ -187,11 +190,11 @@ export default function EditPost({ post, accounts }) {
                     <div className="rounded-xl border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 p-5 space-y-3">
                         <div className="flex items-center justify-between">
                             <h3 className="text-sm font-semibold text-neutral-800 dark:text-neutral-200">{t('social.media')}</h3>
-                            <button type="button"
+                            {!hasYoutube && <button type="button"
                                 onClick={() => setData('media_urls', [...(data.media_urls ?? []), ''])}
                                 className="inline-flex items-center gap-1 text-xs font-medium text-brand-600 hover:text-brand-700">
                                 <Plus className="h-3.5 w-3.5" /> {t('social.add_media')}
-                            </button>
+                            </button>}
                         </div>
                         {(data.media_urls ?? []).map((url, i) => (
                             <div key={i} className="flex items-start gap-2">
@@ -203,9 +206,12 @@ export default function EditPost({ post, accounts }) {
                                             next[i] = v;
                                             setData('media_urls', next);
                                         }}
-                                        accept="image/*,video/*"
-                                        collection="social"
-                                        placeholder="https://cdn.example.com/image.jpg"
+                                        accept={requiresDirectVideo ? 'video/mp4,video/webm,video/quicktime' : 'image/*,video/*'}
+                                        collection={hasYoutube ? 'social-video' : 'social'}
+                                        maxSizeMb={hasYoutube ? 512 : undefined}
+                                        limitType={hasYoutube ? 'youtubeVideoMb' : 'mediaMb'}
+                                        placeholder={requiresDirectVideo ? 'https://cdn.example.com/video.mp4' : 'https://cdn.example.com/image.jpg'}
+                                        urlHelp={requiresDirectVideo ? t('social.direct_video_url_help') : null}
                                     />
                                 </div>
                                 <button type="button"
@@ -218,7 +224,21 @@ export default function EditPost({ post, accounts }) {
                         {(data.media_urls ?? []).filter(Boolean).length === 0 && (
                             <p className="text-xs text-neutral-400">{t('social.no_media_attached')}</p>
                         )}
+                        {requiresDirectVideo && (
+                            <div className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs leading-relaxed text-blue-800 dark:border-blue-800 dark:bg-blue-900/20 dark:text-blue-200">
+                                <strong>{t('social.video_media_how_to_title')}</strong> {t('social.direct_video_url_help')}
+                            </div>
+                        )}
+                        {errors.media_urls && <p className="text-xs text-red-500">{errors.media_urls}</p>}
                     </div>
+
+                    {hasYoutube && (
+                        <YouTubeVideoSettings
+                            value={data.youtube_options}
+                            onChange={options => setData('youtube_options', options)}
+                            errors={errors}
+                        />
+                    )}
 
                     {/* Schedule */}
                     <div className="rounded-xl border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 p-5 space-y-3">
@@ -256,7 +276,7 @@ export default function EditPost({ post, accounts }) {
                     <div className="flex items-center gap-3">
                         <button
                             type="submit"
-                            disabled={processing || !data.body.trim() || data.target_accounts.length === 0}
+                            disabled={processing || (isYoutubeOnly ? !data.title.trim() : !data.body.trim()) || data.target_accounts.length === 0}
                             className="inline-flex items-center gap-2 rounded-lg bg-brand-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-60 transition"
                         >
                             <Send className="h-4 w-4" />

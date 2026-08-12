@@ -14,6 +14,17 @@ use Tests\TestCase;
 
 class SocialOAuthProtocolTest extends TestCase
 {
+    public function test_youtube_authorization_requests_offline_access_and_playlist_scope(): void
+    {
+        $url = $this->managerFor('youtube')->getAuthUrl('youtube', 1, 'https://app.test/callback');
+        parse_str((string) parse_url($url, PHP_URL_QUERY), $query);
+
+        $this->assertSame('https://www.googleapis.com/auth/youtube', $query['scope']);
+        $this->assertSame('offline', $query['access_type']);
+        $this->assertSame('consent', $query['prompt']);
+        $this->assertSame('true', $query['include_granted_scopes']);
+    }
+
     public function test_google_code_exchange_is_form_encoded(): void
     {
         Http::fake(['oauth2.googleapis.com/token' => Http::response([

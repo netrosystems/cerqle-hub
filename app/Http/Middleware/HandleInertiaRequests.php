@@ -86,6 +86,7 @@ class HandleInertiaRequests extends Middleware
                 'entitlements' => ['developer_tools' => false],
                 'uploadLimits' => [
                     'mediaMb' => app(UploadLimitService::class)->mediaMaxMegabytes(),
+                    'youtubeVideoMb' => app(UploadLimitService::class)->youtubeVideoMaxMegabytes(),
                 ],
             ];
         }
@@ -391,6 +392,7 @@ class HandleInertiaRequests extends Middleware
             'metaAppId' => $this->metaAppId(),
             'uploadLimits' => [
                 'mediaMb' => app(UploadLimitService::class)->mediaMaxMegabytes(),
+                'youtubeVideoMb' => app(UploadLimitService::class)->youtubeVideoMaxMegabytes(),
             ],
             'entitlements' => [
                 'developer_tools' => app(AddonEntitlementService::class)->enabledFor(

@@ -3,6 +3,7 @@
 namespace App\Modules\Social\Services\OAuth;
 
 use App\Modules\Integrations\Services\CredentialResolver;
+use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Session;
 
@@ -45,8 +46,8 @@ class OAuthManager
     }
 
     /**
-     * @param array $storedState The already-validated session state data (passed in by the controller
-     *                           after it verified the `state` query param — avoids re-reading the session).
+     * @param  array  $storedState  The already-validated session state data (passed in by the controller
+     *                              after it verified the `state` query param — avoids re-reading the session).
      */
     public function exchangeCode(string $network, string $code, string $callbackUrl, array $storedState = []): array
     {
@@ -187,8 +188,12 @@ class OAuthManager
             'client_id' => $creds->clientId() ?? '',
             'redirect_uri' => $redirect,
             'response_type' => 'code',
-            'scope' => 'https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube.readonly',
+            // The full YouTube scope is required for optional playlist
+            // placement in addition to uploads, thumbnails, and channel reads.
+            'scope' => 'https://www.googleapis.com/auth/youtube',
             'access_type' => 'offline',
+            'include_granted_scopes' => 'true',
+            'prompt' => 'consent',
             'state' => $state,
         ]);
     }
@@ -205,7 +210,12 @@ class OAuthManager
         $this->assertSuccessful($response, 'Google token exchange');
         $res = $response->json();
 
-        return ['access_token' => $res['access_token'] ?? null, 'refresh_token' => $res['refresh_token'] ?? null, 'expires_in' => $res['expires_in'] ?? null];
+        return [
+            'access_token' => $res['access_token'] ?? null,
+            'refresh_token' => $res['refresh_token'] ?? null,
+            'expires_in' => $res['expires_in'] ?? null,
+            'scope' => $res['scope'] ?? null,
+        ];
     }
 
     // ── TikTok ──────────────────────────────────────────────────────────────
@@ -310,7 +320,7 @@ class OAuthManager
         return $state;
     }
 
-    private function assertSuccessful(\Illuminate\Http\Client\Response $response, string $operation): void
+    private function assertSuccessful(Response $response, string $operation): void
     {
         if ($response->successful()) {
             return;

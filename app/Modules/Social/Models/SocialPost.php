@@ -8,12 +8,13 @@ class SocialPost extends Model
 {
     protected $table = 'social_media_posts';
 
-    protected $fillable = ['workspace_id', 'title', 'body', 'media_urls', 'target_accounts', 'status', 'scheduled_at', 'timezone', 'published_at', 'provider_post_id', 'post_url', 'publish_results', 'ai_generated', 'ai_prompt'];
+    protected $fillable = ['workspace_id', 'title', 'body', 'media_urls', 'youtube_options', 'target_accounts', 'status', 'scheduled_at', 'timezone', 'published_at', 'provider_post_id', 'post_url', 'publish_results', 'ai_generated', 'ai_prompt'];
 
     protected function casts(): array
     {
         return [
             'media_urls' => 'array',
+            'youtube_options' => 'array',
             'target_accounts' => 'array',
             'publish_results' => 'array',
             'ai_generated' => 'boolean',

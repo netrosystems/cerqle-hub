@@ -115,11 +115,16 @@ function PostDetailModal({ post, accountMap, userTz, onClose }) {
                                 {Object.entries(post.publish_results).map(([accountId, result]) => {
                                     const acct = accountMap[accountId];
                                     return (
-                                        <div key={accountId} className="flex items-center justify-between text-xs rounded-lg bg-neutral-50 dark:bg-neutral-800 px-3 py-2">
-                                            <span className="text-neutral-600 dark:text-neutral-400">{acct?.name ?? t('social.account_number', { id: accountId })}</span>
-                                            <span className={result.status === 'published' ? 'text-green-600 font-medium' : 'text-red-500 font-medium'}>
-                                                {result.status === 'published' ? t('social.result_published') : t('social.result_failed')}
-                                            </span>
+                                        <div key={accountId} className="rounded-lg bg-neutral-50 px-3 py-2 text-xs dark:bg-neutral-800">
+                                            <div className="flex items-center justify-between">
+                                                <span className="text-neutral-600 dark:text-neutral-400">{acct?.name ?? t('social.account_number', { id: accountId })}</span>
+                                                <span className={result.status === 'published' ? 'text-green-600 font-medium' : 'text-red-500 font-medium'}>
+                                                    {result.status === 'published' ? t('social.result_published') : t('social.result_failed')}
+                                                </span>
+                                            </div>
+                                            {(result.warnings ?? []).map((warning, index) => (
+                                                <p key={index} className="mt-1 text-amber-600 dark:text-amber-400">{warning}</p>
+                                            ))}
                                         </div>
                                     );
                                 })}

@@ -49,12 +49,24 @@ class MediaController extends Controller
 
     public function store(Request $request): JsonResponse|RedirectResponse
     {
+        $collection = $request->string('collection')->toString();
+        $isYoutubeVideo = $collection === 'social-video';
+        $isYoutubeThumbnail = $collection === 'social-thumbnail';
+        $maxKilobytes = $isYoutubeVideo
+            ? $this->uploadLimitService->youtubeVideoMaxKilobytes()
+            : ($isYoutubeThumbnail ? 2048 : $this->uploadLimitService->mediaMaxKilobytes());
+        $allowedExtensions = $isYoutubeVideo
+            ? 'mp4,webm,mov'
+            : ($isYoutubeThumbnail
+                ? 'jpg,jpeg,png'
+                : 'jpg,jpeg,png,gif,webp,pdf,doc,docx,xls,xlsx,ppt,pptx,csv,txt,mp3,wav,ogg,m4a,mp4,webm,mov');
+
         $validated = $request->validate([
             // Allow-list of safe media types only. HTML/SVG/scripts are excluded
             // to prevent stored-XSS via files served from the app origin.
             'file' => [
-                'required', 'file', 'max:'.$this->uploadLimitService->mediaMaxKilobytes(),
-                'mimes:jpg,jpeg,png,gif,webp,pdf,doc,docx,xls,xlsx,ppt,pptx,csv,txt,mp3,wav,ogg,m4a,mp4,webm,mov',
+                'required', 'file', 'max:'.$maxKilobytes,
+                'mimes:'.$allowedExtensions,
             ],
             'collection' => ['nullable', 'string', 'max:64'],
         ]);

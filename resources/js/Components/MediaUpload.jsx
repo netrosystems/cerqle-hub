@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback } from 'react';
 import axios from 'axios';
-import { Upload, Link, X, Image, FileText, Check, Loader2, AlertCircle } from 'lucide-react';
+import { Upload, Link, X, FileText, Loader2, AlertCircle } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { usePage } from '@inertiajs/react';
 
@@ -12,8 +12,10 @@ import { usePage } from '@inertiajs/react';
  *   onChange     (fn)       — called with the new URL string
  *   accept       (string)   — file accept attribute (default: "image/*")
  *   maxSizeMb    (number)   — client-side size guard in MB (default: 50)
+ *   limitType    (string)   — uploadLimits key, e.g. "youtubeVideoMb"
  *   label        (string)   — optional label above the input
  *   placeholder  (string)   — URL input placeholder
+ *   urlHelp      (string)   — optional guidance shown below the URL field
  *   collection   (string)   — media collection name sent to the server
  *   disabled     (bool)
  *   className    (string)
@@ -23,8 +25,10 @@ export default function MediaUpload({
     onChange,
     accept = 'image/*',
     maxSizeMb,
+    limitType = 'mediaMb',
     label,
     placeholder = 'https://',
+    urlHelp,
     collection = 'default',
     disabled = false,
     className = '',
@@ -32,7 +36,7 @@ export default function MediaUpload({
     const { t } = useTranslation();
     const { props } = usePage();
     const configuredMaxSizeMb = Number(maxSizeMb ?? 50);
-    const serverMaxSizeMb = Number(props?.uploadLimits?.mediaMb ?? configuredMaxSizeMb);
+    const serverMaxSizeMb = Number(props?.uploadLimits?.[limitType] ?? configuredMaxSizeMb);
     const effectiveMaxSizeMb = Math.max(1, Math.min(configuredMaxSizeMb, serverMaxSizeMb));
     const [mode, setMode] = useState('upload'); // 'url' | 'upload'
     const [uploading, setUploading] = useState(false);
@@ -142,24 +146,27 @@ export default function MediaUpload({
 
             {/* URL mode */}
             {mode === 'url' && (
-                <div className="relative">
-                    <input
-                        type="url"
-                        value={value}
-                        onChange={(e) => { setError(null); onChange?.(e.target.value); }}
-                        placeholder={placeholder}
-                        disabled={disabled}
-                        className="w-full rounded-soft border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 text-sm px-3 py-2 pr-8 focus:outline-none focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500 disabled:opacity-50"
-                    />
-                    {value && (
-                        <button
-                            type="button"
-                            onClick={clear}
-                            className="absolute right-2 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-200"
-                        >
-                            <X className="h-4 w-4" />
-                        </button>
-                    )}
+                <div className="space-y-1.5">
+                    <div className="relative">
+                        <input
+                            type="url"
+                            value={value}
+                            onChange={(e) => { setError(null); onChange?.(e.target.value); }}
+                            placeholder={placeholder}
+                            disabled={disabled}
+                            className="w-full rounded-soft border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 text-sm px-3 py-2 pr-8 focus:outline-none focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500 disabled:opacity-50"
+                        />
+                        {value && (
+                            <button
+                                type="button"
+                                onClick={clear}
+                                className="absolute right-2 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-200"
+                            >
+                                <X className="h-4 w-4" />
+                            </button>
+                        )}
+                    </div>
+                    {urlHelp && <p className="text-xs leading-relaxed text-neutral-500 dark:text-neutral-400">{urlHelp}</p>}
                 </div>
             )}
 

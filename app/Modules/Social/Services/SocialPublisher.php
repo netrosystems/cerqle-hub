@@ -12,6 +12,7 @@ use App\Modules\Social\Services\Drivers\LinkedInDriver;
 use App\Modules\Social\Services\Drivers\SocialNetworkInterface;
 use App\Modules\Social\Services\Drivers\TikTokDriver;
 use App\Modules\Social\Services\Drivers\YoutubeDriver;
+use Illuminate\Support\Facades\Log;
 
 class SocialPublisher
 {
@@ -39,6 +40,7 @@ class SocialPublisher
             ->get();
 
         $results = [];
+        $publishedUrls = [];
 
         foreach ($accounts as $account) {
             $link = SocialPostAccount::firstOrCreate(
@@ -49,6 +51,7 @@ class SocialPublisher
             // On job retry, skip accounts already successfully published.
             if ($link->status === 'published') {
                 $results[$account->id] = ['status' => 'published', 'post_id' => $link->platform_post_id];
+
                 continue;
             }
 
@@ -64,9 +67,15 @@ class SocialPublisher
                 $platformId = $driver->publish($account, $post->toArray());
                 $link->update(['status' => 'published', 'platform_post_id' => $platformId, 'published_at' => now()]);
                 $results[$account->id] = ['status' => 'published', 'post_id' => $platformId];
+                if ($driver instanceof YoutubeDriver && $driver->warnings() !== []) {
+                    $results[$account->id]['warnings'] = $driver->warnings();
+                }
+                if ($account->network === 'youtube') {
+                    $publishedUrls[] = 'https://www.youtube.com/watch?v='.$platformId;
+                }
             } catch (\Throwable $e) {
                 // Store a sanitized message; full details go to the log.
-                \Illuminate\Support\Facades\Log::error('Social publish failed', [
+                Log::error('Social publish failed', [
                     'post_id' => $post->id,
                     'account_id' => $account->id,
                     'network' => $account->network,
@@ -89,6 +98,10 @@ class SocialPublisher
             'status' => $finalStatus,
             'published_at' => $failedCount === 0 && ! $allFailed ? now() : null,
             'publish_results' => $results,
+            'provider_post_id' => count($results) === 1 && $succeededCount === 1
+                ? (string) data_get(collect($results)->first(), 'post_id')
+                : null,
+            'post_url' => count($publishedUrls) === 1 ? $publishedUrls[0] : null,
         ]);
 
         if (! $allFailed && $failedCount === 0) {

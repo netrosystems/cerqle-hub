@@ -7,9 +7,11 @@ use App\Modules\AI\Services\LlmGateway;
 use App\Modules\Social\Jobs\PublishSocialPostJob;
 use App\Modules\Social\Models\SocialAccount;
 use App\Modules\Social\Models\SocialPost;
+use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -19,6 +21,89 @@ class SocialPostController extends Controller
     private function workspaceId(Request $request): int
     {
         return (int) ($request->user()->current_workspace_id ?? $request->user()->workspace_id);
+    }
+
+    private function validateDirectVideoUrls(Collection $selectedNetworks, array $mediaUrls): void
+    {
+        if ($selectedNetworks->intersect(['youtube', 'tiktok'])->isEmpty()) {
+            return;
+        }
+
+        $blockedHosts = ['youtube.com', 'youtu.be', 'tiktok.com', 'drive.google.com', 'docs.google.com'];
+
+        foreach ($mediaUrls as $index => $url) {
+            $host = strtolower((string) parse_url($url, PHP_URL_HOST));
+            $isWebPage = collect($blockedHosts)->contains(
+                fn (string $blockedHost) => $host === $blockedHost || str_ends_with($host, '.'.$blockedHost)
+            );
+
+            if ($isWebPage) {
+                throw ValidationException::withMessages([
+                    "media_urls.{$index}" => [
+                        'YouTube and TikTok need the actual video file. Choose Upload, or paste a public HTTPS URL that downloads the video directly (for example, https://cdn.example.com/video.mp4). YouTube watch, Shorts, TikTok, and cloud-drive preview links cannot be published.',
+                    ],
+                    'media_urls' => [
+                        'This is a webpage link, not a direct video file. Choose Upload or use a direct public video-file URL.',
+                    ],
+                ]);
+            }
+        }
+    }
+
+    private function validateYoutubeOptions(Collection $selectedNetworks, array $validated, array $mediaUrls): void
+    {
+        if (! $selectedNetworks->contains('youtube')) {
+            return;
+        }
+
+        $errors = [];
+        $title = trim((string) ($validated['title'] ?? ''));
+
+        if ($title === '') {
+            $errors['title'] = ['A YouTube video title is required.'];
+        } elseif (mb_strlen($title) > 100) {
+            $errors['title'] = ['YouTube video titles cannot exceed 100 characters.'];
+        }
+
+        if (count($mediaUrls) !== 1) {
+            $errors['media_urls'] = ['YouTube requires exactly one video file. Remove extra media items.'];
+        }
+
+        $tags = array_map(fn ($tag) => trim((string) $tag), $validated['youtube_options']['tags'] ?? []);
+        if (mb_strlen(implode(',', $tags)) > 500) {
+            $errors['youtube_options.tags'] = ['YouTube tags cannot exceed 500 total characters.'];
+        }
+
+        if ($errors !== []) {
+            throw ValidationException::withMessages($errors);
+        }
+    }
+
+    private function validateContentRequirements(Collection $selectedNetworks, array $validated): void
+    {
+        $isYoutubeOnly = $selectedNetworks->count() === 1 && $selectedNetworks->contains('youtube');
+        if (! $isYoutubeOnly && trim((string) ($validated['body'] ?? '')) === '') {
+            throw ValidationException::withMessages([
+                'body' => ['Post content is required for the selected social networks.'],
+            ]);
+        }
+    }
+
+    private function youtubeValidationRules(): array
+    {
+        return [
+            'youtube_options' => ['nullable', 'array'],
+            'youtube_options.thumbnail_url' => ['nullable', 'url', 'regex:/^https:\/\//i', 'max:2048'],
+            'youtube_options.privacy_status' => ['nullable', 'in:private,unlisted,public'],
+            'youtube_options.tags' => ['nullable', 'array', 'max:50'],
+            'youtube_options.tags.*' => ['string', 'max:60'],
+            'youtube_options.category_id' => ['nullable', 'integer', 'between:1,44'],
+            'youtube_options.playlist_id' => ['nullable', 'string', 'max:128'],
+            'youtube_options.made_for_kids' => ['nullable', 'boolean'],
+            'youtube_options.contains_synthetic_media' => ['nullable', 'boolean'],
+            'youtube_options.notify_subscribers' => ['nullable', 'boolean'],
+            'youtube_options.default_language' => ['nullable', 'string', 'max:16', 'regex:/^[A-Za-z0-9-]+$/'],
+        ];
     }
 
     public function index(Request $request): Response
@@ -43,7 +128,7 @@ class SocialPostController extends Controller
                 $q->where(function ($inner) use ($networkAccountIds) {
                     foreach ($networkAccountIds as $aid) {
                         $inner->orWhereJsonContains('target_accounts', $aid)
-                              ->orWhereJsonContains('target_accounts', (int) $aid);
+                            ->orWhereJsonContains('target_accounts', (int) $aid);
                     }
                 });
             })
@@ -52,9 +137,9 @@ class SocialPostController extends Controller
         $posts = $query->paginate(20)->withQueryString();
 
         return Inertia::render('Social/Posts/Index', [
-            'posts'    => $posts,
+            'posts' => $posts,
             'accounts' => $accounts,
-            'filters'  => ['status' => $status, 'network' => $network],
+            'filters' => ['status' => $status, 'network' => $network],
         ]);
     }
 
@@ -68,13 +153,13 @@ class SocialPostController extends Controller
 
     public function calendar(Request $request): Response
     {
-        $wid  = $this->workspaceId($request);
+        $wid = $this->workspaceId($request);
         $month = $request->query('month', now()->format('Y-m'));
         abort_unless(preg_match('/^\d{4}-(0[1-9]|1[0-2])$/', $month), 422, 'Invalid month format.');
 
-        $filterStatus    = $request->query('status');
+        $filterStatus = $request->query('status');
         $filterAccountId = $request->query('account_id');
-        $filterNetwork   = $request->query('network');
+        $filterNetwork = $request->query('network');
 
         $userTz = $request->user()?->timezone ?? 'Asia/Dhaka';
         try {
@@ -84,8 +169,8 @@ class SocialPostController extends Controller
         }
 
         [$year, $mon] = explode('-', $month);
-        $start = \Carbon\Carbon::createFromDate((int) $year, (int) $mon, 1, $tz)->startOfMonth()->utc();
-        $end   = \Carbon\Carbon::createFromDate((int) $year, (int) $mon, 1, $tz)->endOfMonth()->utc();
+        $start = Carbon::createFromDate((int) $year, (int) $mon, 1, $tz)->startOfMonth()->utc();
+        $end = Carbon::createFromDate((int) $year, (int) $mon, 1, $tz)->endOfMonth()->utc();
 
         $accounts = SocialAccount::where('workspace_id', $wid)
             ->where('active', true)
@@ -103,27 +188,27 @@ class SocialPostController extends Controller
             ->when($filterAccountId, function ($q) use ($filterAccountId) {
                 $q->where(function ($inner) use ($filterAccountId) {
                     $inner->orWhereJsonContains('target_accounts', $filterAccountId)
-                          ->orWhereJsonContains('target_accounts', (int) $filterAccountId);
+                        ->orWhereJsonContains('target_accounts', (int) $filterAccountId);
                 });
             })
             ->when($filterNetwork && $networkAccountIds->isNotEmpty(), function ($q) use ($networkAccountIds) {
                 $q->where(function ($inner) use ($networkAccountIds) {
                     foreach ($networkAccountIds as $aid) {
                         $inner->orWhereJsonContains('target_accounts', $aid)
-                              ->orWhereJsonContains('target_accounts', (int) $aid);
+                            ->orWhereJsonContains('target_accounts', (int) $aid);
                     }
                 });
             })
             ->get(['id', 'title', 'status', 'scheduled_at', 'timezone', 'target_accounts']);
 
         return Inertia::render('Social/Calendar', [
-            'posts'    => $posts,
-            'month'    => $month,
+            'posts' => $posts,
+            'month' => $month,
             'accounts' => $accounts,
-            'filters'  => [
-                'status'     => $filterStatus,
+            'filters' => [
+                'status' => $filterStatus,
                 'account_id' => $filterAccountId,
-                'network'    => $filterNetwork,
+                'network' => $filterNetwork,
             ],
         ]);
     }
@@ -131,33 +216,32 @@ class SocialPostController extends Controller
     public function store(Request $request): JsonResponse|RedirectResponse
     {
         $wid = $this->workspaceId($request);
-        $validated = $request->validate([
-            'title'            => ['nullable', 'string', 'max:256'],
-            'body'             => ['required', 'string', 'max:5000'],
-            'media_urls'       => ['nullable', 'array'],
-            'media_urls.*'     => ['nullable', 'url', 'regex:/^https:\/\//i', 'max:2048'],
-            'target_accounts'  => ['required', 'array', 'min:1'],
-            'target_accounts.*'=> ['integer'],
-            'scheduled_at'     => ['nullable', 'date'],
-            'timezone'         => ['nullable', 'string', 'max:64'],
-        ]);
+        $validated = $request->validate(array_merge([
+            'title' => ['nullable', 'string', 'max:256'],
+            'body' => ['nullable', 'string', 'max:5000'],
+            'media_urls' => ['nullable', 'array'],
+            'media_urls.*' => ['nullable', 'url', 'regex:/^https:\/\//i', 'max:2048'],
+            'target_accounts' => ['required', 'array', 'min:1'],
+            'target_accounts.*' => ['integer'],
+            'scheduled_at' => ['nullable', 'date'],
+            'timezone' => ['nullable', 'string', 'max:64'],
+        ], $this->youtubeValidationRules()));
 
         // Ensure every requested account belongs to this workspace (cross-workspace IDOR guard).
         $requestedIds = collect($validated['target_accounts'])->map(fn ($id) => (int) $id);
-        $ownedCount = SocialAccount::where('workspace_id', $wid)
+        $accounts = SocialAccount::where('workspace_id', $wid)
             ->whereIn('id', $requestedIds)
-            ->count();
-        if ($ownedCount !== $requestedIds->count()) {
+            ->get(['id', 'network']);
+        if ($accounts->count() !== $requestedIds->count()) {
             throw ValidationException::withMessages([
                 'target_accounts' => ['One or more selected accounts do not belong to your workspace.'],
             ]);
         }
 
-        $selectedNetworks = SocialAccount::where('workspace_id', $wid)
-            ->whereIn('id', $requestedIds)
-            ->pluck('network')
-            ->unique();
-        $mediaUrls = $validated['media_urls'] ?? [];
+        $selectedNetworks = $accounts->pluck('network')->unique();
+        $this->validateContentRequirements($selectedNetworks, $validated);
+        $mediaUrls = array_values(array_filter($validated['media_urls'] ?? [], fn ($value) => $value !== null && $value !== ''));
+        $validated['media_urls'] = $mediaUrls;
         if ($selectedNetworks->contains('instagram') && count($mediaUrls) === 0) {
             throw ValidationException::withMessages([
                 'media_urls' => ['Instagram publishing requires at least one publicly reachable image URL.'],
@@ -168,6 +252,13 @@ class SocialPostController extends Controller
                 'media_urls' => ['YouTube and TikTok publishing require a publicly reachable video URL.'],
             ]);
         }
+        $this->validateDirectVideoUrls($selectedNetworks, $mediaUrls);
+        $this->validateYoutubeOptions($selectedNetworks, $validated, $mediaUrls);
+        if (! empty($validated['youtube_options']['playlist_id']) && $accounts->where('network', 'youtube')->count() !== 1) {
+            throw ValidationException::withMessages([
+                'youtube_options.playlist_id' => ['Playlist placement requires exactly one selected YouTube channel.'],
+            ]);
+        }
 
         // scheduled_at arrives as UTC ISO from the frontend (already converted).
         // Allow a 30-second buffer to account for form submission latency.
@@ -176,9 +267,6 @@ class SocialPostController extends Controller
                 'scheduled_at' => ['The scheduled time must be in the future.'],
             ]);
         }
-
-        // Strip empty media URL entries before persisting.
-        $validated['media_urls'] = array_values(array_filter($validated['media_urls'] ?? [], fn ($v) => $v !== null && $v !== ''));
 
         $post = SocialPost::create(array_merge($validated, [
             'workspace_id' => $wid,
@@ -206,7 +294,7 @@ class SocialPostController extends Controller
         $accounts = SocialAccount::where('workspace_id', $wid)->where('active', true)->get(['id', 'network', 'name', 'picture_url']);
 
         return Inertia::render('Social/Posts/Edit', [
-            'post'     => $post,
+            'post' => $post,
             'accounts' => $accounts,
         ]);
     }
@@ -216,32 +304,31 @@ class SocialPostController extends Controller
         abort_unless((int) $post->workspace_id === $this->workspaceId($request), 403);
         abort_if(in_array($post->status, ['publishing', 'published']), 403, 'Cannot edit a post that is already published or being published.');
 
-        $validated = $request->validate([
-            'title'            => ['nullable', 'string', 'max:256'],
-            'body'             => ['required', 'string', 'max:5000'],
-            'media_urls'       => ['nullable', 'array'],
-            'media_urls.*'     => ['nullable', 'url', 'regex:/^https:\/\//i', 'max:2048'],
-            'target_accounts'  => ['required', 'array', 'min:1'],
-            'target_accounts.*'=> ['integer'],
-            'scheduled_at'     => ['nullable', 'date'],
-            'timezone'         => ['nullable', 'string', 'max:64'],
-        ]);
+        $validated = $request->validate(array_merge([
+            'title' => ['nullable', 'string', 'max:256'],
+            'body' => ['nullable', 'string', 'max:5000'],
+            'media_urls' => ['nullable', 'array'],
+            'media_urls.*' => ['nullable', 'url', 'regex:/^https:\/\//i', 'max:2048'],
+            'target_accounts' => ['required', 'array', 'min:1'],
+            'target_accounts.*' => ['integer'],
+            'scheduled_at' => ['nullable', 'date'],
+            'timezone' => ['nullable', 'string', 'max:64'],
+        ], $this->youtubeValidationRules()));
 
         $requestedIds = collect($validated['target_accounts'])->map(fn ($id) => (int) $id);
-        $ownedCount = SocialAccount::where('workspace_id', $this->workspaceId($request))
+        $accounts = SocialAccount::where('workspace_id', $this->workspaceId($request))
             ->whereIn('id', $requestedIds)
-            ->count();
-        if ($ownedCount !== $requestedIds->count()) {
+            ->get(['id', 'network']);
+        if ($accounts->count() !== $requestedIds->count()) {
             throw ValidationException::withMessages([
                 'target_accounts' => ['One or more selected accounts do not belong to your workspace.'],
             ]);
         }
 
-        $selectedNetworks = SocialAccount::where('workspace_id', $this->workspaceId($request))
-            ->whereIn('id', $requestedIds)
-            ->pluck('network')
-            ->unique();
-        $mediaUrls = $validated['media_urls'] ?? [];
+        $selectedNetworks = $accounts->pluck('network')->unique();
+        $this->validateContentRequirements($selectedNetworks, $validated);
+        $mediaUrls = array_values(array_filter($validated['media_urls'] ?? [], fn ($value) => $value !== null && $value !== ''));
+        $validated['media_urls'] = $mediaUrls;
         if ($selectedNetworks->contains('instagram') && count($mediaUrls) === 0) {
             throw ValidationException::withMessages([
                 'media_urls' => ['Instagram publishing requires at least one publicly reachable image URL.'],
@@ -252,6 +339,13 @@ class SocialPostController extends Controller
                 'media_urls' => ['YouTube and TikTok publishing require a publicly reachable video URL.'],
             ]);
         }
+        $this->validateDirectVideoUrls($selectedNetworks, $mediaUrls);
+        $this->validateYoutubeOptions($selectedNetworks, $validated, $mediaUrls);
+        if (! empty($validated['youtube_options']['playlist_id']) && $accounts->where('network', 'youtube')->count() !== 1) {
+            throw ValidationException::withMessages([
+                'youtube_options.playlist_id' => ['Playlist placement requires exactly one selected YouTube channel.'],
+            ]);
+        }
 
         if (! empty($validated['scheduled_at']) && now()->subSeconds(30)->gt($validated['scheduled_at'])) {
             throw ValidationException::withMessages([
@@ -259,7 +353,6 @@ class SocialPostController extends Controller
             ]);
         }
 
-        $validated['media_urls'] = array_values(array_filter($validated['media_urls'] ?? [], fn ($v) => $v !== null && $v !== ''));
         $validated['status'] = $validated['scheduled_at'] ? 'scheduled' : 'draft';
 
         $post->update($validated);
@@ -303,15 +396,15 @@ class SocialPostController extends Controller
         $wid = $this->workspaceId($request);
 
         $validated = $request->validate([
-            'topic'             => ['required', 'string', 'max:500'],
-            'campaign_goal'     => ['nullable', 'string', 'max:200'],
-            'tone'              => ['nullable', 'string', 'in:professional,casual,humorous,inspirational,educational'],
-            'post_count'        => ['nullable', 'integer', 'min:3', 'max:14'],
-            'start_date'        => ['required', 'date', 'after_or_equal:today'],
-            'end_date'          => ['required', 'date', 'after:start_date'],
-            'target_accounts'   => ['required', 'array', 'min:1'],
+            'topic' => ['required', 'string', 'max:500'],
+            'campaign_goal' => ['nullable', 'string', 'max:200'],
+            'tone' => ['nullable', 'string', 'in:professional,casual,humorous,inspirational,educational'],
+            'post_count' => ['nullable', 'integer', 'min:3', 'max:14'],
+            'start_date' => ['required', 'date', 'after_or_equal:today'],
+            'end_date' => ['required', 'date', 'after:start_date'],
+            'target_accounts' => ['required', 'array', 'min:1'],
             'target_accounts.*' => ['integer'],
-            'timezone'          => ['nullable', 'string', 'max:64'],
+            'timezone' => ['nullable', 'string', 'max:64'],
         ]);
 
         $requestedIds = collect($validated['target_accounts'])->map(fn ($id) => (int) $id);
@@ -324,19 +417,25 @@ class SocialPostController extends Controller
             return response()->json(['errors' => ['target_accounts' => ['One or more selected accounts are invalid.']]], 403);
         }
 
-        $networks  = $accounts->pluck('network')->unique()->values()->all();
+        if ($accounts->contains('network', 'youtube')) {
+            throw ValidationException::withMessages([
+                'target_accounts' => ['The AI planner creates text-only drafts and cannot supply a YouTube video. Use Post Composer to upload and automate a YouTube video.'],
+            ]);
+        }
+
+        $networks = $accounts->pluck('network')->unique()->values()->all();
         $postCount = $validated['post_count'] ?? 7;
-        $tone      = $validated['tone'] ?? 'professional';
-        $goal      = $validated['campaign_goal'] ?? 'increase engagement and brand awareness';
+        $tone = $validated['tone'] ?? 'professional';
+        $goal = $validated['campaign_goal'] ?? 'increase engagement and brand awareness';
 
         try {
-            $gateway  = app(LlmGateway::class);
+            $gateway = app(LlmGateway::class);
             $messages = $this->buildPlanMessages(
                 $validated['topic'], $networks, $postCount, $tone, $goal,
                 $validated['start_date'], $validated['end_date'], $validated['timezone'] ?? 'UTC'
             );
             $response = $gateway->chat($wid, $messages, ['temperature' => 0.7, 'max_tokens' => 4096]);
-            $posts    = $this->parsePlanResponse($response->content, $postCount);
+            $posts = $this->parsePlanResponse($response->content, $postCount);
 
             return response()->json(['posts' => $posts, 'accounts' => $accounts]);
         } catch (\Throwable $e) {
@@ -346,8 +445,8 @@ class SocialPostController extends Controller
 
     private function buildPlanMessages(
         string $topic,
-        array  $networks,
-        int    $count,
+        array $networks,
+        int $count,
         string $tone,
         string $goal,
         string $startDate,
@@ -355,8 +454,8 @@ class SocialPostController extends Controller
         string $timezone
     ): array {
         $networksStr = implode(', ', $networks);
-        $limits      = ['tiktok' => 2200, 'linkedin' => 3000, 'facebook' => 63206, 'instagram' => 2200, 'youtube' => 5000];
-        $limitLines  = collect($networks)->map(fn ($n) => "- {$n}: " . ($limits[$n] ?? 5000) . ' characters')->implode("\n");
+        $limits = ['tiktok' => 2200, 'linkedin' => 3000, 'facebook' => 63206, 'instagram' => 2200, 'youtube' => 5000];
+        $limitLines = collect($networks)->map(fn ($n) => "- {$n}: ".($limits[$n] ?? 5000).' characters')->implode("\n");
 
         $system = <<<SYSTEM
 You are an expert social media strategist. Generate a content calendar as JSON.
@@ -404,10 +503,10 @@ SYSTEM;
             }
 
             return [
-                'title'          => $post['title'] ?? '',
-                'body'           => $post['body'],
+                'title' => $post['title'] ?? '',
+                'body' => $post['body'],
                 'suggested_time' => $post['suggested_time'] ?? null,
-                'rationale'      => $post['rationale'] ?? '',
+                'rationale' => $post['rationale'] ?? '',
                 'platform_notes' => $post['platform_notes'] ?? null,
             ];
         })->all();
@@ -418,14 +517,14 @@ SYSTEM;
         $wid = $this->workspaceId($request);
 
         $validated = $request->validate([
-            'posts'                     => ['required', 'array', 'min:1', 'max:14'],
-            'posts.*.title'             => ['nullable', 'string', 'max:256'],
-            'posts.*.body'              => ['required', 'string', 'max:5000'],
-            'posts.*.scheduled_at'      => ['nullable', 'date'],
-            'posts.*.timezone'          => ['nullable', 'string', 'max:64'],
-            'posts.*.target_accounts'   => ['required', 'array', 'min:1'],
+            'posts' => ['required', 'array', 'min:1', 'max:14'],
+            'posts.*.title' => ['nullable', 'string', 'max:256'],
+            'posts.*.body' => ['required', 'string', 'max:5000'],
+            'posts.*.scheduled_at' => ['nullable', 'date'],
+            'posts.*.timezone' => ['nullable', 'string', 'max:64'],
+            'posts.*.target_accounts' => ['required', 'array', 'min:1'],
             'posts.*.target_accounts.*' => ['integer'],
-            'posts.*.ai_prompt'         => ['nullable', 'string', 'max:1000'],
+            'posts.*.ai_prompt' => ['nullable', 'string', 'max:1000'],
         ]);
 
         $allIds = collect($validated['posts'])
@@ -436,6 +535,16 @@ SYSTEM;
         $ownedCount = SocialAccount::where('workspace_id', $wid)->whereIn('id', $allIds)->count();
         if ($ownedCount !== $allIds->count()) {
             return response()->json(['errors' => ['posts' => ['One or more accounts do not belong to your workspace.']]], 403);
+        }
+
+        $containsYoutube = SocialAccount::where('workspace_id', $wid)
+            ->whereIn('id', $allIds)
+            ->where('network', 'youtube')
+            ->exists();
+        if ($containsYoutube) {
+            throw ValidationException::withMessages([
+                'posts' => ['Bulk AI drafts do not include video files. Use Post Composer for YouTube uploads.'],
+            ]);
         }
 
         $now = now();
@@ -450,16 +559,16 @@ SYSTEM;
             foreach ($validated['posts'] as $postData) {
                 $scheduledAt = $postData['scheduled_at'] ?? null;
                 $post = SocialPost::create([
-                    'workspace_id'    => $wid,
-                    'title'           => $postData['title'] ?? null,
-                    'body'            => $postData['body'],
-                    'media_urls'      => [],
+                    'workspace_id' => $wid,
+                    'title' => $postData['title'] ?? null,
+                    'body' => $postData['body'],
+                    'media_urls' => [],
                     'target_accounts' => array_map('intval', $postData['target_accounts']),
-                    'scheduled_at'    => $scheduledAt,
-                    'timezone'        => $postData['timezone'] ?? 'UTC',
-                    'status'          => $scheduledAt ? 'scheduled' : 'draft',
-                    'ai_generated'    => true,
-                    'ai_prompt'       => $postData['ai_prompt'] ?? null,
+                    'scheduled_at' => $scheduledAt,
+                    'timezone' => $postData['timezone'] ?? 'UTC',
+                    'status' => $scheduledAt ? 'scheduled' : 'draft',
+                    'ai_generated' => true,
+                    'ai_prompt' => $postData['ai_prompt'] ?? null,
                 ]);
                 $created[] = $post->id;
             }

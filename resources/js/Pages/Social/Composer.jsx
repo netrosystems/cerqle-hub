@@ -5,19 +5,12 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { SocialBrandIcon } from '@/Components/BrandIcons';
 import MediaUpload from '@/Components/MediaUpload';
+import YouTubeVideoSettings, { DEFAULT_YOUTUBE_OPTIONS } from '@/Components/YouTubeVideoSettings';
 import TimezonePicker from '@/Components/TimezonePicker';
 import { DatePicker } from '@/Components/ui';
 import { browserTz, tzLocalToUtcIso, formatInTz } from '@/Utils/datetime';
 
 const CHAR_LIMITS = { tiktok: 2200, linkedin: 3000, facebook: 63206, instagram: 2200, youtube: 5000 };
-
-const NETWORK_COLORS = {
-    facebook:  '#1877F2',
-    instagram: '#E1306C',
-    linkedin:  '#0A66C2',
-    tiktok:    '#000000',
-    youtube:   '#FF0000',
-};
 
 const NETWORK_LABELS = {
     facebook: 'Facebook', instagram: 'Instagram',
@@ -149,12 +142,12 @@ function TikTokPreview({ body, mediaUrls, accountName }) {
     );
 }
 
-function YouTubePreview({ body, mediaUrls, accountName }) {
+function YouTubePreview({ accountName, title, youtubeOptions }) {
     const { t } = useTranslation();
     return (
         <div className="rounded-2xl border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 text-sm font-[system-ui] overflow-hidden">
-            {mediaUrls?.[0]
-                ? <img src={mediaUrls[0]} alt="" className="w-full object-cover max-h-44" />
+            {youtubeOptions?.thumbnail_url
+                ? <img src={youtubeOptions.thumbnail_url} alt="" className="w-full object-cover aspect-video" />
                 : <div className="w-full h-36 bg-neutral-200 dark:bg-neutral-800 flex items-center justify-center">
                     <div className="h-12 w-12 rounded-full bg-red-600 flex items-center justify-center">
                         <div className="border-t-[8px] border-b-[8px] border-l-[14px] border-t-transparent border-b-transparent border-l-white ml-1" />
@@ -163,7 +156,7 @@ function YouTubePreview({ body, mediaUrls, accountName }) {
             }
             <div className="p-3">
                 <p className="font-semibold text-neutral-900 dark:text-neutral-100 line-clamp-2 leading-snug">
-                    {body?.split('\n')[0] || <span className="text-neutral-400 italic">{t('social.preview_video_title_placeholder')}</span>}
+                    {title || <span className="text-neutral-400 italic">{t('social.preview_video_title_placeholder')}</span>}
                 </p>
                 <p className="text-xs text-neutral-500 mt-1">{accountName ?? t('social.preview_your_channel')} · {t('social.preview_youtube_meta')}</p>
             </div>
@@ -194,6 +187,7 @@ export default function SocialComposer({ accounts }) {
         target_accounts: [],
         scheduled_at:    '',
         timezone:        userTz,
+        youtube_options: { ...DEFAULT_YOUTUBE_OPTIONS },
     });
 
     const [aiLoading, setAiLoading] = useState(false);
@@ -202,6 +196,9 @@ export default function SocialComposer({ accounts }) {
 
     const selectedAccounts = accounts.filter(a => data.target_accounts.includes(a.id.toString()));
     const selectedNetworks  = selectedAccounts.map(a => a.network);
+    const requiresDirectVideo = selectedNetworks.some(network => ['youtube', 'tiktok'].includes(network));
+    const hasYoutube = selectedNetworks.includes('youtube');
+    const isYoutubeOnly = selectedNetworks.length === 1 && hasYoutube;
     const minCharLimit = selectedNetworks.length > 0 ? Math.min(...selectedNetworks.map(n => CHAR_LIMITS[n] ?? 5000)) : 5000;
 
     const toggleAccount = (id) => {
@@ -302,14 +299,15 @@ export default function SocialComposer({ accounts }) {
                         {/* Title */}
                         <div>
                             <label className="text-xs font-medium text-neutral-500 dark:text-neutral-400 block mb-1">
-                                {t('social.title_label')} <span className="text-neutral-400 font-normal">({t('common.optional')})</span>
+                                {hasYoutube ? t('social.youtube_video_title') : t('social.title_label')}{' '}
+                                {!hasYoutube && <span className="text-neutral-400 font-normal">({t('common.optional')})</span>}
                             </label>
                             <input
                                 type="text"
                                 value={data.title}
                                 onChange={e => setData('title', e.target.value)}
                                 placeholder={t('social.title_placeholder')}
-                                maxLength={256}
+                                maxLength={hasYoutube ? 100 : 256}
                                 className="w-full rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm text-neutral-900 dark:text-neutral-100 placeholder-neutral-400 focus:outline-none focus:ring-2 focus:ring-brand-500"
                             />
                             {errors.title && <p className="mt-1 text-xs text-red-500">{errors.title}</p>}
@@ -318,7 +316,7 @@ export default function SocialComposer({ accounts }) {
                         {/* Body */}
                         <div>
                             <div className="flex items-center justify-between mb-1">
-                                <label className="text-xs font-medium text-neutral-500 dark:text-neutral-400">{t('social.post_content')}</label>
+                                <label className="text-xs font-medium text-neutral-500 dark:text-neutral-400">{isYoutubeOnly ? t('social.youtube_description') : t('social.post_content')}</label>
                                 <span className={`text-xs ${data.body.length > minCharLimit ? 'text-red-500' : 'text-neutral-400'}`}>
                                     {data.body.length} / {minCharLimit}
                                 </span>
@@ -327,7 +325,7 @@ export default function SocialComposer({ accounts }) {
                                 value={data.body}
                                 onChange={e => setData('body', e.target.value)}
                                 rows={6}
-                                placeholder={t('social.body_placeholder')}
+                                placeholder={isYoutubeOnly ? t('social.youtube_description_placeholder') : t('social.body_placeholder')}
                                 className="w-full rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-brand-500"
                             />
                             {errors.body && <p className="mt-1 text-xs text-red-500">{errors.body}</p>}
@@ -336,13 +334,13 @@ export default function SocialComposer({ accounts }) {
                         <div className="space-y-2">
                             <div className="flex items-center justify-between">
                                 <label className="text-xs font-medium text-neutral-500 dark:text-neutral-400">{t('social.media')}</label>
-                                <button
+                                {!hasYoutube && <button
                                     type="button"
                                     onClick={() => setData('media_urls', [...(data.media_urls ?? []), ''])}
                                     className="flex items-center gap-1 text-xs text-brand-600 hover:text-brand-700 font-medium"
                                 >
                                     <Plus className="h-3.5 w-3.5" /> {t('social.add_media')}
-                                </button>
+                                </button>}
                             </div>
                             {(data.media_urls ?? []).map((url, i) => (
                                 <div key={i} className="flex items-start gap-2">
@@ -354,9 +352,12 @@ export default function SocialComposer({ accounts }) {
                                                 next[i] = v;
                                                 setData('media_urls', next);
                                             }}
-                                            accept="image/*,video/*"
-                                            collection="social"
-                                            placeholder="https://cdn.example.com/image.jpg"
+                                            accept={requiresDirectVideo ? 'video/mp4,video/webm,video/quicktime' : 'image/*,video/*'}
+                                            collection={hasYoutube ? 'social-video' : 'social'}
+                                            maxSizeMb={hasYoutube ? 512 : undefined}
+                                            limitType={hasYoutube ? 'youtubeVideoMb' : 'mediaMb'}
+                                            placeholder={requiresDirectVideo ? 'https://cdn.example.com/video.mp4' : 'https://cdn.example.com/image.jpg'}
+                                            urlHelp={requiresDirectVideo ? t('social.direct_video_url_help') : null}
                                         />
                                     </div>
                                     <button
@@ -371,7 +372,21 @@ export default function SocialComposer({ accounts }) {
                             {(data.media_urls ?? []).length === 0 && (
                                 <p className="text-xs text-neutral-400">{t('social.no_media_hint')}</p>
                             )}
+                            {requiresDirectVideo && (
+                                <div className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs leading-relaxed text-blue-800 dark:border-blue-800 dark:bg-blue-900/20 dark:text-blue-200">
+                                    <strong>{t('social.video_media_how_to_title')}</strong> {t('social.direct_video_url_help')}
+                                </div>
+                            )}
+                            {errors.media_urls && <p className="text-xs text-red-500">{errors.media_urls}</p>}
                         </div>
+
+                        {hasYoutube && (
+                            <YouTubeVideoSettings
+                                value={data.youtube_options}
+                                onChange={options => setData('youtube_options', options)}
+                                errors={errors}
+                            />
+                        )}
 
                         <div className="space-y-2">
                             <label className="text-xs font-medium text-neutral-500 dark:text-neutral-400 flex items-center gap-1"><Clock className="h-3.5 w-3.5" /> {t('social.schedule_optional')}</label>
@@ -396,7 +411,7 @@ export default function SocialComposer({ accounts }) {
 
                         {(
                             <div className="flex gap-2 pt-1">
-                                <button type="submit" disabled={processing || !data.body.trim()} className="flex items-center gap-1.5 rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-60 transition">
+                                <button type="submit" disabled={processing || (isYoutubeOnly ? !data.title.trim() : !data.body.trim())} className="flex items-center gap-1.5 rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-60 transition">
                                     <Send className="h-4 w-4" />
                                     {data.scheduled_at
                                         ? (processing ? t('social.scheduling') : t('social.schedule'))
@@ -433,7 +448,7 @@ export default function SocialComposer({ accounts }) {
                                                 {NETWORK_LABELS[account.network] ?? account.network} · {account.name}
                                             </span>
                                         </div>
-                                        <Preview body={data.body} mediaUrls={mediaUrls} accountName={account.name} pictureUrl={account.picture_url} />
+                                        <Preview body={data.body} title={data.title} mediaUrls={mediaUrls} youtubeOptions={data.youtube_options} accountName={account.name} pictureUrl={account.picture_url} />
                                     </div>
                                 );
                             })

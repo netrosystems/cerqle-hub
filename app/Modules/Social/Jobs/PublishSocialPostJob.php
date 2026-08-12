@@ -13,7 +13,9 @@ class PublishSocialPostJob implements ShouldQueue
 
     public int $tries = 3;
 
-    public int $timeout = 120;
+    // Large videos can require several minutes to download and upload through
+    // YouTube's resumable endpoint. The worker must exceed this timeout too.
+    public int $timeout = 1800;
 
     public function __construct(public readonly int $postId) {}
 
