@@ -192,26 +192,38 @@ class EmailAccountController extends Controller
         $email = strtolower($validated['email']);
         $credentials = collect($validated)->except(['email', 'display_name'])->all();
         $credentials['verify_tls'] = $validated['verify_tls'] ?? true;
-        $account = ChannelAccount::updateOrCreate(
-            ['workspace_id' => $workspaceId, 'channel' => 'email', 'provider' => 'imap_smtp', 'business_account_id' => $email],
-            [
-                'display_name' => $validated['display_name'] ?: $email,
-                'status' => 'inactive',
-                'credentials' => $credentials,
-                'meta_json' => ['email' => $email],
-            ],
-        );
+
+        // Validate against an unsaved model first. A typo must not overwrite a
+        // previously working mailbox or persist an invalid password.
+        $pendingAccount = new ChannelAccount([
+            'workspace_id' => $workspaceId,
+            'channel' => 'email',
+            'provider' => 'imap_smtp',
+            'business_account_id' => $email,
+            'display_name' => $validated['display_name'] ?: $email,
+            'status' => 'inactive',
+            'credentials' => $credentials,
+            'meta_json' => ['email' => $email],
+        ]);
 
         try {
-            $client->verify($account);
-            $account->update(['status' => 'active']);
+            $client->verify($pendingAccount);
+            $account = ChannelAccount::updateOrCreate(
+                ['workspace_id' => $workspaceId, 'channel' => 'email', 'provider' => 'imap_smtp', 'business_account_id' => $email],
+                [
+                    'display_name' => $pendingAccount->display_name,
+                    'status' => 'active',
+                    'credentials' => $credentials,
+                    'meta_json' => ['email' => $email, 'last_sync_error' => null],
+                ],
+            );
             SyncEmailAccountJob::dispatch($account->id)->onQueue('default');
 
             return back()->with('success', 'IMAP and SMTP connected. Initial sync has started.');
         } catch (Throwable $e) {
-            $account->update(['status' => 'error', 'meta_json' => ['email' => $email, 'last_sync_error' => $e->getMessage()]]);
-
-            return back()->with('error', $e->getMessage());
+            return back()
+                ->withErrors(['connection' => $e->getMessage()])
+                ->withInput($request->except('password'));
         }
     }
 

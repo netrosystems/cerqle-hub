@@ -6,13 +6,26 @@ use App\Modules\Shared\Models\ChannelAccount;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Mail;
 use RuntimeException;
+use Throwable;
 
 class GenericMailboxClient
 {
     public function verify(ChannelAccount $account): bool
     {
         $this->open($account, true);
-        $this->mailer($account);
+
+        $transport = $this->mailer($account)->getSymfonyTransport();
+
+        try {
+            // Building an on-demand mailer does not open a connection. Starting
+            // the transport forces the SMTP handshake and AUTH exchange without
+            // sending a test message to a real recipient.
+            $transport->start();
+        } catch (Throwable $e) {
+            throw new RuntimeException('SMTP connection failed: '.$e->getMessage(), 0, $e);
+        } finally {
+            $transport->stop();
+        }
 
         return true;
     }
@@ -59,9 +72,10 @@ class GenericMailboxClient
     public function send(ChannelAccount $account, string $to, string $subject, string $body, ?string $inReplyTo = null): string
     {
         $credentials = $account->credentials ?? [];
+        $fromAddress = (string) ($account->meta_json['email'] ?? $credentials['username']);
         $mailer = $this->mailer($account);
-        $sent = $mailer->html(nl2br(e($body)), function ($message) use ($credentials, $to, $subject, $inReplyTo): void {
-            $message->to($to)->subject($subject)->from($credentials['username'], $credentials['from_name'] ?? null);
+        $sent = $mailer->html(nl2br(e($body)), function ($message) use ($account, $fromAddress, $to, $subject, $inReplyTo): void {
+            $message->to($to)->subject($subject)->from($fromAddress, $account->display_name ?: null);
             if ($inReplyTo) {
                 $message->getHeaders()->addTextHeader('In-Reply-To', '<'.trim($inReplyTo, '<>').'>');
                 $message->getHeaders()->addTextHeader('References', '<'.trim($inReplyTo, '<>').'>');
@@ -98,15 +112,20 @@ class GenericMailboxClient
     private function mailer(ChannelAccount $account): mixed
     {
         $c = $account->credentials ?? [];
+        $encryption = $c['smtp_encryption'] ?? 'tls';
 
         return Mail::build([
             'transport' => 'smtp',
+            // Laravel 12/Symfony Mailer uses the scheme, not the legacy
+            // "encryption" key, to select implicit TLS on port 465.
+            'scheme' => $encryption === 'ssl' ? 'smtps' : 'smtp',
             'host' => $c['smtp_host'],
             'port' => (int) $c['smtp_port'],
-            'encryption' => ($c['smtp_encryption'] ?? 'tls') === 'none' ? null : $c['smtp_encryption'],
             'username' => $c['username'],
             'password' => $c['password'],
             'timeout' => 20,
+            'auto_tls' => $encryption !== 'none',
+            'require_tls' => $encryption === 'tls',
             'verify_peer' => (bool) ($c['verify_tls'] ?? true),
         ]);
     }

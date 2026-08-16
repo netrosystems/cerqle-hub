@@ -14,6 +14,7 @@ use App\Modules\Shared\Models\Message;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Queue;
 use Inertia\Testing\AssertableInertia as Assert;
 use Mockery;
 use RuntimeException;
@@ -22,6 +23,122 @@ use Tests\TestCase;
 class EmailInboxIntegrationTest extends TestCase
 {
     use RefreshDatabase;
+
+    public function test_generic_mailbox_is_saved_only_after_both_connections_are_verified(): void
+    {
+        Queue::fake();
+        $context = $this->createWorkspaceContext();
+        $client = Mockery::mock(GenericMailboxClient::class);
+        $client->shouldReceive('verify')->once()->withArgs(function (ChannelAccount $account): bool {
+            $this->assertFalse($account->exists);
+            $this->assertSame('imap_smtp', $account->provider);
+            $this->assertSame('ssl', $account->credentials['smtp_encryption']);
+
+            return true;
+        })->andReturnTrue();
+        $this->app->instance(GenericMailboxClient::class, $client);
+
+        $this->actingAs($context['user'])->post(route('client.inbox.email.generic.store'), [
+            'email' => 'support@example.com',
+            'display_name' => 'Support',
+            'imap_host' => 'mail.example.com',
+            'imap_port' => 993,
+            'imap_encryption' => 'ssl',
+            'smtp_host' => 'mail.example.com',
+            'smtp_port' => 465,
+            'smtp_encryption' => 'ssl',
+            'username' => 'support@example.com',
+            'password' => 'secret-password',
+            'verify_tls' => true,
+        ])->assertRedirect()->assertSessionHas('success');
+
+        $account = ChannelAccount::where('provider', 'imap_smtp')->firstOrFail();
+        $this->assertSame('active', $account->status);
+        $this->assertSame('support@example.com', $account->meta_json['email']);
+        Queue::assertPushedOn('default', SyncEmailAccountJob::class);
+    }
+
+    public function test_failed_generic_mailbox_test_does_not_persist_or_replace_credentials(): void
+    {
+        $context = $this->createWorkspaceContext();
+        $existing = ChannelAccount::create([
+            'workspace_id' => $context['workspace']->id,
+            'channel' => 'email',
+            'provider' => 'imap_smtp',
+            'business_account_id' => 'support@example.com',
+            'display_name' => 'Working mailbox',
+            'status' => 'active',
+            'credentials' => ['username' => 'support@example.com', 'password' => 'working-password'],
+            'meta_json' => ['email' => 'support@example.com'],
+        ]);
+        $client = Mockery::mock(GenericMailboxClient::class);
+        $client->shouldReceive('verify')->once()->andThrow(new RuntimeException('SMTP connection failed: authentication failed'));
+        $this->app->instance(GenericMailboxClient::class, $client);
+
+        $this->actingAs($context['user'])->from(route('client.inbox.email.index'))->post(route('client.inbox.email.generic.store'), [
+            'email' => 'support@example.com',
+            'display_name' => 'Broken replacement',
+            'imap_host' => 'mail.example.com',
+            'imap_port' => 993,
+            'imap_encryption' => 'ssl',
+            'smtp_host' => 'mail.example.com',
+            'smtp_port' => 465,
+            'smtp_encryption' => 'ssl',
+            'username' => 'support@example.com',
+            'password' => 'wrong-password',
+            'verify_tls' => true,
+        ])->assertRedirect(route('client.inbox.email.index'))
+            ->assertSessionHasErrors(['connection']);
+
+        $existing->refresh();
+        $this->assertSame('active', $existing->status);
+        $this->assertSame('Working mailbox', $existing->display_name);
+        $this->assertSame('working-password', $existing->credentials['password']);
+        $this->assertSame(1, ChannelAccount::where('provider', 'imap_smtp')->count());
+    }
+
+    public function test_multiple_generic_mailboxes_are_kept_and_exposed_to_the_master_inbox(): void
+    {
+        Queue::fake();
+        $context = $this->createWorkspaceContext();
+        $client = Mockery::mock(GenericMailboxClient::class);
+        $client->shouldReceive('verify')->twice()->andReturnTrue();
+        $this->app->instance(GenericMailboxClient::class, $client);
+
+        foreach (['support@example.com', 'sales@example.com'] as $email) {
+            $this->actingAs($context['user'])->post(route('client.inbox.email.generic.store'), [
+                'email' => $email,
+                'display_name' => ucfirst(strstr($email, '@', true)),
+                'imap_host' => 'mail.example.com',
+                'imap_port' => 993,
+                'imap_encryption' => 'ssl',
+                'smtp_host' => 'mail.example.com',
+                'smtp_port' => 465,
+                'smtp_encryption' => 'ssl',
+                'username' => $email,
+                'password' => 'secret-password',
+                'verify_tls' => true,
+            ])->assertSessionHas('success');
+        }
+
+        $this->assertSame(2, ChannelAccount::where('workspace_id', $context['workspace']->id)
+            ->where('channel', 'email')
+            ->where('status', 'active')
+            ->count());
+        Queue::assertPushed(SyncEmailAccountJob::class, 2);
+
+        $this->actingAs($context['user'])
+            ->get(route('client.inbox.email.index'))
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Inbox/EmailSetup')
+                ->has('accounts', 2));
+
+        $this->actingAs($context['user'])
+            ->get(route('client.inbox.email-inbox'))
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Inbox/EmailInbox')
+                ->has('accounts', 2));
+    }
 
     public function test_microsoft_authorization_and_code_exchange_use_expected_graph_contract(): void
     {
@@ -42,6 +159,7 @@ class EmailInboxIntegrationTest extends TestCase
         $this->assertStringContainsString('/organizations/oauth2/v2.0/authorize', $url);
         $this->assertStringContainsString('Mail.ReadWrite', urldecode($url));
         $this->assertStringContainsString('offline_access', urldecode($url));
+        $this->assertStringContainsString('prompt=select_account', $url);
 
         $tokens = $client->exchangeCode('code-1', 'https://example.com/callback');
         $profile = $client->profile($tokens['access_token']);
@@ -73,6 +191,7 @@ class EmailInboxIntegrationTest extends TestCase
         $this->assertStringContainsString('gmail.readonly', urldecode($url));
         $this->assertStringContainsString('gmail.send', urldecode($url));
         $this->assertStringContainsString('access_type=offline', $url);
+        $this->assertStringContainsString('prompt=consent%20select_account', $url);
 
         $tokens = $client->exchangeCode('code-1', 'https://example.com/callback');
         $profile = $client->profile($tokens['access_token']);
