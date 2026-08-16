@@ -31,20 +31,21 @@ class ValidateContactListCsvJob implements ShouldQueue
     public function handle(): void
     {
         $operation = ContactListOperation::findOrFail($this->operationId);
-        Segment::whereKey($operation->segment_id)
+        $segment = Segment::whereKey($operation->segment_id)
             ->where('workspace_id', $operation->workspace_id)
             ->where('type', 'static')
             ->firstOrFail();
 
         $operation->update(['status' => 'processing', 'started_at' => now(), 'error_message' => null]);
+        $normaliser = new ImportContactsToListJob($operation->id);
+        $normaliser->assertPhoneValidationAvailable();
         $path = Storage::disk('local')->path((string) $operation->source_path);
         $handle = fopen($path, 'rb');
         if ($handle === false) {
             throw new \RuntimeException('The uploaded CSV could not be opened.');
         }
 
-        $normaliser = new ImportContactsToListJob($operation->id);
-        $headers = $normaliser->normaliseHeaders(fgetcsv($handle) ?: []);
+        $headers = $normaliser->normaliseHeaders(fgetcsv($handle, null, ',', '"', '') ?: []);
         if (! in_array('phone_e164', $headers, true)) {
             fclose($handle);
             throw new \RuntimeException('CSV must include a Phone, Mobile, Phone Number, or phone_e164 column.');
@@ -69,12 +70,17 @@ class ValidateContactListCsvJob implements ShouldQueue
             'malformed_row' => 0,
             'duplicate_in_file' => 0,
             'existing_customer' => 0,
+            'already_in_list' => 0,
+            'ignored_over_limit' => 0,
         ];
         $total = 0;
         $maxRows = (int) config('contact_imports.max_rows_per_file');
+        $maximum = (int) config('contact_imports.max_contacts_per_list');
+        $current = $segment->contacts()->count();
+        $remaining = max(0, $maximum - $current);
         $buffer = [];
 
-        $flush = function () use (&$buffer, &$summary, $operation): void {
+        $flush = function () use (&$buffer, &$summary, $operation, $segment, $remaining): void {
             if ($buffer === []) {
                 return;
             }
@@ -86,9 +92,20 @@ class ValidateContactListCsvJob implements ShouldQueue
                 ->pluck('phone_e164')
                 ->all();
             $existingLookup = array_fill_keys($existing, true);
+            $alreadyInList = Contact::query()
+                ->where('workspace_id', $operation->workspace_id)
+                ->whereIn('phone_e164', $phones)
+                ->whereHas('segments', fn ($query) => $query->whereKey($segment->id))
+                ->pluck('phone_e164')
+                ->all();
+            $alreadyInListLookup = array_fill_keys($alreadyInList, true);
             foreach ($phones as $phone) {
                 if (isset($existingLookup[$phone])) {
                     $summary['existing_customer']++;
+                } elseif (isset($alreadyInListLookup[$phone])) {
+                    $summary['already_in_list']++;
+                } elseif ($summary['accepted'] >= $remaining) {
+                    $summary['ignored_over_limit']++;
                 } else {
                     $summary['accepted']++;
                 }
@@ -96,16 +113,18 @@ class ValidateContactListCsvJob implements ShouldQueue
             $buffer = [];
         };
 
-        while (($line = fgetcsv($handle)) !== false) {
+        while (($line = fgetcsv($handle, null, ',', '"', '')) !== false) {
             if ($line === [null] || $line === [] || $line === ['']) {
                 continue;
             }
             $total++;
             if ($total > $maxRows) {
-                fclose($handle);
-                throw new \RuntimeException(
-                    'This CSV exceeds the '.number_format($maxRows).'-contact limit. Split the audience into smaller CSV files and upload each file to this same Contact List.'
-                );
+                $summary['ignored_over_limit']++;
+                if ($total % 1000 === 0) {
+                    $this->reportProgress($operation, $total, $summary);
+                }
+
+                continue;
             }
             if (count($line) !== count($headers)) {
                 $summary['malformed_row']++;

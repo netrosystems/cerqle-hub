@@ -37,14 +37,18 @@ class ImportContactsToListJob implements ShouldQueue
             ->firstOrFail();
         $contactService = app(ContactService::class);
 
+        $expectedAdditions = (int) data_get($operation->options, 'expected_additions', 0);
+        $this->assertListCapacity($segment, $expectedAdditions);
+
         $operation->update(['status' => 'processing', 'started_at' => now(), 'error_message' => null]);
+        $this->assertPhoneValidationAvailable();
         $path = Storage::disk('local')->path((string) $operation->source_path);
         $handle = fopen($path, 'rb');
         if ($handle === false) {
             throw new \RuntimeException('The uploaded CSV could not be opened.');
         }
 
-        $headers = $this->normaliseHeaders(fgetcsv($handle) ?: []);
+        $headers = $this->normaliseHeaders(fgetcsv($handle, null, ',', '"', '') ?: []);
         if (! in_array('phone_e164', $headers, true)) {
             fclose($handle);
             throw new \RuntimeException('CSV must contain a phone_e164 or phone column.');
@@ -62,11 +66,20 @@ class ImportContactsToListJob implements ShouldQueue
         $pendingInvalid = 0;
         $pendingMalformed = 0;
         $pendingDuplicate = 0;
+        $rowsSeen = 0;
+        $maxRows = (int) config('contact_imports.max_rows_per_file');
 
-        while (($line = fgetcsv($handle)) !== false) {
+        while (($line = fgetcsv($handle, null, ',', '"', '')) !== false) {
             if ($line === [null] || $line === [] || $line === ['']) {
                 // Tolerate a trailing empty line from spreadsheet exports.
                 continue;
+            }
+            $rowsSeen++;
+            if ($rowsSeen > $maxRows) {
+                // Validation already counted and disclosed the remaining
+                // rows. Do not parse or persist them during the confirmed
+                // import—the first configured block is the entire audience.
+                break;
             }
 
             if (count($line) !== count($headers)) {
@@ -162,10 +175,46 @@ class ImportContactsToListJob implements ShouldQueue
             ->whereIn('phone_e164', $phones)
             ->pluck('phone_e164')
             ->all();
+        $crmCustomerLookup = array_fill_keys($crmCustomerPhones, true);
         $campaignAudienceRows = array_values(array_filter(
             $rows,
-            fn (array $row) => ! in_array($row['phone_e164'], $crmCustomerPhones, true)
+            fn (array $row) => ! isset($crmCustomerLookup[$row['phone_e164']])
         ));
+
+        $existingCampaignContacts = Contact::query()
+            ->where('workspace_id', $operation->workspace_id)
+            ->whereIn('phone_e164', array_column($campaignAudienceRows, 'phone_e164'))
+            ->where('is_campaign_only', true)
+            ->pluck('id', 'phone_e164');
+        $alreadyAttachedIds = DB::table('segment_contact')
+            ->where('segment_id', $segment->id)
+            ->whereIn('contact_id', $existingCampaignContacts->values()->all())
+            ->pluck('contact_id')
+            ->all();
+        $alreadyAttachedLookup = array_fill_keys($alreadyAttachedIds, true);
+        // Older/directly-created import operations predate the validation
+        // handshake and do not carry `expected_additions`. Preserve those by
+        // falling back to the Contact List's remaining capacity.
+        $configuredExpected = data_get($operation->options, 'expected_additions');
+        $expected = $configuredExpected === null
+            ? max(0, (int) config('contact_imports.max_contacts_per_list') - $segment->contacts()->count())
+            : (int) $configuredExpected;
+        $slots = max(0, $expected - (int) $operation->fresh()->added);
+        $selectedRows = [];
+        $ignoredOverLimit = 0;
+        foreach ($campaignAudienceRows as $row) {
+            $existingId = $existingCampaignContacts->get($row['phone_e164']);
+            if ($existingId !== null && isset($alreadyAttachedLookup[$existingId])) {
+                continue;
+            }
+            if (count($selectedRows) >= $slots) {
+                $ignoredOverLimit++;
+
+                continue;
+            }
+            $selectedRows[] = $row;
+        }
+        $campaignAudienceRows = $selectedRows;
 
         if ($campaignAudienceRows !== []) {
             Contact::query()->upsert(
@@ -175,10 +224,18 @@ class ImportContactsToListJob implements ShouldQueue
             );
         }
 
+        $selectedPhones = array_column($campaignAudienceRows, 'phone_e164');
         $contacts = Contact::where('workspace_id', $operation->workspace_id)
-            ->whereIn('phone_e164', $phones)
+            ->whereIn('phone_e164', $selectedPhones)
             ->where('is_campaign_only', true)
             ->pluck('id', 'phone_e164');
+        $alreadyAttached = DB::table('segment_contact')
+            ->where('segment_id', $segment->id)
+            ->whereIn('contact_id', $contacts->values()->all())
+            ->pluck('contact_id')
+            ->all();
+        $newContactIds = $contacts->values()->diff($alreadyAttached)->values()->all();
+        $this->assertListCapacity($segment, count($newContactIds));
         $pivotRows = $contacts->map(fn ($id) => ['segment_id' => $segment->id, 'contact_id' => $id])->values()->all();
         $addedToList = DB::table('segment_contact')->insertOrIgnore($pivotRows);
 
@@ -186,6 +243,25 @@ class ImportContactsToListJob implements ShouldQueue
         $operation->increment('added', $addedToList);
         $operation->increment('updated', $existing->count());
         $operation->increment('skipped_existing_customer', count($crmCustomerPhones));
+        if ($ignoredOverLimit > 0) {
+            $operation->increment('skipped', $ignoredOverLimit);
+        }
+    }
+
+    private function assertListCapacity(Segment $segment, int $requested): void
+    {
+        if ($requested <= 0) {
+            return;
+        }
+
+        $maximum = (int) config('contact_imports.max_contacts_per_list');
+        $current = $segment->contacts()->count();
+        $remaining = max(0, $maximum - $current);
+        if ($requested > $remaining) {
+            throw new \RuntimeException(
+                'A single Contact List can contain a maximum of '.number_format($maximum).' contacts. This list has '.number_format($current).' and can accept only '.number_format($remaining).' more.'
+            );
+        }
     }
 
     public function normaliseHeaders(array $headers): array
@@ -201,6 +277,19 @@ class ImportContactsToListJob implements ShouldQueue
                 default => $key,
             };
         }, $headers);
+    }
+
+    /**
+     * Fail with an actionable, client-safe message when a deployment pulled
+     * new application code without installing its Composer dependencies.
+     */
+    public function assertPhoneValidationAvailable(): void
+    {
+        if (! class_exists(PhoneNumberUtil::class)) {
+            throw new \RuntimeException(
+                'Contact validation is temporarily unavailable because a required server component is missing. Please ask an administrator to complete the application deployment.'
+            );
+        }
     }
 
     public function normaliseRow(array $row, int $workspaceId, ?string $defaultCountry, ContactService $contactService): ?array
@@ -267,7 +356,9 @@ class ImportContactsToListJob implements ShouldQueue
             $candidate = '+'.substr($digits, 2);
         } elseif ($defaultCountry !== null && $defaultCountry !== '') {
             $callingCode = $this->countryToCallingCode($defaultCountry);
-            if ($callingCode === null) return null;
+            if ($callingCode === null) {
+                return null;
+            }
 
             // A CSV frequently loses the + sign. If the value already starts
             // with the selected country's calling code, treat it as
@@ -283,7 +374,9 @@ class ImportContactsToListJob implements ShouldQueue
         try {
             $utility = PhoneNumberUtil::getInstance();
             $parsed = $utility->parse($candidate, $region);
-            if (! $utility->isValidNumber($parsed)) return null;
+            if (! $utility->isValidNumber($parsed)) {
+                return null;
+            }
 
             return $utility->format($parsed, PhoneNumberFormat::E164);
         } catch (NumberParseException) {
@@ -352,7 +445,6 @@ class ImportContactsToListJob implements ShouldQueue
 
         return $codes[$country] ?? null;
     }
-
 
     public function failed(\Throwable $exception): void
     {

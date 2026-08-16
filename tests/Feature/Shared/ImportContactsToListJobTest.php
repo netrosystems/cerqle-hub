@@ -25,10 +25,10 @@ class ImportContactsToListJobTest extends TestCase
 
     public function test_csv_without_opt_in_sms_column_opts_everyone_in(): void
     {
-        $this->importRows(['+447700900001', '+447700900002']);
+        $this->importRows(['+12025550101', '+12025550102']);
 
-        $this->assertOptIn('+447700900001', 1);
-        $this->assertOptIn('+447700900002', 1);
+        $this->assertOptIn('+12025550101', 1);
+        $this->assertOptIn('+12025550102', 1);
     }
 
     public function test_blank_opt_in_sms_cell_opts_in(): void
@@ -36,12 +36,12 @@ class ImportContactsToListJobTest extends TestCase
         // Blank cells used to coerce to false via FILTER_VALIDATE_BOOL.
         // Upload is the consent signal — blanks should opt in.
         $this->importRows(
-            ['+447700900010', '+447700900011'],
+            ['+12025550110', '+12025550111'],
             optInValues: ['', '   '],
         );
 
-        $this->assertOptIn('+447700900010', 1);
-        $this->assertOptIn('+447700900011', 1);
+        $this->assertOptIn('+12025550110', 1);
+        $this->assertOptIn('+12025550111', 1);
     }
 
     public function test_explicit_opt_out_tokens_reject(): void
@@ -49,16 +49,16 @@ class ImportContactsToListJobTest extends TestCase
         // Every value in ContactService::OPT_OUT_TOKENS should opt out.
         $this->importRows(
             phones: [
-                '+447700900020', '+447700900021', '+447700900022',
-                '+447700900023', '+447700900024', '+447700900025',
-                '+447700900026', // Arabic "لا"
+                '+12025550120', '+12025550121', '+12025550122',
+                '+12025550123', '+12025550124', '+12025550125',
+                '+12025550126', // Arabic "لا"
             ],
             optInValues: ['no', '0', 'false', 'off', 'unsubscribe', 'optout', 'لا'],
         );
 
         foreach (
-            ['+447700900020', '+447700900021', '+447700900022', '+447700900023',
-             '+447700900024', '+447700900025', '+447700900026'] as $phone
+            ['+12025550120', '+12025550121', '+12025550122', '+12025550123',
+                '+12025550124', '+12025550125', '+12025550126'] as $phone
         ) {
             $this->assertOptIn($phone, 0, "phone {$phone} should be opted out");
         }
@@ -69,11 +69,11 @@ class ImportContactsToListJobTest extends TestCase
         // FILTER_VALIDATE_BOOL used to silently turn garbage into false.
         // After the fix, anything that isn't an opt-out token opts in.
         $this->importRows(
-            phones: ['+447700900030', '+447700900031', '+447700900032'],
+            phones: ['+12025550130', '+12025550131', '+12025550132'],
             optInValues: ['maybe', 'abc', 'yes please'], // 'yes' is NOT in OPT_OUT_TOKENS
         );
 
-        foreach (['+447700900030', '+447700900031', '+447700900032'] as $phone) {
+        foreach (['+12025550130', '+12025550131', '+12025550132'] as $phone) {
             $this->assertOptIn($phone, 1, "phone {$phone} should be opted in");
         }
     }
@@ -82,9 +82,9 @@ class ImportContactsToListJobTest extends TestCase
     {
         // List-imports stay scoped to the uploaded list by design. We do
         // NOT change is_campaign_only here — that's a separate concern.
-        $this->importRows(['+447700900040']);
+        $this->importRows(['+12025550140']);
 
-        $row = Contact::where('phone_e164', '+447700900040')->firstOrFail();
+        $row = Contact::where('phone_e164', '+12025550140')->firstOrFail();
         $this->assertSame(1, (int) $row->is_campaign_only);
         $this->assertSame(1, (int) $row->opt_in_sms);
         $this->assertSame('contact_list_csv', $row->source);

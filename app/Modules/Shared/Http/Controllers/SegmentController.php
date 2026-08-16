@@ -11,6 +11,7 @@ use App\Modules\Shared\Models\ContactListOperation;
 use App\Modules\Shared\Models\Segment;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -74,6 +75,8 @@ class SegmentController extends Controller
         $uploadedContactsCount = $segment->contacts()
             ->where('contacts.is_campaign_only', true)
             ->count();
+        $listContactsCount = $existingContactsCount + $uploadedContactsCount;
+        $maxContactsPerList = (int) config('contact_imports.max_contacts_per_list');
 
         // Single, merged "already in this list" view: real customers first, then
         // uploaded CSV recipients. Each row is tagged so the UI can render a
@@ -127,6 +130,8 @@ class SegmentController extends Controller
             'importLimits' => [
                 'maxFileMb' => (int) config('contact_imports.max_file_mb'),
                 'maxRowsPerFile' => (int) config('contact_imports.max_rows_per_file'),
+                'maxContactsPerList' => $maxContactsPerList,
+                'remainingCapacity' => max(0, $maxContactsPerList - $listContactsCount),
             ],
             'operations' => ContactListOperation::where('workspace_id', $workspaceId)
                 ->where('segment_id', $segment->id)
@@ -160,13 +165,16 @@ class SegmentController extends Controller
                 }))
                 ->whereDoesntHave('segments', fn ($q) => $q->whereKey($segment->id));
 
+            $requested = (clone $query)->count();
+            $this->assertListCapacity($segment, $requested);
+
             $operation = ContactListOperation::create([
                 'workspace_id' => $workspaceId,
                 'segment_id' => $segment->id,
                 'created_by' => $request->user()->id,
                 'type' => 'add_existing',
                 'status' => 'queued',
-                'total' => (clone $query)->count(),
+                'total' => $requested,
                 'options' => [
                     'search' => $search,
                     'max_contact_id' => (int) ((clone $query)->max('contacts.id') ?? 0),
@@ -180,7 +188,9 @@ class SegmentController extends Controller
         $contactIds = Contact::where('workspace_id', $workspaceId)
             ->customerDirectory()
             ->whereIn('id', $validated['contact_ids'])
+            ->whereDoesntHave('segments', fn ($q) => $q->whereKey($segment->id))
             ->pluck('id');
+        $this->assertListCapacity($segment, $contactIds->count());
         $segment->contacts()->syncWithoutDetaching($contactIds);
         $segment->update(['contact_count' => $segment->contacts()->count()]);
 
@@ -192,6 +202,7 @@ class SegmentController extends Controller
         $this->authorise($request, $segment);
 
         $workspaceId = (int) ($request->user()->current_workspace_id ?? $request->user()->workspace_id);
+        $this->assertListCapacity($segment, 1);
         $maxFileKilobytes = (int) config('contact_imports.max_file_mb') * 1024;
         $validated = $request->validate([
             'file' => ['required', 'file', 'mimes:csv,txt', 'max:'.$maxFileKilobytes],
@@ -221,6 +232,7 @@ class SegmentController extends Controller
         abort_unless((int) $operation->workspace_id === (int) $segment->workspace_id && (int) $operation->segment_id === (int) $segment->id, 404);
         abort_unless($operation->type === 'csv_validation' && $operation->status === 'completed', 422, 'This CSV is not ready to import.');
         abort_unless((int) $operation->added > 0, 422, 'There are no valid new contacts to import from this CSV.');
+        $this->assertListCapacity($segment, (int) $operation->added);
 
         $import = ContactListOperation::create([
             'workspace_id' => $operation->workspace_id,
@@ -229,7 +241,10 @@ class SegmentController extends Controller
             'type' => 'csv_import',
             'status' => 'queued',
             'source_path' => $operation->source_path,
-            'options' => $operation->options,
+            'options' => array_merge($operation->options ?? [], [
+                'expected_additions' => (int) $operation->added,
+                'max_contacts_per_list' => (int) config('contact_imports.max_contacts_per_list'),
+            ]),
         ]);
         ImportContactsToListJob::dispatch($import->id);
         $operation->update(['status' => 'confirmed']);
@@ -306,5 +321,22 @@ class SegmentController extends Controller
     {
         $workspaceId = $request->user()->current_workspace_id ?? $request->user()->workspace_id;
         abort_unless((int) $segment->workspace_id === (int) $workspaceId, 403);
+    }
+
+    private function assertListCapacity(Segment $segment, int $requested): void
+    {
+        if ($requested <= 0) {
+            return;
+        }
+
+        $maximum = (int) config('contact_imports.max_contacts_per_list');
+        $current = $segment->contacts()->count();
+        $remaining = max(0, $maximum - $current);
+
+        if ($requested > $remaining) {
+            throw ValidationException::withMessages([
+                'contacts' => 'A single Contact List can contain a maximum of '.number_format($maximum).' contacts. This list has '.number_format($current).' and can accept only '.number_format($remaining).' more.',
+            ]);
+        }
     }
 }

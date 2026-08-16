@@ -54,9 +54,11 @@ function OperationStatus({ operation, confirmImport }) {
     const invalidPhone = Number(operation.skipped_invalid_phone || 0);
     const malformedRow = Number(operation.skipped_malformed_row || 0);
     const duplicateInFile = Number(operation.skipped_duplicate_in_file || 0);
+    const alreadyInList = Number(validation.already_in_list || 0);
+    const ignoredOverLimit = Number(validation.ignored_over_limit || 0);
     // `skipped` is the sum of all reject buckets; this fallback handles old
     // records that were imported before the breakdown existed.
-    const accounted = existingCustomerSkip + invalidPhone + malformedRow + duplicateInFile;
+    const accounted = existingCustomerSkip + invalidPhone + malformedRow + duplicateInFile + alreadyInList + ignoredOverLimit;
     const unknown = Math.max(0, Number(operation.skipped || 0) - accounted);
     const totalRejected = Number(operation.skipped || 0);
     const percent = operation.total ? Math.min(100, Math.round((operation.processed / operation.total) * 100)) : null;
@@ -98,11 +100,17 @@ function OperationStatus({ operation, confirmImport }) {
                     {existingCustomerSkip > 0 && (
                         <span><strong className="font-semibold">{existingCustomerSkip.toLocaleString()}</strong> matched an existing customer</span>
                     )}
+                    {alreadyInList > 0 && (
+                        <span><strong className="font-semibold">{alreadyInList.toLocaleString()}</strong> already in this list</span>
+                    )}
                     {malformedRow > 0 && (
                         <span><strong className="font-semibold">{malformedRow.toLocaleString()}</strong> malformed row</span>
                     )}
                     {duplicateInFile > 0 && (
                         <span><strong className="font-semibold">{duplicateInFile.toLocaleString()}</strong> duplicate in file</span>
+                    )}
+                    {ignoredOverLimit > 0 && (
+                        <span><strong className="font-semibold">{ignoredOverLimit.toLocaleString()}</strong> ignored above list limit</span>
                     )}
                     {unknown > 0 && (
                         <span><strong className="font-semibold">{unknown.toLocaleString()}</strong> other</span>
@@ -179,7 +187,8 @@ function ExistingCustomerPicker({ availableContacts, availableCount, search, app
 function CsvUploader({ csvForm, uploadCsv, importLimits }) {
     const [fileError, setFileError] = useState('');
     const maxFileMb = Number(importLimits?.maxFileMb || 20);
-    const maxRows = Number(importLimits?.maxRowsPerFile || 250000);
+    const maxContacts = Number(importLimits?.maxContactsPerList || 50000);
+    const remainingCapacity = Number(importLimits?.remainingCapacity ?? maxContacts);
     const maxFileBytes = maxFileMb * 1024 * 1024;
 
     const chooseFile = (event) => {
@@ -199,29 +208,24 @@ function CsvUploader({ csvForm, uploadCsv, importLimits }) {
             <div className="space-y-5">
                 <div className="rounded-xl border-2 border-dashed border-neutral-300 p-6 text-center dark:border-neutral-600">
                     <Upload className="mx-auto h-9 w-9 text-brand-600" />
-                    <h3 className="mt-3 font-semibold text-neutral-900 dark:text-neutral-100">Upload a CSV of recipients</h3>
-                    <p className="mt-1 text-sm text-neutral-500">Your file is scanned first in 1,000-row chunks. Nothing is added until you review the accepted and rejected counts, then confirm the import.</p>
-                    <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-left text-xs text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200">
-                        <strong>Per-file limit: {maxFileMb} MB or {maxRows.toLocaleString()} contacts.</strong>
-                        <span className="mt-1 block">For 1,000,000 contacts, split the audience into at least 4 CSV files and upload them to this same Contact List one at a time.</span>
-                    </div>
+                    <h3 className="mt-3 font-semibold text-neutral-900 dark:text-neutral-100">Upload CSV</h3>
+                    <p className="mx-auto mt-2 max-w-sm rounded-lg bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
+                        Maximum {maxContacts.toLocaleString()} contacts per Contact List
+                    </p>
                     <form onSubmit={uploadCsv} className="mt-5 space-y-3">
                         <input type="file" accept=".csv,text/csv" required onChange={chooseFile} className="block w-full text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-brand-50 file:px-4 file:py-2 file:font-medium file:text-brand-700" />
                         {fileError && <p className="rounded-lg bg-red-50 px-3 py-2 text-left text-xs font-medium text-red-700 dark:bg-red-950/30 dark:text-red-300">{fileError}</p>}
                         <label className="block text-left text-sm font-medium text-neutral-700 dark:text-neutral-200">
-                            Default country <span className="font-normal text-neutral-500">(only for national numbers without country code)</span>
+                            Default country <span className="font-normal text-neutral-500">(optional)</span>
                             <input value={csvForm.data.default_country} onChange={event => csvForm.setData('default_country', event.target.value.toUpperCase().replace(/[^A-Z]/g, '').slice(0, 2))} placeholder="e.g. LB" maxLength={2} className="mt-1 block w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm uppercase dark:border-neutral-600 dark:bg-neutral-800" />
                         </label>
-                        <button disabled={csvForm.processing || !csvForm.data.file} className="rounded-lg bg-brand-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-40">
+                        <button disabled={csvForm.processing || !csvForm.data.file || remainingCapacity === 0} className="rounded-lg bg-brand-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-40">
                             {csvForm.processing ? 'Uploading…' : 'Upload and validate'}
                         </button>
                     </form>
                 </div>
-                <div className="rounded-lg bg-neutral-50 p-4 text-sm text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300">
-                    <p className="font-medium text-neutral-900 dark:text-neutral-100">CSV format</p>
-                    <p className="mt-1">Required: a <code>Phone</code>, <code>Mobile</code>, <code>Phone Number</code>, or <code>phone_e164</code> column. International formats such as <code>+96170123456</code>, <code>0096170123456</code>, and <code>96170123456</code> are normalized automatically. Optional: <code>first_name</code>, <code>last_name</code>, <code>email</code>, <code>country</code>, <code>language</code>, <code>opt_in_sms</code>.</p>
-                    <p className="mt-2">A national number needs either its own two-letter <code>country</code> value or the Default country above. Blank phones, malformed/invalid numbers, invalid country codes, duplicate rows, and numbers already belonging to CRM customers are counted separately before import.</p>
-                    <a href={route('client.segments.contacts.sample-csv')} className="mt-3 inline-flex items-center gap-1.5 font-medium text-brand-700 hover:text-brand-800 dark:text-brand-300">
+                <div className="text-center text-sm">
+                    <a href={route('client.segments.contacts.sample-csv')} className="inline-flex items-center gap-1.5 font-medium text-brand-700 hover:text-brand-800 dark:text-brand-300">
                         <FileSpreadsheet className="h-4 w-4" /> Download sample CSV
                     </a>
                 </div>
@@ -322,9 +326,9 @@ export default function SegmentContacts({ segment, listContacts, existingContact
                     </div>
                 </div>
 
-                {(props.flash?.success || props.errors?.file) && (
-                    <div className={`rounded-lg px-4 py-3 text-sm ${props.errors?.file ? 'bg-red-50 text-red-700 dark:bg-red-950/30 dark:text-red-300' : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300'}`}>
-                        {props.errors?.file ?? props.flash?.success}
+                {(props.flash?.success || props.errors?.file || props.errors?.contacts) && (
+                    <div className={`rounded-lg px-4 py-3 text-sm ${(props.errors?.file || props.errors?.contacts) ? 'bg-red-50 text-red-700 dark:bg-red-950/30 dark:text-red-300' : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300'}`}>
+                        {props.errors?.file ?? props.errors?.contacts ?? props.flash?.success}
                     </div>
                 )}
 

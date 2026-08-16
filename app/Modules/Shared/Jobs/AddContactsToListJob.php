@@ -46,6 +46,16 @@ class AddContactsToListJob implements ShouldQueue
             }))
             ->whereDoesntHave('segments', fn ($q) => $q->whereKey($segment->id));
 
+        $maximum = (int) config('contact_imports.max_contacts_per_list');
+        $current = $segment->contacts()->count();
+        $requested = (clone $query)->count();
+        $remaining = max(0, $maximum - $current);
+        if ($requested > $remaining) {
+            throw new \RuntimeException(
+                'A single Contact List can contain a maximum of '.number_format($maximum).' contacts. This list has '.number_format($current).' and can accept only '.number_format($remaining).' more.'
+            );
+        }
+
         $query->select('contacts.id')->chunkById(2000, function ($contacts) use ($operation, $segment) {
             $rows = $contacts->map(fn ($contact) => [
                 'segment_id' => $segment->id,
