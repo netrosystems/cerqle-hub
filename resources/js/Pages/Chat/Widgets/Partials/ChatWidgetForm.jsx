@@ -53,7 +53,8 @@ export default function ChatWidgetForm({ widget = null, chatbots = [], canUseCus
         subtitle: widget?.subtitle ?? 'We typically reply in a few minutes',
         welcome_message: widget?.welcome_message ?? 'Hi there 👋 How can we help you today?',
         agent_name: widget?.agent_name ?? 'Support',
-        avatar_url: widget?.avatar_url ?? '',
+        avatar_image: null,
+        remove_avatar: false,
         primary_color: widget?.primary_color ?? '#ff762e',
         position: widget?.position ?? 'bottom_right',
         launcher_text: widget?.launcher_text ?? '',
@@ -72,6 +73,8 @@ export default function ChatWidgetForm({ widget = null, chatbots = [], canUseCus
     });
 
     const [domainsText, setDomainsText] = useState((widget?.allowed_domains ?? []).join('\n'));
+    const [avatarPreview, setAvatarPreview] = useState(widget?.avatar_url ?? null);
+    const [avatarUploadError, setAvatarUploadError] = useState('');
     const [launcherLogoPreview, setLauncherLogoPreview] = useState(widget?.launcher_logo_url ?? null);
 
     const togglePrechatField = (field) => {
@@ -113,8 +116,46 @@ export default function ChatWidgetForm({ widget = null, chatbots = [], canUseCus
                         <Field label="Agent name">
                             <input className={inputCls} value={data.agent_name} onChange={(e) => setData('agent_name', e.target.value)} />
                         </Field>
-                        <Field label="Avatar URL" hint="Optional — leave blank to show initials.">
-                            <input className={inputCls} value={data.avatar_url} onChange={(e) => setData('avatar_url', e.target.value)} placeholder="https://…/avatar.png" />
+                        <Field label="Agent avatar" hint="PNG, JPG or WebP up to 1 MB. Cerqle crops and compresses it automatically.">
+                            <input
+                                type="file"
+                                accept="image/png,image/jpeg,image/webp"
+                                className={inputCls}
+                                onChange={(e) => {
+                                    const file = e.target.files?.[0] ?? null;
+                                    if (file && file.size > 1024 * 1024) {
+                                        setAvatarUploadError('Please choose an image no larger than 1 MB.');
+                                        setData('avatar_image', null);
+                                        e.target.value = '';
+                                        return;
+                                    }
+
+                                    setAvatarUploadError('');
+                                    setData('avatar_image', file);
+                                    setData('remove_avatar', false);
+                                    setAvatarPreview(file ? URL.createObjectURL(file) : (widget?.avatar_url ?? null));
+                                }}
+                            />
+                            {(avatarUploadError || errors.avatar_image) && (
+                                <span className="mt-1 block text-xs text-red-500">{avatarUploadError || errors.avatar_image}</span>
+                            )}
+                            {avatarPreview && !data.remove_avatar && (
+                                <div className="mt-2 flex items-center gap-3 rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2 dark:border-neutral-700 dark:bg-neutral-800/60">
+                                    <img src={avatarPreview} alt="Agent avatar preview" className="h-10 w-10 rounded-full object-cover" />
+                                    <button
+                                        type="button"
+                                        className="text-xs font-medium text-red-500 hover:text-red-600"
+                                        onClick={() => {
+                                            setData('avatar_image', null);
+                                            setData('remove_avatar', true);
+                                            setAvatarPreview(null);
+                                            setAvatarUploadError('');
+                                        }}
+                                    >
+                                        Remove avatar
+                                    </button>
+                                </div>
+                            )}
                         </Field>
                     </div>
                     <Field label="Welcome message" hint="The first thing visitors see when they open the chat.">
@@ -241,7 +282,7 @@ export default function ChatWidgetForm({ widget = null, chatbots = [], canUseCus
             <div className="lg:sticky lg:top-6 h-fit space-y-4">
                 <div className="rounded-2xl border border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-900/50 p-4">
                     <p className="mb-3 text-xs font-medium uppercase tracking-wide text-neutral-400">Live preview</p>
-                    <WidgetPreview data={data} />
+                    <WidgetPreview data={data} avatarPreview={avatarPreview} />
                 </div>
                 <button
                     type="submit"
@@ -259,14 +300,14 @@ export default function ChatWidgetForm({ widget = null, chatbots = [], canUseCus
 }
 
 /** A faithful, static mock of the embedded widget using the live form values. */
-function WidgetPreview({ data }) {
+function WidgetPreview({ data, avatarPreview }) {
     const color = data.primary_color || '#ff762e';
     const initial = (data.agent_name || 'S').trim().charAt(0).toUpperCase();
     return (
         <div className="mx-auto w-full max-w-[300px] overflow-hidden rounded-2xl border border-neutral-200 dark:border-neutral-700 bg-white shadow-lg">
             <div className="flex items-center gap-2.5 p-3.5 text-white" style={{ background: color }}>
-                {data.avatar_url
-                    ? <img src={data.avatar_url} alt="" className="h-9 w-9 rounded-full object-cover" />
+                {avatarPreview
+                    ? <img src={avatarPreview} alt="" className="h-9 w-9 rounded-full object-cover" />
                     : <span className="flex h-9 w-9 items-center justify-center rounded-full bg-white/25 text-sm font-bold">{initial}</span>}
                 <div className="min-w-0">
                     <p className="truncate text-sm font-semibold">{data.title || 'Chat with us'}</p>

@@ -37,9 +37,9 @@ class EmailAccountController extends Controller
                     'last_synced_at' => $account->meta_json['last_synced_at'] ?? null,
                     'last_sync_error' => $account->meta_json['last_sync_error'] ?? null,
                 ]),
-            'microsoftEnabled' => (bool) ($microsoft?->enabled && $microsoft?->credential('client_id') && $microsoft?->credential('client_secret')),
+            'microsoftEnabled' => (bool) ($microsoft?->enabled && $microsoft->isConfigured()),
             'microsoftCallbackUrl' => route('client.inbox.email.microsoft.callback'),
-            'googleEnabled' => (bool) ($google?->enabled && $google?->credential('client_id') && $google?->credential('client_secret')),
+            'googleEnabled' => (bool) ($google?->enabled && $google->isConfigured()),
             'googleCallbackUrl' => route('client.inbox.email.google.callback'),
             'imapExtensionAvailable' => function_exists('imap_open'),
         ]);

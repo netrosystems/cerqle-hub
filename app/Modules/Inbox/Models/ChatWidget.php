@@ -2,8 +2,8 @@
 
 namespace App\Modules\Inbox\Models;
 
-use App\Models\Workspace;
 use App\Models\User;
+use App\Models\Workspace;
 use App\Modules\AI\Models\AiChatbot;
 use App\Modules\Shared\Models\ChannelAccount;
 use App\Services\StorageManager;
@@ -23,6 +23,7 @@ class ChatWidget extends Model
     protected $fillable = [
         'workspace_id', 'channel_account_id', 'widget_key', 'name',
         'title', 'subtitle', 'welcome_message', 'agent_name', 'avatar_url',
+        'avatar_path', 'avatar_disk',
         'primary_color', 'position', 'launcher_text', 'footer_company_name',
         'launcher_logo_path', 'launcher_logo_disk',
         'ai_enabled', 'ai_chatbot_id', 'require_prechat', 'prechat_fields',
@@ -78,6 +79,20 @@ class ChatWidget extends Model
         $disk = $this->launcher_logo_disk ?: app(StorageManager::class)->diskName();
 
         return Storage::disk($disk)->url($this->launcher_logo_path);
+    }
+
+    /** Prefer the managed upload while retaining legacy URL-based avatars. */
+    public function getAvatarUrlAttribute(?string $legacyUrl): ?string
+    {
+        if (! $this->avatar_path) {
+            return $legacyUrl;
+        }
+
+        $storageManager = app(StorageManager::class);
+        $disk = $this->avatar_disk ?: $storageManager->diskName();
+        $storageManager->ensureDiskReady($disk);
+
+        return Storage::disk($disk)->url($this->avatar_path);
     }
 
     private function canUseCustomLauncherLogo(): bool

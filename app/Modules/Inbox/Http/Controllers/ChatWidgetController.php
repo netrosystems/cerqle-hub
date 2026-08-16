@@ -3,15 +3,16 @@
 namespace App\Modules\Inbox\Http\Controllers;
 
 use App\Http\Controllers\Controller;
+use App\Models\Workspace;
 use App\Modules\AI\Models\AiChatbot;
 use App\Modules\Inbox\Models\ChatWidget;
+use App\Modules\Inbox\Services\ChatWidgetAvatarProcessor;
 use App\Modules\Shared\Models\ChannelAccount;
-use App\Models\Workspace;
 use App\Services\StorageManager;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -24,7 +25,10 @@ use Inertia\Response;
  */
 class ChatWidgetController extends Controller
 {
-    public function __construct(private readonly StorageManager $storageManager) {}
+    public function __construct(
+        private readonly StorageManager $storageManager,
+        private readonly ChatWidgetAvatarProcessor $avatarProcessor,
+    ) {}
 
     public function index(Request $request): Response
     {
@@ -64,6 +68,7 @@ class ChatWidgetController extends Controller
         $data = $this->validated($request);
         $workspaceId = $this->workspaceId($request);
         $data = $this->applyLauncherLogo($request, $data);
+        $data = $this->applyAvatar($request, $data);
 
         $channelAccount = ChannelAccount::create([
             'workspace_id' => $workspaceId,
@@ -86,6 +91,7 @@ class ChatWidgetController extends Controller
         $this->assertOwner($request, $chatWidget);
         $data = $this->validated($request);
         $data = $this->applyLauncherLogo($request, $data, $chatWidget);
+        $data = $this->applyAvatar($request, $data, $chatWidget);
 
         $chatWidget->update($data);
 
@@ -104,6 +110,8 @@ class ChatWidgetController extends Controller
         // Keep the channel_account (mark inactive) so past conversations still
         // resolve in the inbox — just deactivate and remove the widget config.
         $chatWidget->channelAccount?->update(['status' => 'inactive']);
+        $this->deleteAvatar($chatWidget);
+        $this->deleteLauncherLogo($chatWidget);
         $chatWidget->delete();
 
         return redirect()->route('client.inbox.chat-widgets.index')->with('success', 'Widget deleted.');
@@ -120,7 +128,8 @@ class ChatWidgetController extends Controller
             'subtitle' => ['nullable', 'string', 'max:160'],
             'welcome_message' => ['nullable', 'string', 'max:1000'],
             'agent_name' => ['nullable', 'string', 'max:64'],
-            'avatar_url' => ['nullable', 'string', 'max:512'],
+            'avatar_image' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:1024'],
+            'remove_avatar' => ['nullable', 'boolean'],
             'primary_color' => ['nullable', 'string', 'max:16'],
             'position' => ['required', 'in:bottom_right,bottom_left'],
             'launcher_text' => ['nullable', 'string', 'max:64'],
@@ -140,7 +149,12 @@ class ChatWidgetController extends Controller
         $data['identity_verification'] = $request->boolean('identity_verification');
         $data['enabled'] = $request->has('enabled') ? $request->boolean('enabled') : true;
 
-        unset($data['launcher_logo'], $data['remove_launcher_logo']);
+        unset(
+            $data['avatar_image'],
+            $data['remove_avatar'],
+            $data['launcher_logo'],
+            $data['remove_launcher_logo'],
+        );
 
         return $data;
     }
@@ -192,6 +206,53 @@ class ChatWidgetController extends Controller
 
         $disk = $widget->launcher_logo_disk ?: $this->storageManager->diskName();
         Storage::disk($disk)->delete($widget->launcher_logo_path);
+    }
+
+    /** @param array<string, mixed> $data */
+    private function applyAvatar(Request $request, array $data, ?ChatWidget $widget = null): array
+    {
+        if ($request->boolean('remove_avatar')) {
+            $this->deleteAvatar($widget);
+
+            return array_merge($data, [
+                'avatar_url' => null,
+                'avatar_path' => null,
+                'avatar_disk' => null,
+            ]);
+        }
+
+        if (! $request->hasFile('avatar_image')) {
+            return $data;
+        }
+
+        $webp = $this->avatarProcessor->process($request->file('avatar_image'));
+        $path = $this->storageManager->prefixedPath('widget-avatars/'.Str::uuid().'.webp');
+        $disk = $this->storageManager->disk();
+
+        if (! $disk->put($path, $webp, ['visibility' => 'public'])) {
+            throw ValidationException::withMessages([
+                'avatar_image' => 'The avatar could not be uploaded to the configured storage provider.',
+            ]);
+        }
+
+        $this->deleteAvatar($widget);
+
+        return array_merge($data, [
+            'avatar_url' => null,
+            'avatar_path' => $path,
+            'avatar_disk' => $this->storageManager->diskName(),
+        ]);
+    }
+
+    private function deleteAvatar(?ChatWidget $widget): void
+    {
+        if (! $widget?->avatar_path) {
+            return;
+        }
+
+        $disk = $widget->avatar_disk ?: $this->storageManager->diskName();
+        $this->storageManager->ensureDiskReady($disk);
+        Storage::disk($disk)->delete($widget->avatar_path);
     }
 
     private function canUseCustomLauncherLogo(Request $request): bool

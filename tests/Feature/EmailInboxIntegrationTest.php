@@ -86,6 +86,45 @@ class EmailInboxIntegrationTest extends TestCase
     {
         $this->get('/app/inbox/email-setup')->assertRedirect();
         $this->get('/app/inbox/email')->assertRedirect();
+
+        $context = $this->createWorkspaceContext();
+
+        $this->actingAs($context['user'])
+            ->get('/app/inbox/email-setup')
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Inbox/EmailSetup')
+                ->has('accounts', 0)
+                ->where('googleEnabled', false)
+                ->where('microsoftEnabled', false));
+    }
+
+    public function test_email_setup_page_renders_when_google_and_microsoft_are_configured(): void
+    {
+        $context = $this->createWorkspaceContext();
+
+        IntegrationConfig::create([
+            'provider' => 'oauth_google_mail',
+            'label' => 'Google Gmail OAuth',
+            'mode' => 'live',
+            'credentials' => ['client_id' => 'google-client-id', 'client_secret' => 'google-secret'],
+            'enabled' => true,
+        ]);
+        IntegrationConfig::create([
+            'provider' => 'oauth_microsoft_365',
+            'label' => 'Microsoft 365 Mail OAuth',
+            'mode' => 'live',
+            'credentials' => ['client_id' => 'microsoft-client-id', 'client_secret' => 'microsoft-secret'],
+            'enabled' => true,
+        ]);
+
+        $this->actingAs($context['user'])
+            ->get('/app/inbox/email-setup')
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Inbox/EmailSetup')
+                ->where('googleEnabled', true)
+                ->where('microsoftEnabled', true));
     }
 
     public function test_master_email_inbox_excludes_every_non_email_channel(): void

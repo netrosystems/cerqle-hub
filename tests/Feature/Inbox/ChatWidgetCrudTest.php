@@ -149,4 +149,67 @@ class ChatWidgetCrudTest extends TestCase
             'name' => 'Free plan chat',
         ]);
     }
+
+    public function test_agent_avatar_is_uploaded_as_a_compact_square_webp(): void
+    {
+        Storage::fake('public');
+
+        $this->actingAs($this->ctx['user'])
+            ->post(route('client.inbox.chat-widgets.store'), [
+                'name' => 'Avatar chat',
+                'position' => 'bottom_right',
+                'avatar_image' => UploadedFile::fake()->image('portrait.png', 900, 1200),
+            ])
+            ->assertRedirect(route('client.inbox.chat-widgets.index'));
+
+        $widget = ChatWidget::where('workspace_id', $this->ctx['workspace']->id)->sole();
+        $this->assertNotNull($widget->avatar_path);
+        $this->assertStringEndsWith('.webp', $widget->avatar_path);
+        $this->assertNull($widget->getRawOriginal('avatar_url'));
+        Storage::disk('public')->assertExists($widget->avatar_path);
+
+        $contents = Storage::disk('public')->get($widget->avatar_path);
+        $image = getimagesizefromstring($contents);
+        $this->assertSame(160, $image[0]);
+        $this->assertSame(160, $image[1]);
+        $this->assertSame('image/webp', $image['mime']);
+        $this->assertLessThan(100 * 1024, strlen($contents));
+        $this->assertStringContainsString('/storage/', $widget->publicConfig()['avatar_url']);
+    }
+
+    public function test_agent_avatar_is_limited_to_one_megabyte_and_can_be_removed(): void
+    {
+        Storage::fake('public');
+
+        $this->actingAs($this->ctx['user'])
+            ->post(route('client.inbox.chat-widgets.store'), [
+                'name' => 'Too large avatar',
+                'position' => 'bottom_right',
+                'avatar_image' => UploadedFile::fake()->image('large.jpg')->size(1025),
+            ])
+            ->assertSessionHasErrors('avatar_image');
+
+        $this->actingAs($this->ctx['user'])
+            ->post(route('client.inbox.chat-widgets.store'), [
+                'name' => 'Removable avatar',
+                'position' => 'bottom_right',
+                'avatar_image' => UploadedFile::fake()->image('avatar.jpg', 320, 240),
+            ]);
+
+        $widget = ChatWidget::where('name', 'Removable avatar')->sole();
+        $oldPath = $widget->avatar_path;
+        Storage::disk('public')->assertExists($oldPath);
+
+        $this->actingAs($this->ctx['user'])
+            ->put(route('client.inbox.chat-widgets.update', $widget), [
+                'name' => $widget->name,
+                'position' => 'bottom_right',
+                'remove_avatar' => true,
+            ])
+            ->assertSessionHasNoErrors();
+
+        Storage::disk('public')->assertMissing($oldPath);
+        $this->assertNull($widget->fresh()->avatar_path);
+        $this->assertNull($widget->fresh()->avatar_url);
+    }
 }
