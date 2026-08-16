@@ -213,5 +213,6 @@ class PrepareSmsCampaignAudienceJob implements ShouldQueue
             'status' => 'safety_paused',
             'pause_reason' => 'Audience preparation stopped after repeated errors: '.substr($exception->getMessage(), 0, 350),
         ]);
+        app(SmsCampaignCapacityService::class)->release($campaign->fresh());
     }
 }

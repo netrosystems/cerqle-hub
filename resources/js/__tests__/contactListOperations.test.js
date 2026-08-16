@@ -19,8 +19,8 @@ describe('OPERATION_VISIBILITY windows', () => {
         expect(OPERATION_VISIBILITY.completed).toBe(5 * 60 * 1000);
     });
 
-    it('keeps failed rows visible for twenty-four hours', () => {
-        expect(OPERATION_VISIBILITY.failed).toBe(24 * 60 * 60 * 1000);
+    it('keeps failed rows visible for five minutes', () => {
+        expect(OPERATION_VISIBILITY.failed).toBe(5 * 60 * 1000);
     });
 });
 
@@ -49,12 +49,20 @@ describe('isLiveOperation', () => {
         expect(isLiveOperation({ status: 'completed', created_at: '2026-08-07T03:04:00Z' }, now)).toBe(false);
     });
 
-    it('keeps a failed operation visible inside the twenty-four hour window', () => {
-        expect(isLiveOperation({ status: 'failed', created_at: '2026-08-06T04:00:00Z' }, now)).toBe(true);
+    it('keeps a recently failed operation visible', () => {
+        expect(isLiveOperation({ status: 'failed', finished_at: '2026-08-07T03:08:00Z' }, now)).toBe(true);
     });
 
-    it('hides a failed operation older than twenty-four hours', () => {
-        expect(isLiveOperation({ status: 'failed', created_at: '2026-08-06T02:00:00Z' }, now)).toBe(false);
+    it('hides a failed operation older than five minutes', () => {
+        expect(isLiveOperation({ status: 'failed', finished_at: '2026-08-07T03:04:00Z' }, now)).toBe(false);
+    });
+
+    it('uses completion time instead of creation time for terminal operations', () => {
+        expect(isLiveOperation({
+            status: 'failed',
+            created_at: '2026-08-01T00:00:00Z',
+            finished_at: '2026-08-07T03:09:00Z',
+        }, now)).toBe(true);
     });
 
     it('hides a queued operation with no timestamp at all', () => {

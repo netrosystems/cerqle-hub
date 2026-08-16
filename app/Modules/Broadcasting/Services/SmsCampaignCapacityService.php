@@ -10,7 +10,7 @@ use Illuminate\Support\Facades\DB;
 class SmsCampaignCapacityService
 {
     private const ACTIVE_STATUSES = [
-        'preparing', 'sending', 'retrying', 'paused', 'safety_paused',
+        'preparing', 'sending', 'retrying',
     ];
 
     public function admit(Campaign $campaign, string $providerKey, int $recipientCount): bool

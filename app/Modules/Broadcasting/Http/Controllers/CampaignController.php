@@ -272,6 +272,9 @@ class CampaignController extends Controller
         $this->authorise($request, $campaign);
         abort_unless(in_array($campaign->status, ['queued', 'preparing', 'sending', 'retrying'], true), 422, 'Only active campaigns can be paused.');
         $campaign->update(['status' => 'paused']);
+        if ($campaign->channel === 'sms') {
+            app(SmsCampaignCapacityService::class)->release($campaign->fresh());
+        }
 
         return back()->with('success', 'Campaign paused.');
     }

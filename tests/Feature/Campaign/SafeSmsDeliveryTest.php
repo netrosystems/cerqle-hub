@@ -113,6 +113,32 @@ class SafeSmsDeliveryTest extends TestCase
     }
 
     #[Test]
+    public function a_paused_campaign_does_not_keep_provider_capacity_locked(): void
+    {
+        $credentials = $this->credentials();
+        [, $workspace] = $this->workspaceWithProvider($credentials);
+        $providerKey = SmsDriverManager::providerKey('alaris', $credentials);
+        $capacity = app(SmsCampaignCapacityService::class);
+
+        $first = Campaign::factory()->create([
+            'workspace_id' => $workspace->id,
+            'channel' => 'sms',
+            'status' => 'queued',
+        ]);
+        $second = Campaign::factory()->create([
+            'workspace_id' => $workspace->id,
+            'channel' => 'sms',
+            'status' => 'queued',
+        ]);
+
+        $this->assertTrue($capacity->admit($first, $providerKey, 10_000));
+        $first->update(['status' => 'paused']);
+
+        $this->assertTrue($capacity->admit($second, $providerKey, 10_000));
+        $this->assertSame('preparing', $second->fresh()->status);
+    }
+
+    #[Test]
     public function workers_do_not_block_on_far_future_rate_slots(): void
     {
         [, $workspace] = $this->workspaceWithProvider();

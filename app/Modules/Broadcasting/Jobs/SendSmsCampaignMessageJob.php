@@ -70,6 +70,7 @@ class SendSmsCampaignMessageJob implements ShouldQueue
                 'status' => 'safety_paused',
                 'pause_reason' => 'SMS provider credentials changed during the campaign. Review the gateway and resume safely.',
             ]);
+            $capacity->release($campaign->fresh());
             $this->returnToQueue($recipient, 'Provider credentials changed during delivery.', 60);
 
             return;
@@ -196,6 +197,7 @@ class SendSmsCampaignMessageJob implements ShouldQueue
                 'status' => 'safety_paused',
                 'pause_reason' => 'Sending paused automatically after repeated provider configuration or authentication failures.',
             ]);
+            $capacity->release($campaign->fresh());
         }
 
         Log::channel('json')->warning('campaign.sms.failed', [
