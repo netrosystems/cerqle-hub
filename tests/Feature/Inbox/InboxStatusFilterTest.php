@@ -54,4 +54,52 @@ class InboxStatusFilterTest extends TestCase
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page->where('conversations.total', 1));
     }
+
+    public function test_omni_channel_inbox_excludes_email_and_sms_everywhere(): void
+    {
+        ['user' => $user, 'workspace' => $workspace] = $this->createWorkspaceContext();
+
+        foreach (['webchat', 'whatsapp', 'email', 'sms'] as $channel) {
+            $account = ChannelAccount::create([
+                'workspace_id' => $workspace->id,
+                'channel' => $channel,
+                'provider' => $channel,
+                'display_name' => ucfirst($channel),
+                'status' => 'active',
+            ]);
+            $contact = Contact::create([
+                'workspace_id' => $workspace->id,
+                'source' => $channel,
+                'first_name' => ucfirst($channel),
+            ]);
+            Conversation::create([
+                'workspace_id' => $workspace->id,
+                'channel_account_id' => $account->id,
+                'contact_id' => $contact->id,
+                'status' => 'open',
+                'last_message_at' => now(),
+            ]);
+        }
+
+        $this->actingAs($user)->get(route('client.inbox.index'))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Inbox/Index')
+                ->where('conversations.total', 2)
+                ->has('channelAccounts', 2)
+                ->where('channelAccounts.0.channel', 'webchat')
+                ->where('channelAccounts.1.channel', 'whatsapp'));
+
+        $this->actingAs($user)
+            ->getJson(route('client.inbox.poll', ['channel' => 'email']))
+            ->assertOk()
+            ->assertJsonPath('conversations.total', 0);
+
+        $this->actingAs($user)
+            ->getJson(route('client.inbox.channel-accounts'))
+            ->assertOk()
+            ->assertJsonCount(2)
+            ->assertJsonMissing(['channel' => 'email'])
+            ->assertJsonMissing(['channel' => 'sms']);
+    }
 }

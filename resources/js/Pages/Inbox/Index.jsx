@@ -22,7 +22,7 @@ const FOLDERS = [
     { key: 'snoozed',    labelKey: 'inbox.folder_snoozed',    icon: Clock },
 ];
 
-const ALL_CHANNELS = ['whatsapp', 'instagram', 'messenger', 'sms', 'email', 'webchat'];
+const ALL_CHANNELS = ['whatsapp', 'instagram', 'messenger', 'webchat'];
 
 function ConversationCard({ conv, isFlashing, isActive, userTz }) {
     const { t } = useTranslation();

@@ -7,6 +7,7 @@ use App\Models\Invitation;
 use App\Models\User;
 use App\Models\Workspace;
 use App\Services\WorkspaceMembershipService;
+use Illuminate\Auth\Events\Registered;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -102,7 +103,7 @@ class TeamController extends Controller
             'workspace_assignments.*.role' => ['required', 'in:administrator,staff'],
         ]);
 
-        DB::transaction(function () use ($client, $validated): void {
+        $member = DB::transaction(function () use ($client, $validated): User {
             $member = $client->users()->create([
                 'name' => $validated['name'],
                 'email' => $validated['email'],
@@ -116,7 +117,13 @@ class TeamController extends Controller
             ]);
 
             $this->memberships->sync($member, $client, $validated['workspace_assignments']);
+
+            return $member;
         });
+
+        // Dispatch only after the transaction commits so the standard email
+        // verification listener can resolve the new member immediately.
+        event(new Registered($member));
 
         return redirect()->route('client.team.index')->with('success', __('Team member added.'));
     }

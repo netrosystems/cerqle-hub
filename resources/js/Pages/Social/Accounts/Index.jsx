@@ -1,6 +1,7 @@
 import { Head, router, usePage } from '@inertiajs/react';
 import ClientLayout from '@/Layouts/ClientLayout';
-import { Share2, Plus, Trash2, AlertCircle, RefreshCw } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Share2, Plus, Trash2, AlertCircle, RefreshCw, ExternalLink, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { SocialBrandIcon } from '@/Components/BrandIcons';
 
@@ -21,6 +22,8 @@ export default function SocialAccountsIndex({ accounts }) {
     const { t } = useTranslation();
     const { props } = usePage();
     const flash = props.flash ?? {};
+    const [linkedinConnectUrl, setLinkedinConnectUrl] = useState(null);
+    const [linkedinSignOutOpened, setLinkedinSignOutOpened] = useState(false);
 
     // Group accounts by network — supports multiple per network
     const byNetwork = accounts.reduce((acc, a) => {
@@ -34,6 +37,35 @@ export default function SocialAccountsIndex({ accounts }) {
             router.delete(route('client.social.accounts.disconnect', account.id), { preserveScroll: true });
         }
     };
+
+    const beginConnect = (event, network) => {
+        if (network !== 'linkedin') return;
+
+        event.preventDefault();
+        setLinkedinConnectUrl(event.currentTarget.href);
+        setLinkedinSignOutOpened(false);
+    };
+
+    const closeLinkedinDialog = () => {
+        setLinkedinConnectUrl(null);
+        setLinkedinSignOutOpened(false);
+    };
+
+    const signOutOfLinkedin = () => {
+        window.open('https://www.linkedin.com/m/logout/', '_blank', 'noopener,noreferrer');
+        setLinkedinSignOutOpened(true);
+    };
+
+    useEffect(() => {
+        if (!linkedinConnectUrl) return undefined;
+
+        const handleKeyDown = (event) => {
+            if (event.key === 'Escape') closeLinkedinDialog();
+        };
+
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [linkedinConnectUrl]);
 
     const totalConnected = accounts.length;
 
@@ -141,6 +173,7 @@ export default function SocialAccountsIndex({ accounts }) {
                                     <div className="p-3 mt-auto">
                                         <a
                                             href={route('client.social.accounts.connect', net.id)}
+                                            onClick={(event) => beginConnect(event, net.id)}
                                             className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-neutral-200 dark:border-neutral-700 px-3 py-2 text-xs font-medium text-neutral-600 dark:text-neutral-300 hover:border-brand-500 hover:text-brand-600 dark:hover:text-brand-400 transition"
                                         >
                                             {connected.length > 0 ? (
@@ -166,6 +199,74 @@ export default function SocialAccountsIndex({ accounts }) {
                         <Share2 className="h-8 w-8 mx-auto text-neutral-300 dark:text-neutral-600 mb-3" />
                         <p className="font-medium text-neutral-700 dark:text-neutral-300">{t('social.no_accounts_yet')}</p>
                         <p className="text-sm text-neutral-400 mt-1">{t('social.no_accounts_yet_hint')}</p>
+                    </div>
+                )}
+
+                {linkedinConnectUrl && (
+                    <div
+                        className="fixed inset-0 z-50 flex items-center justify-center bg-neutral-950/55 p-4"
+                        role="dialog"
+                        aria-modal="true"
+                        aria-labelledby="linkedin-account-dialog-title"
+                        onMouseDown={(event) => {
+                            if (event.target === event.currentTarget) closeLinkedinDialog();
+                        }}
+                    >
+                        <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-2xl dark:bg-neutral-900">
+                            <div className="flex items-start gap-3">
+                                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-neutral-50 dark:bg-neutral-800">
+                                    <SocialBrandIcon network="linkedin" className="h-6 w-6" />
+                                </span>
+                                <div className="min-w-0 flex-1">
+                                    <h3 id="linkedin-account-dialog-title" className="font-semibold text-neutral-900 dark:text-neutral-100">
+                                        Choose a LinkedIn account
+                                    </h3>
+                                    <p className="mt-1 text-sm leading-5 text-neutral-500 dark:text-neutral-400">
+                                        LinkedIn automatically reuses the account currently signed in to linkedin.com.
+                                    </p>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={closeLinkedinDialog}
+                                    className="rounded-lg p-1 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
+                                    aria-label="Close"
+                                >
+                                    <X className="h-5 w-5" />
+                                </button>
+                            </div>
+
+                            <div className="mt-5 space-y-3">
+                                <a
+                                    href={linkedinConnectUrl}
+                                    className="flex w-full items-center justify-center rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-brand-700"
+                                >
+                                    Continue with the signed-in account
+                                </a>
+
+                                {!linkedinSignOutOpened ? (
+                                    <button
+                                        type="button"
+                                        onClick={signOutOfLinkedin}
+                                        className="flex w-full items-center justify-center gap-2 rounded-lg border border-neutral-200 px-4 py-2.5 text-sm font-medium text-neutral-700 transition hover:border-brand-500 hover:text-brand-600 dark:border-neutral-700 dark:text-neutral-200"
+                                    >
+                                        Sign out to use another account
+                                        <ExternalLink className="h-4 w-4" />
+                                    </button>
+                                ) : (
+                                    <div className="rounded-xl border border-brand-200 bg-brand-50 p-3 dark:border-brand-800 dark:bg-brand-950/30">
+                                        <p className="text-sm text-neutral-700 dark:text-neutral-200">
+                                            Finish signing out in the LinkedIn tab, then continue below.
+                                        </p>
+                                        <a
+                                            href={linkedinConnectUrl}
+                                            className="mt-3 flex w-full items-center justify-center rounded-lg border border-brand-500 bg-white px-4 py-2.5 text-sm font-medium text-brand-700 transition hover:bg-brand-50 dark:bg-neutral-900 dark:text-brand-300"
+                                        >
+                                            Connect another LinkedIn account
+                                        </a>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
                     </div>
                 )}
             </div>

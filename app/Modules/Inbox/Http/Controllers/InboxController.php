@@ -30,6 +30,8 @@ use Inertia\Response;
 
 class InboxController extends Controller
 {
+    private const OMNI_CHANNELS = ['whatsapp', 'instagram', 'messenger', 'webchat'];
+
     public function __construct(
         private ChannelManager $channelManager,
         private StorageManager $storageManager,
@@ -47,6 +49,7 @@ class InboxController extends Controller
         $labels = InboxLabel::where('workspace_id', $workspaceId)->orderBy('name')->get(['id', 'name', 'color']);
         $channelAccounts = ChannelAccount::where('workspace_id', $workspaceId)
             ->where('status', 'active')
+            ->whereIn('channel', self::OMNI_CHANNELS)
             ->orderBy('channel')
             ->orderBy('display_name')
             ->get(['id', 'channel', 'display_name', 'phone_number_id']);
@@ -160,6 +163,7 @@ class InboxController extends Controller
         $filters = $request->only('folder', 'channel', 'label', 'account_id');
         $conversations = Conversation::where('workspace_id', $workspaceId)
             ->with(['contact', 'channelAccount', 'lastMessage', 'lastHumanReply.user:id,name,avatar', 'labels'])
+            ->whereHas('channelAccount', fn ($q) => $q->whereIn('channel', self::OMNI_CHANNELS))
             ->when(($filters['folder'] ?? null) === 'mine', fn ($q) => $q->where('assigned_user_id', $userId))
             ->when(($filters['folder'] ?? null) === 'unassigned', fn ($q) => $q->whereNull('assigned_user_id'))
             ->when($filters['channel'] ?? null, fn ($q, $ch) => $q->whereHas('channelAccount', fn ($q) => $q->where('channel', $ch)))
@@ -175,6 +179,7 @@ class InboxController extends Controller
 
         $channelAccounts = ChannelAccount::where('workspace_id', $workspaceId)
             ->where('status', 'active')
+            ->whereIn('channel', self::OMNI_CHANNELS)
             ->orderBy('channel')
             ->orderBy('display_name')
             ->get(['id', 'channel', 'display_name', 'phone_number_id']);
@@ -694,6 +699,7 @@ class InboxController extends Controller
 
         $accounts = ChannelAccount::where('workspace_id', $workspaceId)
             ->where('status', 'active')
+            ->whereIn('channel', self::OMNI_CHANNELS)
             ->get(['id', 'channel', 'display_name', 'phone_number_id']);
 
         return response()->json($accounts);
@@ -711,7 +717,9 @@ class InboxController extends Controller
         ]);
 
         $contact = Contact::where('workspace_id', $workspaceId)->findOrFail($validated['contact_id']);
-        $channelAccount = ChannelAccount::where('workspace_id', $workspaceId)->findOrFail($validated['channel_account_id']);
+        $channelAccount = ChannelAccount::where('workspace_id', $workspaceId)
+            ->whereIn('channel', self::OMNI_CHANNELS)
+            ->findOrFail($validated['channel_account_id']);
 
         // Reuse the most recent open conversation for this contact + channel, or create a new one
         $conversation = Conversation::where('workspace_id', $workspaceId)
@@ -774,6 +782,7 @@ class InboxController extends Controller
 
         return Conversation::where('workspace_id', $workspaceId)
             ->with(['contact', 'channelAccount', 'lastMessage', 'lastHumanReply.user:id,name,avatar', 'labels'])
+            ->whereHas('channelAccount', fn ($q) => $q->whereIn('channel', self::OMNI_CHANNELS))
             ->when($request->folder === 'mine', fn ($q) => $q->where('assigned_user_id', $userId))
             ->when($request->folder === 'unassigned', fn ($q) => $q->whereNull('assigned_user_id'))
             ->when($request->channel, fn ($q) => $q->whereHas('channelAccount', fn ($q) => $q->where('channel', $request->channel)))

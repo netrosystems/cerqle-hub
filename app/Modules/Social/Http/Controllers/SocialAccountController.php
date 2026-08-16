@@ -240,8 +240,13 @@ class SocialAccountController extends Controller
     public function disconnect(Request $request, SocialAccount $account): RedirectResponse
     {
         abort_unless((int) $account->workspace_id === $this->workspaceId($request), 403);
+        $network = $account->network;
         $account->delete();
 
-        return back()->with('success', 'Account disconnected.');
+        $message = $network === 'linkedin'
+            ? 'LinkedIn account disconnected from Cerqle. Your LinkedIn browser session remains signed in; choose “Sign out to use another account” when reconnecting.'
+            : 'Account disconnected.';
+
+        return back()->with('success', $message);
     }
 }
