@@ -70,10 +70,26 @@ class SyncEmailAccountJob implements ShouldBeUnique, ShouldQueue
     private function ingest(ChannelAccount $account, array $item): void
     {
         $providerId = trim((string) ($item['id'] ?? ''));
-        if ($providerId === '' || Message::where('channel', 'email')
+        if ($providerId === '') {
+            return;
+        }
+        $body = trim(strip_tags((string) data_get($item, 'body.content', $item['bodyPreview'] ?? '')));
+        $existing = Message::where('channel', 'email')
             ->where('provider_message_id', $providerId)
             ->whereHas('conversation', fn ($query) => $query->where('channel_account_id', $account->id))
-            ->exists()) {
+            ->first();
+        if ($existing) {
+            // A manual bounded resync can repair messages saved by the legacy
+            // IMAP parser, which stored raw multipart boundaries as the body.
+            if ($body !== '' && $existing->body !== $body) {
+                $existing->update([
+                    'body' => $body,
+                    'payload' => array_merge($existing->payload ?? [], [
+                        'subject' => (string) ($item['subject'] ?? '(no subject)'),
+                    ]),
+                ]);
+            }
+
             return;
         }
         $address = strtolower(trim((string) data_get($item, 'from.emailAddress.address')));
@@ -103,7 +119,6 @@ class SyncEmailAccountJob implements ShouldBeUnique, ShouldQueue
             ],
             ['status' => 'open', 'assigned_to' => 'human'],
         );
-        $body = trim(strip_tags((string) data_get($item, 'body.content', $item['bodyPreview'] ?? '')));
         $message = Message::create([
             'conversation_id' => $conversation->id,
             'direction' => 'in',

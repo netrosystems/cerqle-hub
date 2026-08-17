@@ -140,6 +140,36 @@ class EmailInboxIntegrationTest extends TestCase
                 ->has('accounts', 2));
     }
 
+    public function test_manual_generic_sync_queues_a_bounded_refresh_for_body_repairs(): void
+    {
+        Queue::fake();
+        $context = $this->createWorkspaceContext();
+        $account = ChannelAccount::create([
+            'workspace_id' => $context['workspace']->id,
+            'channel' => 'email',
+            'provider' => 'imap_smtp',
+            'business_account_id' => 'support@example.com',
+            'display_name' => 'Support',
+            'status' => 'active',
+            'credentials' => ['username' => 'support@example.com'],
+            'meta_json' => [
+                'email' => 'support@example.com',
+                'last_synced_at' => now()->toIso8601String(),
+                'last_sync_error' => 'Old error',
+            ],
+        ]);
+
+        $this->actingAs($context['user'])
+            ->post(route('client.inbox.email.sync', $account))
+            ->assertRedirect()
+            ->assertSessionHas('success', 'Recent mailbox refresh queued.');
+
+        $account->refresh();
+        $this->assertArrayNotHasKey('last_synced_at', $account->meta_json);
+        $this->assertArrayNotHasKey('last_sync_error', $account->meta_json);
+        Queue::assertPushedOn('default', SyncEmailAccountJob::class);
+    }
+
     public function test_microsoft_authorization_and_code_exchange_use_expected_graph_contract(): void
     {
         IntegrationConfig::create([
@@ -313,6 +343,16 @@ class EmailInboxIntegrationTest extends TestCase
                 ->where('conversations.data.0.latest_inbound_message.payload.subject', 'Account assistance')
                 ->has('accounts', 1)
                 ->where('counts.all', 1));
+
+        $emailConversation->update(['status' => 'resolved']);
+        $this->actingAs($context['user'])
+            ->get(route('client.inbox.email-inbox', ['folder' => 'resolved']))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Inbox/EmailInbox')
+                ->where('filters.folder', 'resolved')
+                ->has('conversations.data', 1)
+                ->where('selectedConversation', null));
     }
 
     public function test_mailbox_sync_creates_one_workspace_scoped_email_conversation_and_deduplicates(): void
@@ -343,6 +383,7 @@ class EmailInboxIntegrationTest extends TestCase
 
         $job = new SyncEmailAccountJob($account->id);
         $job->handle($microsoft, $google, $generic);
+        Message::firstOrFail()->update(['body' => '--raw-boundary Content-Transfer-Encoding: quoted-printable']);
         $job->handle($microsoft, $google, $generic);
 
         $this->assertDatabaseCount('conversations', 1);

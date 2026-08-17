@@ -230,10 +230,21 @@ class EmailAccountController extends Controller
     public function sync(Request $request, ChannelAccount $channelAccount): RedirectResponse
     {
         $this->authorise($request, $channelAccount);
-        $channelAccount->update(['status' => 'active']);
+        $updates = ['status' => 'active'];
+        if ($channelAccount->provider === 'imap_smtp') {
+            // Manual sync is a bounded seven-day refresh. This lets the new
+            // MIME parser repair recently imported messages without making the
+            // minute-by-minute scheduled sync repeatedly scan old mail.
+            $updates['meta_json'] = collect($channelAccount->meta_json ?? [])
+                ->except(['last_synced_at', 'last_sync_error'])
+                ->all();
+        }
+        $channelAccount->update($updates);
         SyncEmailAccountJob::dispatch($channelAccount->id)->onQueue('default');
 
-        return back()->with('success', 'Mailbox sync queued.');
+        return back()->with('success', $channelAccount->provider === 'imap_smtp'
+            ? 'Recent mailbox refresh queued.'
+            : 'Mailbox sync queued.');
     }
 
     public function destroy(Request $request, ChannelAccount $channelAccount): RedirectResponse
