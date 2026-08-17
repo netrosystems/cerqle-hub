@@ -55,7 +55,11 @@ class NewMessageNotification extends Notification implements ShouldQueue
             'conversation_id' => $this->conversation->id,
             'contact_name' => $this->conversation->contact?->name ?? 'Unknown',
             'snippet' => mb_substr((string) $this->message->body, 0, 120),
-            'url' => route('client.inbox.show', $this->conversation),
+            'channel' => $this->message->channel,
+            'conversation_uuid' => $this->conversation->uuid,
+            'workspace_id' => $this->conversation->workspace_id,
+            'screen' => $this->isEmail() ? 'master_email_inbox' : 'omni_channel_inbox',
+            'url' => $this->destinationUrl(),
         ];
     }
 
@@ -84,25 +88,44 @@ class NewMessageNotification extends Notification implements ShouldQueue
         return [
             'title' => 'New message',
             'body' => $this->conversation->contact?->name ?? 'A contact sent a message',
-            'url' => route('client.inbox.show', $this->conversation),
+            'url' => $this->destinationUrl(),
         ];
     }
 
     public function toOneSignal(object $notifiable): array
     {
         $contact = $this->conversation->contact;
-        $name    = trim(implode(' ', array_filter([$contact?->first_name, $contact?->last_name])));
+        $name = trim(implode(' ', array_filter([$contact?->first_name, $contact?->last_name])));
         $channel = ucfirst($this->conversation->channel_account?->channel ?? 'message');
         $snippet = mb_substr((string) $this->message->body, 0, 100);
 
         return [
             'title' => $name ?: 'New message',
-            'body'  => $snippet ?: "New {$channel} message",
-            'url'   => route('client.inbox.show', $this->conversation),
+            'body' => $snippet ?: "New {$channel} message",
+            'url' => $this->destinationUrl(),
             // Extra data so the service worker can collapse duplicate notifications
             // for the same conversation.
             'conversation_id' => $this->conversation->id,
+            'conversation_uuid' => $this->conversation->uuid,
+            'workspace_id' => $this->conversation->workspace_id,
+            'channel' => $this->message->channel,
+            'screen' => $this->isEmail() ? 'master_email_inbox' : 'omni_channel_inbox',
+            'account_id' => $this->conversation->channel_account_id,
         ];
+    }
+
+    private function isEmail(): bool
+    {
+        return $this->message->channel === 'email';
+    }
+
+    private function destinationUrl(): string
+    {
+        if ($this->isEmail()) {
+            return route('client.inbox.email-inbox', ['conversation' => $this->conversation->uuid]);
+        }
+
+        return route('client.inbox.show', $this->conversation);
     }
 
     private function isEnabled(object $notifiable, string $channel): bool

@@ -240,7 +240,7 @@ class EmailAccountController extends Controller
                 ->all();
         }
         $channelAccount->update($updates);
-        SyncEmailAccountJob::dispatch($channelAccount->id)->onQueue('default');
+        SyncEmailAccountJob::dispatch($channelAccount->id, true)->onQueue('default');
 
         return back()->with('success', $channelAccount->provider === 'imap_smtp'
             ? 'Recent mailbox refresh queued.'

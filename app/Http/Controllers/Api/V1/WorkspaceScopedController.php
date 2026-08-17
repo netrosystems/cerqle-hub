@@ -12,7 +12,9 @@ abstract class WorkspaceScopedController extends Controller
 {
     /**
      * Resolve the workspace_id for the authenticated API request.
-     * Uses the authenticated user's primary workspace.
+     * The mobile workspace selector persists the agent's active workspace on
+     * users.workspace_id, so token-authenticated requests do not depend on a
+     * browser session.
      */
     protected function workspaceId(Request $request): int
     {

@@ -13,6 +13,7 @@ use App\Modules\Shared\Models\Conversation;
 use App\Modules\Shared\Models\Message;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
 use Inertia\Testing\AssertableInertia as Assert;
@@ -55,7 +56,18 @@ class EmailInboxIntegrationTest extends TestCase
         $account = ChannelAccount::where('provider', 'imap_smtp')->firstOrFail();
         $this->assertSame('active', $account->status);
         $this->assertSame('support@example.com', $account->meta_json['email']);
-        Queue::assertPushedOn('default', SyncEmailAccountJob::class);
+        Queue::assertPushedOn('default', SyncEmailAccountJob::class, fn (SyncEmailAccountJob $job) => ! $job->manual);
+    }
+
+    public function test_manual_and_scheduled_mailbox_syncs_have_distinct_unique_keys(): void
+    {
+        $scheduled = new SyncEmailAccountJob(42);
+        $manual = new SyncEmailAccountJob(42, true);
+
+        $this->assertSame('42:scheduled', $scheduled->uniqueId());
+        $this->assertSame('42:manual', $manual->uniqueId());
+        $this->assertCount(1, $scheduled->middleware());
+        $this->assertCount(1, $manual->middleware());
     }
 
     public function test_failed_generic_mailbox_test_does_not_persist_or_replace_credentials(): void
@@ -167,7 +179,33 @@ class EmailInboxIntegrationTest extends TestCase
         $account->refresh();
         $this->assertArrayNotHasKey('last_synced_at', $account->meta_json);
         $this->assertArrayNotHasKey('last_sync_error', $account->meta_json);
+        Queue::assertPushedOn('default', SyncEmailAccountJob::class, fn (SyncEmailAccountJob $job) => $job->manual);
+    }
+
+    public function test_polling_the_master_inbox_requests_a_throttled_provider_sync(): void
+    {
+        Queue::fake();
+        Cache::flush();
+        $context = $this->createWorkspaceContext();
+        $account = ChannelAccount::create([
+            'workspace_id' => $context['workspace']->id,
+            'channel' => 'email',
+            'provider' => 'imap_smtp',
+            'business_account_id' => 'support@example.com',
+            'display_name' => 'Support',
+            'status' => 'active',
+            'credentials' => ['username' => 'support@example.com'],
+            'meta_json' => ['email' => 'support@example.com'],
+        ]);
+
+        $route = route('client.inbox.email.poll', ['account_id' => $account->id]);
+
+        $this->actingAs($context['user'])->getJson($route)->assertOk();
+        $this->actingAs($context['user'])->getJson($route)->assertOk();
+
         Queue::assertPushedOn('default', SyncEmailAccountJob::class);
+        Queue::assertPushed(SyncEmailAccountJob::class, 1);
+        Queue::assertPushed(SyncEmailAccountJob::class, fn (SyncEmailAccountJob $job) => $job->channelAccountId === $account->id);
     }
 
     public function test_microsoft_authorization_and_code_exchange_use_expected_graph_contract(): void

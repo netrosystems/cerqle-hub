@@ -5,6 +5,7 @@ namespace App\Notifications\Channels;
 use App\Models\User;
 use App\Services\OneSignalService;
 use Illuminate\Notifications\Notification;
+use Illuminate\Support\Arr;
 
 class OneSignalChannel
 {
@@ -31,12 +32,19 @@ class OneSignalChannel
             return;
         }
 
-        $data           = $notification->toOneSignal($notifiable);
-        $title          = $data['title'] ?? 'Notification';
-        $body           = $data['body'] ?? '';
-        $url            = $data['url'] ?? null;
+        $data = $notification->toOneSignal($notifiable);
+        $title = $data['title'] ?? 'Notification';
+        $body = $data['body'] ?? '';
+        $url = $data['url'] ?? null;
         $conversationId = $data['conversation_id'] ?? null;
 
-        $this->service->sendToExternalId('user:'.$notifiable->id, $title, $body, $url, $conversationId);
+        $this->service->sendToExternalId(
+            'user:'.$notifiable->id,
+            $title,
+            $body,
+            $url,
+            $conversationId,
+            Arr::except($data, ['title', 'body', 'url']),
+        );
     }
 }

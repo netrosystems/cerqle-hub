@@ -28,13 +28,13 @@ class OneSignalService
     /**
      * Send a push notification to a user identified by their Laravel user ID.
      */
-    public function sendToUser(int|string $userId, string $title, string $body, ?string $url = null, int|string|null $conversationId = null): void
+    public function sendToUser(int|string $userId, string $title, string $body, ?string $url = null, int|string|null $conversationId = null, array $data = []): void
     {
-        $this->sendToExternalId('user:'.$userId, $title, $body, $url, $conversationId);
+        $this->sendToExternalId('user:'.$userId, $title, $body, $url, $conversationId, $data);
     }
 
     /** Send a push message to a namespaced OneSignal external ID. */
-    public function sendToExternalId(string $externalId, string $title, string $body, ?string $url = null, int|string|null $conversationId = null): void
+    public function sendToExternalId(string $externalId, string $title, string $body, ?string $url = null, int|string|null $conversationId = null, array $data = []): void
     {
         if (! $this->isConfigured()) {
             return;
@@ -43,25 +43,31 @@ class OneSignalService
         $config = $this->configuration();
 
         $payload = [
-            'app_id'                        => $config['app_id'],
-            'include_aliases'               => ['external_id' => [$externalId]],
-            'target_channel'                => 'push',
-            'headings'                      => ['en' => $title],
-            'contents'                      => ['en' => $body],
-            'ios_badgeType'                 => 'Increase',
-            'ios_badgeCount'                => 1,
+            'app_id' => $config['app_id'],
+            'include_aliases' => ['external_id' => [$externalId]],
+            'target_channel' => 'push',
+            'headings' => ['en' => $title],
+            'contents' => ['en' => $body],
+            'ios_badgeType' => 'Increase',
+            'ios_badgeCount' => 1,
         ];
 
         if ($url) {
-            $payload['url'] = $url;
+            // Keep browser push navigation separate from native app routing.
+            // Native clients use the custom data payload below so they can open
+            // the correct in-app screen instead of launching the web browser.
+            $payload['web_url'] = $url;
         }
 
         // Collapse multiple notifications for the same conversation into one.
         if ($conversationId !== null) {
-            $payload['collapse_id']             = "conversation-{$conversationId}";
-            $payload['web_push_topic']          = "conversation-{$conversationId}";
-            $payload['data']                    = ['conversation_id' => $conversationId, 'url' => $url];
+            $payload['collapse_id'] = "conversation-{$conversationId}";
+            $payload['web_push_topic'] = "conversation-{$conversationId}";
+            $data['conversation_id'] = $conversationId;
         }
+
+        $data['url'] = $url;
+        $payload['data'] = array_filter($data, fn ($value) => $value !== null && $value !== '');
 
         $response = Http::withHeaders(['Authorization' => 'Key '.$config['rest_api_key']])
             ->post(self::API_URL, $payload);
@@ -69,8 +75,8 @@ class OneSignalService
         if (! $response->successful()) {
             Log::warning('OneSignal notification failed', [
                 'external_id' => $externalId,
-                'status'  => $response->status(),
-                'body'    => $response->body(),
+                'status' => $response->status(),
+                'body' => $response->body(),
             ]);
         }
     }

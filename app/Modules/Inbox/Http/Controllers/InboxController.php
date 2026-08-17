@@ -9,6 +9,7 @@ use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Modules\Inbox\Models\InboxLabel;
 use App\Modules\Inbox\Services\ConversationHandoverService;
+use App\Modules\Inbox\Services\EmailInboxSyncDispatcher;
 use App\Modules\Shared\Models\ChannelAccount;
 use App\Modules\Shared\Models\Contact;
 use App\Modules\Shared\Models\Conversation;
@@ -36,6 +37,7 @@ class InboxController extends Controller
         private ChannelManager $channelManager,
         private StorageManager $storageManager,
         private ConversationHandoverService $handoverService,
+        private EmailInboxSyncDispatcher $emailSyncDispatcher,
     ) {}
 
     public function index(Request $request): Response
@@ -110,6 +112,8 @@ class InboxController extends Controller
     public function pollEmailConversations(Request $request): JsonResponse
     {
         $workspaceId = (int) ($request->user()->current_workspace_id ?? $request->user()->workspace_id);
+
+        $this->emailSyncDispatcher->dispatchForWorkspace($workspaceId, $request->integer('account_id') ?: null);
 
         return response()->json($this->emailInboxData($request, $workspaceId));
     }

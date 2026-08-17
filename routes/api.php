@@ -12,6 +12,7 @@ use App\Http\Controllers\Api\V1\MeController;
 use App\Http\Controllers\Api\V1\MessageApiController;
 use App\Http\Controllers\Api\V1\MobileAuthController;
 use App\Http\Controllers\Api\V1\MobileConversationController;
+use App\Http\Controllers\Api\V1\MobileEmailInboxController;
 use App\Http\Controllers\Api\V1\MobileInboxController;
 use App\Http\Controllers\Api\V1\NotificationApiController;
 use App\Http\Controllers\Api\V1\OutboundWebhookApiController;
@@ -47,6 +48,9 @@ Route::prefix('v1/auth')->middleware(['auth:sanctum', 'throttle:api'])->group(fu
 // `demo` blocks writes (POST/PATCH/DELETE) in demo mode while GET reads pass,
 // keeping the mobile app a consistent read-only showcase like the web app.
 Route::prefix('v1/mobile')->middleware(['auth:sanctum', 'throttle:api', 'demo'])->group(function () {
+    // Workspace context
+    Route::post('/workspaces/{workspace}/select', [WorkspaceApiController::class, 'select']);
+
     // Conversations
     Route::get('/conversations', [MobileConversationController::class, 'index']);
     Route::get('/conversations/{uuid}', [MobileConversationController::class, 'show']);
@@ -71,6 +75,15 @@ Route::prefix('v1/mobile')->middleware(['auth:sanctum', 'throttle:api', 'demo'])
     Route::get('/inbox/templates', [MobileInboxController::class, 'templates']);
     Route::get('/inbox/labels', [MobileInboxController::class, 'labels']);
     Route::get('/inbox/canned-replies', [MobileInboxController::class, 'cannedReplies']);
+
+    // Master Email Inbox (kept separate from the Omni Channel Inbox)
+    Route::get('/email/accounts', [MobileEmailInboxController::class, 'accounts']);
+    Route::get('/email/threads', [MobileEmailInboxController::class, 'threads']);
+    Route::get('/email/threads/{uuid}', [MobileEmailInboxController::class, 'show']);
+    Route::get('/email/threads/{uuid}/messages', [MobileEmailInboxController::class, 'messages']);
+    Route::post('/email/threads/{uuid}/reply', [MobileEmailInboxController::class, 'reply']);
+    Route::patch('/email/threads/{uuid}/status', [MobileEmailInboxController::class, 'updateStatus']);
+    Route::post('/email/accounts/{account}/sync', [MobileEmailInboxController::class, 'sync']);
 
     // Contacts
     Route::get('/contacts/search', [MobileInboxController::class, 'contactSearch']);

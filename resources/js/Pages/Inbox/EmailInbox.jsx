@@ -28,19 +28,36 @@ function contactName(conversation) {
 }
 
 function subjectOf(conversation) {
-    return conversation?.latest_inbound_message?.payload?.subject
-        || conversation?.last_message?.payload?.subject
+    return safeText(conversation?.latest_inbound_message?.payload?.subject)
+        || safeText(conversation?.last_message?.payload?.subject)
         || '(no subject)';
+}
+
+function safeText(value, fallback = '') {
+    if (typeof value === 'string' || typeof value === 'number') return String(value);
+    return fallback;
 }
 
 function formatMailTime(value, timezone) {
     if (!value) return '';
-    return new Intl.DateTimeFormat(undefined, {
-        timeZone: timezone,
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return '';
+    const options = {
         month: 'short',
         day: 'numeric',
-        ...(new Date(value).getFullYear() !== new Date().getFullYear() ? { year: 'numeric' } : {}),
-    }).format(new Date(value));
+        ...(date.getFullYear() !== new Date().getFullYear() ? { year: 'numeric' } : {}),
+    };
+    try {
+        return new Intl.DateTimeFormat(undefined, { ...options, timeZone: timezone }).format(date);
+    } catch {
+        return new Intl.DateTimeFormat(undefined, options).format(date);
+    }
+}
+
+function formatMessageTime(value) {
+    if (!value) return '';
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? '' : date.toLocaleString();
 }
 
 function FolderNav({ filters, counts, onFolder }) {
@@ -84,8 +101,9 @@ function MailRow({ conversation, active, timezone, onOpen }) {
 
 function MessageBlock({ message, contact, mailbox }) {
     const outbound = message.direction === 'out';
-    const sender = outbound ? (message.user?.name || mailbox?.display_name || 'Your team') : contactName({ contact });
-    const senderEmail = outbound ? mailbox?.meta_json?.email : contact?.email;
+    const sender = safeText(outbound ? (message.user?.name || mailbox?.display_name) : contactName({ contact }), outbound ? 'Your team' : 'Unknown sender');
+    const senderEmail = safeText(outbound ? mailbox?.meta_json?.email : contact?.email, 'unknown');
+    const body = safeText(message.body, '(empty message)');
     return <article className={`border-b border-neutral-100 px-5 py-5 dark:border-neutral-800 sm:px-7 ${outbound ? 'bg-brand-50/30 dark:bg-brand-950/10' : 'bg-white dark:bg-neutral-900'}`}>
         <div className="mb-4 flex items-start gap-3">
             <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-bold ${outbound ? 'bg-brand-600 text-white' : 'bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-200'}`}>{sender?.[0]?.toUpperCase() || '?'}</div>
@@ -97,11 +115,11 @@ function MessageBlock({ message, contact, mailbox }) {
                 <p className="text-xs text-neutral-400">{outbound ? `to ${contact?.email || 'recipient'}` : `to ${mailbox?.display_name || 'your team'}`}</p>
             </div>
             <div className="shrink-0 text-right">
-                <time className="text-xs text-neutral-400">{message.sent_at ? new Date(message.sent_at).toLocaleString() : ''}</time>
+                <time className="text-xs text-neutral-400">{formatMessageTime(message.sent_at)}</time>
                 {outbound && <p className={`mt-1 text-[10px] font-medium ${message.status === 'failed' ? 'text-red-500' : 'text-neutral-400'}`}>{message.status}</p>}
             </div>
         </div>
-        <div className="whitespace-pre-wrap break-words text-sm leading-7 text-neutral-700 dark:text-neutral-200">{message.body || '(empty message)'}</div>
+        <div className="whitespace-pre-wrap break-words text-sm leading-7 text-neutral-700 dark:text-neutral-200">{body}</div>
         {message.payload?.has_attachments && <span className="mt-4 inline-flex rounded-lg bg-neutral-100 px-2.5 py-1 text-xs text-neutral-500 dark:bg-neutral-800">Attachment included in source mailbox</span>}
     </article>;
 }
@@ -126,10 +144,19 @@ export default function EmailInbox({
     const initialSearch = useRef(true);
     const bottomRef = useRef(null);
 
+    // Inertia can replace page props without remounting this component; keep
+    // the pollable local copies aligned with the latest server response.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     useEffect(() => setConversations(initialConversations), [initialConversations]);
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     useEffect(() => setCounts(initialCounts), [initialCounts]);
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     useEffect(() => setMessages(initialMessages), [initialMessages, selectedConversation?.id]);
-    useEffect(() => bottomRef.current?.scrollIntoView({ block: 'end' }), [selectedConversation?.id, messages.length]);
+    useEffect(() => {
+        // Never return scrollIntoView's implementation-specific return value:
+        // React treats any returned value as an effect cleanup function.
+        bottomRef.current?.scrollIntoView({ block: 'end' });
+    }, [selectedConversation?.id, messages.length]);
 
     const params = useMemo(() => ({
         folder: filters.folder,
@@ -148,7 +175,7 @@ export default function EmailInbox({
             router.get(route('client.inbox.email-inbox'), { ...params, search: search || undefined, conversation: undefined }, { preserveState: true, replace: true, preserveScroll: true });
         }, 350);
         return () => clearTimeout(timer);
-    }, [search]);
+    }, [search, filters.search, params]);
 
     useEffect(() => {
         let stopped = false;
@@ -159,8 +186,8 @@ export default function EmailInbox({
                     setCounts(data.counts);
                 }
             }).catch(() => {});
-        const timer = setInterval(poll, 5000);
-        return () => { stopped = true; clearInterval(timer); };
+        const timer = window.setInterval(poll, 5000);
+        return () => { stopped = true; window.clearInterval(timer); };
     }, [filters.folder, filters.account_id, filters.search]);
 
     useEffect(() => {
@@ -175,9 +202,9 @@ export default function EmailInbox({
                     }
                 }).catch(() => {});
         };
-        const timer = setInterval(poll, 3000);
-        return () => { stopped = true; clearInterval(timer); };
-    }, [selectedConversation?.uuid, messages.length]);
+        const timer = window.setInterval(poll, 3000);
+        return () => { stopped = true; window.clearInterval(timer); };
+    }, [selectedConversation, messages]);
 
     const navigate = (next) => router.get(route('client.inbox.email-inbox'), next, { preserveState: true, replace: true, preserveScroll: true });
     const openConversation = conversation => navigate({ ...params, conversation: conversation.uuid });
@@ -203,7 +230,7 @@ export default function EmailInbox({
     };
 
     const setStatus = status => router.post(route('client.inbox.status', selectedConversation.uuid), { status }, { preserveScroll: true });
-    const selectedSubject = messages.find(message => message.payload?.subject)?.payload?.subject || subjectOf(selectedConversation);
+    const selectedSubject = safeText(messages.find(message => safeText(message.payload?.subject))?.payload?.subject) || subjectOf(selectedConversation);
     const selectedMailbox = selectedConversation?.channel_account;
 
     return <InboxLayout>

@@ -1,12 +1,22 @@
 import { Head, Link, router, useForm } from '@inertiajs/react';
 import ClientLayout from '@/Layouts/ClientLayout';
 import { Mail, RefreshCw, Trash2, ShieldCheck, Server, AlertTriangle, AtSign } from 'lucide-react';
+import { useState } from 'react';
 
 function AccountCard({ account }) {
+    const [syncing, setSyncing] = useState(false);
+    const sync = () => {
+        if (syncing) return;
+        setSyncing(true);
+        router.post(route('client.inbox.email.sync', account.id), {}, {
+            preserveScroll: true,
+            onFinish: () => setSyncing(false),
+        });
+    };
     return <div className="flex items-start gap-3 rounded-xl border border-neutral-200 bg-white p-4 dark:border-neutral-700 dark:bg-neutral-900">
         <div className="rounded-lg bg-brand-50 p-2 text-brand-600 dark:bg-brand-950/40"><Mail className="h-5 w-5" /></div>
         <div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><p className="font-semibold text-neutral-900 dark:text-white">{account.display_name}</p><span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${account.status === 'active' ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>{account.status}</span></div><p className="truncate text-sm text-neutral-500">{account.email} · {account.provider === 'microsoft_365' ? 'Microsoft 365' : account.provider === 'gmail' ? 'Google Gmail' : 'IMAP / SMTP'}</p>{account.last_synced_at && <p className="mt-1 text-xs text-neutral-400">Last sync: {new Date(account.last_synced_at).toLocaleString()}</p>}{account.last_sync_error && <p className="mt-1 text-xs text-red-600">{account.last_sync_error}</p>}</div>
-        <button onClick={() => router.post(route('client.inbox.email.sync', account.id))} className="rounded-lg p-2 text-neutral-500 hover:bg-neutral-100" title="Sync now"><RefreshCw className="h-4 w-4" /></button>
+        <button onClick={sync} disabled={syncing} className="rounded-lg p-2 text-neutral-500 hover:bg-neutral-100 disabled:opacity-50" title={syncing ? 'Queueing sync…' : 'Sync now'}><RefreshCw className={`h-4 w-4 ${syncing ? 'animate-spin' : ''}`} /></button>
         <button onClick={() => confirm('Disconnect this mailbox? Existing conversations will be kept.') && router.delete(route('client.inbox.email.destroy', account.id))} className="rounded-lg p-2 text-red-500 hover:bg-red-50" title="Disconnect"><Trash2 className="h-4 w-4" /></button>
     </div>;
 }

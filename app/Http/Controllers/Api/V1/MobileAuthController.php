@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Services\OneSignalService;
 use App\Services\StorageManager;
 use App\Support\Demo;
 use Illuminate\Http\JsonResponse;
@@ -13,7 +14,10 @@ use Illuminate\Validation\ValidationException;
 
 class MobileAuthController extends Controller
 {
-    public function __construct(private StorageManager $storageManager) {}
+    public function __construct(
+        private StorageManager $storageManager,
+        private OneSignalService $oneSignal,
+    ) {}
 
     /**
      * POST /api/v1/auth/login
@@ -120,9 +124,15 @@ class MobileAuthController extends Controller
             'email' => $user->email,
             'role' => $user->role,
             'workspace_id' => $user->workspace_id,
-            'current_workspace_id' => $user->current_workspace_id,
+            'current_workspace_id' => $user->workspace_id,
             'avatar' => $user->avatarUrl(),
             'demo_mode' => Demo::active(),
+            'push' => [
+                'provider' => 'onesignal',
+                'enabled' => $this->oneSignal->isConfigured(),
+                'app_id' => $this->oneSignal->publicAppId(),
+                'external_id' => 'user:'.$user->id,
+            ],
         ];
 
         if ($withWorkspace) {
