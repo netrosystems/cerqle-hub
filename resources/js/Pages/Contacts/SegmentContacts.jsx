@@ -187,7 +187,8 @@ function ExistingCustomerPicker({ availableContacts, availableCount, search, app
 function CsvUploader({ csvForm, uploadCsv, importLimits }) {
     const [fileError, setFileError] = useState('');
     const maxFileMb = Number(importLimits?.maxFileMb || 20);
-    const maxContacts = Number(importLimits?.maxContactsPerList || 50000);
+    const maxContacts = Number(importLimits?.maxContactsPerList || 250000);
+    const maxRowsPerFile = Number(importLimits?.maxRowsPerFile || 50000);
     const remainingCapacity = Number(importLimits?.remainingCapacity ?? maxContacts);
     const maxFileBytes = maxFileMb * 1024 * 1024;
 
@@ -209,8 +210,8 @@ function CsvUploader({ csvForm, uploadCsv, importLimits }) {
                 <div className="rounded-xl border-2 border-dashed border-neutral-300 p-6 text-center dark:border-neutral-600">
                     <Upload className="mx-auto h-9 w-9 text-brand-600" />
                     <h3 className="mt-3 font-semibold text-neutral-900 dark:text-neutral-100">Upload CSV</h3>
-                    <p className="mx-auto mt-2 max-w-sm rounded-lg bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
-                        Maximum {maxContacts.toLocaleString()} contacts per Contact List
+                    <p className="mx-auto mt-2 max-w-sm text-sm text-neutral-500 dark:text-neutral-400">
+                        Import up to <strong className="font-semibold text-neutral-700 dark:text-neutral-200">{maxRowsPerFile.toLocaleString()} contacts per CSV</strong>.
                     </p>
                     <form onSubmit={uploadCsv} className="mt-5 space-y-3">
                         <input type="file" accept=".csv,text/csv" required onChange={chooseFile} className="block w-full text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-brand-50 file:px-4 file:py-2 file:font-medium file:text-brand-700" />
@@ -251,6 +252,11 @@ export default function SegmentContacts({ segment, listContacts, existingContact
     // denormalised counter that can lag behind reality (especially right after
     // attach/detach) so prefer the freshly-computed values.
     const totalInList = Number(existingContactsCount) + Number(uploadedContactsCount);
+    const maxContactsPerList = Number(importLimits?.maxContactsPerList || 250000);
+    const remainingCapacity = Math.max(0, Number(importLimits?.remainingCapacity ?? (maxContactsPerList - totalInList)));
+    const capacityPercent = maxContactsPerList > 0
+        ? Math.min(100, Math.round((totalInList / maxContactsPerList) * 100))
+        : 0;
 
     useEffect(() => () => clearTimeout(searchTimer.current), []);
 
@@ -331,6 +337,24 @@ export default function SegmentContacts({ segment, listContacts, existingContact
                         {props.errors?.file ?? props.errors?.contacts ?? props.flash?.success}
                     </div>
                 )}
+
+                <section className="rounded-xl border border-neutral-200 bg-white px-4 py-3 dark:border-neutral-700 dark:bg-neutral-900">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div>
+                            <h3 className="text-sm font-semibold text-neutral-900 dark:text-neutral-100">Contact List capacity</h3>
+                            <p className="text-xs text-neutral-500 dark:text-neutral-400">
+                                Up to {maxContactsPerList.toLocaleString()} contacts total · Import up to {Number(importLimits?.maxRowsPerFile || 50000).toLocaleString()} contacts per CSV
+                            </p>
+                        </div>
+                        <p className="text-sm text-neutral-700 dark:text-neutral-200">
+                            <strong>{totalInList.toLocaleString()}</strong> of {maxContactsPerList.toLocaleString()}
+                            <span className="ml-2 text-xs text-neutral-500">({remainingCapacity.toLocaleString()} remaining)</span>
+                        </p>
+                    </div>
+                    <div className="mt-3 h-2 overflow-hidden rounded-full bg-neutral-100 dark:bg-neutral-800" aria-label={`${capacityPercent}% of Contact List capacity used`}>
+                        <div className="h-full rounded-full bg-brand-600 transition-all" style={{ width: `${capacityPercent}%` }} />
+                    </div>
+                </section>
 
                 {liveOperations.length > 0 && (
                     <div className="space-y-2">

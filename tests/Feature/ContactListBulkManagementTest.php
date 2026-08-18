@@ -20,6 +20,12 @@ class ContactListBulkManagementTest extends TestCase
 {
     use RefreshDatabase;
 
+    public function test_default_limits_allow_a_250k_list_built_from_50k_csv_batches(): void
+    {
+        $this->assertSame(250000, config('contact_imports.max_contacts_per_list'));
+        $this->assertSame(50000, config('contact_imports.max_rows_per_file'));
+    }
+
     public function test_selected_contacts_are_scoped_to_the_current_workspace(): void
     {
         ['user' => $user, 'workspace' => $workspace] = $this->createWorkspaceContext();
@@ -157,6 +163,50 @@ class ContactListBulkManagementTest extends TestCase
         $this->assertDatabaseHas('contacts', ['workspace_id' => $workspace->id, 'phone_e164' => '+96170111111']);
         $this->assertDatabaseHas('contacts', ['workspace_id' => $workspace->id, 'phone_e164' => '+96170222222']);
         $this->assertDatabaseMissing('contacts', ['workspace_id' => $workspace->id, 'phone_e164' => '+96170333333']);
+    }
+
+    public function test_multiple_csv_batches_build_one_list_without_bypassing_total_capacity(): void
+    {
+        Queue::fake();
+        Storage::fake('local');
+        Config::set('contact_imports.max_contacts_per_list', 5);
+        Config::set('contact_imports.max_rows_per_file', 2);
+        ['user' => $user, 'workspace' => $workspace] = $this->createWorkspaceContext();
+        $list = Segment::create(['workspace_id' => $workspace->id, 'name' => 'Batched audience', 'type' => 'static']);
+        $batches = [
+            "+12025550101\n+12025550102\n",
+            "+12025550103\n+12025550104\n",
+            "+12025550105\n+12025550106\n",
+        ];
+
+        foreach ($batches as $index => $rows) {
+            $path = "contact-list-imports/batch-{$index}.csv";
+            Storage::disk('local')->put($path, "phone_e164\n{$rows}");
+            $validation = ContactListOperation::create([
+                'workspace_id' => $workspace->id,
+                'segment_id' => $list->id,
+                'created_by' => $user->id,
+                'type' => 'csv_validation',
+                'status' => 'queued',
+                'source_path' => $path,
+            ]);
+            (new ValidateContactListCsvJob($validation->id))->handle();
+            $validation->refresh();
+
+            $this->actingAs($user)
+                ->post(route('client.segments.contacts.import.confirm', [$list, $validation]))
+                ->assertRedirect()
+                ->assertSessionHasNoErrors();
+
+            $import = ContactListOperation::where('type', 'csv_import')->latest('id')->firstOrFail();
+            (new ImportContactsToListJob($import->id))->handle();
+        }
+
+        $this->assertSame(5, $list->fresh()->contacts()->count());
+        $this->assertSame(1, data_get(
+            ContactListOperation::where('type', 'csv_validation')->latest('id')->firstOrFail()->options,
+            'validation.ignored_over_limit'
+        ));
     }
 
     public function test_single_contact_list_capacity_is_exposed_and_enforced_for_existing_contacts(): void
