@@ -8,7 +8,6 @@ use App\Modules\AI\Models\AiChatbot;
 use App\Modules\Automation\Models\Automation;
 use App\Modules\Automation\Models\AutomationRun;
 use App\Modules\Automation\Services\AutomationEngine;
-use App\Modules\Automation\Services\WorkflowGenerator;
 use App\Modules\Broadcasting\Models\Campaign;
 use App\Modules\Ecommerce\Models\EcommerceStore;
 use App\Modules\Integrations\Models\IntegrationConfig;
@@ -171,42 +170,6 @@ class AutomationController extends Controller
         }
 
         return response()->json(app(AutomationEngine::class)->testRun($automation, $nodes, $edges, $context));
-    }
-
-    /**
-     * Generate a full automation graph from a natural-language prompt via the workspace LLM.
-     * With persist=true a new automation is created and an edit URL returned; otherwise the
-     * normalised graph is returned for the builder to drop onto the canvas for review.
-     */
-    public function generate(Request $request): JsonResponse
-    {
-        $wid = $this->workspaceId($request);
-        $validated = $request->validate([
-            'prompt' => ['required', 'string', 'max:2000'],
-            'persist' => ['nullable', 'boolean'],
-        ]);
-
-        try {
-            $graph = app(WorkflowGenerator::class)->generate($wid, $validated['prompt']);
-        } catch (\Throwable $e) {
-            return response()->json(['ok' => false, 'error' => $e->getMessage()], 422);
-        }
-
-        if ($request->boolean('persist')) {
-            $auto = Automation::create([
-                'workspace_id' => $wid,
-                'name' => $graph['name'],
-                'status' => 'draft',
-                'trigger_type' => $graph['trigger_type'],
-                'trigger_config' => $graph['trigger_config'],
-                'nodes' => $graph['nodes'],
-                'edges' => $graph['edges'],
-            ]);
-
-            return response()->json(['ok' => true, 'redirect' => route('client.automations.edit', $auto->uuid)]);
-        }
-
-        return response()->json(['ok' => true, 'graph' => $graph]);
     }
 
     private function authorise(Request $request, Automation $automation): void
