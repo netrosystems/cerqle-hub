@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Head, useForm, usePage } from '@inertiajs/react';
 import ClientLayout from '@/Layouts/ClientLayout';
 import { Bell, Mail, Smartphone, CheckCircle } from 'lucide-react';
@@ -24,17 +24,68 @@ const VAPID_CHANNELS = [
     { key: 'web_push', labelKey: 'settings.channel_web_push', icon: Smartphone },
 ];
 
+const KEEP_PUSH_AFTER_LOGOUT_KEY = 'cerqle_keep_push_after_logout';
+
 export default function NotificationSettings({ preferences = {} }) {
     const { t } = useTranslation();
     const { onesignal } = usePage().props;
     const { data, setData, post, processing, transform } = useForm({ preferences: [] });
     const [pushError, setPushError] = useState('');
+    const [keepAfterLogout, setKeepAfterLogout] = useState(false);
     const channels = onesignal?.enabled
         ? [
             { key: 'mail', labelKey: 'common.email', icon: Mail },
             { key: 'one_signal', label: 'Push notifications', icon: Smartphone },
         ]
         : VAPID_CHANNELS;
+
+    useEffect(() => {
+        try {
+            setKeepAfterLogout(localStorage.getItem(KEEP_PUSH_AFTER_LOGOUT_KEY) === '1');
+        } catch {
+            setKeepAfterLogout(false);
+        }
+    }, []);
+
+    const requestOneSignalPermission = async () => {
+        if (typeof Notification === 'undefined') return false;
+        if (Notification.permission === 'granted') return true;
+        if (Notification.permission === 'denied') return false;
+
+        if (window.OneSignal?.Notifications?.requestPermission) {
+            return await window.OneSignal.Notifications.requestPermission().catch(() => false);
+        }
+
+        return await Notification.requestPermission().then(permission => permission === 'granted').catch(() => false);
+    };
+
+    const handleKeepAfterLogoutToggle = async () => {
+        const next = !keepAfterLogout;
+        setPushError('');
+
+        if (next) {
+            const granted = await requestOneSignalPermission();
+            if (!granted) {
+                setPushError('Browser push permission is required before this device can receive notifications after logout.');
+                return;
+            }
+        }
+
+        try {
+            if (next) localStorage.setItem(KEEP_PUSH_AFTER_LOGOUT_KEY, '1');
+            else localStorage.removeItem(KEEP_PUSH_AFTER_LOGOUT_KEY);
+        } catch {
+            setPushError('Could not save this device setting in your browser.');
+            return;
+        }
+
+        setKeepAfterLogout(next);
+        if (window.osSetKeepAfterLogout) {
+            window.osSetKeepAfterLogout(next).catch(() => {});
+        } else if (next && window.osLogin) {
+            window.osLogin();
+        }
+    };
 
     // Build the preference grid from props
     const getEnabled = (event, channel) => {
@@ -155,9 +206,30 @@ export default function NotificationSettings({ preferences = {} }) {
                     ))}
                 </div>
 
+                {onesignal?.enabled && (
+                    <div className="bg-white dark:bg-neutral-900 rounded-xl border border-neutral-200 dark:border-neutral-700 px-6 py-4 flex items-center justify-between gap-4">
+                        <div className="min-w-0">
+                            <p className="text-sm font-medium text-neutral-900 dark:text-neutral-100">
+                                Keep notifications on this device after logout
+                            </p>
+                            <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-1">
+                                Use this only on a trusted browser. Shared devices should leave it off.
+                            </p>
+                        </div>
+                        <button
+                            onClick={handleKeepAfterLogoutToggle}
+                            className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2 ${keepAfterLogout ? 'bg-brand-600' : 'bg-neutral-300 dark:bg-neutral-600'}`}
+                            title={keepAfterLogout ? 'Enabled' : 'Disabled'}
+                            type="button"
+                        >
+                            <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${keepAfterLogout ? 'translate-x-6' : 'translate-x-1'}`} />
+                        </button>
+                    </div>
+                )}
+
                 <p className="text-xs text-neutral-400 dark:text-neutral-500">
                     {onesignal?.enabled
-                        ? 'Push permissions are managed by OneSignal. Turn this preference off to stop Cerqle notifications on your devices.'
+                        ? 'Push permissions are managed by OneSignal. Turn this preference off to stop Cerqle notifications on shared browsers after logout.'
                         : t('settings.push_permission_hint')}
                 </p>
 

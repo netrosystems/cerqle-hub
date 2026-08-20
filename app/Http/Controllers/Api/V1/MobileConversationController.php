@@ -82,7 +82,7 @@ class MobileConversationController extends WorkspaceScopedController
         $messages = $conversation->messages()
             ->with('conversation')
             ->orderBy('sent_at')
-            ->paginate(50);
+            ->get();
 
         $conversation->update(['unread_count' => 0]);
 
@@ -95,8 +95,8 @@ class MobileConversationController extends WorkspaceScopedController
             'conversation' => $this->formatConversation($conversation, detail: true),
             'messages' => $messages->map(fn ($m) => $this->formatMessage($m)),
             'messages_meta' => [
-                'current_page' => $messages->currentPage(),
-                'last_page' => $messages->lastPage(),
+                'current_page' => 1,
+                'last_page' => 1,
             ],
         ]);
     }
@@ -113,13 +113,13 @@ class MobileConversationController extends WorkspaceScopedController
 
         $messages = $conversation->messages()
             ->orderBy('sent_at')
-            ->paginate(50);
+            ->get();
 
         return response()->json([
             'data' => $messages->map(fn ($m) => $this->formatMessage($m)),
             'meta' => [
-                'current_page' => $messages->currentPage(),
-                'last_page' => $messages->lastPage(),
+                'current_page' => 1,
+                'last_page' => 1,
             ],
         ]);
     }
@@ -447,6 +447,12 @@ class MobileConversationController extends WorkspaceScopedController
             'unread_count' => (int) $c->unread_count,
             'last_message_at' => $c->last_message_at?->toIso8601String(),
             'assigned_user_id' => $c->assigned_user_id,
+            'assigned_to' => $c->assigned_to,
+            'assigned_user' => $c->assignedUser ? [
+                'id' => $c->assignedUser->id,
+                'name' => $c->assignedUser->name,
+                'avatar' => $c->assignedUser->avatar ?? null,
+            ] : null,
             'contact' => $c->contact ? [
                 'id' => $c->contact->id,
                 'name' => Demo::name($c->contact->full_name),
@@ -469,12 +475,6 @@ class MobileConversationController extends WorkspaceScopedController
 
         if ($detail) {
             $data['is_whatsapp_window_open'] = $c->getAttribute('is_whatsapp_window_open') ?? true;
-            $data['assigned_user'] = $c->assignedUser ? [
-                'id' => $c->assignedUser->id,
-                'name' => $c->assignedUser->name,
-                'avatar' => $c->assignedUser->avatar ?? null,
-            ] : null;
-            $data['assigned_to'] = $c->assigned_to;
             $data['handover_at'] = $c->handover_at?->toIso8601String();
             $data['resolved_at'] = $c->resolved_at?->toIso8601String();
             $data['created_at'] = $c->created_at->toIso8601String();
