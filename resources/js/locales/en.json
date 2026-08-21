@@ -1788,7 +1788,10 @@
         "timezone": "Timezone",
         "timezone_hint": "Used for campaign and post scheduling across your account.",
         "email_reports": "Email Reports",
+        "email_notifications": "Email Notifications",
         "weekly_digest_label": "Receive weekly performance digest every Monday at 9am",
+        "pending_reply_notifications_label": "Email administrators when a customer has waited over one hour for a reply",
+        "pending_reply_notifications_hint": "Turn this off to stop unanswered-customer reminder emails for every workspace in this organization.",
         "manage_notifications_link": "Manage Notification Preferences",
         "export_data_link": "Export My Data (GDPR)"
     },

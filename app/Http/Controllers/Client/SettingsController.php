@@ -44,11 +44,17 @@ class SettingsController extends Controller
                 'theme' => $user->theme ?? 'light',
                 'timezone' => $user->timezone ?? 'Asia/Dhaka',
             ],
-            'supportedLocales' => $supportedLocales->map(fn ($l) => ['code' => $l->code, 'name' => $l->name]),
+            'supportedLocales' => $supportedLocales->map(fn ($locale) => [
+                'code' => data_get($locale, 'code'),
+                'name' => data_get($locale, 'name'),
+            ]),
             'supportedCurrencies' => $supportedCurrencies->map(fn ($c) => ['code' => $c->code, 'name' => $c->code, 'symbol' => $c->symbol ?? $c->code]),
             'client' => $client,
             'digestEnabled' => $user->client_id
                 ? ClientSetting::get($user->client_id, 'weekly_digest_enabled', '1') !== '0'
+                : true,
+            'pendingReplyNotificationsEnabled' => $user->client_id
+                ? ClientSetting::get($user->client_id, 'pending_reply_notifications_enabled', '1') !== '0'
                 : true,
         ]);
     }
@@ -82,6 +88,7 @@ class SettingsController extends Controller
             'client_phone' => ['nullable', 'string', 'max:64'],
             'client_address' => ['nullable', 'string'],
             'weekly_digest_enabled' => ['nullable', 'boolean'],
+            'pending_reply_notifications_enabled' => ['nullable', 'boolean'],
         ]);
 
         if (array_key_exists('locale', $validated) && $validated['locale'] !== null) {
@@ -118,6 +125,13 @@ class SettingsController extends Controller
         // Digest preference
         if ($user->client_id && array_key_exists('weekly_digest_enabled', $validated)) {
             ClientSetting::set($user->client_id, 'weekly_digest_enabled', $validated['weekly_digest_enabled'] ? '1' : '0');
+        }
+        if ($user->client_id && array_key_exists('pending_reply_notifications_enabled', $validated)) {
+            ClientSetting::set(
+                $user->client_id,
+                'pending_reply_notifications_enabled',
+                $validated['pending_reply_notifications_enabled'] ? '1' : '0',
+            );
         }
 
         return redirect()->route('client.settings.index')->with('success', __('Settings saved.'));

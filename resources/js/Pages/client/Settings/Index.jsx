@@ -12,6 +12,7 @@ export default function ClientSettingsIndex({
     supportedCurrencies = [],
     client = null,
     digestEnabled = true,
+    pendingReplyNotificationsEnabled = true,
 }) {
     const { t } = useTranslation();
     const { flash = {} } = usePage().props;
@@ -25,6 +26,7 @@ export default function ClientSettingsIndex({
         client_phone: client?.phone ?? '',
         client_address: client?.address ?? '',
         weekly_digest_enabled: digestEnabled,
+        pending_reply_notifications_enabled: pendingReplyNotificationsEnabled,
     });
 
     const handleSubmit = (e) => {
@@ -169,9 +171,11 @@ export default function ClientSettingsIndex({
                         </div>
                     )}
 
-                    {/* Email Digest */}
+                    {/* Email notifications */}
                     <div className="rounded-xl border border-neutral-200 dark:border-neutral-700 p-4 sm:p-5">
-                        <h3 className="text-sm font-semibold text-neutral-600 dark:text-neutral-300 uppercase tracking-wide mb-3">{t('settings.email_reports')}</h3>
+                        <h3 className="text-sm font-semibold text-neutral-600 dark:text-neutral-300 uppercase tracking-wide mb-3">
+                            {t('settings.email_notifications', { defaultValue: 'Email Notifications' })}
+                        </h3>
                         <label className="flex items-center gap-3 cursor-pointer">
                             <input
                                 type="checkbox"
@@ -181,6 +185,22 @@ export default function ClientSettingsIndex({
                             />
                             <span className="text-sm text-neutral-700 dark:text-neutral-300">
                                 {t('settings.weekly_digest_label')}
+                            </span>
+                        </label>
+                        <label className="mt-3 flex items-start gap-3 cursor-pointer">
+                            <input
+                                type="checkbox"
+                                checked={!!form.data.pending_reply_notifications_enabled}
+                                onChange={e => form.setData('pending_reply_notifications_enabled', e.target.checked)}
+                                className="mt-0.5 h-4 w-4 rounded border-gray-300 text-indigo-600"
+                            />
+                            <span>
+                                <span className="block text-sm text-neutral-700 dark:text-neutral-300">
+                                    {t('settings.pending_reply_notifications_label', { defaultValue: 'Email administrators when a customer has waited over one hour for a reply' })}
+                                </span>
+                                <span className="mt-0.5 block text-xs text-neutral-500 dark:text-neutral-400">
+                                    {t('settings.pending_reply_notifications_hint', { defaultValue: 'Turn this off to stop unanswered-customer reminder emails for every workspace in this organization.' })}
+                                </span>
                             </span>
                         </label>
                     </div>

@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Models\ClientSetting;
 use App\Models\User;
 use App\Modules\Shared\Models\Conversation;
 use App\Modules\Shared\Models\Message;
@@ -20,9 +21,17 @@ class NotifyUnansweredConversationsCommand extends Command
         $minutes = max(1, (int) $this->option('minutes'));
         $cutoff = now()->subMinutes($minutes);
         $sent = 0;
+        $disabledClientIds = ClientSetting::query()
+            ->where('key', 'pending_reply_notifications_enabled')
+            ->where('value', '0')
+            ->pluck('client_id');
 
         Conversation::query()
             ->with(['contact', 'channelAccount', 'workspace.owner'])
+            ->when($disabledClientIds->isNotEmpty(), fn ($query) => $query->whereHas(
+                'workspace',
+                fn ($workspace) => $workspace->whereNotIn('client_id', $disabledClientIds),
+            ))
             ->whereIn('status', ['open', 'pending'])
             ->whereNotNull('last_inbound_at')
             ->where('last_inbound_at', '<=', $cutoff)
