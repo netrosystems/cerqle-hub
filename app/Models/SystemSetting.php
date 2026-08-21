@@ -48,6 +48,37 @@ class SystemSetting extends Model
         return $s ? $s->value : $default;
     }
 
+    /**
+     * Resolve several settings with a single database query.
+     *
+     * Calling get() in a loop turns large settings-driven pages into hundreds
+     * of queries. Accepting the defaults as a keyed array preserves the same
+     * fallback behaviour while keeping the request cost constant.
+     *
+     * @param  array<string, mixed>  $defaults
+     * @return array<string, mixed>
+     */
+    public static function getMany(array $defaults): array
+    {
+        if ($defaults === []) {
+            return [];
+        }
+
+        $stored = static::query()
+            ->whereIn('key', array_keys($defaults))
+            ->get()
+            ->keyBy('key');
+
+        $resolved = [];
+        foreach ($defaults as $key => $default) {
+            $resolved[$key] = $stored->has($key)
+                ? $stored->get($key)->value
+                : $default;
+        }
+
+        return $resolved;
+    }
+
     public static function set(string $key, $value, bool $isSecret = false, ?string $group = null): void
     {
         $s = static::firstOrNew(['key' => $key]);
