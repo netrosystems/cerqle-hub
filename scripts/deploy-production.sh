@@ -16,6 +16,20 @@ fi
 echo "Fetching origin/$DEPLOY_BRANCH..."
 git pull --ff-only origin "$DEPLOY_BRANCH"
 
+# Laravel's deploy user and PHP-FPM must both be able to create cache and log
+# files. Normalize these narrowly scoped runtime directories before Composer
+# invokes Artisan so a file created by either user cannot break the next deploy.
+mkdir -p storage/logs bootstrap/cache
+if command -v sudo >/dev/null 2>&1 && sudo -n true >/dev/null 2>&1; then
+    DEPLOY_USER="$(id -un)"
+    sudo -n chown -R "$DEPLOY_USER":www-data storage bootstrap/cache
+    sudo -n find storage bootstrap/cache -type d -exec chmod 2775 {} +
+    sudo -n find storage bootstrap/cache -type f -exec chmod 0664 {} +
+elif [[ ! -w storage/logs || ! -w bootstrap/cache ]]; then
+    echo "ERROR: storage/logs and bootstrap/cache must be writable by the deploy user and PHP-FPM." >&2
+    exit 1
+fi
+
 echo "Installing production dependencies..."
 composer install --no-dev --prefer-dist --optimize-autoloader --no-interaction
 npm ci
