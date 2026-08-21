@@ -228,6 +228,22 @@ const SETUP_GUIDES = {
         link: 'https://console.cloud.google.com/apis/credentials',
         linkLabel: 'Open Google Cloud Console',
     },
+    oauth_google_mail: {
+        title: 'Google Gmail OAuth Setup & Review',
+        subtitle: 'Connects client Gmail accounts to the Master Email Inbox for reading and replying.',
+        steps: [
+            'Use an adult, company-controlled Google account to create a dedicated Google Cloud project for Cerqle Gmail. Add at least one second company owner to avoid account lockout.',
+            'In Google Cloud, configure Google Auth Platform branding for an External app. Use https://cerqle.ai as the home page, https://cerqle.ai/p/privacy as the privacy policy, and https://cerqle.ai/p/terms as the terms URL.',
+            'Add cerqle.ai under Authorized domains and verify domain ownership in Google Search Console using a project Owner or Editor account.',
+            'Enable the Gmail API, then add only these scopes: openid, email, profile, gmail.readonly, and gmail.send. Inbox sync requires gmail.readonly; removing it disables the Master Email Inbox.',
+            'Create an OAuth client with application type Web application. Add the exact Callback URL shown above as an Authorized redirect URI. This server-side flow does not need an Authorized JavaScript origin.',
+            'Before publishing, test with an allowlisted mailbox. Save the Client ID and Client Secret below, enable the integration, and connect a Gmail mailbox from Client → Email Setup.',
+            'Verify first sync, reply sending, account reconnection, and refresh-token access before publishing the consent screen.',
+            'For production, submit Brand and Data Access verification with a demo video and scope justifications. gmail.readonly is restricted and Google may require an annual CASA security assessment; do not submit until the public privacy policy includes Google API data handling and Limited Use disclosures.',
+        ],
+        link: 'https://console.cloud.google.com/auth/overview',
+        linkLabel: 'Open Google Auth Platform',
+    },
     oauth_shopify: {
         title: 'Shopify App (OAuth) Setup',
         subtitle: 'Lets merchants connect their Shopify store with one click instead of pasting an API token.',
