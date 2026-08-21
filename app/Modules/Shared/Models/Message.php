@@ -46,4 +46,10 @@ class Message extends Model
     {
         return $this->belongsTo(User::class);
     }
+
+    /** The agent who authored an outbound message. */
+    public function sender(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'user_id');
+    }
 }

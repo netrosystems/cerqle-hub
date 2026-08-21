@@ -34,7 +34,7 @@ use Illuminate\Support\Facades\Route;
 */
 
 // ─── Mobile Auth (public — no token required for login) ───────────────────────
-Route::prefix('v1/auth')->middleware(['throttle:10,1'])->group(function () {
+Route::prefix('v1/auth')->middleware(['throttle:mobile-login'])->group(function () {
     Route::post('/login', [MobileAuthController::class, 'login']);
 });
 

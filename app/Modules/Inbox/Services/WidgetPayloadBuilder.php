@@ -54,7 +54,7 @@ class WidgetPayloadBuilder
      */
     public function handoff(ChatWidget $widget, Conversation $conversation): array
     {
-        $enabled = $widget->hasActiveAiChatbot();
+        $enabled = $widget->hasEnabledAiChatbot();
         $connected = ($conversation->assigned_to ?? 'bot') === 'human';
 
         return [
