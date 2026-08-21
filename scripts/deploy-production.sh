@@ -91,5 +91,13 @@ php artisan up
 APP_IS_DOWN=0
 trap - EXIT
 
+# Reconcile Meta's external webhook state after the application is reachable.
+# Keep a transient Meta outage from rolling back an otherwise healthy deploy,
+# while making the failure explicit in deployment logs. The daily scheduler
+# retries this repair automatically.
+if ! php artisan whatsapp:register-webhook; then
+    echo "WARNING: WhatsApp inbound webhook registration is not healthy; the daily repair task will retry." >&2
+fi
+
 echo "Deployment completed."
 php artisan app:release --show

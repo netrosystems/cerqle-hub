@@ -85,22 +85,20 @@ class WhatsappWebhookRegisterCommand extends Command
         $this->line('');
         $this->line('<fg=yellow>Step 2:</> Subscribing ' . $wabas->count() . ' WABA(s) to the app…');
 
+        $wabaSubscriptionFailed = false;
+
         foreach ($wabas as $waba) {
             $this->line('  WABA ' . $waba->waba_id . '…');
 
             $token = $waba->accessToken() ?? $meta->systemUserToken();
 
-            if (! $token) {
-                $this->warn('  ⚠ No access token for WABA ' . $waba->waba_id . ' — skipping subscribed_apps call');
-                continue;
-            }
-
-            // Try app token first, fall back to WABA user token
+            // Try the app token first. A WABA-scoped token is only needed as a
+            // fallback, so its absence must not prevent the primary attempt.
             $subRes = Http::post("https://graph.facebook.com/v25.0/{$waba->waba_id}/subscribed_apps", [
                 'access_token' => $appToken,
             ]);
 
-            if (! $subRes->successful()) {
+            if (! $subRes->successful() && $token) {
                 $subRes = Http::post("https://graph.facebook.com/v25.0/{$waba->waba_id}/subscribed_apps", [
                     'access_token' => $token,
                 ]);
@@ -110,6 +108,7 @@ class WhatsappWebhookRegisterCommand extends Command
                 $this->info('  ✓ WABA ' . $waba->waba_id . ' subscribed.');
             } else {
                 $this->error('  ✗ WABA ' . $waba->waba_id . ' subscription failed: ' . $subRes->body());
+                $wabaSubscriptionFailed = true;
             }
         }
 
@@ -120,6 +119,8 @@ class WhatsappWebhookRegisterCommand extends Command
         $checkRes = Http::get("https://graph.facebook.com/v25.0/{$appId}/subscriptions", [
             'access_token' => $appToken,
         ]);
+
+        $appSubscriptionHealthy = false;
 
         if ($checkRes->successful()) {
             $subs = collect($checkRes->json('data', []))
@@ -134,6 +135,9 @@ class WhatsappWebhookRegisterCommand extends Command
                     $active = ($sub['active'] ?? null) === true || ($sub['status'] ?? '') === 'active';
                     $fields = array_column($sub['fields'] ?? [], 'name');
                     $hasMessages = in_array('messages', $fields, true);
+                    $callbackMatches = ($sub['callback_url'] ?? null) === $callbackUrl;
+                    $appSubscriptionHealthy = $appSubscriptionHealthy
+                        || ($active && $hasMessages && $callbackMatches);
 
                     $status = $active ? '<fg=green>active</>' : '<fg=red>' . ($sub['status'] ?? 'inactive') . '</>';
                     $this->line('  Status: ' . $status);
@@ -142,10 +146,19 @@ class WhatsappWebhookRegisterCommand extends Command
                     $this->line('  Inbound (messages): ' . ($hasMessages
                         ? '<fg=green>subscribed</>'
                         : '<fg=red>MISSING — inbound webhooks will not arrive</>'));
+                    $this->line('  Callback match: ' . ($callbackMatches
+                        ? '<fg=green>yes</>'
+                        : '<fg=red>NO — Meta is pointing at a different URL</>'));
                 }
             }
         } else {
             $this->warn('  Could not verify subscription: ' . $checkRes->body());
+        }
+
+        if ($wabaSubscriptionFailed || ! $appSubscriptionHealthy) {
+            $this->error('WhatsApp inbound webhook registration is not healthy.');
+
+            return self::FAILURE;
         }
 
         $this->info('');

@@ -54,6 +54,16 @@ Schedule::call(function () {
     });
 })->daily()->name('sync-whatsapp-templates');
 
+// Meta subscriptions can be removed when an app setting, token assignment, or
+// webhook configuration changes. Re-register and verify the global callback
+// daily so outbound messaging cannot remain healthy while inbound silently
+// stops. The command exits non-zero when Meta is still misconfigured.
+Schedule::command('whatsapp:register-webhook')
+    ->dailyAt('03:15')
+    ->name('repair-whatsapp-webhook-subscription')
+    ->withoutOverlapping()
+    ->onOneServer();
+
 // Dispatch scheduled social posts (every minute)
 Schedule::job(new DispatchScheduledPostsJob, 'social')
     ->everyMinute()
