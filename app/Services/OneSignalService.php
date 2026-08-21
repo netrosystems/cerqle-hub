@@ -119,6 +119,66 @@ class OneSignalService
     }
 
     /**
+     * Send directly to OneSignal mobile/web subscription IDs.
+     *
+     * @param  array<int, string>  $subscriptionIds
+     * @param  array<string, mixed>  $data
+     */
+    public function sendToSubscriptionIds(
+        array $subscriptionIds,
+        string $title,
+        string $body,
+        ?string $url = null,
+        int|string|null $conversationId = null,
+        array $data = [],
+    ): void {
+        $subscriptionIds = array_values(array_unique(array_filter(array_map(
+            static fn ($id) => trim((string) $id),
+            $subscriptionIds,
+        ))));
+
+        if (! $this->isConfigured() || $subscriptionIds === []) {
+            return;
+        }
+
+        $config = $this->configuration();
+        $payload = [
+            'app_id' => $config['app_id'],
+            'include_subscription_ids' => $subscriptionIds,
+            'target_channel' => 'push',
+            'headings' => ['en' => $title],
+            'contents' => ['en' => $body],
+            'ios_badgeType' => 'Increase',
+            'ios_badgeCount' => 1,
+        ];
+
+        if ($url) {
+            $payload['url'] = $url;
+        }
+
+        if ($conversationId !== null) {
+            $payload['collapse_id'] = "conversation-{$conversationId}";
+            $payload['web_push_topic'] = "conversation-{$conversationId}";
+            $data = array_merge(['conversation_id' => $conversationId], $data);
+        }
+
+        if ($data !== []) {
+            $payload['data'] = $data;
+        }
+
+        $response = Http::withHeaders(['Authorization' => 'Key '.$config['rest_api_key']])
+            ->post(self::API_URL, $payload);
+
+        if (! $response->successful()) {
+            Log::warning('OneSignal subscription notification failed', [
+                'subscription_count' => count($subscriptionIds),
+                'status' => $response->status(),
+                'body' => $response->body(),
+            ]);
+        }
+    }
+
+    /**
      * Super-admin configuration overrides .env, including an explicit disabled
      * state. The environment remains a safe fallback for existing deployments.
      *

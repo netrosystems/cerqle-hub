@@ -4,8 +4,8 @@ namespace Tests\Feature;
 
 use App\Models\AdminUser;
 use App\Models\NotificationPreference;
+use App\Models\UserPushToken;
 use App\Modules\Integrations\Models\IntegrationConfig;
-use App\Modules\Shared\Models\ChannelAccount;
 use App\Modules\Shared\Models\Contact;
 use App\Modules\Shared\Models\Conversation;
 use App\Modules\Shared\Models\Message;
@@ -15,7 +15,6 @@ use App\Notifications\NewMessageNotification;
 use App\Services\OneSignalService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request;
-use Illuminate\Notifications\Notification;
 use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
 
@@ -25,16 +24,10 @@ class OneSignalIntegrationTest extends TestCase
 
     public function test_admin_managed_onesignal_configuration_takes_priority_over_environment(): void
     {
-        config([
-            'services.onesignal.app_id' => 'env-app-id',
-            'services.onesignal.rest_api_key' => 'env-secret',
-        ]);
+        config(['services.onesignal.app_id' => 'env-app-id', 'services.onesignal.rest_api_key' => 'env-secret']);
 
         IntegrationConfig::create([
-            'provider' => 'onesignal',
-            'label' => 'OneSignal Push Notifications',
-            'mode' => 'live',
-            'enabled' => true,
+            'provider' => 'onesignal', 'label' => 'OneSignal Push Notifications', 'mode' => 'live', 'enabled' => true,
             'credentials' => ['app_id' => 'admin-app-id', 'rest_api_key' => 'admin-secret'],
         ]);
 
@@ -46,16 +39,10 @@ class OneSignalIntegrationTest extends TestCase
 
     public function test_disabled_admin_configuration_does_not_fall_back_to_environment(): void
     {
-        config([
-            'services.onesignal.app_id' => 'env-app-id',
-            'services.onesignal.rest_api_key' => 'env-secret',
-        ]);
+        config(['services.onesignal.app_id' => 'env-app-id', 'services.onesignal.rest_api_key' => 'env-secret']);
 
         IntegrationConfig::create([
-            'provider' => 'onesignal',
-            'label' => 'OneSignal Push Notifications',
-            'mode' => 'live',
-            'enabled' => false,
+            'provider' => 'onesignal', 'label' => 'OneSignal Push Notifications', 'mode' => 'live', 'enabled' => false,
             'credentials' => ['app_id' => 'admin-app-id', 'rest_api_key' => 'admin-secret'],
         ]);
 
@@ -68,10 +55,7 @@ class OneSignalIntegrationTest extends TestCase
     public function test_onesignal_replaces_vapid_for_new_message_notifications(): void
     {
         IntegrationConfig::create([
-            'provider' => 'onesignal',
-            'label' => 'OneSignal Push Notifications',
-            'mode' => 'live',
-            'enabled' => true,
+            'provider' => 'onesignal', 'label' => 'OneSignal Push Notifications', 'mode' => 'live', 'enabled' => true,
             'credentials' => ['app_id' => 'admin-app-id', 'rest_api_key' => 'admin-secret'],
         ]);
 
@@ -92,13 +76,7 @@ class OneSignalIntegrationTest extends TestCase
             'status' => 'sent',
             'sent_at' => now(),
         ]);
-
-        NotificationPreference::create([
-            'user_id' => $user->id,
-            'event' => 'new_message',
-            'channel' => 'web_push',
-            'enabled' => true,
-        ]);
+        NotificationPreference::create(['user_id' => $user->id, 'event' => 'new_message', 'channel' => 'web_push', 'enabled' => true]);
 
         $channels = (new NewMessageNotification($message, $conversation))->via($user);
 
@@ -109,78 +87,57 @@ class OneSignalIntegrationTest extends TestCase
     public function test_pushes_use_the_current_onesignal_endpoint_header_and_namespaced_identity(): void
     {
         IntegrationConfig::create([
-            'provider' => 'onesignal',
-            'label' => 'OneSignal Push Notifications',
-            'mode' => 'live',
-            'enabled' => true,
+            'provider' => 'onesignal', 'label' => 'OneSignal Push Notifications', 'mode' => 'live', 'enabled' => true,
             'credentials' => ['app_id' => 'app-id', 'rest_api_key' => 'rest-key'],
         ]);
         Http::fake(['https://api.onesignal.com/notifications' => Http::response(['id' => 'message-id'])]);
 
-        app(OneSignalService::class)->sendToUser(
-            42,
-            'New message',
-            'Hello',
-            'https://cerqle.ai/inbox/1',
-            1,
-            ['screen' => 'master_email_inbox', 'conversation_uuid' => 'thread-uuid'],
-        );
+        app(OneSignalService::class)->sendToUser(42, 'New message', 'Hello', 'https://wisperbot.com/inbox/1', 1);
 
-        Http::assertSent(function (Request $request) {
-            return $request->url() === 'https://api.onesignal.com/notifications'
-                && $request->hasHeader('Authorization', 'Key rest-key')
-                && $request['include_aliases']['external_id'] === ['user:42']
-                && $request['target_channel'] === 'push'
-                && $request['web_url'] === 'https://cerqle.ai/inbox/1'
-                && ! isset($request['url'])
-                && $request['data']['screen'] === 'master_email_inbox'
-                && $request['data']['conversation_uuid'] === 'thread-uuid'
-                && $request['data']['conversation_id'] === 1;
-        });
+        Http::assertSent(fn (Request $request) => $request->url() === 'https://api.onesignal.com/notifications'
+            && $request->hasHeader('Authorization', 'Key rest-key')
+            && $request['include_aliases']['external_id'] === ['user:42']
+            && $request['target_channel'] === 'push');
     }
 
-    public function test_email_message_push_targets_the_master_email_inbox(): void
+    public function test_channel_sends_to_backend_managed_user_push_tokens(): void
     {
+        IntegrationConfig::create([
+            'provider' => 'onesignal', 'label' => 'OneSignal Push Notifications', 'mode' => 'live', 'enabled' => true,
+            'credentials' => ['app_id' => 'app-id', 'rest_api_key' => 'rest-key'],
+        ]);
+        Http::fake(['https://api.onesignal.com/notifications' => Http::response(['id' => 'message-id'])]);
         $context = $this->createWorkspaceContext();
-        $account = ChannelAccount::create([
-            'workspace_id' => $context['workspace']->id,
-            'channel' => 'email',
-            'provider' => 'imap_smtp',
-            'display_name' => 'Support',
-            'status' => 'active',
+        $user = $context['user'];
+        UserPushToken::create([
+            'user_id' => $user->id,
+            'provider' => 'onesignal',
+            'token' => 'stored-subscription-id',
+            'device_name' => 'QA iPhone',
+            'last_seen_at' => now(),
         ]);
-        $contact = Contact::factory()->create(['workspace_id' => $context['workspace']->id]);
-        $conversation = Conversation::create([
-            'workspace_id' => $context['workspace']->id,
-            'channel_account_id' => $account->id,
-            'contact_id' => $contact->id,
-            'status' => 'open',
-        ]);
-        $message = Message::create([
-            'conversation_id' => $conversation->id,
-            'direction' => 'in',
-            'channel' => 'email',
-            'body' => 'A new customer email',
-            'status' => 'delivered',
-            'sent_at' => now(),
-        ]);
+        $notification = new class extends \Illuminate\Notifications\Notification {
+            public function toOneSignal(object $notifiable): array
+            {
+                return ['title' => 'New chat', 'body' => 'Hello', 'conversation_id' => 123];
+            }
+        };
 
-        $payload = (new NewMessageNotification($message, $conversation))->toOneSignal($context['user']);
+        app(OneSignalChannel::class)->send($user, $notification);
 
-        $this->assertSame('master_email_inbox', $payload['screen']);
-        $this->assertSame('email', $payload['channel']);
-        $this->assertSame($context['workspace']->id, $payload['workspace_id']);
-        $this->assertSame($conversation->uuid, $payload['conversation_uuid']);
-        $this->assertSame($account->id, $payload['account_id']);
-        $this->assertStringContainsString('/app/inbox/email', $payload['url']);
+        Http::assertSent(fn (Request $request) => $request->url() === 'https://api.onesignal.com/notifications'
+            && ($request['include_subscription_ids'] ?? null) === ['stored-subscription-id']
+            && $request['contents']['en'] === 'Hello'
+            && $request['data']['conversation_id'] === 123);
+        Http::assertSent(fn (Request $request) => $request->url() === 'https://api.onesignal.com/notifications'
+            && ($request['include_aliases']['external_id'] ?? null) === ['user:'.$user->id]);
     }
 
     public function test_super_admins_are_never_sent_onesignal_pushes(): void
     {
         Http::fake();
         $admin = AdminUser::factory()->create();
-        $notification = new class extends Notification
-        {
+        $notification = new class extends \Illuminate\Notifications\Notification {
             public function toOneSignal(object $notifiable): array
             {
                 return ['title' => 'Test', 'body' => 'Test'];

@@ -9,14 +9,17 @@ use App\Events\CommerceEventReceived;
 use App\Events\ContactCreated;
 use App\Events\ConversationAssigned;
 use App\Events\MessageReceived;
+use App\Events\MessageSent;
 use App\Events\PlanChanged;
 use App\Events\SubscriptionCancelled;
 use App\Events\SubscriptionExpired;
 use App\Events\SubscriptionRenewed;
 use App\Events\SubscriptionStarted;
 use App\Events\TrialEnding;
+use App\Events\TypingChanged;
 use App\Listeners\AutomationTriggerListener;
 use App\Listeners\AutoReplyListener;
+use App\Listeners\BroadcastWidgetRealtimeUpdate;
 use App\Listeners\DispatchOutboundWebhookListener;
 use App\Listeners\LogSuccessfulLogin;
 use App\Listeners\SendAutomationFailedNotification;
@@ -83,6 +86,9 @@ class AppServiceProvider extends ServiceProvider
 
         Event::listen(MessageReceived::class, [AutomationTriggerListener::class, 'handleMessageReceived']);
         Event::listen(MessageReceived::class, [AutoReplyListener::class, 'handle']);
+        Event::listen(MessageSent::class, [BroadcastWidgetRealtimeUpdate::class, 'handleMessageSent']);
+        Event::listen(ConversationAssigned::class, [BroadcastWidgetRealtimeUpdate::class, 'handleConversationAssigned']);
+        Event::listen(TypingChanged::class, [BroadcastWidgetRealtimeUpdate::class, 'handleTypingChanged']);
         Event::listen(ContactCreated::class, [AutomationTriggerListener::class, 'handleContactCreated']);
         Event::listen(AutomationWebhookReceived::class, [AutomationTriggerListener::class, 'handleAutomationWebhookReceived']);
         Event::listen(CommerceEventReceived::class, [AutomationTriggerListener::class, 'handleCommerceEvent']);
@@ -110,6 +116,20 @@ class AppServiceProvider extends ServiceProvider
         RateLimiter::for('api', function (Request $request) {
             return Limit::perMinute(60)
                 ->by(optional($request->user())->id ?: $request->ip());
+        });
+
+        RateLimiter::for('mobile-login', function (Request $request) {
+            return Limit::perMinute(30)
+                ->by('mobile-login:ip:'.$request->ip())
+                ->response(function (Request $request, array $headers) {
+                    $retryAfter = max(1, (int) ($headers['Retry-After'] ?? 60));
+
+                    return response()->json([
+                        'code' => 'login_rate_limited',
+                        'message' => 'Too many login attempts. Please wait before trying again.',
+                        'retry_after' => $retryAfter,
+                    ], 429, $headers);
+                });
         });
 
         RateLimiter::for('webhooks', function (Request $request) {

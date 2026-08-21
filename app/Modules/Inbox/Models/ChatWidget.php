@@ -176,6 +176,7 @@ class ChatWidget extends Model
             'require_prechat' => (bool) $this->require_prechat,
             'prechat_fields' => $this->prechat_fields ?: ['name', 'email'],
             'offline_message' => $this->offline_message,
+            'realtime' => app(\App\Services\PusherPublicConfig::class)->widget(),
         ];
     }
 }

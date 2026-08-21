@@ -23,13 +23,17 @@ class SendNewMessageNotification
             return;
         }
 
-        // Notify assigned agent, or all workspace members if unassigned
-        if ($conversation->assigned_user_id) {
-            $recipients = User::where('id', $conversation->assigned_user_id)->get();
-        } else {
-            $workspaceId = $conversation->workspace_id;
-            $recipients = User::inWorkspace($workspaceId)->get();
-        }
+        // Previously: only notify assigned agent if set
+        // if ($conversation->assigned_user_id) {
+        //     $recipients = User::where('id', $conversation->assigned_user_id)->get();
+        // } else {
+        //     $workspaceId = $conversation->workspace_id;
+        //     $recipients = User::inWorkspace($workspaceId)->get();
+        // }
+
+        // Notify all workspace team members for all messages
+        $workspaceId = $conversation->workspace_id;
+        $recipients = User::inWorkspace($workspaceId)->get();
 
         if ($recipients->isEmpty()) {
             return;

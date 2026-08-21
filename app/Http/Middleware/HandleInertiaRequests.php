@@ -127,26 +127,7 @@ class HandleInertiaRequests extends Middleware
 
     private function pusherPublicConfig(): array
     {
-        try {
-            $key = SystemSetting::get('pusher_app_key') ?: env('PUSHER_APP_KEY', '');
-            $cluster = SystemSetting::get('pusher_app_cluster') ?: env('PUSHER_APP_CLUSTER', 'mt1');
-            $dbFlag = SystemSetting::get('pusher_enabled');
-
-            // If the admin panel has explicitly disabled Pusher, respect that.
-            // Otherwise (setting absent/null) treat a non-empty key as enabled,
-            // so the .env credentials work out-of-the-box without a DB toggle.
-            $enabled = $dbFlag === 'false' ? false : ! empty($key);
-
-            return [
-                'key' => $key,
-                'cluster' => $cluster,
-                'enabled' => $enabled,
-            ];
-        } catch (\Throwable) {
-            $key = env('PUSHER_APP_KEY', '');
-
-            return ['key' => $key, 'cluster' => env('PUSHER_APP_CLUSTER', 'mt1'), 'enabled' => ! empty($key)];
-        }
+        return app(\App\Services\PusherPublicConfig::class)->app();
     }
 
     private function brandingShare(): array
