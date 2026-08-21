@@ -43,6 +43,36 @@ php artisan migrate --force
 php artisan optimize
 php artisan queue:restart
 
+# `queue:restart` asks current Laravel workers to exit. Supervisor normally
+# starts replacements, but a manually-stopped process group remains STOPPED
+# forever and leaves imports/messages silently queued. Ensure the general
+# worker group is enabled after every deployment when Supervisor is present.
+SUPERVISOR=()
+if command -v supervisorctl >/dev/null 2>&1; then
+    if supervisorctl status >/dev/null 2>&1; then
+        SUPERVISOR=(supervisorctl)
+    elif command -v sudo >/dev/null 2>&1 && sudo -n supervisorctl status >/dev/null 2>&1; then
+        SUPERVISOR=(sudo -n supervisorctl)
+    fi
+fi
+
+if [[ ${#SUPERVISOR[@]} -gt 0 ]]; then
+    "${SUPERVISOR[@]}" reread
+    "${SUPERVISOR[@]}" update
+    # `start` reports an error when a process is already running, so verify
+    # the resulting state explicitly instead of treating that as a failure.
+    "${SUPERVISOR[@]}" start 'cerqle-worker:*' || true
+    sleep 3
+    WORKER_STATUS="$("${SUPERVISOR[@]}" status 'cerqle-worker:*')"
+    echo "$WORKER_STATUS"
+    if echo "$WORKER_STATUS" | grep -Eq '(STOPPED|FATAL|BACKOFF|EXITED|UNKNOWN)'; then
+        echo "ERROR: One or more Cerqle queue workers failed to start." >&2
+        exit 1
+    fi
+else
+    echo "WARNING: Supervisor is unavailable; verify queue workers manually." >&2
+fi
+
 php artisan up
 APP_IS_DOWN=0
 trap - EXIT

@@ -240,6 +240,43 @@ class ContactListBulkManagementTest extends TestCase
             );
     }
 
+    public function test_stalled_and_actionable_contact_list_operations_remain_visible(): void
+    {
+        ['user' => $user, 'workspace' => $workspace] = $this->createWorkspaceContext();
+        $list = Segment::create(['workspace_id' => $workspace->id, 'name' => 'Worker health', 'type' => 'static']);
+
+        $queued = ContactListOperation::create([
+            'workspace_id' => $workspace->id,
+            'segment_id' => $list->id,
+            'created_by' => $user->id,
+            'type' => 'csv_validation',
+            'status' => 'queued',
+        ]);
+        $queued->forceFill([
+            'created_at' => now()->subMinutes(2),
+            'updated_at' => now()->subMinutes(2),
+        ])->saveQuietly();
+
+        $completed = ContactListOperation::create([
+            'workspace_id' => $workspace->id,
+            'segment_id' => $list->id,
+            'created_by' => $user->id,
+            'type' => 'csv_validation',
+            'status' => 'completed',
+            'added' => 10,
+            'finished_at' => now()->subDays(2),
+        ]);
+
+        $this->actingAs($user)->get(route('client.segments.contacts', $list))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->has('operations', 2)
+                ->where('operations.0.id', $completed->id)
+                ->where('operations.1.id', $queued->id)
+                ->where('operations.1.is_stalled', true)
+            );
+    }
+
     public function test_csv_validation_keeps_available_capacity_and_ignores_the_rest(): void
     {
         Queue::fake();
