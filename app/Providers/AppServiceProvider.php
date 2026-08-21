@@ -90,6 +90,7 @@ class AppServiceProvider extends ServiceProvider
         Event::listen(ConversationAssigned::class, [BroadcastWidgetRealtimeUpdate::class, 'handleConversationAssigned']);
         Event::listen(TypingChanged::class, [BroadcastWidgetRealtimeUpdate::class, 'handleTypingChanged']);
         Event::listen(ContactCreated::class, [AutomationTriggerListener::class, 'handleContactCreated']);
+        Event::listen(CampaignCompleted::class, [AutomationTriggerListener::class, 'handleCampaignCompleted']);
         Event::listen(AutomationWebhookReceived::class, [AutomationTriggerListener::class, 'handleAutomationWebhookReceived']);
         Event::listen(CommerceEventReceived::class, [AutomationTriggerListener::class, 'handleCommerceEvent']);
 

@@ -1310,7 +1310,11 @@ function makeNode(type, existingCount, position) {
 function serializeNodes(nodes) {
     return nodes.map(n => ({
         id: n.id,
-        type: n.data?.nodeType ?? n.type,
+        // React Flow uses `triggerNode` as the renderer key, but the backend
+        // execution graph has always used the canonical `trigger` type. Saving
+        // the renderer key made dry-runs pass while every real run failed with
+        // "No trigger node".
+        type: n.type === 'triggerNode' ? 'trigger' : (n.data?.nodeType ?? n.type),
         position: n.position,
         data: n.data,
     }));

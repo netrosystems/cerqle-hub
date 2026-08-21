@@ -30,11 +30,11 @@ class AutomationWebhookTriggerTest extends TestCase
         $workspace = $this->ctx['workspace'];
         $token = 'test-trigger-token-abc123';
 
-        Automation::create([
+        $automation = Automation::create([
             'workspace_id' => $workspace->id,
             'name' => 'Webhook Automation',
             'status' => 'active',
-            'trigger_type' => 'webhook',
+            'trigger_type' => 'webhook.received',
             'trigger_token' => $token,
             'nodes' => [],
             'edges' => [],
@@ -45,6 +45,9 @@ class AutomationWebhookTriggerTest extends TestCase
         ]);
 
         $response->assertStatus(202);
+        $this->assertDatabaseHas('automation_runs', [
+            'automation_id' => $automation->id,
+        ]);
     }
 
     public function test_post_to_unknown_token_returns_404(): void

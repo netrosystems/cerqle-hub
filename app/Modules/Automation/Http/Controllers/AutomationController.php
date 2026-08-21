@@ -16,6 +16,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -111,6 +112,31 @@ class AutomationController extends Controller
             'nodes' => ['nullable', 'array'],
             'edges' => ['nullable', 'array'],
         ]);
+
+        if (isset($validated['nodes'])) {
+            $validated['nodes'] = $this->normaliseNodes($validated['nodes'], $validated['trigger_type'] ?? $automation->trigger_type);
+        }
+
+        if (($validated['status'] ?? null) === 'active') {
+            $nodes = collect($validated['nodes'] ?? $automation->nodes ?? []);
+            $edges = collect($validated['edges'] ?? $automation->edges ?? []);
+            $trigger = $nodes->first(fn (array $node) => $this->isTriggerNode($node));
+            $triggerType = $validated['trigger_type'] ?? $automation->trigger_type;
+
+            if (! $triggerType || ! $trigger) {
+                throw ValidationException::withMessages([
+                    'status' => 'Choose a trigger and save the workflow before activating it.',
+                ]);
+            }
+
+            $hasEntryEdge = $edges->contains(fn (array $edge) => ($edge['source'] ?? null) === ($trigger['id'] ?? null));
+            if (! $hasEntryEdge) {
+                throw ValidationException::withMessages([
+                    'status' => 'Connect the trigger to at least one action before activating it.',
+                ]);
+            }
+        }
+
         $automation->update($validated);
 
         return back()->with('success', 'Automation saved.');
@@ -175,5 +201,25 @@ class AutomationController extends Controller
     private function authorise(Request $request, Automation $automation): void
     {
         abort_unless((int) $automation->workspace_id === $this->workspaceId($request), 403);
+    }
+
+    private function normaliseNodes(array $nodes, ?string $triggerType): array
+    {
+        return array_map(function (array $node) use ($triggerType): array {
+            if (! $this->isTriggerNode($node)) {
+                return $node;
+            }
+
+            $node['type'] = 'trigger';
+            $node['data'] = array_merge($node['data'] ?? [], ['triggerType' => $triggerType]);
+
+            return $node;
+        }, $nodes);
+    }
+
+    private function isTriggerNode(array $node): bool
+    {
+        return in_array($node['type'] ?? '', ['trigger', 'triggerNode'], true)
+            || array_key_exists('triggerType', $node['data'] ?? []);
     }
 }
