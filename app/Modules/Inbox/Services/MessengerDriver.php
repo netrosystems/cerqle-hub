@@ -12,6 +12,7 @@ use App\Modules\Shared\Models\Message;
 use App\Modules\Shared\Services\ContactService;
 use App\Services\WebhookIdempotencyService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
@@ -146,21 +147,107 @@ class MessengerDriver implements ChannelDriverInterface
         return $processed;
     }
 
+    /**
+     * Reconcile recent Page conversations when Meta did not deliver a webhook.
+     *
+     * Webhooks remain the primary, real-time path. This bounded poll overlaps the
+     * previous cursor by ten minutes, then relies on provider_message_id
+     * idempotency so delayed/retried webhook deliveries cannot create duplicates.
+     */
+    public function syncRecentMessages(ChannelAccount $channelAccount): int
+    {
+        if ($channelAccount->channel !== 'messenger' || $channelAccount->status !== 'active') {
+            return 0;
+        }
+
+        $pageId = (string) ($channelAccount->meta_json['page_id'] ?? '');
+        $pageToken = (string) ($channelAccount->credentials['page_access_token'] ?? '');
+        if ($pageId === '' || $pageToken === '') {
+            throw new \RuntimeException('Messenger account is missing its Page id or access token.');
+        }
+
+        $meta = $channelAccount->meta_json ?? [];
+        $since = isset($meta['messenger_last_synced_at'])
+            ? Carbon::parse($meta['messenger_last_synced_at'])->subMinutes(10)
+            : now()->subDays(2);
+
+        $conversationsUrl = self::BASE."/{$pageId}/conversations";
+        $conversationParams = [
+            'platform' => 'messenger',
+            'fields' => 'id,updated_time',
+            'since' => $since->timestamp,
+            'limit' => 100,
+        ];
+
+        $processed = 0;
+        $conversationPages = 0;
+
+        do {
+            $response = Http::withToken($pageToken)->timeout(20)->get($conversationsUrl, $conversationParams);
+            if (! $response->successful()) {
+                throw new \RuntimeException('Messenger conversation sync failed: '.($response->json('error.message') ?? $response->body()));
+            }
+
+            foreach ($response->json('data', []) as $conversation) {
+                $conversationId = (string) ($conversation['id'] ?? '');
+                if ($conversationId === '') {
+                    continue;
+                }
+
+                $processed += $this->syncConversationMessages(
+                    $channelAccount,
+                    $pageId,
+                    $pageToken,
+                    $conversationId,
+                    $since,
+                );
+            }
+
+            $conversationsUrl = (string) ($response->json('paging.next') ?? '');
+            $conversationParams = [];
+            $conversationPages++;
+        } while ($conversationsUrl !== '' && $conversationPages < 5);
+
+        $channelAccount->update([
+            'meta_json' => array_merge($meta, [
+                'messenger_last_synced_at' => now()->toIso8601String(),
+                'messenger_last_sync_error' => null,
+            ]),
+        ]);
+
+        Log::info('Messenger reconciliation completed', [
+            'channel_account_id' => $channelAccount->id,
+            'workspace_id' => $channelAccount->workspace_id,
+            'processed_count' => $processed,
+        ]);
+
+        return $processed;
+    }
+
     public function verifyCreds(): bool
     {
         return true;
     }
 
-    private function processInboundMessage(string $pageId, array $event): ?Message
+    private function processInboundMessage(string $pageId, array $event, ?ChannelAccount $matchedAccount = null): ?Message
     {
         $senderId = $event['sender']['id'] ?? '';
         $msgBody = $event['message']['text'] ?? '';
+        $providerMessageId = $event['message']['mid'] ?? null;
+        $sentAt = isset($event['timestamp'])
+            ? Carbon::createFromTimestampMs((int) $event['timestamp'])
+            : now();
+
+        if ($senderId === '' || ($providerMessageId && Message::where('channel', 'messenger')
+            ->where('provider_message_id', $providerMessageId)->exists())) {
+            return null;
+        }
 
         // The webhook entry.id is the Facebook Page id. Match it against the page_id
         // we persist when the page was connected (InboxSetupController).
-        $channelAccount = ChannelAccount::where('channel', 'messenger')
-            ->whereJsonContains('meta_json->page_id', $pageId)
-            ->first();
+        $channelAccount = $matchedAccount ?: ChannelAccount::where('channel', 'messenger')
+            ->get()
+            ->first(fn (ChannelAccount $account) => (string) ($account->meta_json['page_id'] ?? '') === (string) $pageId);
 
         // No matching page → the message belonged to a page that isn't connected to
         // any workspace. Drop it (and log) instead of silently writing it to
@@ -203,12 +290,12 @@ class MessengerDriver implements ChannelDriverInterface
             'payload' => $event,
             'body' => $msgBody,
             'status' => 'delivered',
-            'provider_message_id' => $event['message']['mid'] ?? null,
+            'provider_message_id' => $providerMessageId,
             'sent_by' => 'human',
-            'sent_at' => now(),
+            'sent_at' => $sentAt,
         ]);
 
-        $conversation->update(['last_message_at' => now(), 'status' => 'open', 'unread_count' => $conversation->unread_count + 1]);
+        $conversation->update(['last_message_at' => $sentAt, 'status' => 'open', 'unread_count' => $conversation->unread_count + 1]);
 
         MessageReceived::dispatch($message);
 
@@ -221,6 +308,70 @@ class MessengerDriver implements ChannelDriverInterface
         return $message;
     }
 
+    private function syncConversationMessages(
+        ChannelAccount $channelAccount,
+        string $pageId,
+        string $pageToken,
+        string $conversationId,
+        Carbon $since,
+    ): int {
+        $url = self::BASE."/{$conversationId}/messages";
+        $params = [
+            'fields' => 'id,message,from,to,created_time,attachments',
+            'since' => $since->timestamp,
+            'limit' => 100,
+        ];
+        $events = [];
+        $pages = 0;
+
+        do {
+            $response = Http::withToken($pageToken)->timeout(20)->get($url, $params);
+            if (! $response->successful()) {
+                throw new \RuntimeException('Messenger message sync failed: '.($response->json('error.message') ?? $response->body()));
+            }
+
+            foreach ($response->json('data', []) as $item) {
+                $messageId = (string) ($item['id'] ?? '');
+                $senderId = (string) ($item['from']['id'] ?? '');
+                if ($messageId === '' || $senderId === '' || $senderId === $pageId) {
+                    continue;
+                }
+
+                $createdAt = isset($item['created_time']) ? Carbon::parse($item['created_time']) : now();
+                if ($createdAt->lt($since)) {
+                    continue;
+                }
+
+                $events[] = [
+                    'created_at' => $createdAt,
+                    'event' => [
+                        'sender' => ['id' => $senderId],
+                        'recipient' => ['id' => $pageId],
+                        'timestamp' => $createdAt->getTimestampMs(),
+                        'message' => [
+                            'mid' => $messageId,
+                            'text' => (string) ($item['message'] ?? ''),
+                            'attachments' => $item['attachments']['data'] ?? [],
+                        ],
+                    ],
+                ];
+            }
+
+            $url = (string) ($response->json('paging.next') ?? '');
+            $params = [];
+            $pages++;
+        } while ($url !== '' && $pages < 10);
+
+        $processed = 0;
+        foreach (collect($events)->sortBy('created_at') as $item) {
+            if ($this->processInboundMessage($pageId, $item['event'], $channelAccount)) {
+                $processed++;
+            }
+        }
+
+        return $processed;
+    }
+
     /**
      * Find-or-create the contact for a Messenger sender, keyed on the stable PSID
      * (stored in custom_fields.messenger_psid) so repeat messages map to ONE contact
@@ -229,18 +380,21 @@ class MessengerDriver implements ChannelDriverInterface
      */
     private function resolveMessengerContact(int $workspaceId, string $psid, ChannelAccount $channelAccount): Contact
     {
-        $profile = $this->fetchSenderProfile(
-            $psid,
-            $channelAccount->credentials['page_access_token'] ?? '',
-            (string) ($channelAccount->meta_json['page_id'] ?? '')
-        );
-
-        $firstName = $profile['first_name'] ?? null;
-        $lastName = $profile['last_name'] ?? null;
-
         $contact = Contact::where('workspace_id', $workspaceId)
             ->whereJsonContains('custom_fields->messenger_psid', $psid)
             ->first();
+
+        $profile = [];
+        if (! $contact || ! $contact->first_name) {
+            $profile = $this->fetchSenderProfile(
+                $psid,
+                $channelAccount->credentials['page_access_token'] ?? '',
+                (string) ($channelAccount->meta_json['page_id'] ?? '')
+            );
+        }
+
+        $firstName = $profile['first_name'] ?? null;
+        $lastName = $profile['last_name'] ?? null;
 
         if (! $contact) {
             $contact = Contact::create([
