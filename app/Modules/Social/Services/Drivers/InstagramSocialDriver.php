@@ -62,4 +62,22 @@ class InstagramSocialDriver implements SocialNetworkInterface
 
         return $res['id'] ?? throw new \RuntimeException('Instagram publish failed: '.json_encode($res));
     }
+
+    public function permalink(SocialAccount $account, string $platformPostId): ?string
+    {
+        $response = Http::timeout(15)->get("https://graph.facebook.com/v25.0/{$platformPostId}", [
+            'fields' => 'permalink',
+            'access_token' => $account->access_token,
+        ]);
+
+        if (! $response->successful()) {
+            return null;
+        }
+
+        $permalink = $response->json('permalink');
+
+        return is_string($permalink) && str_starts_with($permalink, 'https://www.instagram.com/')
+            ? $permalink
+            : null;
+    }
 }

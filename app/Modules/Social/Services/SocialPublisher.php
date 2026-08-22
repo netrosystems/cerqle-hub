@@ -6,6 +6,8 @@ use App\Modules\Broadcasting\Models\UsageMeter;
 use App\Modules\Social\Models\SocialAccount;
 use App\Modules\Social\Models\SocialPost;
 use App\Modules\Social\Models\SocialPostAccount;
+use App\Modules\Social\Services\Drivers\DeletesPublishedPosts;
+use App\Modules\Social\Services\Drivers\EditsPublishedPosts;
 use App\Modules\Social\Services\Drivers\FacebookDriver;
 use App\Modules\Social\Services\Drivers\InstagramSocialDriver;
 use App\Modules\Social\Services\Drivers\LinkedInDriver;
@@ -67,6 +69,13 @@ class SocialPublisher
                 $platformId = $driver->publish($account, $post->toArray());
                 $link->update(['status' => 'published', 'platform_post_id' => $platformId, 'published_at' => now()]);
                 $results[$account->id] = ['status' => 'published', 'post_id' => $platformId];
+                if ($driver instanceof InstagramSocialDriver) {
+                    $permalink = $driver->permalink($account, $platformId);
+                    if ($permalink) {
+                        $results[$account->id]['url'] = $permalink;
+                        $publishedUrls[] = $permalink;
+                    }
+                }
                 if ($driver instanceof YoutubeDriver && $driver->warnings() !== []) {
                     $results[$account->id]['warnings'] = $driver->warnings();
                 }
@@ -116,5 +125,27 @@ class SocialPublisher
         if ($failedCount > 0) {
             throw new \RuntimeException("{$failedCount} social account publish attempt(s) failed.");
         }
+    }
+
+    public function updatePublishedPost(SocialAccount $account, string $platformPostId, array $postData): void
+    {
+        $driver = $this->drivers[$account->network] ?? null;
+
+        if (! $driver instanceof EditsPublishedPosts) {
+            throw new \LogicException(ucfirst($account->network).' does not support editing published posts through its API.');
+        }
+
+        $driver->updatePublishedPost($account, $platformPostId, $postData);
+    }
+
+    public function deletePublishedPost(SocialAccount $account, string $platformPostId): void
+    {
+        $driver = $this->drivers[$account->network] ?? null;
+
+        if (! $driver instanceof DeletesPublishedPosts) {
+            throw new \LogicException(ucfirst($account->network).' does not support deleting published posts through its API.');
+        }
+
+        $driver->deletePublishedPost($account, $platformPostId);
     }
 }
