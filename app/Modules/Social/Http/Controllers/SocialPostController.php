@@ -504,39 +504,22 @@ class SocialPostController extends Controller
     public function deletePublishedInstagram(
         Request $request,
         SocialPost $post,
-        int $account,
-        SocialPublisher $publisher
+        int $account
     ): RedirectResponse {
-        [$socialAccount, $link] = $this->publishedTarget($request, $post, $account, 'instagram');
-
-        try {
-            $publisher->deletePublishedPost($socialAccount, (string) $link->platform_post_id);
-        } catch (\Throwable $e) {
-            Log::error('Instagram published post deletion failed', [
-                'post_id' => $post->id,
-                'account_id' => $socialAccount->id,
-                'error' => $e->getMessage(),
-            ]);
-
-            $message = str_contains($e->getMessage(), 'Meta code 10')
-                ? 'Meta denied post deletion because this Instagram connection is missing media-management access. Ask the Super Admin to enable instagram_manage_comments, then reconnect this Instagram account and retry.'
-                : (str_contains($e->getMessage(), 'Meta code 200')
-                    ? 'Meta rejected the deletion request. Reconnect Instagram and confirm Cerqle has permission to manage this account.'
-                    : 'Instagram could not delete this post. '.$this->publicProviderError($e->getMessage()));
-
-            return back()->withErrors(['instagram' => $message]);
-        }
+        [$socialAccount, $link] = $this->publishedTarget(
+            $request,
+            $post,
+            $account,
+            'instagram',
+            requirePlatformPostId: false,
+        );
 
         $this->removePublishedTarget($post, $socialAccount, $link);
 
-        return back()->with('success', 'Instagram post deleted.');
-    }
-
-    private function publicProviderError(string $message): string
-    {
-        $clean = preg_replace('/(?:access[_ -]?token|token)\s*[=:]\s*[^\s,]+/i', 'token=[redacted]', $message);
-
-        return mb_substr((string) $clean, 0, 260);
+        return back()->with(
+            'success',
+            'Post removed from Cerqle. Instagram does not provide an API for deleting published media, so the post remains on Instagram until you delete it there.'
+        );
     }
 
     /** @return array{SocialAccount, SocialPostAccount} */
@@ -550,7 +533,8 @@ class SocialPostController extends Controller
         Request $request,
         SocialPost $post,
         int $accountId,
-        string $network
+        string $network,
+        bool $requirePlatformPostId = true,
     ): array {
         abort_unless((int) $post->workspace_id === $this->workspaceId($request), 403);
         abort_if($post->status === 'publishing', 422, 'This post is still being published.');
@@ -568,7 +552,7 @@ class SocialPostController extends Controller
             ->firstOrFail();
 
         abort_unless(
-            $link->status === 'published' && filled($link->platform_post_id),
+            $link->status === 'published' && (! $requirePlatformPostId || filled($link->platform_post_id)),
             422,
             'This '.ucfirst($network).' post has not been published successfully.'
         );

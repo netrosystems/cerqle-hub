@@ -188,10 +188,9 @@ const SETUP_GUIDES = {
                     'business_management',
                     'instagram_basic',
                     'instagram_content_publish',
-                    'instagram_manage_comments',
                 ],
                 steps2: [
-                    'Submit your app for App Review for any permissions marked as "Advanced Access" (pages_manage_posts, instagram_content_publish, and instagram_manage_comments).',
+                    'Submit your app for App Review for any permissions marked as "Advanced Access" (pages_manage_posts and instagram_content_publish).',
                     'Add a Privacy Policy URL and Terms of Service URL under Settings → Basic before submitting for review.',
                 ],
             },
