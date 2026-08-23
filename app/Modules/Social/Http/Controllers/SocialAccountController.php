@@ -123,7 +123,7 @@ class SocialAccountController extends Controller
             $pages = $discovery['pages'];
 
             $selectionScopes = $network === 'instagram'
-                ? ['instagram_content_publish', 'instagram_basic', 'pages_read_engagement', 'pages_show_list']
+                ? ['instagram_content_publish', 'instagram_manage_contents', 'instagram_basic', 'pages_read_engagement', 'pages_show_list']
                 : ['pages_manage_posts', 'pages_read_engagement', 'pages_show_list'];
 
             try {

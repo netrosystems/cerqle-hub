@@ -90,7 +90,7 @@ class PublishedFacebookPostManagementTest extends TestCase
         Http::assertNothingSent();
     }
 
-    public function test_published_instagram_post_can_be_removed_from_cerqle(): void
+    public function test_published_instagram_post_is_deleted_remotely_before_it_is_removed_from_cerqle(): void
     {
         Http::fake(['graph.facebook.com/*' => Http::response(['success' => true])]);
         ['user' => $user, 'workspace' => $workspace] = $this->createWorkspaceContext();
@@ -103,23 +103,34 @@ class PublishedFacebookPostManagementTest extends TestCase
         $response->assertRedirect()->assertSessionHasNoErrors();
         $this->assertDatabaseMissing('social_media_posts', ['id' => $post->id]);
         $this->assertDatabaseMissing('social_media_post_accounts', ['post_id' => $post->id]);
-        Http::assertNothingSent();
+        Http::assertSent(function (Request $request): bool {
+            parse_str($request->body(), $body);
+
+            return $request->method() === 'DELETE'
+                && $request->url() === 'https://graph.facebook.com/v25.0/page_123'
+                && ($body['access_token'] ?? null) === 'test-token';
+        });
     }
 
-    public function test_instagram_record_without_a_remote_media_id_can_be_removed_from_cerqle(): void
+    public function test_failed_instagram_delete_preserves_the_local_post_and_account_link(): void
     {
-        Http::fake();
+        Http::fake(['graph.facebook.com/*' => Http::response([
+            'error' => ['message' => '(#10) Insufficient permissions to access this data', 'code' => 10],
+        ], 400)]);
         ['user' => $user, 'workspace' => $workspace] = $this->createWorkspaceContext();
         [$post, $account] = $this->publishedPost($workspace->id, 'instagram');
-        SocialPostAccount::where('post_id', $post->id)->update(['platform_post_id' => null]);
 
         $response = $this->actingAs($user)->delete(
             route('client.social.posts.instagram.destroy', [$post, $account])
         );
 
-        $response->assertRedirect()->assertSessionHasNoErrors();
-        $this->assertDatabaseMissing('social_media_posts', ['id' => $post->id]);
-        Http::assertNothingSent();
+        $response->assertRedirect()->assertSessionHasErrors('instagram');
+        $this->assertDatabaseHas('social_media_posts', ['id' => $post->id]);
+        $this->assertDatabaseHas('social_media_post_accounts', [
+            'post_id' => $post->id,
+            'social_account_id' => $account->id,
+            'platform_post_id' => 'page_123',
+        ]);
     }
 
     public function test_facebook_cannot_use_instagram_post_management_endpoint(): void

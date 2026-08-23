@@ -194,7 +194,7 @@ function PostDetailModal({ post, accountMap, userTz, onClose, onDelete, onEditFa
                                                     {result.status === 'published' && acct?.network === 'instagram' && (
                                                         <button type="button" onClick={() => onDeleteInstagram(post, acct)}
                                                             className="rounded-md border border-neutral-200 p-1 text-neutral-500 hover:border-red-300 hover:text-red-500 dark:border-neutral-700"
-                                                            title={t('social.remove_instagram_record')}>
+                                                            title={t('social.delete_instagram_post')}>
                                                             <Trash2 className="h-3.5 w-3.5" />
                                                         </button>
                                                     )}
@@ -370,8 +370,8 @@ function PostCard({ post, accountMap, userTz, onView, onDelete, onEditFacebook, 
                     {instagramTarget && (
                         <button type="button" onClick={() => onDeleteInstagram(post, instagramTarget)}
                             className="ml-auto inline-flex items-center gap-1 rounded-lg border border-neutral-200 px-2 py-1 text-[11px] text-neutral-400 hover:border-red-300 hover:text-red-500 dark:border-neutral-700"
-                            title={t('social.remove_instagram_record')}>
-                            <Trash2 className="h-3 w-3" /> {t('social.remove_from_cerqle')}
+                            title={t('social.delete_instagram_post')}>
+                            <Trash2 className="h-3 w-3" /> Instagram
                         </button>
                     )}
                     {canDelete && (
@@ -420,7 +420,7 @@ export default function PostsIndex({ posts, accounts, filters }) {
     };
 
     const handleInstagramDelete = (post, account) => {
-        if (!confirm(t('social.confirm_remove_instagram_record'))) return;
+        if (!confirm(t('social.confirm_delete_instagram_post'))) return;
 
         router.delete(route('client.social.posts.instagram.destroy', [post.id, account.id]), {
             preserveScroll: true,
