@@ -395,7 +395,10 @@ class SocialPostController extends Controller
             422,
             'Published posts must be deleted from the connected platform.'
         );
-        $post->delete();
+        DB::transaction(function () use ($post): void {
+            $post->accountLinks()->delete();
+            $post->delete();
+        });
 
         return back()->with('success', 'Post deleted.');
     }

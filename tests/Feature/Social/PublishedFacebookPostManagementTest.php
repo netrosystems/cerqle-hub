@@ -115,6 +115,42 @@ class PublishedFacebookPostManagementTest extends TestCase
         $this->assertDatabaseHas('social_media_posts', ['id' => $post->id]);
     }
 
+    public function test_scheduled_instagram_post_and_its_pending_target_can_be_deleted_locally(): void
+    {
+        Http::fake();
+        ['user' => $user, 'workspace' => $workspace] = $this->createWorkspaceContext();
+
+        $account = SocialAccount::create([
+            'workspace_id' => $workspace->id,
+            'network' => 'instagram',
+            'account_id' => 'instagram-scheduled-account',
+            'name' => 'Scheduled Instagram Account',
+            'access_token' => 'test-token',
+            'active' => true,
+        ]);
+        $post = SocialPost::create([
+            'workspace_id' => $workspace->id,
+            'body' => 'Scheduled Instagram post',
+            'target_accounts' => [$account->id],
+            'status' => 'scheduled',
+            'scheduled_at' => now()->addHour(),
+        ]);
+        SocialPostAccount::create([
+            'post_id' => $post->id,
+            'social_account_id' => $account->id,
+            'status' => 'pending',
+        ]);
+
+        $this->actingAs($user)
+            ->delete(route('client.social.posts.destroy', $post))
+            ->assertRedirect()
+            ->assertSessionHas('success', 'Post deleted.');
+
+        $this->assertDatabaseMissing('social_media_posts', ['id' => $post->id]);
+        $this->assertDatabaseMissing('social_media_post_accounts', ['post_id' => $post->id]);
+        Http::assertNothingSent();
+    }
+
     /** @return array{SocialPost, SocialAccount} */
     private function publishedPost(int $workspaceId, string $network): array
     {

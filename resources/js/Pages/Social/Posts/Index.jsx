@@ -104,14 +104,17 @@ function FacebookEditModal({ post, account, result, onClose }) {
 }
 
 /* ── Detail Modal ─────────────────────────────────────────────── */
-function PostDetailModal({ post, accountMap, userTz, onClose, onEditFacebook, onDeleteFacebook }) {
+function PostDetailModal({ post, accountMap, userTz, onClose, onDelete, onEditFacebook, onDeleteFacebook }) {
     const { t } = useTranslation();
     if (!post) return null;
     const targets = post.target_accounts ?? [];
     const dateField = post.published_at ?? post.scheduled_at;
     const tz = post.timezone || userTz;
     const mediaUrls = (post.media_urls ?? []).filter(Boolean);
-    const canEdit = ['draft', 'scheduled', 'failed'].includes(post.status);
+    const publishedTargets = targets.filter((id) => post.publish_results?.[id]?.status === 'published');
+    const hasPublishedTarget = publishedTargets.length > 0;
+    const canEdit = ['draft', 'scheduled', 'failed'].includes(post.status) && !hasPublishedTarget;
+    const canDelete = ['draft', 'scheduled', 'failed'].includes(post.status) && !hasPublishedTarget;
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -190,9 +193,9 @@ function PostDetailModal({ post, accountMap, userTz, onClose, onEditFacebook, on
                                                     )}
                                                     {result.status === 'published' && acct?.network === 'instagram' && (
                                                         <a href={result.url || 'https://www.instagram.com/'} target="_blank" rel="noopener noreferrer"
-                                                            className="inline-flex items-center gap-1 rounded-md border border-neutral-200 px-2 py-1 text-neutral-500 hover:border-red-300 hover:text-red-500 dark:border-neutral-700"
+                                                            className="inline-flex items-center gap-1 rounded-md border border-neutral-200 px-2 py-1 text-neutral-500 hover:border-brand-300 hover:text-brand-600 dark:border-neutral-700"
                                                             title={t('social.instagram_delete_api_notice')}>
-                                                            <Trash2 className="h-3.5 w-3.5" /> {t('social.delete_on_instagram')}
+                                                            <ExternalLink className="h-3.5 w-3.5" /> {t('social.open_instagram')}
                                                         </a>
                                                     )}
                                                 </div>
@@ -218,6 +221,12 @@ function PostDetailModal({ post, accountMap, userTz, onClose, onEditFacebook, on
                         )}
                     </div>
                     <div className="flex items-center gap-2">
+                        {canDelete && (
+                            <button type="button" onClick={() => onDelete(post.id)}
+                                className="inline-flex items-center gap-1.5 rounded-lg border border-red-200 px-3 py-1.5 text-sm font-medium text-red-600 hover:bg-red-50 dark:border-red-900/60 dark:hover:bg-red-900/20 transition">
+                                <Trash2 className="h-3.5 w-3.5" /> {post.status === 'scheduled' ? t('social.delete_schedule') : t('common.delete')}
+                            </button>
+                        )}
                         {canEdit && (
                             <Link href={route('client.social.posts.edit', post.id)}
                                 className="inline-flex items-center gap-1.5 rounded-lg border border-neutral-300 dark:border-neutral-600 px-3 py-1.5 text-sm font-medium text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-700 transition">
@@ -360,15 +369,15 @@ function PostCard({ post, accountMap, userTz, onView, onDelete, onEditFacebook, 
                     )}
                     {!facebookTarget && instagramTarget && (
                         <a href={post.publish_results?.[instagramTarget.id]?.url || 'https://www.instagram.com/'} target="_blank" rel="noopener noreferrer"
-                            className="ml-auto inline-flex items-center gap-1 rounded-lg border border-neutral-200 px-2 py-1 text-[11px] text-neutral-400 hover:border-red-300 hover:text-red-500 dark:border-neutral-700"
+                            className="ml-auto inline-flex items-center gap-1 rounded-lg border border-neutral-200 px-2 py-1 text-[11px] text-neutral-500 hover:border-brand-300 hover:text-brand-600 dark:border-neutral-700"
                             title={t('social.instagram_delete_api_notice')}>
-                            <Trash2 className="h-3 w-3" /> Instagram
+                            <ExternalLink className="h-3 w-3" /> {t('social.open_instagram')}
                         </a>
                     )}
                     {canDelete && (
                         <button onClick={() => onDelete(post.id)}
                             className="ml-auto inline-flex items-center gap-1 rounded-lg border border-neutral-200 dark:border-neutral-700 px-2 py-1 text-[11px] text-neutral-400 hover:text-red-500 hover:border-red-300 transition">
-                            <Trash2 className="h-3 w-3" />
+                            <Trash2 className="h-3 w-3" /> {post.status === 'scheduled' ? t('social.delete_schedule') : t('common.delete')}
                         </button>
                     )}
                 </div>
@@ -394,7 +403,10 @@ export default function PostsIndex({ posts, accounts, filters }) {
 
     const handleDelete = (id) => {
         if (confirm(t('social.confirm_delete_post'))) {
-            router.delete(route('client.social.posts.destroy', id), { preserveScroll: true });
+            router.delete(route('client.social.posts.destroy', id), {
+                preserveScroll: true,
+                onSuccess: () => setDetailPost(null),
+            });
         }
     };
 
@@ -527,6 +539,7 @@ export default function PostsIndex({ posts, accounts, filters }) {
                 accountMap={accountMap}
                 userTz={userTz}
                 onClose={() => setDetailPost(null)}
+                onDelete={handleDelete}
                 onEditFacebook={(post, account, result) => setFacebookEdit({ post, account, result })}
                 onDeleteFacebook={handleFacebookDelete}
             />
