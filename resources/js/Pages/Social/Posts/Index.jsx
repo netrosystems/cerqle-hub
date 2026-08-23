@@ -111,7 +111,10 @@ function PostDetailModal({ post, accountMap, userTz, onClose, onDelete, onEditFa
     const dateField = post.published_at ?? post.scheduled_at;
     const tz = post.timezone || userTz;
     const mediaUrls = (post.media_urls ?? []).filter(Boolean);
-    const publishedTargets = targets.filter((id) => post.publish_results?.[id]?.status === 'published');
+    const publishedTargets = [...new Set([
+        ...targets.filter((id) => post.publish_results?.[id]?.status === 'published'),
+        ...(post.published_account_ids ?? []),
+    ].map(Number))];
     const hasPublishedTarget = publishedTargets.length > 0;
     const canEdit = ['draft', 'scheduled', 'failed'].includes(post.status) && !hasPublishedTarget;
     const canDelete = ['draft', 'scheduled', 'failed'].includes(post.status) && !hasPublishedTarget;
@@ -251,7 +254,10 @@ function PostCard({ post, accountMap, userTz, onView, onDelete, onEditFacebook, 
     const targets = post.target_accounts ?? [];
     const dateField = post.published_at ?? post.scheduled_at;
     const tz = post.timezone || userTz;
-    const publishedTargets = targets.filter((id) => post.publish_results?.[id]?.status === 'published');
+    const publishedTargets = [...new Set([
+        ...targets.filter((id) => post.publish_results?.[id]?.status === 'published'),
+        ...(post.published_account_ids ?? []),
+    ].map(Number))];
     const hasPublishedTarget = publishedTargets.length > 0;
     const facebookTarget = publishedTargets.map((id) => accountMap[id]).find((account) => account?.network === 'facebook');
     const instagramTarget = publishedTargets.map((id) => accountMap[id]).find((account) => account?.network === 'instagram');

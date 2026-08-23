@@ -127,6 +127,7 @@ class SocialPostController extends Controller
             : collect();
 
         $query = SocialPost::where('workspace_id', $wid)
+            ->with(['accountLinks:id,post_id,social_account_id,status'])
             ->when($status, fn ($q) => $q->where('status', $status))
             ->when($network && $networkAccountIds->isNotEmpty(), function ($q) use ($networkAccountIds) {
                 $q->where(function ($inner) use ($networkAccountIds) {
@@ -139,6 +140,22 @@ class SocialPostController extends Controller
             ->orderByDesc('created_at');
 
         $posts = $query->paginate(20)->withQueryString();
+        $posts->getCollection()->each(function (SocialPost $post): void {
+            // Older published posts may not have publish_results, but their
+            // durable account link still identifies the remote post target.
+            // Expose that authoritative state so the UI never hides the
+            // platform-delete action for a live Instagram/Facebook post.
+            $post->setAttribute(
+                'published_account_ids',
+                $post->accountLinks
+                    ->where('status', 'published')
+                    ->pluck('social_account_id')
+                    ->map(fn ($id) => (int) $id)
+                    ->values()
+                    ->all()
+            );
+            $post->unsetRelation('accountLinks');
+        });
 
         return Inertia::render('Social/Posts/Index', [
             'posts' => $posts,

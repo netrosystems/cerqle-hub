@@ -8,6 +8,7 @@ use App\Modules\Social\Models\SocialPostAccount;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
+use Inertia\Testing\AssertableInertia as Assert;
 use Tests\TestCase;
 
 class PublishedFacebookPostManagementTest extends TestCase
@@ -110,6 +111,22 @@ class PublishedFacebookPostManagementTest extends TestCase
                 && $request->url() === 'https://graph.facebook.com/v25.0/page_123'
                 && ($body['access_token'] ?? null) === 'test-token';
         });
+    }
+
+    public function test_posts_index_exposes_published_account_links_when_legacy_publish_results_are_missing(): void
+    {
+        ['user' => $user, 'workspace' => $workspace] = $this->createWorkspaceContext();
+        [$post, $account] = $this->publishedPost($workspace->id, 'instagram');
+        $post->update(['publish_results' => null]);
+
+        $this->actingAs($user)
+            ->get(route('client.social.posts.index'))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Social/Posts/Index')
+                ->where('posts.data.0.id', $post->id)
+                ->where('posts.data.0.published_account_ids', [$account->id])
+            );
     }
 
     public function test_failed_instagram_delete_preserves_the_local_post_and_account_link(): void
