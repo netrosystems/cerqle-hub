@@ -133,6 +133,27 @@ class PublishedFacebookPostManagementTest extends TestCase
         ]);
     }
 
+    public function test_instagram_permission_error_explains_reconnect_requirement(): void
+    {
+        Http::fake(['graph.facebook.com/*' => Http::response([
+            'error' => [
+                'message' => '(#10) Insufficient permissions to access this data',
+                'code' => 10,
+            ],
+        ], 403)]);
+        ['user' => $user, 'workspace' => $workspace] = $this->createWorkspaceContext();
+        [$post, $account] = $this->publishedPost($workspace->id, 'instagram');
+
+        $response = $this->actingAs($user)->delete(
+            route('client.social.posts.instagram.destroy', [$post, $account])
+        );
+
+        $response->assertSessionHasErrors([
+            'instagram' => 'Meta denied post deletion because this Instagram connection is missing media-management access. Ask the Super Admin to enable instagram_manage_comments, then reconnect this Instagram account and retry.',
+        ]);
+        $this->assertDatabaseHas('social_media_posts', ['id' => $post->id]);
+    }
+
     public function test_facebook_cannot_use_instagram_post_management_endpoint(): void
     {
         Http::fake();

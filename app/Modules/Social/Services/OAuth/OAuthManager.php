@@ -141,7 +141,7 @@ class OAuthManager
     private function facebookAuthUrl($creds, string $redirect, string $network): string
     {
         $scopes = $network === 'instagram'
-            ? 'instagram_basic,instagram_content_publish,pages_read_engagement,pages_show_list,business_management'
+            ? 'instagram_basic,instagram_content_publish,instagram_manage_comments,pages_read_engagement,pages_show_list,business_management'
             : 'pages_manage_posts,pages_read_engagement,pages_show_list,business_management';
         $state = $this->storeState(['network' => $network]);
 

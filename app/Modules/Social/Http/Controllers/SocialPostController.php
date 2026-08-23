@@ -518,9 +518,11 @@ class SocialPostController extends Controller
                 'error' => $e->getMessage(),
             ]);
 
-            $message = str_contains($e->getMessage(), 'Meta code 200')
-                ? 'Meta rejected the deletion request. Reconnect Instagram and confirm Cerqle has permission to publish for this account.'
-                : 'Instagram could not delete this post. '.$this->publicProviderError($e->getMessage());
+            $message = str_contains($e->getMessage(), 'Meta code 10')
+                ? 'Meta denied post deletion because this Instagram connection is missing media-management access. Ask the Super Admin to enable instagram_manage_comments, then reconnect this Instagram account and retry.'
+                : (str_contains($e->getMessage(), 'Meta code 200')
+                    ? 'Meta rejected the deletion request. Reconnect Instagram and confirm Cerqle has permission to manage this account.'
+                    : 'Instagram could not delete this post. '.$this->publicProviderError($e->getMessage()));
 
             return back()->withErrors(['instagram' => $message]);
         }
