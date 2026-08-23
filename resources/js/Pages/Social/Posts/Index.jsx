@@ -191,7 +191,7 @@ function PostDetailModal({ post, accountMap, userTz, onClose, onDelete, onEditFa
                                                             </button>
                                                         </>
                                                     )}
-                                                    {result.status === 'published' && acct?.network === 'instagram' && (
+                                                    {result.status === 'published' && acct?.network === 'instagram' && acct.can_delete_published_posts && (
                                                         <button type="button" onClick={() => onDeleteInstagram(post, acct)}
                                                             className="rounded-md border border-neutral-200 p-1 text-neutral-500 hover:border-red-300 hover:text-red-500 dark:border-neutral-700"
                                                             title={t('social.delete_instagram_post')}>
@@ -367,7 +367,7 @@ function PostCard({ post, accountMap, userTz, onView, onDelete, onEditFacebook, 
                             <Trash2 className="h-3 w-3" /> Facebook
                         </button>
                     )}
-                    {instagramTarget && (
+                    {instagramTarget?.can_delete_published_posts && (
                         <button type="button" onClick={() => onDeleteInstagram(post, instagramTarget)}
                             className="ml-auto inline-flex items-center gap-1 rounded-lg border border-neutral-200 px-2 py-1 text-[11px] text-neutral-400 hover:border-red-300 hover:text-red-500 dark:border-neutral-700"
                             title={t('social.delete_instagram_post')}>
@@ -460,6 +460,11 @@ export default function PostsIndex({ posts, accounts, filters }) {
                 )}
                 {props.errors?.instagram && (
                     <div className="rounded-lg bg-red-50 px-4 py-2 text-sm text-red-700 dark:bg-red-900/30 dark:text-red-200">{props.errors.instagram}</div>
+                )}
+                {accounts.some((account) => account.network === 'instagram' && !account.can_delete_published_posts) && (
+                    <div className="rounded-lg bg-amber-50 px-4 py-2 text-sm text-amber-800 dark:bg-amber-900/30 dark:text-amber-200">
+                        Reconnect Instagram under Connected Social Media to enable deletion of published posts.
+                    </div>
                 )}
 
                 {/* Filters */}

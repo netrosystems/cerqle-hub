@@ -133,6 +133,24 @@ class PublishedFacebookPostManagementTest extends TestCase
         ]);
     }
 
+    public function test_instagram_delete_requires_content_management_scope_before_calling_meta(): void
+    {
+        Http::fake();
+        ['user' => $user, 'workspace' => $workspace] = $this->createWorkspaceContext();
+        [$post, $account] = $this->publishedPost($workspace->id, 'instagram');
+        $account->update(['scopes' => ['instagram_basic', 'instagram_content_publish']]);
+
+        $response = $this->actingAs($user)->delete(
+            route('client.social.posts.instagram.destroy', [$post, $account])
+        );
+
+        $response->assertRedirect()->assertSessionHasErrors([
+            'instagram' => 'Reconnect this Instagram account to grant the content-management permission required to delete published posts.',
+        ]);
+        Http::assertNothingSent();
+        $this->assertDatabaseHas('social_media_posts', ['id' => $post->id]);
+    }
+
     public function test_facebook_cannot_use_instagram_post_management_endpoint(): void
     {
         Http::fake();
@@ -217,6 +235,7 @@ class PublishedFacebookPostManagementTest extends TestCase
             'account_id' => $network.'-account',
             'name' => ucfirst($network).' Account',
             'access_token' => 'test-token',
+            'scopes' => $network === 'instagram' ? ['instagram_manage_contents'] : null,
             'active' => true,
         ]);
 

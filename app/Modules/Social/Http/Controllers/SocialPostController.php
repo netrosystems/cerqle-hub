@@ -119,7 +119,12 @@ class SocialPostController extends Controller
 
         $accounts = SocialAccount::where('workspace_id', $wid)
             ->where('active', true)
-            ->get(['id', 'network', 'name', 'picture_url']);
+            ->get(['id', 'network', 'name', 'picture_url', 'scopes'])
+            ->each(fn (SocialAccount $account) => $account->setAttribute(
+                'can_delete_published_posts',
+                $account->network !== 'instagram'
+                    || in_array('instagram_manage_contents', $account->scopes ?? [], true)
+            ));
 
         // Collect account IDs for the requested network filter
         $networkAccountIds = $network
@@ -509,23 +514,38 @@ class SocialPostController extends Controller
     ): RedirectResponse {
         [$socialAccount, $link] = $this->publishedTarget($request, $post, $account, 'instagram');
 
+        if (! in_array('instagram_manage_contents', $socialAccount->scopes ?? [], true)) {
+            return back()->withErrors([
+                'instagram' => 'Reconnect this Instagram account to grant the content-management permission required to delete published posts.',
+            ]);
+        }
+
         try {
             $publisher->deletePublishedPost($socialAccount, (string) $link->platform_post_id);
         } catch (\Throwable $e) {
-            Log::warning('Instagram published post deletion failed', [
+            Log::error('Instagram published post deletion failed', [
                 'post_id' => $post->id,
                 'account_id' => $socialAccount->id,
                 'error' => $e->getMessage(),
             ]);
 
-            return back()->withErrors([
-                'instagram' => 'Instagram could not delete this post. Check the connected account permissions and try again.',
-            ]);
+            $message = str_contains($e->getMessage(), 'Meta code 200')
+                ? 'Meta rejected the deletion permission. Reconnect Instagram after instagram_manage_contents is approved for the Meta app.'
+                : 'Instagram could not delete this post. '.$this->publicProviderError($e->getMessage());
+
+            return back()->withErrors(['instagram' => $message]);
         }
 
         $this->removePublishedTarget($post, $socialAccount, $link);
 
         return back()->with('success', 'Instagram post deleted.');
+    }
+
+    private function publicProviderError(string $message): string
+    {
+        $clean = preg_replace('/(?:access[_ -]?token|token)\s*[=:]\s*[^\s,]+/i', 'token=[redacted]', $message);
+
+        return mb_substr((string) $clean, 0, 260);
     }
 
     /** @return array{SocialAccount, SocialPostAccount} */

@@ -69,11 +69,11 @@ class SocialAccountController extends Controller
 
     public function callback(Request $request, string $network): RedirectResponse
     {
-        $code     = $request->query('code');
-        $state    = $request->query('state');
-        $error    = $request->query('error');
-        $wid      = Session::get('social_oauth_workspace', $this->workspaceId($request));
-        $stored   = Session::pull('social_oauth_state', []);
+        $code = $request->query('code');
+        $state = $request->query('state');
+        $error = $request->query('error');
+        $wid = Session::get('social_oauth_workspace', $this->workspaceId($request));
+        $stored = Session::pull('social_oauth_state', []);
 
         if ($error || ! $code) {
             return redirect()->route('client.social.accounts.index')->with('error', 'OAuth failed: '.($error ?? 'No code received'));
@@ -121,6 +121,35 @@ class SocialAccountController extends Controller
 
             $discovery = $this->metaPages->discover($tokens['access_token'], $fields);
             $pages = $discovery['pages'];
+
+            $selectionScopes = $network === 'instagram'
+                ? ['instagram_manage_contents', 'instagram_content_publish', 'instagram_basic', 'pages_read_engagement', 'pages_show_list']
+                : ['pages_manage_posts', 'pages_read_engagement', 'pages_show_list'];
+
+            try {
+                $selectedTargetIds = $this->oauth->selectedMetaTargetIds(
+                    $network,
+                    $tokens['access_token'],
+                    $selectionScopes,
+                );
+                $grantedScopes = $this->oauth->grantedMetaScopes($network, $tokens['access_token']);
+            } catch (\Throwable $e) {
+                Log::warning('Social OAuth: Meta token capabilities could not be verified', [
+                    'workspace_id' => $wid,
+                    'network' => $network,
+                    'error' => $e->getMessage(),
+                ]);
+
+                return redirect()->route('client.social.accounts.index')
+                    ->with('error', 'Meta authorization succeeded, but Cerqle could not verify the selected account and permissions. No accounts were connected. Please try again.');
+            }
+
+            if ($selectedTargetIds === []) {
+                return redirect()->route('client.social.accounts.index')
+                    ->with('error', 'Meta did not return a selected Page or Instagram account. Reconnect and choose the specific account you want to add.');
+            }
+
+            $pages = $this->filterMetaPagesToSelectedTargets($pages, $selectedTargetIds);
 
             if ($discovery['errors'] !== []) {
                 Log::warning('Social OAuth: one or more Meta Page discovery sources failed', [
@@ -176,6 +205,7 @@ class SocialAccountController extends Controller
                             'access_token' => $pageToken, // page token is used for IG Graph API calls
                             'refresh_token' => null,
                             'token_expires_at' => null,
+                            'scopes' => $grantedScopes,
                             'active' => true,
                         ]
                     );
@@ -188,6 +218,7 @@ class SocialAccountController extends Controller
                             'access_token' => $pageToken,
                             'refresh_token' => null,
                             'token_expires_at' => null,
+                            'scopes' => $grantedScopes,
                             'active' => true,
                         ]
                     );
@@ -204,8 +235,15 @@ class SocialAccountController extends Controller
                 return redirect()->route('client.social.accounts.index')->with('error', $message);
             }
 
-            return redirect()->route('client.social.accounts.index')
-                ->with('success', $connected.' '.ucfirst($network).' account(s) connected.');
+            $missingManagementScope = $network === 'instagram'
+                && ! in_array('instagram_manage_contents', $grantedScopes, true);
+
+            $message = $connected.' '.ucfirst($network).' account(s) connected.';
+            if ($missingManagementScope) {
+                $message .= ' Meta did not grant Instagram content management, so published-post deletion remains unavailable until that permission is approved and the account is reconnected.';
+            }
+
+            return redirect()->route('client.social.accounts.index')->with('success', $message);
         }
 
         if (empty($accountInfo['account_id'])) {
@@ -248,5 +286,21 @@ class SocialAccountController extends Controller
             : 'Account disconnected.';
 
         return back()->with('success', $message);
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $pages
+     * @param  list<string>  $selectedTargetIds
+     * @return list<array<string, mixed>>
+     */
+    private function filterMetaPagesToSelectedTargets(array $pages, array $selectedTargetIds): array
+    {
+        return array_values(array_filter($pages, function (array $page) use ($selectedTargetIds): bool {
+            $pageId = (string) ($page['id'] ?? '');
+            $instagramId = (string) ($page['instagram_business_account']['id'] ?? '');
+
+            return ($pageId !== '' && in_array($pageId, $selectedTargetIds, true))
+                || ($instagramId !== '' && in_array($instagramId, $selectedTargetIds, true));
+        }));
     }
 }

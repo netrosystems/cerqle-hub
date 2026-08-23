@@ -67,6 +67,55 @@ class OAuthManager
     }
 
     /**
+     * Return the Page/Instagram asset IDs explicitly selected in Meta's OAuth
+     * dialog for the requested granular scopes.
+     *
+     * The first matching scope is authoritative. Meta can retain broader
+     * targets for read scopes than the asset selected for a write scope, so
+     * unioning all target IDs could connect an account the user did not select.
+     *
+     * @param  list<string>  $scopes
+     * @return list<string>
+     */
+    public function selectedMetaTargetIds(string $network, string $accessToken, array $scopes): array
+    {
+        $data = $this->inspectMetaToken($network, $accessToken);
+
+        /** @var array<string, list<string>> $targetsByScope */
+        $targetsByScope = [];
+        foreach ((array) ($data['granular_scopes'] ?? []) as $scope) {
+            $scopeName = (string) ($scope['scope'] ?? '');
+            if (! in_array($scopeName, $scopes, true)) {
+                continue;
+            }
+
+            foreach ((array) ($scope['target_ids'] ?? []) as $targetId) {
+                if (is_string($targetId) || is_int($targetId)) {
+                    $targetsByScope[$scopeName][] = (string) $targetId;
+                }
+            }
+        }
+
+        foreach ($scopes as $scopeName) {
+            $targetIds = array_values(array_unique($targetsByScope[$scopeName] ?? []));
+            if ($targetIds !== []) {
+                return $targetIds;
+            }
+        }
+
+        return [];
+    }
+
+    /** @return list<string> */
+    public function grantedMetaScopes(string $network, string $accessToken): array
+    {
+        return array_values(array_unique(array_filter(
+            array_map('strval', (array) ($this->inspectMetaToken($network, $accessToken)['scopes'] ?? [])),
+            fn (string $scope): bool => $scope !== ''
+        )));
+    }
+
+    /**
      * Refresh an access token using a refresh_token.
      * Returns ['access_token', 'refresh_token' (if rotated), 'expires_in'] or throws on failure.
      */
@@ -92,7 +141,7 @@ class OAuthManager
     private function facebookAuthUrl($creds, string $redirect, string $network): string
     {
         $scopes = $network === 'instagram'
-            ? 'instagram_basic,instagram_content_publish,pages_show_list,business_management'
+            ? 'instagram_basic,instagram_content_publish,instagram_manage_contents,pages_read_engagement,pages_show_list,business_management'
             : 'pages_manage_posts,pages_read_engagement,pages_show_list,business_management';
         $state = $this->storeState(['network' => $network]);
 
@@ -332,5 +381,30 @@ class OAuthManager
             ?? $response->body();
 
         throw new \RuntimeException($operation.' failed (HTTP '.$response->status().'): '.mb_substr((string) $message, 0, 500));
+    }
+
+    /** @return array<string, mixed> */
+    private function inspectMetaToken(string $network, string $accessToken): array
+    {
+        if (! in_array($network, ['facebook', 'instagram'], true)) {
+            throw new \InvalidArgumentException("Meta token inspection is not supported for [{$network}].");
+        }
+
+        $creds = $this->credentials->oauth($network);
+        if ($creds === null || ! $creds->clientId() || ! $creds->clientSecret()) {
+            throw new \RuntimeException('Meta OAuth credentials are not configured.');
+        }
+
+        $response = Http::timeout(15)->get(self::META_GRAPH_BASE.'/debug_token', [
+            'input_token' => $accessToken,
+            'access_token' => $creds->clientId().'|'.$creds->clientSecret(),
+        ]);
+        $this->assertSuccessful($response, 'Meta token inspection');
+
+        if (! $response->json('data.is_valid', false)) {
+            throw new \RuntimeException('Meta token inspection reported an invalid access token.');
+        }
+
+        return (array) $response->json('data', []);
     }
 }

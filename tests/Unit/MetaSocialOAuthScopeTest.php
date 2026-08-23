@@ -25,6 +25,9 @@ class MetaSocialOAuthScopeTest extends TestCase
 
         $this->assertContains('pages_show_list', $scopes);
         $this->assertContains('instagram_basic', $scopes);
+        $this->assertContains('instagram_content_publish', $scopes);
+        $this->assertContains('instagram_manage_contents', $scopes);
+        $this->assertContains('pages_read_engagement', $scopes);
         $this->assertContains('business_management', $scopes);
     }
 
