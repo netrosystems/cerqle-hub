@@ -104,7 +104,7 @@ function FacebookEditModal({ post, account, result, onClose }) {
 }
 
 /* ── Detail Modal ─────────────────────────────────────────────── */
-function PostDetailModal({ post, accountMap, userTz, onClose, onDelete, onEditFacebook, onDeleteFacebook }) {
+function PostDetailModal({ post, accountMap, userTz, onClose, onDelete, onEditFacebook, onDeleteFacebook, onDeleteInstagram }) {
     const { t } = useTranslation();
     if (!post) return null;
     const targets = post.target_accounts ?? [];
@@ -192,11 +192,11 @@ function PostDetailModal({ post, accountMap, userTz, onClose, onDelete, onEditFa
                                                         </>
                                                     )}
                                                     {result.status === 'published' && acct?.network === 'instagram' && (
-                                                        <a href={result.url || 'https://www.instagram.com/'} target="_blank" rel="noopener noreferrer"
-                                                            className="inline-flex items-center gap-1 rounded-md border border-neutral-200 px-2 py-1 text-neutral-500 hover:border-brand-300 hover:text-brand-600 dark:border-neutral-700"
-                                                            title={t('social.instagram_delete_api_notice')}>
-                                                            <ExternalLink className="h-3.5 w-3.5" /> {t('social.open_instagram')}
-                                                        </a>
+                                                        <button type="button" onClick={() => onDeleteInstagram(post, acct)}
+                                                            className="rounded-md border border-neutral-200 p-1 text-neutral-500 hover:border-red-300 hover:text-red-500 dark:border-neutral-700"
+                                                            title={t('social.delete_instagram_post')}>
+                                                            <Trash2 className="h-3.5 w-3.5" />
+                                                        </button>
                                                     )}
                                                 </div>
                                             </div>
@@ -245,7 +245,7 @@ function PostDetailModal({ post, accountMap, userTz, onClose, onDelete, onEditFa
 }
 
 /* ── Post Card ────────────────────────────────────────────────── */
-function PostCard({ post, accountMap, userTz, onView, onDelete, onEditFacebook, onDeleteFacebook }) {
+function PostCard({ post, accountMap, userTz, onView, onDelete, onEditFacebook, onDeleteFacebook, onDeleteInstagram }) {
     const { t } = useTranslation();
     const [actioning, setActioning] = useState(null);
     const targets = post.target_accounts ?? [];
@@ -367,12 +367,12 @@ function PostCard({ post, accountMap, userTz, onView, onDelete, onEditFacebook, 
                             <Trash2 className="h-3 w-3" /> Facebook
                         </button>
                     )}
-                    {!facebookTarget && instagramTarget && (
-                        <a href={post.publish_results?.[instagramTarget.id]?.url || 'https://www.instagram.com/'} target="_blank" rel="noopener noreferrer"
-                            className="ml-auto inline-flex items-center gap-1 rounded-lg border border-neutral-200 px-2 py-1 text-[11px] text-neutral-500 hover:border-brand-300 hover:text-brand-600 dark:border-neutral-700"
-                            title={t('social.instagram_delete_api_notice')}>
-                            <ExternalLink className="h-3 w-3" /> {t('social.open_instagram')}
-                        </a>
+                    {instagramTarget && (
+                        <button type="button" onClick={() => onDeleteInstagram(post, instagramTarget)}
+                            className="ml-auto inline-flex items-center gap-1 rounded-lg border border-neutral-200 px-2 py-1 text-[11px] text-neutral-400 hover:border-red-300 hover:text-red-500 dark:border-neutral-700"
+                            title={t('social.delete_instagram_post')}>
+                            <Trash2 className="h-3 w-3" /> Instagram
+                        </button>
                     )}
                     {canDelete && (
                         <button onClick={() => onDelete(post.id)}
@@ -419,6 +419,15 @@ export default function PostsIndex({ posts, accounts, filters }) {
         });
     };
 
+    const handleInstagramDelete = (post, account) => {
+        if (!confirm(t('social.confirm_delete_instagram_post'))) return;
+
+        router.delete(route('client.social.posts.instagram.destroy', [post.id, account.id]), {
+            preserveScroll: true,
+            onSuccess: () => setDetailPost(null),
+        });
+    };
+
     return (
         <ClientLayout title={t('social.posts_title')}>
             <Head title={t('social.posts_head')} />
@@ -448,6 +457,9 @@ export default function PostsIndex({ posts, accounts, filters }) {
                 )}
                 {props.errors?.facebook && (
                     <div className="rounded-lg bg-red-50 px-4 py-2 text-sm text-red-700 dark:bg-red-900/30 dark:text-red-200">{props.errors.facebook}</div>
+                )}
+                {props.errors?.instagram && (
+                    <div className="rounded-lg bg-red-50 px-4 py-2 text-sm text-red-700 dark:bg-red-900/30 dark:text-red-200">{props.errors.instagram}</div>
                 )}
 
                 {/* Filters */}
@@ -512,6 +524,7 @@ export default function PostsIndex({ posts, accounts, filters }) {
                                 onDelete={handleDelete}
                                 onEditFacebook={(post, account, result) => setFacebookEdit({ post, account, result })}
                                 onDeleteFacebook={handleFacebookDelete}
+                                onDeleteInstagram={handleInstagramDelete}
                             />
                         ))}
                     </div>
@@ -542,6 +555,7 @@ export default function PostsIndex({ posts, accounts, filters }) {
                 onDelete={handleDelete}
                 onEditFacebook={(post, account, result) => setFacebookEdit({ post, account, result })}
                 onDeleteFacebook={handleFacebookDelete}
+                onDeleteInstagram={handleInstagramDelete}
             />
 
             <FacebookEditModal
