@@ -119,12 +119,7 @@ class SocialPostController extends Controller
 
         $accounts = SocialAccount::where('workspace_id', $wid)
             ->where('active', true)
-            ->get(['id', 'network', 'name', 'picture_url', 'scopes'])
-            ->each(fn (SocialAccount $account) => $account->setAttribute(
-                'can_delete_published_posts',
-                $account->network !== 'instagram'
-                    || in_array('instagram_manage_contents', $account->scopes ?? [], true)
-            ));
+            ->get(['id', 'network', 'name', 'picture_url']);
 
         // Collect account IDs for the requested network filter
         $networkAccountIds = $network
@@ -514,12 +509,6 @@ class SocialPostController extends Controller
     ): RedirectResponse {
         [$socialAccount, $link] = $this->publishedTarget($request, $post, $account, 'instagram');
 
-        if (! in_array('instagram_manage_contents', $socialAccount->scopes ?? [], true)) {
-            return back()->withErrors([
-                'instagram' => 'Reconnect this Instagram account to grant the content-management permission required to delete published posts.',
-            ]);
-        }
-
         try {
             $publisher->deletePublishedPost($socialAccount, (string) $link->platform_post_id);
         } catch (\Throwable $e) {
@@ -530,7 +519,7 @@ class SocialPostController extends Controller
             ]);
 
             $message = str_contains($e->getMessage(), 'Meta code 200')
-                ? 'Meta rejected the deletion permission. Reconnect Instagram after instagram_manage_contents is approved for the Meta app.'
+                ? 'Meta rejected the deletion request. Reconnect Instagram and confirm Cerqle has permission to publish for this account.'
                 : 'Instagram could not delete this post. '.$this->publicProviderError($e->getMessage());
 
             return back()->withErrors(['instagram' => $message]);

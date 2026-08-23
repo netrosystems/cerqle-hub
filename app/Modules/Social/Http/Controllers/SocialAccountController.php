@@ -123,7 +123,7 @@ class SocialAccountController extends Controller
             $pages = $discovery['pages'];
 
             $selectionScopes = $network === 'instagram'
-                ? ['instagram_manage_contents', 'instagram_content_publish', 'instagram_basic', 'pages_read_engagement', 'pages_show_list']
+                ? ['instagram_content_publish', 'instagram_basic', 'pages_read_engagement', 'pages_show_list']
                 : ['pages_manage_posts', 'pages_read_engagement', 'pages_show_list'];
 
             try {
@@ -235,13 +235,7 @@ class SocialAccountController extends Controller
                 return redirect()->route('client.social.accounts.index')->with('error', $message);
             }
 
-            $missingManagementScope = $network === 'instagram'
-                && ! in_array('instagram_manage_contents', $grantedScopes, true);
-
             $message = $connected.' '.ucfirst($network).' account(s) connected.';
-            if ($missingManagementScope) {
-                $message .= ' Meta did not grant Instagram content management, so published-post deletion remains unavailable until that permission is approved and the account is reconnected.';
-            }
 
             return redirect()->route('client.social.accounts.index')->with('success', $message);
         }
