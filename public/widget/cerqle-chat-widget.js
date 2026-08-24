@@ -1135,14 +1135,21 @@
   }
   function handle(r) { if (!r.ok) throw new Error('http ' + r.status); return r.json(); }
 
+  function resolveLogoUrl(url) {
+    if (!url || String(url).indexOf('cerqle-icon-white-bg') !== -1 || String(url).indexOf('wisperbot') !== -1) {
+      return API + '/cerqle-logo-transparent.svg';
+    }
+    return url;
+  }
+
   // ── Markup + styles ──────────────────────────────────────────────────────────
   function template() {
-    var av = '<span class="wb-head-av-shell"><img class="wb-head-av" src="' + esc(CFG.avatar_url || (API + '/cerqle-logo-transparent.svg')) + '" alt=""></span>';
+    var av = '<span class="wb-head-av-shell"><img class="wb-head-av" src="' + esc(resolveLogoUrl(CFG.avatar_url)) + '" alt=""></span>';
     var pcName = (CFG.prechat_fields || []).indexOf('name') !== -1
       ? '<input class="wb-pc-name" type="text" placeholder="Your name" required>' : '';
     var pcEmail = (CFG.prechat_fields || []).indexOf('email') !== -1
       ? '<input class="wb-pc-email" type="email" placeholder="Email address" required>' : '';
-    var launcherIcon = '<img class="wb-launcher-logo" src="' + esc(CFG.launcher_logo_url || (API + '/cerqle-logo-transparent.svg')) + '" alt="">';
+    var launcherIcon = '<img class="wb-launcher-logo" src="' + esc(resolveLogoUrl(CFG.launcher_logo_url)) + '" alt="">';
     var inviteTitle = CFG.launcher_text || 'Live Chat!';
     var inviteSubtitle = CFG.subtitle || 'One human agent online now!';
     return '' +
@@ -1217,7 +1224,10 @@
       '.wb-panel{position:absolute;bottom:57px;' + (LEFT ? 'left:0' : 'right:0') + ';width:370px;max-width:calc(100vw - 40px);height:560px;max-height:calc(100vh - 103px);background:#fff;border-radius:18px;box-shadow:0 16px 50px rgba(0,0,0,.22);display:flex;flex-direction:column;overflow:hidden;opacity:0;transform:translateY(12px) scale(.98);pointer-events:none;transition:opacity .2s,transform .22s cubic-bezier(.34,1.4,.6,1);transform-origin:bottom ' + (LEFT ? 'left' : 'right') + '}',
       '.wb-open .wb-panel{opacity:1;transform:translateY(0) scale(1);pointer-events:auto}',
       '.wb-header{background:' + COLOR + ';color:#fff;padding:10px 12px;display:flex;align-items:center;gap:8px}',
-      '.wb-head-av-shell,.wb-av-shell{width:34px;height:34px;border-radius:50%;background:' + COLOR + ';border:2px solid rgba(255,255,255,.62);display:flex;align-items:center;justify-content:center;overflow:hidden;flex-shrink:0}.wb-head-av{width:20px;height:20px;object-fit:contain;flex-shrink:0}.wb-av{width:16px;height:16px;object-fit:contain;flex-shrink:0}.wb-av-shell{width:28px;height:28px;border-width:1px}',
+      '.wb-head-av-shell{width:34px;height:34px;border-radius:50%;background:rgba(255,255,255,.18);border:1.5px solid rgba(255,255,255,.62);display:flex;align-items:center;justify-content:center;overflow:hidden;flex-shrink:0}',
+      '.wb-head-av{width:22px;height:22px;object-fit:contain;flex-shrink:0}',
+      '.wb-av-shell{width:28px;height:28px;border-radius:50%;background:' + COLOR + ';border:1px solid rgba(255,255,255,.2);display:flex;align-items:center;justify-content:center;overflow:hidden;flex-shrink:0}',
+      '.wb-av{width:18px;height:18px;object-fit:contain;flex-shrink:0}',
       '.wb-av-ini{display:flex;align-items:center;justify-content:center;font-weight:700;font-size:15px;background:rgba(255,255,255,.25);color:#fff}',
       '.wb-head-info{flex:1;min-width:0}',
       '.wb-title{font-weight:700;font-size:15px;line-height:1.3}',
