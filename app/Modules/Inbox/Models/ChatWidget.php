@@ -161,7 +161,7 @@ class ChatWidget extends Model
             'subtitle' => $this->subtitle ?: 'We typically reply in a few minutes',
             'welcome_message' => $this->welcome_message ?: 'Hi there 👋 How can we help?',
             'agent_name' => $this->agent_name ?: 'Support',
-            'avatar_url' => $this->avatar_url,
+            'avatar_url' => $this->avatar_url ?: url('/cerqle-logo-transparent.svg'),
             'primary_color' => $this->primary_color ?: '#ff762e',
             'position' => $this->position ?: 'bottom_right',
             'launcher_text' => $this->launcher_text,
@@ -170,7 +170,7 @@ class ChatWidget extends Model
             'footer_company_name' => $this->footer_company_name ?: 'Cerqle',
             // The product icon remains the default for every free widget.
             // A custom launcher mark is only exposed for white-label plans.
-            'launcher_logo_url' => $this->launcher_logo_url ?: url('/cerqle-icon-white-bg.svg'),
+            'launcher_logo_url' => $this->launcher_logo_url ?: url('/cerqle-logo-transparent.svg'),
             'ai_enabled' => $this->hasEnabledAiChatbot(),
             'available_team' => $this->availableTeam(),
             'require_prechat' => (bool) $this->require_prechat,

@@ -882,9 +882,7 @@
     row.className = 'wb-row wb-' + (role === 'visitor' ? 'out' : 'in');
     var av = '';
     if (role !== 'visitor') {
-      av = CFG.avatar_url
-        ? '<span class="wb-av-shell"><img class="wb-av" src="' + esc(CFG.avatar_url) + '" alt=""></span>'
-        : '<span class="wb-av wb-av-ini">' + esc(initial(name || CFG.agent_name)) + '</span>';
+      av = '<span class="wb-av-shell"><img class="wb-av" src="' + esc(CFG.avatar_url || (API + '/cerqle-logo-transparent.svg')) + '" alt=""></span>';
     }
     var attachment = '';
     if (attachmentUrl && type === 'image') {
@@ -1139,16 +1137,12 @@
 
   // ── Markup + styles ──────────────────────────────────────────────────────────
   function template() {
-    var av = CFG.avatar_url
-      ? '<span class="wb-head-av-shell"><img class="wb-head-av" src="' + esc(CFG.avatar_url) + '" alt=""></span>'
-      : '<span class="wb-head-av wb-av-ini">' + esc(initial(CFG.agent_name)) + '</span>';
+    var av = '<span class="wb-head-av-shell"><img class="wb-head-av" src="' + esc(CFG.avatar_url || (API + '/cerqle-logo-transparent.svg')) + '" alt=""></span>';
     var pcName = (CFG.prechat_fields || []).indexOf('name') !== -1
       ? '<input class="wb-pc-name" type="text" placeholder="Your name" required>' : '';
     var pcEmail = (CFG.prechat_fields || []).indexOf('email') !== -1
       ? '<input class="wb-pc-email" type="email" placeholder="Email address" required>' : '';
-    var launcherIcon = CFG.launcher_logo_url
-      ? '<img class="wb-launcher-logo" src="' + esc(CFG.launcher_logo_url) + '" alt="">'
-      : '<svg class="wb-ic-chat" width="26" height="26" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3C6.5 3 2 6.9 2 11.7c0 2.2 1 4.3 2.6 5.8-.1 1-.5 2.4-1.4 3.4 1.5-.2 3.2-.8 4.3-1.6 1.4.6 2.9.9 4.5.9 5.5 0 10-3.9 10-8.7S17.5 3 12 3z"/></svg>';
+    var launcherIcon = '<img class="wb-launcher-logo" src="' + esc(CFG.launcher_logo_url || (API + '/cerqle-logo-transparent.svg')) + '" alt="">';
     var inviteTitle = CFG.launcher_text || 'Live Chat!';
     var inviteSubtitle = CFG.subtitle || 'One human agent online now!';
     return '' +
