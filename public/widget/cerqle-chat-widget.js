@@ -369,7 +369,7 @@
     sendingText = true;
     var clientMessageId = makeClientMessageId();
     // Render immediately; a slow network must never make a submitted message
-    // look lost. Replace this temporary bubble with the canonical server echo.
+    // look lost. Confirm this bubble in-place when the server echo arrives.
     var optimisticRow = addBubble('visitor', text);
     if (optimisticRow) {
       optimisticRow.classList.add('wb-pending');
@@ -383,8 +383,10 @@
       startPolling();
       return post('/widget/v1/messages', { key: KEY, message: text, client_message_id: clientMessageId });
     }).then(function (data) {
-      if (optimisticRow && optimisticRow.parentNode) optimisticRow.parentNode.removeChild(optimisticRow);
-      if (data && data.message) addMessage(data.message);
+      if (data && data.message) {
+        data.message.client_message_id = data.message.client_message_id || clientMessageId;
+        addMessage(data.message);
+      }
       if (data) applyHandoff(data.handoff);
     }).catch(function () {
       renderAgentTyping(null);
@@ -784,9 +786,21 @@
 
   function addMessage(m) {
     if (!m) return false;
-    removeMatchingPendingVisitorMessage(m);
     if (m.role === 'agent') renderAgentTyping(null);
     if (rendered[m.id]) return false;
+
+    var pendingRow = findMatchingPendingVisitorRow(m);
+    if (pendingRow) {
+      pendingRow.classList.remove('wb-pending');
+      pendingRow.removeAttribute('data-wb-pending-body');
+      pendingRow.removeAttribute('data-wb-client-message-id');
+      rendered[m.id] = true;
+      if (m.id > lastId) lastId = m.id;
+      thread.push({ id: m.id, role: m.role, body: m.body, agent_name: m.agent_name, attachment_url: m.attachment_url, type: m.type, filename: m.filename, mime_type: m.mime_type });
+      saveThread();
+      return true;
+    }
+
     rendered[m.id] = true;
     if (m.id > lastId) lastId = m.id;
     thread.push({ id: m.id, role: m.role, body: m.body, agent_name: m.agent_name, attachment_url: m.attachment_url, type: m.type, filename: m.filename, mime_type: m.mime_type });
@@ -795,8 +809,8 @@
     return true;
   }
 
-  function removeMatchingPendingVisitorMessage(m) {
-    if (!m || m.role !== 'visitor' || !body) return;
+  function findMatchingPendingVisitorRow(m) {
+    if (!m || m.role !== 'visitor' || !body) return null;
 
     var pending = body.querySelectorAll('.wb-row.wb-out.wb-pending');
     var expectedBody = String(m.body || '').trim();
@@ -808,10 +822,10 @@
       var rowBody = (row.getAttribute('data-wb-pending-body') || '').trim();
 
       if ((expectedClientId && rowClientId === expectedClientId) || (!expectedClientId && expectedBody && rowBody === expectedBody)) {
-        if (row.parentNode) row.parentNode.removeChild(row);
-        return;
+        return row;
       }
     }
+    return null;
   }
 
   function makeClientMessageId() {
