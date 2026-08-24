@@ -383,11 +383,23 @@
       startPolling();
       return post('/widget/v1/messages', { key: KEY, message: text, client_message_id: clientMessageId });
     }).then(function (data) {
-      if (data && data.message) {
+      if (data && Array.isArray(data.messages) && data.messages.length > 0) {
+        data.messages.forEach(function (m) {
+          addMessage(m);
+        });
+      } else if (data && data.message) {
         data.message.client_message_id = data.message.client_message_id || clientMessageId;
         addMessage(data.message);
       }
       if (data) applyHandoff(data.handoff);
+
+      if (optimisticRow && optimisticRow.classList.contains('wb-pending')) {
+        optimisticRow.classList.remove('wb-pending');
+      }
+
+      // Fast check in 1s and 2.5s for asynchronous AI replies
+      setTimeout(function () { if (open) poll().catch(function () {}); }, 1200);
+      setTimeout(function () { if (open) poll().catch(function () {}); }, 2800);
     }).catch(function () {
       renderAgentTyping(null);
       if (!optimisticRow) return;

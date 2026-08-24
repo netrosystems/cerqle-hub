@@ -161,7 +161,7 @@ class ChatWidgetPublicController extends Controller
             'token' => $issuedToken,
             'message' => $messagePayloadData,
             'handover' => $this->handoverState($conversation->fresh(), $widget),
-            'handoff' => $this->payloads->handoff($widget, $conversation->fresh()),
+            'handoff' => $this->payloads->handoff($widget, $conversation->refresh()),
         ]));
     }
 
