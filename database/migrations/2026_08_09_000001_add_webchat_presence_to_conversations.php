@@ -10,10 +10,7 @@ return new class extends Migration
     {
         Schema::table('conversations', function (Blueprint $table) {
             if (! Schema::hasColumn('conversations', 'webchat_last_seen_at')) {
-                $table->timestamp('webchat_last_seen_at')
-                    ->nullable()
-                    ->after('last_inbound_at')
-                    ->index();
+                $table->timestamp('webchat_last_seen_at')->nullable()->index()->after('last_message_at');
             }
         });
     }
