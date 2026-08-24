@@ -62,6 +62,7 @@ function OperationStatus({ operation, confirmImport }) {
     const unknown = Math.max(0, Number(operation.skipped || 0) - accounted);
     const totalRejected = Number(operation.skipped || 0);
     const percent = operation.total ? Math.min(100, Math.round((operation.processed / operation.total) * 100)) : null;
+    const isStalled = Boolean(operation.is_stalled);
 
     const tone = operation.status === 'completed'
         ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300'
@@ -123,6 +124,11 @@ function OperationStatus({ operation, confirmImport }) {
                 </div>
             )}
             {operation.error_message && <p className="mt-1">{operation.error_message}</p>}
+            {isStalled && (
+                <p className="mt-1 font-medium">
+                    This task is still waiting for a background worker. An administrator should check the queue service; your uploaded file has not been lost.
+                </p>
+            )}
             {isValidation && operation.status === 'completed' && (
                 <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-current/15 pt-2">
                     <span className="text-[11px]">No contacts have been added yet.</span>

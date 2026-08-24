@@ -336,15 +336,13 @@ class LandingPageController extends Controller
     public static function getPublicSettings(): array
     {
         $defaults = self::defaults();
-        $result   = [];
-        foreach ($defaults as $key => $default) {
-            // The master toggle is read separately by LandingController; skip it here.
-            if ($key === 'landing.page_enabled') {
-                continue;
-            }
-            $result[$key] = SystemSetting::get($key, $default);
-        }
 
-        return $result;
+        // The master toggle is read separately by LandingController. Resolve
+        // every remaining setting in one query; this page has hundreds of
+        // editable values and querying each one individually can exhaust PHP
+        // workers during even a small traffic spike.
+        unset($defaults['landing.page_enabled']);
+
+        return SystemSetting::getMany($defaults);
     }
 }

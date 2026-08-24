@@ -14,6 +14,7 @@ class AutomationWebhookController
     {
         $automation = Automation::where('trigger_token', $triggerToken)
             ->where('status', 'active')
+            ->whereIn('trigger_type', ['webhook', 'webhook.received'])
             ->first();
 
         if (! $automation) {

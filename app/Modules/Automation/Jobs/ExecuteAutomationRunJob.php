@@ -28,7 +28,11 @@ class ExecuteAutomationRunJob implements ShouldQueue
         try {
             $engine->executeRun($run);
         } catch (\Throwable $e) {
-            $run->update(['status' => 'failed', 'error_message' => $e->getMessage()]);
+            $run->update([
+                'status' => 'failed',
+                'error' => $e->getMessage(),
+                'completed_at' => now(),
+            ]);
             AutomationFailed::dispatch($run, $e->getMessage());
             throw $e;
         }

@@ -124,4 +124,47 @@ class AutomationEngineTest extends TestCase
             'contact_id' => $contact->id,
         ]);
     }
+
+    public function test_live_engine_executes_builder_style_trigger_node(): void
+    {
+        Queue::fake();
+
+        $data = $this->createWorkspaceContext();
+        $workspace = $data['workspace'];
+        $contact = Contact::factory()->create(['workspace_id' => $workspace->id]);
+
+        $automation = Automation::create([
+            'workspace_id' => $workspace->id,
+            'name' => 'Builder Trigger Compatibility',
+            'status' => 'active',
+            'trigger_type' => 'message.received',
+            'nodes' => [
+                [
+                    'id' => 'trigger-1',
+                    'type' => 'triggerNode',
+                    'data' => ['triggerType' => 'message.received'],
+                ],
+                [
+                    'id' => 'tag-1',
+                    'type' => 'add_tag',
+                    'data' => ['tag' => 'builder-trigger-ran'],
+                ],
+            ],
+            'edges' => [
+                ['id' => 'edge-1', 'source' => 'trigger-1', 'target' => 'tag-1'],
+            ],
+        ]);
+
+        $engine = app(AutomationEngine::class);
+        $engine->triggerForContact($automation, $contact->id);
+
+        $run = AutomationRun::where('automation_id', $automation->id)->firstOrFail();
+        $engine->executeRun($run);
+
+        $this->assertSame('completed', $run->fresh()->status);
+        $this->assertTrue(
+            $contact->fresh()->tags()->where('name', 'builder-trigger-ran')->exists(),
+            'The action connected to a builder-style trigger should execute.'
+        );
+    }
 }

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Head, Link, router, usePage } from '@inertiajs/react';
+import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
 import { useTranslation } from 'react-i18next';
 import ClientLayout from '@/Layouts/ClientLayout';
 import EmptyState from '@/Components/EmptyState';
@@ -51,15 +51,73 @@ function AccountPill({ acct }) {
     );
 }
 
+function FacebookEditModal({ post, account, result, onClose }) {
+    const { t } = useTranslation();
+    const { data, setData, put, processing, errors } = useForm({
+        body: result?.edited_body ?? post?.body ?? '',
+    });
+
+    if (!post || !account) return null;
+
+    const submit = (event) => {
+        event.preventDefault();
+        put(route('client.social.posts.facebook.update', [post.id, account.id]), {
+            preserveScroll: true,
+            onSuccess: onClose,
+        });
+    };
+
+    return (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+            <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
+            <form onSubmit={submit} className="relative w-full max-w-lg rounded-2xl bg-white p-5 shadow-2xl dark:bg-neutral-900">
+                <div className="mb-4 flex items-center justify-between gap-3">
+                    <div>
+                        <h3 className="font-semibold text-neutral-900 dark:text-neutral-100">{t('social.edit_facebook_post')}</h3>
+                        <p className="mt-0.5 text-xs text-neutral-500">{account.name}</p>
+                    </div>
+                    <button type="button" onClick={onClose} className="text-neutral-400 hover:text-neutral-700">
+                        <X className="h-5 w-5" />
+                    </button>
+                </div>
+                <textarea
+                    value={data.body}
+                    onChange={(event) => setData('body', event.target.value)}
+                    rows={8}
+                    maxLength={63206}
+                    autoFocus
+                    className="w-full resize-none rounded-xl border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 focus:outline-none focus:ring-2 focus:ring-brand-500 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-100"
+                />
+                {errors.body && <p className="mt-1 text-xs text-red-500">{errors.body}</p>}
+                {errors.facebook && <p className="mt-1 text-xs text-red-500">{errors.facebook}</p>}
+                <div className="mt-4 flex justify-end gap-2">
+                    <button type="button" onClick={onClose} className="rounded-lg border border-neutral-300 px-4 py-2 text-sm dark:border-neutral-700">
+                        {t('common.cancel')}
+                    </button>
+                    <button type="submit" disabled={processing || !data.body.trim()} className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-60">
+                        {processing ? t('social.saving') : t('social.update_on_facebook')}
+                    </button>
+                </div>
+            </form>
+        </div>
+    );
+}
+
 /* ── Detail Modal ─────────────────────────────────────────────── */
-function PostDetailModal({ post, accountMap, userTz, onClose }) {
+function PostDetailModal({ post, accountMap, userTz, onClose, onDelete, onEditFacebook, onDeleteFacebook, onDeleteInstagram }) {
     const { t } = useTranslation();
     if (!post) return null;
     const targets = post.target_accounts ?? [];
     const dateField = post.published_at ?? post.scheduled_at;
     const tz = post.timezone || userTz;
     const mediaUrls = (post.media_urls ?? []).filter(Boolean);
-    const canEdit = ['draft', 'scheduled', 'failed'].includes(post.status);
+    const publishedTargets = [...new Set([
+        ...targets.filter((id) => post.publish_results?.[id]?.status === 'published'),
+        ...(post.published_account_ids ?? []),
+    ].map(Number))];
+    const hasPublishedTarget = publishedTargets.length > 0;
+    const canEdit = ['draft', 'scheduled', 'failed'].includes(post.status) && !hasPublishedTarget;
+    const canDelete = ['draft', 'scheduled', 'failed'].includes(post.status) && !hasPublishedTarget;
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -118,9 +176,32 @@ function PostDetailModal({ post, accountMap, userTz, onClose }) {
                                         <div key={accountId} className="rounded-lg bg-neutral-50 px-3 py-2 text-xs dark:bg-neutral-800">
                                             <div className="flex items-center justify-between">
                                                 <span className="text-neutral-600 dark:text-neutral-400">{acct?.name ?? t('social.account_number', { id: accountId })}</span>
-                                                <span className={result.status === 'published' ? 'text-green-600 font-medium' : 'text-red-500 font-medium'}>
-                                                    {result.status === 'published' ? t('social.result_published') : t('social.result_failed')}
-                                                </span>
+                                                <div className="flex items-center gap-2">
+                                                    <span className={result.status === 'published' ? 'text-green-600 font-medium' : 'text-red-500 font-medium'}>
+                                                        {result.status === 'published' ? t('social.result_published') : t('social.result_failed')}
+                                                    </span>
+                                                    {result.status === 'published' && acct?.network === 'facebook' && (
+                                                        <>
+                                                            <button type="button" onClick={() => onEditFacebook(post, acct, result)}
+                                                                className="rounded-md border border-neutral-200 p-1 text-neutral-500 hover:border-brand-300 hover:text-brand-600 dark:border-neutral-700"
+                                                                title={t('social.edit_facebook_post')}>
+                                                                <Pencil className="h-3.5 w-3.5" />
+                                                            </button>
+                                                            <button type="button" onClick={() => onDeleteFacebook(post, acct)}
+                                                                className="rounded-md border border-neutral-200 p-1 text-neutral-500 hover:border-red-300 hover:text-red-500 dark:border-neutral-700"
+                                                                title={t('social.delete_facebook_post')}>
+                                                                <Trash2 className="h-3.5 w-3.5" />
+                                                            </button>
+                                                        </>
+                                                    )}
+                                                    {result.status === 'published' && acct?.network === 'instagram' && (
+                                                        <button type="button" onClick={() => onDeleteInstagram(post, acct)}
+                                                            className="rounded-md border border-neutral-200 p-1 text-neutral-500 hover:border-red-300 hover:text-red-500 dark:border-neutral-700"
+                                                            title={t('social.delete_instagram_post')}>
+                                                            <Trash2 className="h-3.5 w-3.5" />
+                                                        </button>
+                                                    )}
+                                                </div>
                                             </div>
                                             {(result.warnings ?? []).map((warning, index) => (
                                                 <p key={index} className="mt-1 text-amber-600 dark:text-amber-400">{warning}</p>
@@ -143,6 +224,12 @@ function PostDetailModal({ post, accountMap, userTz, onClose }) {
                         )}
                     </div>
                     <div className="flex items-center gap-2">
+                        {canDelete && (
+                            <button type="button" onClick={() => onDelete(post.id)}
+                                className="inline-flex items-center gap-1.5 rounded-lg border border-red-200 px-3 py-1.5 text-sm font-medium text-red-600 hover:bg-red-50 dark:border-red-900/60 dark:hover:bg-red-900/20 transition">
+                                <Trash2 className="h-3.5 w-3.5" /> {post.status === 'scheduled' ? t('social.delete_schedule') : t('common.delete')}
+                            </button>
+                        )}
                         {canEdit && (
                             <Link href={route('client.social.posts.edit', post.id)}
                                 className="inline-flex items-center gap-1.5 rounded-lg border border-neutral-300 dark:border-neutral-600 px-3 py-1.5 text-sm font-medium text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-700 transition">
@@ -161,14 +248,21 @@ function PostDetailModal({ post, accountMap, userTz, onClose }) {
 }
 
 /* ── Post Card ────────────────────────────────────────────────── */
-function PostCard({ post, accountMap, userTz, onView, onDelete }) {
+function PostCard({ post, accountMap, userTz, onView, onDelete, onEditFacebook, onDeleteFacebook, onDeleteInstagram }) {
     const { t } = useTranslation();
     const [actioning, setActioning] = useState(null);
     const targets = post.target_accounts ?? [];
     const dateField = post.published_at ?? post.scheduled_at;
     const tz = post.timezone || userTz;
-    const canDelete = ['draft', 'scheduled', 'failed'].includes(post.status);
-    const canEdit   = ['draft', 'scheduled', 'failed'].includes(post.status);
+    const publishedTargets = [...new Set([
+        ...targets.filter((id) => post.publish_results?.[id]?.status === 'published'),
+        ...(post.published_account_ids ?? []),
+    ].map(Number))];
+    const hasPublishedTarget = publishedTargets.length > 0;
+    const facebookTarget = publishedTargets.map((id) => accountMap[id]).find((account) => account?.network === 'facebook');
+    const instagramTarget = publishedTargets.map((id) => accountMap[id]).find((account) => account?.network === 'instagram');
+    const canDelete = ['draft', 'scheduled', 'failed'].includes(post.status) && !hasPublishedTarget;
+    const canEdit   = ['draft', 'scheduled', 'failed'].includes(post.status) && !hasPublishedTarget;
     const canPublishNow = ['draft', 'scheduled', 'failed'].includes(post.status);
     const canCancel = post.status === 'scheduled';
     const mediaUrls = (post.media_urls ?? []).filter(Boolean);
@@ -238,6 +332,12 @@ function PostCard({ post, accountMap, userTz, onView, onDelete }) {
                             <Pencil className="h-3.5 w-3.5" /> {t('common.edit')}
                         </Link>
                     )}
+                    {facebookTarget && (
+                        <button type="button" onClick={() => onEditFacebook(post, facebookTarget, post.publish_results?.[facebookTarget.id])}
+                            className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-lg border border-neutral-200 dark:border-neutral-700 px-3 py-1.5 text-xs font-medium text-neutral-600 dark:text-neutral-300 hover:border-brand-400 hover:text-brand-600 transition">
+                            <Pencil className="h-3.5 w-3.5" /> Facebook
+                        </button>
+                    )}
                 </div>
 
                 {/* Secondary actions */}
@@ -266,10 +366,24 @@ function PostCard({ post, accountMap, userTz, onView, onDelete }) {
                             <ExternalLink className="h-3 w-3" /> {t('social.view')}
                         </a>
                     )}
+                    {facebookTarget && (
+                        <button type="button" onClick={() => onDeleteFacebook(post, facebookTarget)}
+                            className="ml-auto inline-flex items-center gap-1 rounded-lg border border-neutral-200 px-2 py-1 text-[11px] text-neutral-400 hover:border-red-300 hover:text-red-500 dark:border-neutral-700"
+                            title={t('social.delete_facebook_post')}>
+                            <Trash2 className="h-3 w-3" /> Facebook
+                        </button>
+                    )}
+                    {instagramTarget && (
+                        <button type="button" onClick={() => onDeleteInstagram(post, instagramTarget)}
+                            className="ml-auto inline-flex items-center gap-1 rounded-lg border border-neutral-200 px-2 py-1 text-[11px] text-neutral-400 hover:border-red-300 hover:text-red-500 dark:border-neutral-700"
+                            title={t('social.delete_instagram_post')}>
+                            <Trash2 className="h-3 w-3" /> Instagram
+                        </button>
+                    )}
                     {canDelete && (
                         <button onClick={() => onDelete(post.id)}
                             className="ml-auto inline-flex items-center gap-1 rounded-lg border border-neutral-200 dark:border-neutral-700 px-2 py-1 text-[11px] text-neutral-400 hover:text-red-500 hover:border-red-300 transition">
-                            <Trash2 className="h-3 w-3" />
+                            <Trash2 className="h-3 w-3" /> {post.status === 'scheduled' ? t('social.delete_schedule') : t('common.delete')}
                         </button>
                     )}
                 </div>
@@ -287,6 +401,7 @@ export default function PostsIndex({ posts, accounts, filters }) {
 
     const [plannerOpen, setPlannerOpen] = useState(false);
     const [detailPost, setDetailPost] = useState(null);
+    const [facebookEdit, setFacebookEdit] = useState(null);
     const accountMap = accounts.reduce((acc, a) => { acc[a.id] = a; return acc; }, {});
 
     const handleFilter = (key, val) =>
@@ -294,8 +409,29 @@ export default function PostsIndex({ posts, accounts, filters }) {
 
     const handleDelete = (id) => {
         if (confirm(t('social.confirm_delete_post'))) {
-            router.delete(route('client.social.posts.destroy', id), { preserveScroll: true });
+            router.delete(route('client.social.posts.destroy', id), {
+                preserveScroll: true,
+                onSuccess: () => setDetailPost(null),
+            });
         }
+    };
+
+    const handleFacebookDelete = (post, account) => {
+        if (!confirm(t('social.confirm_delete_facebook_post'))) return;
+
+        router.delete(route('client.social.posts.facebook.destroy', [post.id, account.id]), {
+            preserveScroll: true,
+            onSuccess: () => setDetailPost(null),
+        });
+    };
+
+    const handleInstagramDelete = (post, account) => {
+        if (!confirm(t('social.confirm_delete_instagram_post'))) return;
+
+        router.delete(route('client.social.posts.instagram.destroy', [post.id, account.id]), {
+            preserveScroll: true,
+            onSuccess: () => setDetailPost(null),
+        });
     };
 
     return (
@@ -325,7 +461,12 @@ export default function PostsIndex({ posts, accounts, filters }) {
                 {flash.success && (
                     <div className="rounded-lg bg-green-50 dark:bg-green-900/30 text-green-800 dark:text-green-200 px-4 py-2 text-sm">{flash.success}</div>
                 )}
-
+                {props.errors?.facebook && (
+                    <div className="rounded-lg bg-red-50 px-4 py-2 text-sm text-red-700 dark:bg-red-900/30 dark:text-red-200">{props.errors.facebook}</div>
+                )}
+                {props.errors?.instagram && (
+                    <div className="rounded-lg bg-red-50 px-4 py-2 text-sm text-red-700 dark:bg-red-900/30 dark:text-red-200">{props.errors.instagram}</div>
+                )}
                 {/* Filters */}
                 <div className="flex flex-wrap items-center gap-3 rounded-xl border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 px-4 py-3">
                     <span className="text-xs font-semibold text-neutral-400 uppercase tracking-wider shrink-0">{t('social.filter_by')}</span>
@@ -386,6 +527,9 @@ export default function PostsIndex({ posts, accounts, filters }) {
                                 userTz={userTz}
                                 onView={setDetailPost}
                                 onDelete={handleDelete}
+                                onEditFacebook={(post, account, result) => setFacebookEdit({ post, account, result })}
+                                onDeleteFacebook={handleFacebookDelete}
+                                onDeleteInstagram={handleInstagramDelete}
                             />
                         ))}
                     </div>
@@ -408,7 +552,23 @@ export default function PostsIndex({ posts, accounts, filters }) {
                 )}
             </div>
 
-            <PostDetailModal post={detailPost} accountMap={accountMap} userTz={userTz} onClose={() => setDetailPost(null)} />
+            <PostDetailModal
+                post={detailPost}
+                accountMap={accountMap}
+                userTz={userTz}
+                onClose={() => setDetailPost(null)}
+                onDelete={handleDelete}
+                onEditFacebook={(post, account, result) => setFacebookEdit({ post, account, result })}
+                onDeleteFacebook={handleFacebookDelete}
+                onDeleteInstagram={handleInstagramDelete}
+            />
+
+            <FacebookEditModal
+                post={facebookEdit?.post}
+                account={facebookEdit?.account}
+                result={facebookEdit?.result}
+                onClose={() => { setFacebookEdit(null); setDetailPost(null); }}
+            />
 
             <AiPlannerModal show={plannerOpen} onClose={() => setPlannerOpen(false)} accounts={accounts}
                 onSuccess={() => { setPlannerOpen(false); router.reload({ only: ['posts'] }); }} />

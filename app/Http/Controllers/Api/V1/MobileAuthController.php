@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Services\OneSignalService;
 use App\Services\StorageManager;
 use App\Services\UserPushTokenService;
 use App\Support\Demo;
@@ -19,6 +20,7 @@ class MobileAuthController extends Controller
     public function __construct(
         private StorageManager $storageManager,
         private UserPushTokenService $pushTokens,
+        private OneSignalService $oneSignal,
     ) {}
 
     /**

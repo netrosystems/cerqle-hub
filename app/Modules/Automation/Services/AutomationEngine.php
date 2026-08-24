@@ -115,7 +115,10 @@ class AutomationEngine
             $run->update(['resume_node_id' => null]);
         } else {
             // Find trigger node and start from the first node after it
-            $triggerNode = $nodes->first(fn ($n) => ($n['type'] ?? '') === 'trigger');
+            // `triggerNode` is the React Flow renderer key used by older
+            // builder saves. Accept it here (and data.triggerType) so existing
+            // production automations remain executable after deployment.
+            $triggerNode = $nodes->first(fn ($n) => $this->isTriggerNode($n));
             if (! $triggerNode) {
                 $run->update(['status' => 'failed', 'error' => 'No trigger node.', 'completed_at' => now()]);
 
@@ -205,8 +208,7 @@ class AutomationEngine
         $contact = $this->sampleContact((int) $automation->workspace_id);
         $context = array_merge($this->defaultTestContext(), $context);
 
-        $isTrigger = fn ($n) => in_array($n['type'] ?? '', ['trigger', 'triggerNode'], true) || isset($n['data']['triggerType']);
-        $trigger = $nodesC->first($isTrigger);
+        $trigger = $nodesC->first(fn ($n) => $this->isTriggerNode($n));
 
         if (! $trigger) {
             return ['ok' => false, 'error' => 'Add a trigger to start the automation.', 'steps' => []];
@@ -280,6 +282,17 @@ class AutomationEngine
                 'phone' => $contact->phone_e164,
             ],
         ];
+    }
+
+    /**
+     * The persisted workflow type is `trigger`; `triggerNode` is retained as a
+     * compatibility alias for workflows saved by the visual builder before the
+     * renderer/persistence boundary was corrected.
+     */
+    private function isTriggerNode(array $node): bool
+    {
+        return in_array($node['type'] ?? '', ['trigger', 'triggerNode'], true)
+            || array_key_exists('triggerType', $node['data'] ?? []);
     }
 
     /** A throw-away, unsaved contact used for test simulations so we never touch real data. */

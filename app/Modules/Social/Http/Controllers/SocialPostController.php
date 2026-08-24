@@ -7,11 +7,15 @@ use App\Modules\AI\Services\LlmGateway;
 use App\Modules\Social\Jobs\PublishSocialPostJob;
 use App\Modules\Social\Models\SocialAccount;
 use App\Modules\Social\Models\SocialPost;
+use App\Modules\Social\Models\SocialPostAccount;
+use App\Modules\Social\Services\SocialPublisher;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -123,6 +127,7 @@ class SocialPostController extends Controller
             : collect();
 
         $query = SocialPost::where('workspace_id', $wid)
+            ->with(['accountLinks:id,post_id,social_account_id,status'])
             ->when($status, fn ($q) => $q->where('status', $status))
             ->when($network && $networkAccountIds->isNotEmpty(), function ($q) use ($networkAccountIds) {
                 $q->where(function ($inner) use ($networkAccountIds) {
@@ -135,6 +140,22 @@ class SocialPostController extends Controller
             ->orderByDesc('created_at');
 
         $posts = $query->paginate(20)->withQueryString();
+        $posts->getCollection()->each(function (SocialPost $post): void {
+            // Older published posts may not have publish_results, but their
+            // durable account link still identifies the remote post target.
+            // Expose that authoritative state so the UI never hides the
+            // platform-delete action for a live Instagram/Facebook post.
+            $post->setAttribute(
+                'published_account_ids',
+                $post->accountLinks
+                    ->where('status', 'published')
+                    ->pluck('social_account_id')
+                    ->map(fn ($id) => (int) $id)
+                    ->values()
+                    ->all()
+            );
+            $post->unsetRelation('accountLinks');
+        });
 
         return Inertia::render('Social/Posts/Index', [
             'posts' => $posts,
@@ -386,9 +407,221 @@ class SocialPostController extends Controller
     {
         abort_unless((int) $post->workspace_id === $this->workspaceId($request), 403);
         abort_if($post->status === 'publishing', 422, 'Cannot delete a post that is currently being published.');
-        $post->delete();
+        abort_if(
+            $post->status === 'published' || $post->accountLinks()->where('status', 'published')->exists(),
+            422,
+            'Published posts must be deleted from the connected platform.'
+        );
+        DB::transaction(function () use ($post): void {
+            $post->accountLinks()->delete();
+            $post->delete();
+        });
 
         return back()->with('success', 'Post deleted.');
+    }
+
+    public function updatePublishedFacebook(
+        Request $request,
+        SocialPost $post,
+        int $account,
+        SocialPublisher $publisher
+    ): RedirectResponse {
+        [$socialAccount, $link] = $this->publishedFacebookTarget($request, $post, $account);
+        $validated = $request->validate([
+            'body' => ['required', 'string', 'max:63206'],
+        ]);
+
+        try {
+            $publisher->updatePublishedPost($socialAccount, (string) $link->platform_post_id, $validated);
+        } catch (\Throwable $e) {
+            Log::warning('Facebook published post update failed', [
+                'post_id' => $post->id,
+                'account_id' => $socialAccount->id,
+                'error' => $e->getMessage(),
+            ]);
+
+            return back()->withErrors([
+                'facebook' => 'Facebook could not update this post. Check the connected Page permissions and try again.',
+            ]);
+        }
+
+        $results = $post->publish_results ?? [];
+        $results[$socialAccount->id] = array_merge($results[$socialAccount->id] ?? [], [
+            'status' => 'published',
+            'post_id' => $link->platform_post_id,
+            'edited_body' => $validated['body'],
+            'edited_at' => now()->toIso8601String(),
+        ]);
+
+        $updates = ['publish_results' => $results];
+        if (count($post->target_accounts ?? []) === 1) {
+            $updates['body'] = $validated['body'];
+        }
+        $post->update($updates);
+
+        return back()->with('success', 'Facebook post updated.');
+    }
+
+    public function deletePublishedFacebook(
+        Request $request,
+        SocialPost $post,
+        int $account,
+        SocialPublisher $publisher
+    ): RedirectResponse {
+        [$socialAccount, $link] = $this->publishedFacebookTarget($request, $post, $account);
+
+        try {
+            $publisher->deletePublishedPost($socialAccount, (string) $link->platform_post_id);
+        } catch (\Throwable $e) {
+            Log::warning('Facebook published post deletion failed', [
+                'post_id' => $post->id,
+                'account_id' => $socialAccount->id,
+                'error' => $e->getMessage(),
+            ]);
+
+            return back()->withErrors([
+                'facebook' => 'Facebook could not delete this post. Check the connected Page permissions and try again.',
+            ]);
+        }
+
+        DB::transaction(function () use ($post, $socialAccount, $link): void {
+            $link->delete();
+
+            $remainingTargets = collect($post->target_accounts ?? [])
+                ->map(fn ($id) => (int) $id)
+                ->reject(fn ($id) => $id === (int) $socialAccount->id)
+                ->values()
+                ->all();
+
+            if ($remainingTargets === []) {
+                $post->delete();
+
+                return;
+            }
+
+            $results = $post->publish_results ?? [];
+            unset($results[$socialAccount->id], $results[(string) $socialAccount->id]);
+
+            $hasPublishedTarget = $post->accountLinks()
+                ->where('status', 'published')
+                ->exists();
+
+            $post->update([
+                'target_accounts' => $remainingTargets,
+                'publish_results' => $results,
+                'provider_post_id' => null,
+                'post_url' => null,
+                'status' => $hasPublishedTarget ? 'published' : 'failed',
+            ]);
+        });
+
+        return back()->with('success', 'Facebook post deleted.');
+    }
+
+    public function deletePublishedInstagram(
+        Request $request,
+        SocialPost $post,
+        int $account,
+        SocialPublisher $publisher
+    ): RedirectResponse {
+        [$socialAccount, $link] = $this->publishedTarget($request, $post, $account, 'instagram');
+
+        try {
+            $publisher->deletePublishedPost($socialAccount, (string) $link->platform_post_id);
+        } catch (\Throwable $e) {
+            Log::error('Instagram published post deletion failed', [
+                'post_id' => $post->id,
+                'account_id' => $socialAccount->id,
+                'error' => $e->getMessage(),
+            ]);
+
+            $message = str_contains($e->getMessage(), 'Meta code 10')
+                ? 'Meta denied deletion because this Instagram connection does not have instagram_manage_contents access. Enable that permission for the Meta app, reconnect this Instagram account, and retry.'
+                : 'Instagram could not delete this post. '.$this->publicProviderError($e->getMessage());
+
+            return back()->withErrors(['instagram' => $message]);
+        }
+
+        $this->removePublishedTarget($post, $socialAccount, $link);
+
+        return back()->with('success', 'Post deleted from Instagram and Cerqle.');
+    }
+
+    private function publicProviderError(string $message): string
+    {
+        $clean = preg_replace('/(?:access[_ -]?token|token)\s*[=:]\s*[^\s,]+/i', 'token=[redacted]', $message);
+
+        return mb_substr((string) $clean, 0, 260);
+    }
+
+    /** @return array{SocialAccount, SocialPostAccount} */
+    private function publishedFacebookTarget(Request $request, SocialPost $post, int $accountId): array
+    {
+        return $this->publishedTarget($request, $post, $accountId, 'facebook');
+    }
+
+    /** @return array{SocialAccount, SocialPostAccount} */
+    private function publishedTarget(
+        Request $request,
+        SocialPost $post,
+        int $accountId,
+        string $network
+    ): array {
+        abort_unless((int) $post->workspace_id === $this->workspaceId($request), 403);
+        abort_if($post->status === 'publishing', 422, 'This post is still being published.');
+
+        $account = SocialAccount::query()
+            ->where('workspace_id', $this->workspaceId($request))
+            ->where('network', $network)
+            ->findOrFail($accountId);
+
+        abort_unless(collect($post->target_accounts ?? [])->map(fn ($id) => (int) $id)->contains($account->id), 404);
+
+        $link = SocialPostAccount::query()
+            ->where('post_id', $post->id)
+            ->where('social_account_id', $account->id)
+            ->firstOrFail();
+
+        abort_unless(
+            $link->status === 'published' && filled($link->platform_post_id),
+            422,
+            'This '.ucfirst($network).' post has not been published successfully.'
+        );
+
+        return [$account, $link];
+    }
+
+    private function removePublishedTarget(
+        SocialPost $post,
+        SocialAccount $socialAccount,
+        SocialPostAccount $link
+    ): void {
+        DB::transaction(function () use ($post, $socialAccount, $link): void {
+            $link->delete();
+
+            $remainingTargets = collect($post->target_accounts ?? [])
+                ->map(fn ($id) => (int) $id)
+                ->reject(fn ($id) => $id === (int) $socialAccount->id)
+                ->values()
+                ->all();
+
+            if ($remainingTargets === []) {
+                $post->delete();
+
+                return;
+            }
+
+            $results = $post->publish_results ?? [];
+            unset($results[$socialAccount->id], $results[(string) $socialAccount->id]);
+
+            $post->update([
+                'target_accounts' => $remainingTargets,
+                'publish_results' => $results,
+                'provider_post_id' => null,
+                'post_url' => null,
+                'status' => $post->accountLinks()->where('status', 'published')->exists() ? 'published' : 'failed',
+            ]);
+        });
     }
 
     public function aiPlan(Request $request): JsonResponse

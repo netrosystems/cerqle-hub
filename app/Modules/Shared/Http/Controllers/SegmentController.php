@@ -119,6 +119,34 @@ class SegmentController extends Controller
             ->paginate(50, ['id', 'uuid', 'first_name', 'last_name', 'phone_e164', 'email', 'avatar'], 'available_page')
             ->withQueryString();
 
+        // Keep enough history for every actionable validation/worker state.
+        // The old five-row window could hide a completed validation before
+        // the user clicked "Import". Mark stale queued work server-side so
+        // React rendering remains deterministic.
+        $operations = ContactListOperation::where('workspace_id', $workspaceId)
+            ->where('segment_id', $segment->id)
+            ->where(function ($query) {
+                $query->whereIn('status', ['queued', 'processing'])
+                    ->orWhere(function ($query) {
+                        $query->where('type', 'csv_validation')
+                            ->where('status', 'completed');
+                    })
+                    ->orWhere(function ($query) {
+                        $query->where('status', 'failed')
+                            ->where('finished_at', '>=', now()->subDay());
+                    })
+                    ->orWhere(function ($query) {
+                        $query->where('status', 'completed')
+                            ->where('finished_at', '>=', now()->subMinutes(5));
+                    });
+            })
+            ->latest()
+            ->get()
+            ->each(fn (ContactListOperation $operation) => $operation->setAttribute(
+                'is_stalled',
+                $operation->status === 'queued' && $operation->created_at?->lt(now()->subMinute())
+            ));
+
         return Inertia::render('Contacts/SegmentContacts', [
             'segment' => $segment,
             'listContacts' => $listContacts,
@@ -133,11 +161,7 @@ class SegmentController extends Controller
                 'maxContactsPerList' => $maxContactsPerList,
                 'remainingCapacity' => max(0, $maxContactsPerList - $listContactsCount),
             ],
-            'operations' => ContactListOperation::where('workspace_id', $workspaceId)
-                ->where('segment_id', $segment->id)
-                ->latest()
-                ->limit(5)
-                ->get(),
+            'operations' => $operations,
         ]);
     }
 

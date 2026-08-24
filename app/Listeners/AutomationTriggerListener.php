@@ -43,7 +43,18 @@ class AutomationTriggerListener
 
     public function handleCampaignCompleted(CampaignCompleted $event): void
     {
-        // No per-contact trigger for campaign completion; skip.
+        $campaign = $event->campaign;
+        $context = [
+            'campaign_id' => $campaign->id,
+            'campaign_name' => $campaign->name,
+            'sent_count' => $campaign->sent_count ?? 0,
+            'failed_count' => $campaign->failed_count ?? 0,
+        ];
+
+        Automation::where('workspace_id', $campaign->workspace_id)
+            ->where('status', 'active')
+            ->where('trigger_type', 'campaign.sent')
+            ->each(fn (Automation $automation) => $this->triggerWithoutContact($automation, $context));
     }
 
     public function handleCommerceEvent(CommerceEventReceived $event): void
@@ -57,7 +68,7 @@ class AutomationTriggerListener
     {
         $automation = Automation::where('id', $event->automationId)
             ->where('status', 'active')
-            ->where('trigger_type', 'webhook')
+            ->whereIn('trigger_type', ['webhook', 'webhook.received'])
             ->first();
 
         if (! $automation) {

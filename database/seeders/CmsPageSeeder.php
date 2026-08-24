@@ -39,7 +39,10 @@ class CmsPageSeeder extends Seeder
                     .'<h2>4. Data Retention</h2><p>We retain personal data only as long as necessary to provide our services and fulfill the purposes described in this policy.</p>'
                     .'<h2>5. Your Rights</h2><p>Depending on your location, you may have rights to access, correct, delete, or port your data, and to object to or restrict certain processing.</p>'
                     .'<h2>6. Security</h2><p>We use industry-standard technical and organizational measures, including encryption in transit and at rest, to protect your data.</p>'
-                    ."<h2>7. Contact</h2><p>For privacy questions, contact us at <a href=\"/contact\">our contact page</a>.</p>",
+                    .'<h2>7. Google API Data</h2><p>When you connect a Google account, we access the Google account identity, Gmail messages and related metadata needed to synchronize, display, search, and reply to email in the Master Email Inbox. We use this data only to provide the user-facing features you request. OAuth tokens are encrypted at rest, access is isolated to your workspace, and data is transmitted over encrypted connections.</p>'
+                    .'<p>We do not sell Google user data or use it for advertising. We share it only with service providers necessary to operate the requested features, when required by law, or with your consent. Disconnecting a mailbox stops future access. Connected-mailbox data is retained only while needed to provide the service and is deleted according to account deletion requests and applicable legal retention requirements.</p>'
+                    .'<p>Our use and transfer to any other app of information received from Google APIs will adhere to the <a href="https://developers.google.com/terms/api-services-user-data-policy">Google API Services User Data Policy</a>, including the Limited Use requirements.</p>'
+                    ."<h2>8. Contact</h2><p>For privacy questions or Google-data deletion requests, contact us at <a href=\"mailto:hello@cerqle.ai\">hello@cerqle.ai</a>.</p>",
             ],
             [
                 'slug'             => 'terms',

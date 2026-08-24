@@ -5,6 +5,7 @@ use App\Modules\Broadcasting\Jobs\LaunchScheduledCampaignsJob;
 use App\Modules\Broadcasting\Jobs\RecoverSmsCampaignsJob;
 use App\Modules\Broadcasting\Models\UsageMeter;
 use App\Modules\Inbox\Jobs\SyncEmailAccountJob;
+use App\Modules\Inbox\Jobs\SyncMessengerAccountJob;
 use App\Modules\Shared\Models\ChannelAccount;
 use App\Modules\Social\Jobs\DispatchScheduledPostsJob;
 use App\Modules\Social\Jobs\RefreshSocialTokensJob;
@@ -47,12 +48,31 @@ Schedule::call(function () {
         ->each(fn (int $id) => SyncEmailAccountJob::dispatch($id)->onQueue('default'));
 })->everyMinute()->name('sync-email-inboxes')->withoutOverlapping();
 
+// Meta webhooks are the real-time path. This reconciliation poll is a safety
+// net for valid Page messages that Meta occasionally fails to push or delays.
+Schedule::call(function () {
+    ChannelAccount::where('channel', 'messenger')
+        ->where('status', 'active')
+        ->pluck('id')
+        ->each(fn (int $id) => SyncMessengerAccountJob::dispatch($id)->onQueue('whatsapp'));
+})->everyMinute()->name('sync-messenger-inboxes')->withoutOverlapping();
+
 // Sync WhatsApp templates from Meta (once per day)
 Schedule::call(function () {
     WhatsappBusinessAccount::all()->each(function ($waba) {
         TemplateSyncJob::dispatch($waba->id)->onQueue('whatsapp');
     });
 })->daily()->name('sync-whatsapp-templates');
+
+// Meta subscriptions can be removed when an app setting, token assignment, or
+// webhook configuration changes. Re-register and verify the global callback
+// daily so outbound messaging cannot remain healthy while inbound silently
+// stops. The command exits non-zero when Meta is still misconfigured.
+Schedule::command('whatsapp:register-webhook')
+    ->dailyAt('03:15')
+    ->name('repair-whatsapp-webhook-subscription')
+    ->withoutOverlapping()
+    ->onOneServer();
 
 // Dispatch scheduled social posts (every minute)
 Schedule::job(new DispatchScheduledPostsJob, 'social')

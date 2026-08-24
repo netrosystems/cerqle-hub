@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Inbox;
 
+use App\Models\ClientSetting;
 use App\Modules\Shared\Models\ChannelAccount;
 use App\Modules\Shared\Models\Contact;
 use App\Modules\Shared\Models\Conversation;
@@ -113,6 +114,46 @@ class PendingReplyNotificationTest extends TestCase
             'sent_by' => 'human',
             'user_id' => $admin->id,
             'sent_at' => now()->subMinutes(70),
+        ]);
+
+        $this->artisan('inbox:notify-unanswered')->assertSuccessful();
+
+        Notification::assertNothingSent();
+        $this->assertNull($conversation->fresh()->pending_reply_notified_at);
+    }
+
+    public function test_client_can_disable_pending_reply_notifications_for_all_workspaces(): void
+    {
+        Notification::fake();
+        ['client' => $client, 'workspace' => $workspace, 'user' => $admin] = $this->createWorkspaceContext();
+        $admin->update(['status' => 'active', 'client_role' => 'administrator']);
+        ClientSetting::set($client->id, 'pending_reply_notifications_enabled', '0');
+
+        $contact = Contact::factory()->create(['workspace_id' => $workspace->id]);
+        $account = ChannelAccount::create([
+            'workspace_id' => $workspace->id,
+            'channel' => 'webchat',
+            'display_name' => 'Website',
+            'status' => 'active',
+        ]);
+        $receivedAt = now()->subMinutes(90);
+        $conversation = Conversation::create([
+            'workspace_id' => $workspace->id,
+            'contact_id' => $contact->id,
+            'channel_account_id' => $account->id,
+            'status' => 'open',
+            'last_inbound_at' => $receivedAt,
+            'last_message_at' => $receivedAt,
+        ]);
+        Message::create([
+            'conversation_id' => $conversation->id,
+            'direction' => 'in',
+            'channel' => 'webchat',
+            'type' => 'text',
+            'body' => 'Still waiting for help.',
+            'status' => 'delivered',
+            'sent_by' => 'human',
+            'sent_at' => $receivedAt,
         ]);
 
         $this->artisan('inbox:notify-unanswered')->assertSuccessful();

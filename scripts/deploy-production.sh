@@ -16,6 +16,20 @@ fi
 echo "Fetching origin/$DEPLOY_BRANCH..."
 git pull --ff-only origin "$DEPLOY_BRANCH"
 
+# Laravel's deploy user and PHP-FPM must both be able to create cache and log
+# files. Normalize these narrowly scoped runtime directories before Composer
+# invokes Artisan so a file created by either user cannot break the next deploy.
+mkdir -p storage/logs bootstrap/cache
+if command -v sudo >/dev/null 2>&1 && sudo -n true >/dev/null 2>&1; then
+    DEPLOY_USER="$(id -un)"
+    sudo -n chown -R "$DEPLOY_USER":www-data storage bootstrap/cache
+    sudo -n find storage bootstrap/cache -type d -exec chmod 2775 {} +
+    sudo -n find storage bootstrap/cache -type f -exec chmod 0664 {} +
+elif [[ ! -w storage/logs || ! -w bootstrap/cache ]]; then
+    echo "ERROR: storage/logs and bootstrap/cache must be writable by the deploy user and PHP-FPM." >&2
+    exit 1
+fi
+
 echo "Installing production dependencies..."
 composer install --no-dev --prefer-dist --optimize-autoloader --no-interaction
 npm ci
@@ -43,9 +57,47 @@ php artisan migrate --force
 php artisan optimize
 php artisan queue:restart
 
+# `queue:restart` asks current Laravel workers to exit. Supervisor normally
+# starts replacements, but a manually-stopped process group remains STOPPED
+# forever and leaves imports/messages silently queued. Ensure the general
+# worker group is enabled after every deployment when Supervisor is present.
+SUPERVISOR=()
+if command -v supervisorctl >/dev/null 2>&1; then
+    if supervisorctl status >/dev/null 2>&1; then
+        SUPERVISOR=(supervisorctl)
+    elif command -v sudo >/dev/null 2>&1 && sudo -n supervisorctl status >/dev/null 2>&1; then
+        SUPERVISOR=(sudo -n supervisorctl)
+    fi
+fi
+
+if [[ ${#SUPERVISOR[@]} -gt 0 ]]; then
+    "${SUPERVISOR[@]}" reread
+    "${SUPERVISOR[@]}" update
+    # `start` reports an error when a process is already running, so verify
+    # the resulting state explicitly instead of treating that as a failure.
+    "${SUPERVISOR[@]}" start 'cerqle-worker:*' || true
+    sleep 3
+    WORKER_STATUS="$("${SUPERVISOR[@]}" status 'cerqle-worker:*')"
+    echo "$WORKER_STATUS"
+    if echo "$WORKER_STATUS" | grep -Eq '(STOPPED|FATAL|BACKOFF|EXITED|UNKNOWN)'; then
+        echo "ERROR: One or more Cerqle queue workers failed to start." >&2
+        exit 1
+    fi
+else
+    echo "WARNING: Supervisor is unavailable; verify queue workers manually." >&2
+fi
+
 php artisan up
 APP_IS_DOWN=0
 trap - EXIT
+
+# Reconcile Meta's external webhook state after the application is reachable.
+# Keep a transient Meta outage from rolling back an otherwise healthy deploy,
+# while making the failure explicit in deployment logs. The daily scheduler
+# retries this repair automatically.
+if ! php artisan whatsapp:register-webhook; then
+    echo "WARNING: WhatsApp inbound webhook registration is not healthy; the daily repair task will retry." >&2
+fi
 
 echo "Deployment completed."
 php artisan app:release --show
