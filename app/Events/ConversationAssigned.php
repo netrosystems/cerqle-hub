@@ -6,11 +6,11 @@ use App\Models\User;
 use App\Modules\Shared\Models\Conversation;
 use Illuminate\Broadcasting\InteractsWithSockets;
 use Illuminate\Broadcasting\PrivateChannel;
-use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
+use Illuminate\Contracts\Broadcasting\ShouldBroadcastNow;
 use Illuminate\Foundation\Events\Dispatchable;
 use Illuminate\Queue\SerializesModels;
 
-class ConversationAssigned implements ShouldBroadcast
+class ConversationAssigned implements ShouldBroadcastNow
 {
     use Dispatchable, InteractsWithSockets, SerializesModels;
 
@@ -39,6 +39,8 @@ class ConversationAssigned implements ShouldBroadcast
     {
         return [
             'conversation_id' => $this->conversation->id,
+            'mode' => $this->conversation->assigned_to ?? 'bot',
+            'handover_at' => $this->conversation->handover_at?->toIso8601String(),
             'assigned_to' => $this->assignedTo ? [
                 'id' => $this->assignedTo->id,
                 'name' => $this->assignedTo->name,

@@ -94,20 +94,41 @@ class BroadcastChannelsServiceProvider extends ServiceProvider
     }
 
     /**
-     * Whether the user can access the given workspace. Access must be explicit:
-     * belonging to the same client is not enough to subscribe to another
-     * workspace's realtime data.
+     * Whether the user can access the given workspace. Supports primary workspace,
+     * session/current workspace, pivot membership, ownership and client workspaces.
      */
     public static function userCanAccessWorkspace(User $user, int $workspaceId): bool
     {
+        if ((int) $user->workspace_id === $workspaceId) {
+            return true;
+        }
+
+        $current = $user->current_workspace_id ?? null;
+        if ($current && (int) $current === $workspaceId) {
+            return true;
+        }
+
         if ($user->canAccessWorkspace($workspaceId)) {
             return true;
+        }
+
+        if ($user->accessibleWorkspaces()->contains('id', $workspaceId)) {
+            return true;
+        }
+
+        if ($user->client_id) {
+            $belongsToClient = \App\Models\Workspace::where('id', $workspaceId)
+                ->where('client_id', $user->client_id)
+                ->exists();
+            if ($belongsToClient) {
+                return true;
+            }
         }
 
         Log::warning('broadcast.auth.denied workspace access check', [
             'user_id' => $user->id,
             'user_workspace_id' => $user->workspace_id,
-            'user_current_workspace_id' => null,
+            'user_current_workspace_id' => $current,
             'user_client_id' => $user->client_id,
             'requested_workspace_id' => $workspaceId,
         ]);
