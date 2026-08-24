@@ -149,6 +149,14 @@ class ChatWidgetPublicController extends Controller
 
         abort_if($type === 'text' && $body === '', 422, 'Message body is required.');
 
+        app(TypingPresence::class)->setVisitor($conversation, false);
+        $message = $this->driver->recordInboundMessage($conversation, $payload['v'], $body, $type, $messagePayload);
+
+        $messagePayloadData = $this->payloads->message($message, $widget);
+        if (! empty($data['client_message_id'])) {
+            $messagePayloadData['client_message_id'] = (string) $data['client_message_id'];
+        }
+
         return response()->json(array_filter([
             'token' => $issuedToken,
             'message' => $messagePayloadData,
