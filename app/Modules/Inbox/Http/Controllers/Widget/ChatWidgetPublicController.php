@@ -149,32 +149,11 @@ class ChatWidgetPublicController extends Controller
 
         abort_if($type === 'text' && $body === '', 422, 'Message body is required.');
 
-        $beforeMessageId = (int) ($conversation->messages()->max('id') ?? 0);
-
-        app(TypingPresence::class)->setVisitor($conversation, false);
-        $message = $this->driver->recordInboundMessage($conversation, $payload['v'], $body, $type, $messagePayload);
-
-        $messagePayloadData = $this->payloads->message($message, $widget);
-        if (! empty($data['client_message_id'])) {
-            $messagePayloadData['client_message_id'] = (string) $data['client_message_id'];
-        }
-
-        $allNewMessages = $this->payloads->messages($conversation->id, $widget, $beforeMessageId);
-        if (! empty($data['client_message_id'])) {
-            foreach ($allNewMessages as &$nm) {
-                if (($nm['id'] ?? null) === $message->id) {
-                    $nm['client_message_id'] = (string) $data['client_message_id'];
-                }
-            }
-            unset($nm);
-        }
-
         return response()->json(array_filter([
             'token' => $issuedToken,
             'message' => $messagePayloadData,
-            'messages' => $allNewMessages,
             'handover' => $this->handoverState($conversation->fresh(), $widget),
-            'handoff' => $this->payloads->handoff($widget, $conversation->fresh()),
+            'handoff' => $this->payloads->handoff($widget, $conversation->refresh()),
         ]));
     }
 
