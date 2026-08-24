@@ -21,6 +21,7 @@ use App\Http\Controllers\Api\V1\SocialPostApiController;
 use App\Http\Controllers\Api\V1\SubscriptionApiController;
 use App\Http\Controllers\Api\V1\TokenController;
 use App\Http\Controllers\Api\V1\WorkspaceApiController;
+use Illuminate\Broadcasting\BroadcastController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -43,6 +44,16 @@ Route::prefix('v1/auth')->middleware(['auth:sanctum', 'throttle:api'])->group(fu
     Route::get('/me', [MobileAuthController::class, 'me']);
     Route::post('/profile', [MobileAuthController::class, 'updateProfile'])->middleware('demo');
 });
+
+// ─── Mobile private-channel authorization ────────────────────────────────────
+// The browser continues to use Laravel's session/CSRF-protected
+// /broadcasting/auth route. Native clients authenticate this API endpoint with
+// their Sanctum Bearer token. BroadcastController still runs the channel
+// callbacks registered in BroadcastChannelsServiceProvider, so a token can
+// authorize only workspaces and conversations its user can access.
+Route::post('v1/broadcasting/auth', [BroadcastController::class, 'authenticate'])
+    ->middleware(['auth:sanctum', 'throttle:api'])
+    ->name('api.v1.broadcasting.auth');
 
 // ─── Mobile Inbox API (agent-facing: full conversation + inbox actions) ───────
 // `demo` blocks writes (POST/PATCH/DELETE) in demo mode while GET reads pass,
