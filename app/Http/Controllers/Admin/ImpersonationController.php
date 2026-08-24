@@ -16,26 +16,28 @@ class ImpersonationController extends Controller
 
     public function stop(Request $request): RedirectResponse
     {
-        \Illuminate\Support\Facades\Log::info('ImpersonationController::stop', [
-            'session_token' => $request->session()->token(),
-            'csrf_header' => $request->header('X-CSRF-TOKEN'),
-            'impersonating' => $request->session()->get('impersonating'),
-        ]);
-        if (! $request->session()->get('impersonating')) {
-            return redirect()->route('admin.dashboard');
-        }
-
         $adminId = $request->session()->get('impersonator_admin_id');
         $clientId = $request->session()->get('impersonated_client_id');
+        $session = $request->session();
+        $wasImpersonating = (bool) $session->get('impersonating');
 
-        $request->session()->forget(['impersonator_admin_id', 'impersonating', 'impersonated_client_id']);
+        $session->forget(['impersonator_admin_id', 'impersonating', 'impersonated_client_id']);
+
         Auth::guard('web')->logout();
 
-        $this->auditLog->logAdmin('impersonation.ended', null, null, [
-            'actor_admin_id' => $adminId,
-            'client_id' => $clientId,
-        ]);
+        if ($wasImpersonating) {
+            $this->auditLog->logAdmin('impersonation.ended', null, null, [
+                'actor_admin_id' => $adminId,
+                'client_id' => $clientId,
+            ]);
 
-        return redirect()->route('admin.clients.index')->with('success', __('Returned to admin.'));
+            return redirect()
+                ->route('admin.clients.index')
+                ->with('success', __('Returned to admin.'));
+        }
+
+        return redirect()
+            ->route('admin.dashboard')
+            ->with('success', __('Returned to admin.'));
     }
 }
