@@ -11,7 +11,7 @@ import {
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ChannelBrandIcon, CHANNEL_LABELS } from '@/Components/BrandIcons';
-import { formatTimeTz } from '@/Utils/datetime';
+import { formatInboxTimestamp } from '@/Utils/datetime';
 import axios from 'axios';
 
 const FOLDERS = [
@@ -87,7 +87,7 @@ function ConversationCard({ conv, isFlashing, isActive, userTz }) {
                             )}
                         </div>
                         <span className="text-[11px] text-neutral-400 shrink-0">
-                            {conv.last_message_at ? formatTimeTz(conv.last_message_at, userTz) : ''}
+                            {formatInboxTimestamp(conv.last_message_at, userTz)}
                         </span>
                     </div>
                     <div className="flex items-center gap-1.5 mt-0.5">

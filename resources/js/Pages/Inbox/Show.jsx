@@ -12,7 +12,7 @@ import {
     Volume2, VolumeX, ShoppingBag,
 } from 'lucide-react';
 import { ChannelBrandIcon, CHANNEL_LABELS } from '@/Components/BrandIcons';
-import { formatTimeTz, formatInTz } from '@/Utils/datetime';
+import { formatTimeTz, formatInTz, formatInboxTimestamp } from '@/Utils/datetime';
 import { playInboundSound, getSoundPrefs, setChannelSoundEnabled, SOUND_CHANNELS } from '@/Utils/notificationSound';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -859,7 +859,7 @@ function ConversationCard({ conv, isActive, userTz }) {
                             )}
                         </div>
                         <span className="text-[11px] text-neutral-400 shrink-0">
-                            {conv.last_message_at ? formatTimeTz(conv.last_message_at, userTz) : ''}
+                            {formatInboxTimestamp(conv.last_message_at, userTz)}
                         </span>
                     </div>
                     <p className={`text-xs truncate mt-0.5 ${conv.unread_count > 0 ? 'text-neutral-700 dark:text-neutral-300' : 'text-neutral-400'}`}>
