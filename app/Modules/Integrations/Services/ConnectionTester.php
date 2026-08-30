@@ -17,6 +17,7 @@ class ConnectionTester
         try {
             $result = match (true) {
                 $config->provider === 'meta_app' => $this->testMeta($config),
+                $config->provider === 'oauth_google_signin' => $this->testGoogleSignInOAuth($config),
                 $config->provider === 'oauth_google_mail' => $this->testGoogleMailOAuth($config),
                 $config->provider === 'oauth_microsoft_365' => $this->testMicrosoftOAuth($config),
                 str_starts_with($config->provider, 'oauth_') => $this->testOAuth($config),
@@ -121,6 +122,20 @@ class ConnectionTester
 
         return $response->successful() && $response->json('token_endpoint')
             ? ['ok' => true, 'message' => 'Google OAuth app fields are configured. Connect a Gmail mailbox to validate the client secret, consent screen, redirect URI, and Gmail scopes.']
+            : ['ok' => false, 'message' => 'Google identity service is unavailable.'];
+    }
+
+    private function testGoogleSignInOAuth(IntegrationConfig $config): array
+    {
+        $credentials = $config->credentials ?? [];
+        if (empty($credentials['client_id']) || empty($credentials['client_secret'])) {
+            return ['ok' => false, 'message' => 'OAuth Client ID and Client Secret are required.'];
+        }
+
+        $response = HttpFacade::timeout(10)->get('https://accounts.google.com/.well-known/openid-configuration');
+
+        return $response->successful() && $response->json('authorization_endpoint')
+            ? ['ok' => true, 'message' => 'Google Sign-In fields are configured. Use the login page to validate the client secret, consent screen, and redirect URI.']
             : ['ok' => false, 'message' => 'Google identity service is unavailable.'];
     }
 

@@ -26,6 +26,17 @@ class IntegrationConfigurationTest extends TestCase
         $this->assertTrue((new IntegrationConfig(['provider' => 'storage_local']))->isConfigured());
     }
 
+    public function test_google_oauth_flows_are_three_explicit_providers(): void
+    {
+        $this->assertContains('oauth_google_signin', IntegrationConfig::PROVIDERS);
+        $this->assertContains('oauth_youtube', IntegrationConfig::PROVIDERS);
+        $this->assertContains('oauth_google_mail', IntegrationConfig::PROVIDERS);
+
+        $this->assertSame('Google Sign-In', IntegrationConfig::LABELS['oauth_google_signin']);
+        $this->assertSame('YouTube OAuth', IntegrationConfig::LABELS['oauth_youtube']);
+        $this->assertSame('Google Gmail OAuth', IntegrationConfig::LABELS['oauth_google_mail']);
+    }
+
     public function test_incomplete_credentials_cannot_be_enabled(): void
     {
         $admin = $this->createSuperAdmin();
