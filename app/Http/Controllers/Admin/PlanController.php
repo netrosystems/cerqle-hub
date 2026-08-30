@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Currency;
 use App\Models\Plan;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
@@ -17,7 +18,21 @@ class PlanController extends Controller
     {
         return [
             'users' => null,
+            'workspaces' => null,
             'storage' => null,
+            'whatsapp_accounts' => null,
+            'whatsapp_templates' => null,
+            'whatsapp_messages_per_month' => null,
+            'campaigns_per_month' => null,
+            'sms_per_month' => null,
+            'emails_per_month' => null,
+            'inbox_agents' => null,
+            'ai_tokens_per_month' => null,
+            'knowledge_bases' => null,
+            'chatbots' => null,
+            'social_accounts' => null,
+            'social_posts_per_month' => null,
+            'automations' => null,
         ];
     }
 
@@ -33,10 +48,9 @@ class PlanController extends Controller
 
     private function planToArray(Plan $p): array
     {
-        $limits = $p->limits;
-        if (! is_array($limits)) {
-            $limits = self::defaultLimits();
-        }
+        // Keep older plans compatible when new limit types are introduced.
+        // A missing limit is intentionally unlimited.
+        $limits = array_merge(self::defaultLimits(), is_array($p->limits) ? $p->limits : []);
 
         return [
             'id' => $p->id,
@@ -72,7 +86,7 @@ class PlanController extends Controller
         ]);
     }
 
-    public function store(Request $request): \Illuminate\Http\RedirectResponse
+    public function store(Request $request): RedirectResponse
     {
         $validated = $this->validatePlan($request, null);
         $validated['slug'] = $validated['slug'] ?: Str::slug($validated['name']);
@@ -92,7 +106,7 @@ class PlanController extends Controller
         ]);
     }
 
-    public function update(Request $request, Plan $plan): \Illuminate\Http\RedirectResponse
+    public function update(Request $request, Plan $plan): RedirectResponse
     {
         $validated = $this->validatePlan($request, $plan);
         $plan->update($this->mapValidatedToAttributes($validated));
@@ -100,14 +114,14 @@ class PlanController extends Controller
         return redirect()->route('admin.plans.index')->with('success', __('Plan updated successfully.'));
     }
 
-    public function destroy(Plan $plan): \Illuminate\Http\RedirectResponse
+    public function destroy(Plan $plan): RedirectResponse
     {
         $plan->delete();
 
         return redirect()->route('admin.plans.index')->with('success', __('Plan deleted successfully.'));
     }
 
-    public function duplicate(Plan $plan): \Illuminate\Http\RedirectResponse
+    public function duplicate(Plan $plan): RedirectResponse
     {
         $copy = $plan->replicate();
         $copy->name = $plan->name.' (Copy)';
@@ -120,7 +134,7 @@ class PlanController extends Controller
             ->with('openEditPlanId', $copy->id);
     }
 
-    public function reorder(Request $request): \Illuminate\Http\RedirectResponse
+    public function reorder(Request $request): RedirectResponse
     {
         $request->validate(['order' => ['required', 'array'], 'order.*' => ['integer', 'exists:plans,id']]);
 

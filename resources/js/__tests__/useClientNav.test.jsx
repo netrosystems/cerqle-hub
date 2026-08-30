@@ -12,17 +12,15 @@ describe('client navigation organization', () => {
         const groups = result.current;
 
         expect(groups.map((group) => group.label)).toEqual([
-            'nav.group_landing',
+            'nav.home',
             'nav.group_inbox',
-            'nav.group_chatbot_setup',
-            'nav.group_social_media',
-            'nav.group_messaging',
             'nav.group_contacts',
-            'nav.group_broadcasting',
+            'nav.group_campaigns',
+            'nav.group_social_media',
             'nav.group_automations',
-            'nav.group_ai',
             'nav.group_reports',
-            'nav.group_assets',
+            'nav.group_setup',
+            'Assets',
             'nav.group_support',
             'nav.group_billing',
             'nav.group_account',
@@ -30,25 +28,38 @@ describe('client navigation organization', () => {
         expect(groups.some((group) => group.label === 'nav.group_ecommerce')).toBe(false);
     });
 
-    it('places website and WhatsApp chatbot setup in their own group', () => {
+    it('prioritizes inboxes and moves technical connections into Setup', () => {
         const { result } = renderHook(() => useClientNav());
-        const landing = result.current.find((group) => group.label === 'nav.group_landing');
-        const chatbotSetup = result.current.find((group) => group.label === 'nav.group_chatbot_setup');
-        const messaging = result.current.find((group) => group.label === 'nav.group_messaging');
+        const landing = result.current.find((group) => group.label === 'nav.home');
+        const inbox = result.current.find((group) => group.label === 'nav.group_inbox');
+        const setup = result.current.find((group) => group.label === 'nav.group_setup');
+        const campaigns = result.current.find((group) => group.label === 'nav.group_campaigns');
         const support = result.current.find((group) => group.label === 'nav.group_support');
 
         expect(landing.items.map((item) => item.label)).toEqual([
             'nav.dashboard',
             'nav.tutorials',
         ]);
-        expect(chatbotSetup.items.map((item) => item.label)).toEqual([
+        expect(inbox.items.map((item) => item.label)).toEqual([
+            'inBOX',
+            'Email inBOX',
+        ]);
+        expect(setup.items.map((item) => item.label)).toEqual([
+            'nav.channel_setup',
+            'nav.email_setup',
             'nav.website_widget',
             'nav.chat_widget',
+            'nav.social_accounts',
+            'nav.sms_gateways',
+            'nav.ai_providers',
         ]);
-        expect(messaging.items.map((item) => item.label)).toEqual([
+        expect(campaigns.items.map((item) => item.label)).toEqual([
+            'nav.sms_campaigns',
             'nav.templates',
             'nav.auto_replies',
         ]);
+        expect(inbox.defaultOpen).toBe(true);
+        expect(setup.defaultOpen).toBe(false);
         expect(support.items.map((item) => item.label)).toEqual([
             'nav.support_tickets',
         ]);

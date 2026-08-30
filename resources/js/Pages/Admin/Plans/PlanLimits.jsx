@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 
 const LIMIT_KEYS = [
     'users',
+    'workspaces',
     'storage',
     'whatsapp_accounts',
     'whatsapp_templates',
@@ -21,6 +22,7 @@ const LIMIT_KEYS = [
 
 const LABELS = {
     users: 'Users',
+    workspaces: 'Workspaces',
     storage: 'Storage (MB)',
     whatsapp_accounts: 'WhatsApp Accounts',
     whatsapp_templates: 'WhatsApp Templates',

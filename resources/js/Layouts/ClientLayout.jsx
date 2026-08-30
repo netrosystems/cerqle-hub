@@ -185,7 +185,7 @@ footer={<ClientLayoutFooter />}
                     title={title}
                     userNavItems={userNavItems}
                     unreadCount={unreadCount}
-                    showGlobalSearch
+                    showWorkspace={false}
                 />
                 <UsageBanner usage={current_workspace_usage} />
 

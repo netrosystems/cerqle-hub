@@ -23,7 +23,8 @@ class ClientEmailLockTest extends TestCase
             ->put(route('client.settings.update'), [
                 'client_name' => 'Updated organization',
                 'client_email' => 'attacker@example.com',
-                'client_phone' => '+1 555 0100',
+                'client_phone_country' => 'US',
+                'client_phone' => '(415) 555-2671',
             ])
             ->assertSessionHasNoErrors()
             ->assertRedirect(route('client.settings.index'));
@@ -31,7 +32,7 @@ class ClientEmailLockTest extends TestCase
         $client->refresh();
         $this->assertSame('locked@example.com', $client->email);
         $this->assertSame('Updated organization', $client->name);
-        $this->assertSame('+1 555 0100', $client->phone);
+        $this->assertSame('+14155552671', $client->phone);
     }
 
     public function test_client_administrator_cannot_change_a_team_member_email(): void

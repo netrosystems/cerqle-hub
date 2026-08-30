@@ -64,3 +64,59 @@ describe('Sidebar scroll persistence', () => {
         expect(screen.getByTestId('sidebar-scroll-mobile').scrollTop).toBe(330);
     });
 });
+
+describe('Sidebar group prioritization', () => {
+    it('keeps secondary groups collapsed until requested', () => {
+        render(
+            <Sidebar
+                navGroups={[{
+                    label: 'Setup',
+                    defaultOpen: false,
+                    items: [{ label: 'Email Setup', href: '/email-setup', active: false }],
+                }]}
+                showCreateButton={false}
+            />,
+        );
+
+        expect(screen.queryByRole('link', { name: 'Email Setup' })).not.toBeInTheDocument();
+        fireEvent.click(screen.getAllByRole('button', { name: 'Setup' })[0]);
+        expect(screen.getAllByRole('link', { name: 'Email Setup' })).toHaveLength(1);
+    });
+
+    it('highlights a flyout group containing the active page and reveals it on demand', () => {
+        render(
+            <Sidebar
+                navGroups={[{
+                    label: 'Setup',
+                    defaultOpen: false,
+                    items: [{ label: 'Email Setup', href: '/email-setup', active: true }],
+                }]}
+                showCreateButton={false}
+            />,
+        );
+
+        const setupTrigger = screen.getByRole('button', { name: 'Setup' });
+        expect(setupTrigger).toHaveClass('bg-white/10');
+        fireEvent.click(setupTrigger);
+        expect(screen.getByRole('link', { name: 'Email Setup' })).toBeInTheDocument();
+    });
+
+    it('uses an inline accordion for the mobile drawer', () => {
+        render(
+            <Sidebar
+                open
+                onClose={() => {}}
+                navGroups={[{
+                    label: 'Setup',
+                    defaultOpen: false,
+                    items: [{ label: 'Email Setup', href: '/email-setup', active: false }],
+                }]}
+                showCreateButton={false}
+            />,
+        );
+
+        const setupTriggers = screen.getAllByRole('button', { name: 'Setup' });
+        fireEvent.click(setupTriggers[1]);
+        expect(screen.getByRole('link', { name: 'Email Setup' })).toBeInTheDocument();
+    });
+});
