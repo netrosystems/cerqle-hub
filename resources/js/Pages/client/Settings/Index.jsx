@@ -2,7 +2,7 @@ import ClientLayout from '@/Layouts/ClientLayout';
 import { Button } from '@/Components/ui';
 import { Head, Link, useForm, usePage } from '@inertiajs/react';
 import { useTranslation } from 'react-i18next';
-import { Settings as SettingsIcon, Bell, Download } from 'lucide-react';
+import { Settings as SettingsIcon, Bell, Download, LockKeyhole } from 'lucide-react';
 import { browserTz } from '@/Utils/datetime';
 import TimezonePicker from '@/Components/TimezonePicker';
 
@@ -22,7 +22,6 @@ export default function ClientSettingsIndex({
         theme: preferences.theme ?? 'light',
         timezone: preferences.timezone ?? browserTz() ?? 'Asia/Dhaka',
         client_name: client?.name ?? '',
-        client_email: client?.email ?? '',
         client_phone: client?.phone ?? '',
         client_address: client?.address ?? '',
         weekly_digest_enabled: digestEnabled,
@@ -140,10 +139,15 @@ export default function ClientSettingsIndex({
                                     </label>
                                     <input
                                         type="email"
-                                        value={form.data.client_email}
-                                        onChange={e => form.setData('client_email', e.target.value)}
-                                        className="w-full rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm"
+                                        value={client.email ?? ''}
+                                        readOnly
+                                        aria-readonly="true"
+                                        className="w-full cursor-not-allowed rounded-lg border border-neutral-200 bg-neutral-100 px-3 py-2 text-sm text-neutral-500 dark:border-neutral-700 dark:bg-neutral-900/60 dark:text-neutral-400"
                                     />
+                                    <p className="mt-1.5 flex items-center gap-1 text-xs text-neutral-500 dark:text-neutral-400">
+                                        <LockKeyhole className="h-3 w-3" />
+                                        {t('client.organization_email_locked', { defaultValue: 'Locked for account security. Contact a Super Admin to change this email.' })}
+                                    </p>
                                 </div>
                                 <div>
                                     <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">

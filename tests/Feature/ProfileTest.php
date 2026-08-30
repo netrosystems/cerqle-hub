@@ -27,9 +27,9 @@ class ProfileTest extends TestCase
 
         $response = $this
             ->actingAs($user)
+            ->from(route('client.profile.edit'))
             ->patch('/app/profile', [
                 'name' => 'Test User',
-                'email' => 'test@example.com',
             ]);
 
         $response
@@ -39,25 +39,27 @@ class ProfileTest extends TestCase
         $user->refresh();
 
         $this->assertSame('Test User', $user->name);
-        $this->assertSame('test@example.com', $user->email);
-        $this->assertNull($user->email_verified_at);
+        $this->assertNotNull($user->email_verified_at);
     }
 
-    public function test_email_verification_status_is_unchanged_when_the_email_address_is_unchanged(): void
+    public function test_client_cannot_change_login_email_from_profile(): void
     {
         $user = User::factory()->create(['role' => 'client', 'email_verified_at' => now()]);
+        $originalEmail = $user->email;
 
         $response = $this
             ->actingAs($user)
+            ->from(route('client.profile.edit'))
             ->patch('/app/profile', [
                 'name' => 'Test User',
-                'email' => $user->email,
+                'email' => 'changed@example.com',
             ]);
 
         $response
-            ->assertSessionHasNoErrors()
+            ->assertSessionHasErrors('email')
             ->assertRedirect(route('client.profile.edit'));
 
+        $this->assertSame($originalEmail, $user->refresh()->email);
         $this->assertNotNull($user->refresh()->email_verified_at);
     }
 

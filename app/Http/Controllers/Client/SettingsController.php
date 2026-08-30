@@ -84,7 +84,6 @@ class SettingsController extends Controller
             'theme' => ['nullable', 'string', 'in:light,dark'],
             'timezone' => ['nullable', 'string', 'max:64', 'timezone:all'],
             'client_name' => ['nullable', 'string', 'max:255'],
-            'client_email' => ['nullable', 'email', 'max:255'],
             'client_phone' => ['nullable', 'string', 'max:64'],
             'client_address' => ['nullable', 'string'],
             'weekly_digest_enabled' => ['nullable', 'boolean'],
@@ -109,9 +108,6 @@ class SettingsController extends Controller
             $client = $user->client;
             if (array_key_exists('client_name', $validated)) {
                 $client->name = $validated['client_name'] ?? $client->name;
-            }
-            if (array_key_exists('client_email', $validated)) {
-                $client->email = $validated['client_email'];
             }
             if (array_key_exists('client_phone', $validated)) {
                 $client->phone = $validated['client_phone'];

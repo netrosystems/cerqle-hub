@@ -32,7 +32,7 @@ function ActionIcon({ onClick, title, icon: Icon, className = 'text-brand-500 ho
     );
 }
 
-export default function AdminClientsIndex({ clients, plans = [], filters = {} }) {
+export default function AdminClientsIndex({ clients, plans = [], filters = {}, canEditEmail = false }) {
     const { t } = useTranslation();
     const page = usePage();
     const pageFlash = page.props.flash || {};
@@ -449,8 +449,11 @@ export default function AdminClientsIndex({ clients, plans = [], filters = {} })
                                         type="email"
                                         value={editClientForm.data.email}
                                         onChange={(e) => editClientForm.setData('email', e.target.value)}
-                                        className="w-full rounded-soft border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm"
+                                        readOnly={!canEditEmail}
+                                        aria-readonly={!canEditEmail}
+                                        className={`w-full rounded-soft border px-3 py-2 text-sm ${canEditEmail ? 'border-neutral-300 bg-white dark:border-neutral-600 dark:bg-neutral-800' : 'cursor-not-allowed border-neutral-200 bg-neutral-100 text-neutral-500 dark:border-neutral-700 dark:bg-neutral-900/60 dark:text-neutral-400'}`}
                                     />
+                                    {!canEditEmail && <p className="mt-1 text-xs text-neutral-500">Only a Super Admin can change this email.</p>}
                                 </div>
                             </div>
                             <div>
@@ -634,7 +637,8 @@ export default function AdminClientsIndex({ clients, plans = [], filters = {} })
                             </div>
                             <div>
                                 <label className="mb-1 block text-sm font-medium">{t('admin.col_email')} <span className="text-red-500">*</span></label>
-                                <input type="email" value={editUserForm.data.email} onChange={(e) => editUserForm.setData('email', e.target.value)} className="w-full rounded-soft border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm" required />
+                                <input type="email" value={editUserForm.data.email} onChange={(e) => editUserForm.setData('email', e.target.value)} readOnly={!canEditEmail} aria-readonly={!canEditEmail} className={`w-full rounded-soft border px-3 py-2 text-sm ${canEditEmail ? 'border-neutral-300 bg-white dark:border-neutral-600 dark:bg-neutral-800' : 'cursor-not-allowed border-neutral-200 bg-neutral-100 text-neutral-500 dark:border-neutral-700 dark:bg-neutral-900/60 dark:text-neutral-400'}`} required />
+                                {!canEditEmail && <p className="mt-1 text-xs text-neutral-500">Only a Super Admin can change this email.</p>}
                                 {editUserForm.errors.email && <p className="text-xs text-red-500">{editUserForm.errors.email}</p>}
                             </div>
                             <div>
