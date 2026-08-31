@@ -89,6 +89,77 @@ class YoutubeDriverTest extends TestCase
         $this->assertStringContainsString('Custom thumbnail failed', $driver->warnings()[0]);
     }
 
+    public function test_it_updates_published_video_metadata_without_clearing_existing_fields(): void
+    {
+        Http::fake([
+            'www.googleapis.com/youtube/v3/videos*' => Http::sequence()
+                ->push([
+                    'items' => [[
+                        'id' => 'video-123',
+                        'snippet' => [
+                            'title' => 'Old title',
+                            'description' => 'Old description',
+                            'categoryId' => '22',
+                            'tags' => ['existing'],
+                            'defaultLanguage' => 'en',
+                        ],
+                        'status' => [
+                            'privacyStatus' => 'public',
+                            'embeddable' => true,
+                            'license' => 'youtube',
+                            'publicStatsViewable' => true,
+                        ],
+                    ]],
+                ])
+                ->push(['id' => 'video-123'], 200),
+        ]);
+
+        (new YoutubeDriver)->updatePublishedPost(
+            new SocialAccount(['access_token' => 'token']),
+            'video-123',
+            [
+                'title' => 'Updated title',
+                'body' => 'Updated description',
+                'youtube_options' => [
+                    'privacy_status' => 'unlisted',
+                    'category_id' => 27,
+                    'tags' => ['updated'],
+                    'made_for_kids' => false,
+                    'contains_synthetic_media' => true,
+                ],
+            ]
+        );
+
+        Http::assertSent(function (Request $request): bool {
+            return $request->method() === 'PUT'
+                && str_starts_with($request->url(), 'https://www.googleapis.com/youtube/v3/videos?')
+                && data_get($request->data(), 'id') === 'video-123'
+                && data_get($request->data(), 'snippet.title') === 'Updated title'
+                && data_get($request->data(), 'snippet.defaultLanguage') === 'en'
+                && data_get($request->data(), 'status.privacyStatus') === 'unlisted'
+                && data_get($request->data(), 'status.embeddable') === true
+                && data_get($request->data(), 'status.containsSyntheticMedia') === true;
+        });
+    }
+
+    public function test_it_deletes_a_published_video_and_accepts_an_already_missing_video(): void
+    {
+        Http::fake([
+            'www.googleapis.com/youtube/v3/videos*' => Http::sequence()
+                ->push('', 204)
+                ->push(['error' => ['message' => 'Video not found']], 404),
+        ]);
+
+        $driver = new YoutubeDriver;
+        $account = new SocialAccount(['access_token' => 'token']);
+        $driver->deletePublishedPost($account, 'video-123');
+        $driver->deletePublishedPost($account, 'video-123');
+
+        Http::assertSentCount(2);
+        Http::assertSent(fn (Request $request): bool => $request->method() === 'DELETE'
+            && str_contains($request->url(), 'id=video-123'));
+    }
+
     private function writeMinimalMp4(string $path): void
     {
         file_put_contents($path, "\x00\x00\x00\x18ftypisom\x00\x00\x02\x00isomiso2");
