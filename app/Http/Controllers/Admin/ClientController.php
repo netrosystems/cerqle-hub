@@ -67,6 +67,7 @@ class ClientController extends Controller
                 'yearly_price_cents' => $p->yearly_price_cents,
             ]),
             'filters' => $request->only(['search']),
+            'canEditEmail' => $request->user('admin')->isSuperAdmin(),
         ]);
     }
 
@@ -99,7 +100,9 @@ class ClientController extends Controller
 
     public function update(Request $request, Client $client): RedirectResponse
     {
-        $this->authorizeForUser($request->user('admin'), 'update', $client);
+        $admin = $request->user('admin');
+        $this->authorizeForUser($admin, 'update', $client);
+        $previousEmail = $client->email;
 
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
@@ -112,9 +115,21 @@ class ClientController extends Controller
             'currency_position' => ['nullable', 'string', 'in:before,after'],
         ]);
 
+        if (! $admin->isSuperAdmin()) {
+            if (array_key_exists('email', $validated) && $validated['email'] !== $client->email) {
+                abort(403, 'Only a Super Admin can change a client email.');
+            }
+            unset($validated['email']);
+        }
+
         $client->update($validated);
 
-        $this->auditLog->logAdmin('client.updated', Client::class, (int) $client->id, ['name' => $client->name]);
+        $auditContext = ['name' => $client->name];
+        if ($client->email !== $previousEmail) {
+            $auditContext['email_changed_from'] = $previousEmail;
+            $auditContext['email_changed_to'] = $client->email;
+        }
+        $this->auditLog->logAdmin('client.updated', Client::class, (int) $client->id, $auditContext);
 
         return redirect()->back()->with('success', __('Client updated.'));
     }
@@ -189,10 +204,12 @@ class ClientController extends Controller
 
     public function updateUser(Request $request, Client $client, User $user): RedirectResponse|JsonResponse
     {
-        $this->authorizeForUser($request->user('admin'), 'update', $client);
+        $admin = $request->user('admin');
+        $this->authorizeForUser($admin, 'update', $client);
         if ($user->client_id !== $client->id) {
             abort(404);
         }
+        $previousEmail = $user->email;
 
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
@@ -202,8 +219,14 @@ class ClientController extends Controller
             'status' => ['required', 'string', 'in:active,inactive'],
         ]);
 
+        if (! $admin->isSuperAdmin() && $validated['email'] !== $user->email) {
+            abort(403, 'Only a Super Admin can change a client user email.');
+        }
+
         $user->name = $validated['name'];
-        $user->email = $validated['email'];
+        if ($admin->isSuperAdmin()) {
+            $user->email = $validated['email'];
+        }
         $user->client_role = $validated['client_role'];
         $user->status = $validated['status'];
         if (! empty($validated['password'])) {
@@ -211,7 +234,12 @@ class ClientController extends Controller
         }
         $user->save();
 
-        $this->auditLog->logAdmin('client.user_updated', User::class, (int) $user->id, ['client_id' => $client->id]);
+        $auditContext = ['client_id' => $client->id];
+        if ($user->email !== $previousEmail) {
+            $auditContext['email_changed_from'] = $previousEmail;
+            $auditContext['email_changed_to'] = $user->email;
+        }
+        $this->auditLog->logAdmin('client.user_updated', User::class, (int) $user->id, $auditContext);
 
         if ($request->wantsJson()) {
             return response()->json([

@@ -18,12 +18,15 @@ function WorkspaceAvatar({ name }) {
     );
 }
 
-export default function WorkspacesIndex({ workspaces = [] }) {
+export default function WorkspacesIndex({
+    workspaces = [],
+    workspaceUsage = { limit: null, count: 0, remaining: null, can_create: true },
+}) {
     const { t } = useTranslation();
     const [name, setName] = useState('');
     const [creating, setCreating] = useState(false);
     const [switching, setSwitching] = useState(null);
-    const currentWorkspace = usePage().props.currentWorkspace;
+    const { currentWorkspace, errors = {} } = usePage().props;
 
     const handleSwitch = (workspaceId) => {
         setSwitching(workspaceId);
@@ -35,14 +38,12 @@ export default function WorkspacesIndex({ workspaces = [] }) {
 
     const handleCreate = (e) => {
         e.preventDefault();
-        if (!name.trim()) return;
+        if (!name.trim() || !workspaceUsage.can_create) return;
         setCreating(true);
         router.post(route('client.workspaces.store'), { name: name.trim() }, {
             preserveScroll: true,
-            onFinish: () => {
-                setCreating(false);
-                setName('');
-            },
+            onSuccess: () => setName(''),
+            onFinish: () => setCreating(false),
         });
     };
 
@@ -134,6 +135,19 @@ export default function WorkspacesIndex({ workspaces = [] }) {
                             <div>
                                 <h3 className="text-sm font-semibold text-neutral-800 dark:text-neutral-200">{t('workspaces.create_new')}</h3>
                                 <p className="mt-0.5 text-xs text-neutral-400 dark:text-neutral-500">{t('workspaces.create_new_desc')}</p>
+                                <p className={[
+                                    'mt-1 text-xs font-medium',
+                                    workspaceUsage.can_create
+                                        ? 'text-neutral-500 dark:text-neutral-400'
+                                        : 'text-coral-600 dark:text-coral-400',
+                                ].join(' ')}>
+                                    {workspaceUsage.limit === null
+                                        ? t('workspaces.unlimited_plan')
+                                        : t('workspaces.plan_usage', {
+                                            count: workspaceUsage.count,
+                                            limit: workspaceUsage.limit,
+                                        })}
+                                </p>
                             </div>
                         </div>
 
@@ -143,12 +157,14 @@ export default function WorkspacesIndex({ workspaces = [] }) {
                                 value={name}
                                 onChange={(e) => setName(e.target.value)}
                                 placeholder={t('workspaces.name_placeholder')}
+                                disabled={!workspaceUsage.can_create}
+                                error={errors.name}
                                 className="flex-1"
                             />
                             <Button
                                 type="submit"
                                 variant="primary"
-                                disabled={creating || !name.trim()}
+                                disabled={creating || !name.trim() || !workspaceUsage.can_create}
                                 className="shrink-0"
                             >
                                 {creating ? (
@@ -169,6 +185,11 @@ export default function WorkspacesIndex({ workspaces = [] }) {
                                 )}
                             </Button>
                         </form>
+                        {!workspaceUsage.can_create && !errors.name && (
+                            <p className="text-sm text-coral-600 dark:text-coral-400">
+                                {t('workspaces.limit_reached')}
+                            </p>
+                        )}
                     </Card.Body>
                 </Card>
                 )}

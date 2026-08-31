@@ -226,7 +226,7 @@ const SETUP_GUIDES = {
         linkLabel: 'Open LinkedIn Developers',
     },
     oauth_youtube: {
-        title: 'YouTube / Google OAuth Setup',
+        title: 'YouTube OAuth Setup',
         steps: [
             'Go to console.cloud.google.com and create or select a project.',
             'Navigate to APIs & Services → Credentials → Create Credentials → OAuth 2.0 Client ID.',
@@ -236,6 +236,18 @@ const SETUP_GUIDES = {
         ],
         link: 'https://console.cloud.google.com/apis/credentials',
         linkLabel: 'Open Google Cloud Console',
+    },
+    oauth_google_signin: {
+        title: 'Google Sign-In Setup',
+        subtitle: 'Authenticates Cerqle users with their Google identity. It does not grant Gmail or YouTube access.',
+        steps: [
+            'In the Cerqle Core Google Cloud project, create a Web application OAuth client named "Cerqle Google Sign-In".',
+            'Add the exact Callback URL shown on the integration edit page as an Authorized redirect URI.',
+            'Google Sign-In requests only openid, email, and profile. Do not add Gmail or YouTube permissions to the login flow.',
+            'Copy this client\'s ID and secret into Cerqle, enable the integration, then test from the Cerqle login page.',
+        ],
+        link: 'https://console.cloud.google.com/auth/clients',
+        linkLabel: 'Open Google Auth Platform Clients',
     },
     oauth_google_mail: {
         title: 'Google Gmail OAuth Setup & Review',
@@ -450,6 +462,7 @@ const BRAND = {
     storage_wasabi:  { bg: null, color: '#3CBA54', logo: 'wasabi' },
     meta_app:        { bg: null, color: '#0866FF', logo: 'meta' },
     oauth_linkedin:  { bg: null, color: '#0A66C2', logo: 'linkedin' },
+    oauth_google_signin: { bg: 'bg-blue-100 dark:bg-blue-900/30', color: '#4285F4', icon: <span className="text-sm font-bold">G</span> },
     oauth_youtube:   { bg: null, color: '#FF0000', logo: 'youtube' },
     oauth_tiktok:    { bg: null, color: '#000000', logo: 'tiktok' },
     llm_openai_default:     { bg: null, color: '#10a37f', logo: 'openai' },

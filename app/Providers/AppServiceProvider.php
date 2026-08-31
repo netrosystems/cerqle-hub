@@ -162,6 +162,35 @@ class AppServiceProvider extends ServiceProvider
         });
 
         Vite::prefetch(concurrency: 3);
+
+        $this->registerCommands();
+    }
+
+    private function registerCommands(): void
+    {
+        if ($this->app->runningInConsole()) {
+            $this->commands([
+                \App\Console\Commands\RecordReleaseCommand::class,
+                \App\Console\Commands\SaasInstallCommand::class,
+                \App\Console\Commands\SaasMakeModuleCommand::class,
+                \App\Console\Commands\BackfillContactOptinCommand::class,
+                \App\Console\Commands\BillingSyncCommand::class,
+                \App\Console\Commands\ChargeRecurringMyFatoorahCommand::class,
+                \App\Console\Commands\ChargeRecurringPaymobCommand::class,
+                \App\Console\Commands\ChargeRecurringTapCommand::class,
+                \App\Console\Commands\DbBackupCommand::class,
+                \App\Console\Commands\ExpireTrialsCommand::class,
+                \App\Console\Commands\I18nScanCommand::class,
+                \App\Console\Commands\I18nSeedDefaultsCommand::class,
+                \App\Console\Commands\InboxDuplicateReportCommand::class,
+                \App\Console\Commands\MessengerProfileTestCommand::class,
+                \App\Console\Commands\NotifyTrialEndingCommand::class,
+                \App\Console\Commands\NotifyUnansweredConversationsCommand::class,
+                \App\Console\Commands\SendWeeklyDigestCommand::class,
+                \App\Console\Commands\WebpushVapidCommand::class,
+                \App\Console\Commands\WhatsappWebhookRegisterCommand::class,
+            ]);
+        }
     }
 
     /**

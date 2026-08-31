@@ -17,14 +17,14 @@ use Illuminate\Http\Response;
 class ChatWidgetEmbedController extends Controller
 {
     /** Bump when the static widget bundle changes, to bust the browser cache. */
-    private const BUNDLE_VERSION = '31';
-
     public function script(string $key): Response
     {
         $widget = ChatWidget::where('widget_key', $key)->where('enabled', true)->firstOrFail();
 
         $apiBase = rtrim(url('/'), '/');
-        $bundleUrl = $apiBase.'/widget/cerqle-chat-widget.js?v='.self::BUNDLE_VERSION;
+        $bundlePath = public_path('widget/cerqle-chat-widget.js');
+        $bundleVersion = is_file($bundlePath) ? substr(hash_file('sha256', $bundlePath), 0, 12) : '32';
+        $bundleUrl = $apiBase.'/widget/cerqle-chat-widget.js?v='.$bundleVersion;
         $configJson = json_encode(array_merge($widget->publicConfig(), ['api_base' => $apiBase]), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
         $keyJson = json_encode($key);
         $bundleJson = json_encode($bundleUrl);

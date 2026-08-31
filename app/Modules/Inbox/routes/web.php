@@ -27,6 +27,7 @@ Route::middleware(['web', 'client-app'])->prefix('app/inbox')->name('client.inbo
     Route::post('/conversations/{conversation}/assign', [InboxController::class, 'assign'])->name('assign');
     Route::post('/conversations/{conversation}/status', [InboxController::class, 'updateStatus'])->name('status');
     Route::post('/conversations/{conversation}/typing', [InboxController::class, 'typing'])->name('typing');
+    Route::post('/conversations/{conversation}/open-widget', [InboxController::class, 'openWidget'])->name('open-widget');
     Route::get('/conversations/{conversation}/notes', [InternalNoteController::class, 'index'])->name('notes.index');
     Route::post('/conversations/{conversation}/notes', [InternalNoteController::class, 'store'])->name('notes.store');
     Route::post('/conversations/{conversation}/handover', [InboxController::class, 'handover'])->name('handover');

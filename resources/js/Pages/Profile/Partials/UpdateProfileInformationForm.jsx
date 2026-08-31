@@ -2,6 +2,7 @@ import { Button, Input } from '@/Components/ui';
 import { Link, useForm, usePage } from '@inertiajs/react';
 import { useState } from 'react';
 import { useTranslation, Trans } from 'react-i18next';
+import { LockKeyhole } from 'lucide-react';
 
 export default function UpdateProfileInformation({ mustVerifyEmail, status, className = '' }) {
     const { t } = useTranslation();
@@ -10,7 +11,6 @@ export default function UpdateProfileInformation({ mustVerifyEmail, status, clas
 
     const { data, setData, patch, errors, processing } = useForm({
         name:  user.name,
-        email: user.email,
     });
 
     const submit = (e) => {
@@ -53,12 +53,16 @@ export default function UpdateProfileInformation({ mustVerifyEmail, status, clas
                     type="email"
                     name="email"
                     label={t('profile.email_address')}
-                    value={data.email}
+                    value={user.email}
                     autoComplete="username"
-                    onChange={(e) => setData('email', e.target.value)}
-                    error={errors.email}
-                    required
+                    readOnly
+                    aria-readonly="true"
+                    className="cursor-not-allowed bg-neutral-100 text-neutral-500 dark:bg-neutral-900/60 dark:text-neutral-400"
                 />
+                <p className="-mt-2 flex items-center gap-1 text-xs text-neutral-500 dark:text-neutral-400">
+                    <LockKeyhole className="h-3 w-3" />
+                    {t('profile.email_locked', { defaultValue: 'Your email is locked for account security. Contact a Super Admin if it must be changed.' })}
+                </p>
 
                 {mustVerifyEmail && user.email_verified_at === null && (
                     <div className="rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 px-4 py-3 text-sm text-amber-800 dark:text-amber-300">

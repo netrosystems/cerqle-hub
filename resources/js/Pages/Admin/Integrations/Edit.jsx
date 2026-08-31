@@ -216,7 +216,7 @@ const SETUP_GUIDES = {
         linkLabel: 'Open LinkedIn Developers',
     },
     oauth_youtube: {
-        title: 'YouTube / Google OAuth Setup',
+        title: 'YouTube OAuth Setup',
         steps: [
             'Go to console.cloud.google.com and create or select a project.',
             'Navigate to APIs & Services → Credentials → Create Credentials → OAuth 2.0 Client ID.',
@@ -226,6 +226,18 @@ const SETUP_GUIDES = {
         ],
         link: 'https://console.cloud.google.com/apis/credentials',
         linkLabel: 'Open Google Cloud Console',
+    },
+    oauth_google_signin: {
+        title: 'Google Sign-In Setup',
+        subtitle: 'Authenticates Cerqle users with their Google identity. It does not grant Gmail or YouTube access.',
+        steps: [
+            'In the Cerqle Core Google Cloud project, create a Web application OAuth client named "Cerqle Google Sign-In".',
+            'Add the exact Callback URL shown above as an Authorized redirect URI.',
+            'Google Sign-In requests only openid, email, and profile. Do not add Gmail or YouTube permissions to the login flow.',
+            'Copy this client\'s ID and secret below, enable the integration, then test from the Cerqle login page.',
+        ],
+        link: 'https://console.cloud.google.com/auth/clients',
+        linkLabel: 'Open Google Auth Platform Clients',
     },
     oauth_google_mail: {
         title: 'Google Gmail OAuth Setup & Review',
@@ -512,6 +524,7 @@ const BRAND = {
     storage_wasabi:          { bg: 'bg-green-100 dark:bg-green-900/30', color: '#3CBA54', icon: <svg viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5"><path d="M2.5 14.5L5 7l2.5 5 2.5-5 2.5 5 2.5-5 2.5 7.5h-2l-1-3-2 4-2-4-1 3h-2zm14-9A1.5 1.5 0 1114 7a1.5 1.5 0 012.5-1.5z" /></svg> },
     meta_app:                { bg: 'bg-blue-100 dark:bg-blue-900/30', color: '#0866FF', icon: <svg viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5"><path d="M2.5 10C2.5 7.24 4.74 5 7.5 5c1.32 0 2.52.5 3.42 1.32A5 5 0 0114.5 5C17.26 5 19.5 7.24 19.5 10v.5c0 2.76-2.24 5-5 5a5 5 0 01-3.58-1.5A5 5 0 017.5 15.5C4.74 15.5 2.5 13.26 2.5 10.5V10zm5 3.5c1.38 0 2.5-1.12 2.5-2.5v-.5c0-1.38-1.12-2.5-2.5-2.5S5 9.12 5 10.5V11c0 1.38 1.12 2.5 2.5 2.5zm7 0c1.38 0 2.5-1.12 2.5-2.5V10c0-1.38-1.12-2.5-2.5-2.5S12 8.62 12 10v.5c0 1.38 1.12 2.5 2.5 2.5z" /></svg> },
     oauth_linkedin:          { bg: 'bg-sky-100 dark:bg-sky-900/30', color: '#0A66C2', icon: <svg viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5"><path d="M4.5 3C3.67 3 3 3.67 3 4.5S3.67 6 4.5 6 6 5.33 6 4.5 5.33 3 4.5 3zM3 7.5h3V17H3V7.5zm4.5 0H10v1.3c.45-.78 1.45-1.5 2.75-1.5 2.95 0 3.5 1.94 3.5 4.47V17H13v-4.73c0-1.13-.02-2.58-1.57-2.58-1.57 0-1.81 1.23-1.81 2.5V17H7.5V7.5z" /></svg> },
+    oauth_google_signin:     { bg: 'bg-blue-100 dark:bg-blue-900/30', color: '#4285F4', icon: <span className="text-sm font-bold">G</span> },
     oauth_youtube:           { bg: 'bg-red-100 dark:bg-red-900/30', color: '#FF0000', icon: <svg viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5"><path d="M17.5 6.2S17.25 4.8 16.6 4.1c-.67-.72-1.43-.73-1.78-.77C12.6 3.2 10 3.2 10 3.2s-2.6 0-4.82.13c-.35.04-1.1.05-1.78.77C2.75 4.8 2.5 6.2 2.5 6.2S2.25 7.86 2.25 9.5v1.5c0 1.64.25 3.3.25 3.3s.25 1.4.9 2.1c.68.72 1.57.7 1.97.77 1.43.14 6.08.19 6.08.19s2.6 0 4.82-.15c.35-.04 1.1-.05 1.78-.77.65-.7.9-2.1.9-2.1S17.75 12.64 17.75 11V9.5c0-1.64-.25-3.3-.25-3.3zM8.5 12.75v-5.5l5 2.75-5 2.75z" /></svg> },
     oauth_tiktok:            { bg: 'bg-neutral-200 dark:bg-neutral-700/60', color: '#000000', icon: <svg viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5"><path d="M13.5 2h-2.25v9.5A2.25 2.25 0 119 9.2V7a4.5 4.5 0 104.5 4.5V6.25A6.24 6.24 0 0017 7V4.75A4.25 4.25 0 0113.5 2z" /></svg> },
     llm_openai_default:      { bg: 'bg-emerald-100 dark:bg-emerald-900/30', color: '#10a37f', icon: <svg viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5"><path d="M10 2a3.9 3.9 0 00-3.68 2.6A3.9 3.9 0 003.6 8.32a3.9 3.9 0 000 3.36 3.9 3.9 0 002.72 3.72A3.9 3.9 0 0010 18a3.9 3.9 0 003.68-2.6 3.9 3.9 0 002.72-3.72 3.9 3.9 0 000-3.36A3.9 3.9 0 0013.68 4.6 3.9 3.9 0 0010 2zm0 4a2 2 0 110 4 2 2 0 010-4z" /></svg> },

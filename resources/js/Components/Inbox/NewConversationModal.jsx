@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { router } from '@inertiajs/react';
 import axios from 'axios';
 import { X, Search, User, Phone, Mail, Globe, Send, Loader2, MessageSquarePlus, ChevronRight } from 'lucide-react';
@@ -51,6 +51,66 @@ function ContactRow({ contact, onSelect, isSelected }) {
     );
 }
 
+function getChannelReachability(channel, contact) {
+    if (!contact) return { reachable: false, reason: 'missing_contact', label: 'No contact selected' };
+
+    if (channel === 'whatsapp' || channel === 'sms') {
+        const hasPhone = Boolean(contact.phone_e164 && contact.phone_e164.trim() !== '');
+        if (hasPhone) return { reachable: true };
+        return {
+            reachable: false,
+            reason: 'missing_phone',
+            label: 'Missing phone number',
+            actionType: 'phone',
+            actionLabel: '+ Add Phone',
+        };
+    }
+
+    if (channel === 'email') {
+        const hasEmail = Boolean(contact.email && contact.email.trim() !== '');
+        if (hasEmail) return { reachable: true };
+        return {
+            reachable: false,
+            reason: 'missing_email',
+            label: 'Missing email address',
+            actionType: 'email',
+            actionLabel: '+ Add Email',
+        };
+    }
+
+    if (channel === 'messenger') {
+        const hasSocial = Boolean(contact.has_messenger_thread || contact.custom_fields?.messenger_psid);
+        if (hasSocial) return { reachable: true };
+        return {
+            reachable: false,
+            reason: 'inbound_only',
+            label: 'Inbound only (no social thread)',
+        };
+    }
+
+    if (channel === 'instagram') {
+        const hasSocial = Boolean(contact.has_instagram_thread || contact.custom_fields?.instagram_scoped_id);
+        if (hasSocial) return { reachable: true };
+        return {
+            reachable: false,
+            reason: 'inbound_only',
+            label: 'Inbound only (no social thread)',
+        };
+    }
+
+    if (channel === 'webchat') {
+        const hasWeb = Boolean(contact.has_webchat_thread || contact.custom_fields?.webchat_visitor_id);
+        if (hasWeb) return { reachable: true };
+        return {
+            reachable: false,
+            reason: 'no_web_session',
+            label: 'No active web session',
+        };
+    }
+
+    return { reachable: true };
+}
+
 export default function NewConversationModal({ onClose }) {
     const { t } = useTranslation();
     const [step, setStep] = useState('contact'); // 'contact' | 'channel' | 'compose'
@@ -64,6 +124,13 @@ export default function NewConversationModal({ onClose }) {
     const [message, setMessage] = useState('');
     const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState('');
+
+    // Inline quick-add state for phone/email
+    const [editingField, setEditingField] = useState(null); // 'phone' | 'email' | null
+    const [editValue, setEditValue] = useState('');
+    const [savingField, setSavingField] = useState(false);
+    const [fieldError, setFieldError] = useState('');
+
     const searchRef = useRef(null);
     const overlayRef = useRef(null);
 
@@ -75,6 +142,7 @@ export default function NewConversationModal({ onClose }) {
     // Close on Escape
     useEffect(() => {
         const handler = (e) => { if (e.key === 'Escape') onClose(); };
+        document.removeEventListener('keydown', handler);
         document.addEventListener('keydown', handler);
         return () => document.removeEventListener('keydown', handler);
     }, [onClose]);
@@ -100,6 +168,8 @@ export default function NewConversationModal({ onClose }) {
     const selectContact = (contact) => {
         setSelectedContact(contact);
         setStep('channel');
+        setEditingField(null);
+        setFieldError('');
         setLoadingChannels(true);
         axios.get(route('client.inbox.channel-accounts'))
             .then(r => setChannelAccounts(r.data ?? []))
@@ -112,6 +182,62 @@ export default function NewConversationModal({ onClose }) {
         setStep('compose');
     };
 
+    const startEditing = (type) => {
+        setEditingField(type);
+        setEditValue(type === 'phone' ? (selectedContact?.phone_e164 ?? '') : (selectedContact?.email ?? ''));
+        setFieldError('');
+    };
+
+    const cancelEditing = () => {
+        setEditingField(null);
+        setEditValue('');
+        setFieldError('');
+    };
+
+    const handleSaveField = (e) => {
+        e?.preventDefault?.();
+        if (!selectedContact) return;
+        setFieldError('');
+
+        const trimmed = editValue.trim();
+        if (!trimmed) {
+            setFieldError(editingField === 'phone' ? 'Phone number is required.' : 'Email address is required.');
+            return;
+        }
+
+        if (editingField === 'phone' && !trimmed.startsWith('+')) {
+            setFieldError('Please enter international format with country code (e.g. +14155552671).');
+            return;
+        }
+
+        if (editingField === 'email' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
+            setFieldError('Please enter a valid email address.');
+            return;
+        }
+
+        setSavingField(true);
+        const payload = editingField === 'phone' ? { phone_e164: trimmed } : { email: trimmed };
+
+        axios.put(route('client.contacts.update', selectedContact.uuid || selectedContact.id), payload)
+            .then(res => {
+                const updated = res.data?.contact || { ...selectedContact, ...payload };
+                setSelectedContact(updated);
+                setContacts(prev => prev.map(c => c.id === updated.id ? { ...c, ...updated } : c));
+                setEditingField(null);
+                setEditValue('');
+            })
+            .catch(err => {
+                const msg = err.response?.data?.errors?.phone_e164?.[0]
+                    ?? err.response?.data?.errors?.email?.[0]
+                    ?? err.response?.data?.message
+                    ?? 'Failed to update contact details.';
+                setFieldError(msg);
+            })
+            .finally(() => {
+                setSavingField(false);
+            });
+    };
+
     const handleSubmit = (e) => {
         e.preventDefault();
         setError('');
@@ -122,7 +248,6 @@ export default function NewConversationModal({ onClose }) {
             body: message.trim() || undefined,
         })
             .then(r => {
-                // Follow the redirect returned from the server
                 router.visit(r.request?.responseURL ?? route('client.inbox.index'));
             })
             .catch(err => {
@@ -132,7 +257,7 @@ export default function NewConversationModal({ onClose }) {
     };
 
     const contactName = selectedContact
-        ? [selectedContact.first_name, selectedContact.last_name].filter(Boolean).join(' ') || selectedContact.phone_e164 || 'Unknown'
+        ? [selectedContact.first_name, selectedContact.last_name].filter(Boolean).join(' ') || selectedContact.phone_e164 || selectedContact.email || 'Unknown'
         : '';
 
     return (
@@ -218,12 +343,61 @@ export default function NewConversationModal({ onClose }) {
                             <ContactAvatar contact={selectedContact} />
                             <div className="min-w-0">
                                 <p className="text-sm font-semibold text-neutral-900 dark:text-neutral-100 truncate">{contactName}</p>
-                                <p className="text-xs text-neutral-400">{selectedContact?.phone_e164 ?? selectedContact?.email}</p>
+                                <p className="text-xs text-neutral-400">{selectedContact?.phone_e164 ?? selectedContact?.email ?? 'No phone or email saved'}</p>
                             </div>
                             <button onClick={() => setStep('contact')} className="ml-auto text-xs text-brand-600 hover:underline dark:text-brand-400 shrink-0">{t('inbox.change')}</button>
                         </div>
 
                         <div className="flex-1 overflow-y-auto p-4">
+                            {/* Inline Edit Form for Phone / Email */}
+                            {editingField && (
+                                <div className="mb-4 rounded-xl border border-brand-200 dark:border-brand-800/60 bg-brand-50/50 dark:bg-brand-950/20 p-4 space-y-3">
+                                    <div className="flex items-center justify-between">
+                                        <p className="text-xs font-semibold text-brand-900 dark:text-brand-200">
+                                            {editingField === 'phone' ? 'Add Phone Number (WhatsApp / SMS)' : 'Add Email Address'}
+                                        </p>
+                                        <button type="button" onClick={cancelEditing} className="text-neutral-400 hover:text-neutral-600">
+                                            <X className="h-4 w-4" />
+                                        </button>
+                                    </div>
+                                    <form onSubmit={handleSaveField} className="space-y-2">
+                                        <div>
+                                            <input
+                                                type={editingField === 'email' ? 'email' : 'tel'}
+                                                value={editValue}
+                                                onChange={e => setEditValue(e.target.value)}
+                                                placeholder={editingField === 'phone' ? '+14155552671' : 'customer@example.com'}
+                                                autoFocus
+                                                className="w-full rounded-xl border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-800 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+                                            />
+                                            {editingField === 'phone' && (
+                                                <p className="text-[11px] text-neutral-400 mt-1">
+                                                    Use international E.164 format with country code (e.g. +14155552671).
+                                                </p>
+                                            )}
+                                        </div>
+                                        {fieldError && <p className="text-xs text-red-500">{fieldError}</p>}
+                                        <div className="flex items-center justify-end gap-2 pt-1">
+                                            <button
+                                                type="button"
+                                                onClick={cancelEditing}
+                                                className="px-3 py-1.5 text-xs font-medium text-neutral-600 dark:text-neutral-300 hover:bg-neutral-200/50 dark:hover:bg-neutral-800 rounded-lg transition"
+                                            >
+                                                {t('common.cancel', 'Cancel')}
+                                            </button>
+                                            <button
+                                                type="submit"
+                                                disabled={savingField || !editValue.trim()}
+                                                className="px-3 py-1.5 text-xs font-semibold text-white bg-brand-600 hover:bg-brand-700 disabled:opacity-50 rounded-lg transition flex items-center gap-1.5"
+                                            >
+                                                {savingField && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                                                Save & Enable
+                                            </button>
+                                        </div>
+                                    </form>
+                                </div>
+                            )}
+
                             {loadingChannels ? (
                                 <div className="flex items-center justify-center py-10">
                                     <Loader2 className="h-6 w-6 text-brand-600 animate-spin" />
@@ -236,23 +410,61 @@ export default function NewConversationModal({ onClose }) {
                             ) : (
                                 <div className="space-y-2">
                                     <p className="text-xs text-neutral-400 mb-3">{t('inbox.select_channel')}</p>
-                                    {channelAccounts.map(acc => (
-                                        <button
-                                            key={acc.id}
-                                            type="button"
-                                            onClick={() => selectAccount(acc)}
-                                            className="w-full flex items-center gap-3 p-3.5 rounded-xl border border-neutral-200 dark:border-neutral-700 hover:border-brand-400 hover:bg-brand-50 dark:hover:bg-brand-900/20 dark:hover:border-brand-600 transition group"
-                                        >
-                                            <div className="h-10 w-10 rounded-xl bg-neutral-100 dark:bg-neutral-800 flex items-center justify-center shrink-0 group-hover:bg-brand-100 dark:group-hover:bg-brand-900/30 transition">
-                                                <ChannelBrandIcon channel={acc.channel} className="h-5 w-5" />
+                                    {channelAccounts.map(acc => {
+                                        const reach = getChannelReachability(acc.channel, selectedContact);
+                                        const isReachable = reach.reachable;
+
+                                        return (
+                                            <div
+                                                key={acc.id}
+                                                onClick={() => {
+                                                    if (isReachable) selectAccount(acc);
+                                                }}
+                                                className={`w-full flex items-center gap-3 p-3.5 rounded-xl border transition ${
+                                                    isReachable
+                                                        ? 'border-neutral-200 dark:border-neutral-700 hover:border-brand-400 hover:bg-brand-50 dark:hover:bg-brand-900/20 dark:hover:border-brand-600 cursor-pointer group'
+                                                        : 'border-neutral-200/60 dark:border-neutral-800 bg-neutral-50/50 dark:bg-neutral-900/40 opacity-80'
+                                                }`}
+                                            >
+                                                <div className={`h-10 w-10 rounded-xl flex items-center justify-center shrink-0 transition ${
+                                                    isReachable
+                                                        ? 'bg-neutral-100 dark:bg-neutral-800 group-hover:bg-brand-100 dark:group-hover:bg-brand-900/30'
+                                                        : 'bg-neutral-100 dark:bg-neutral-800/60 grayscale'
+                                                }`}>
+                                                    <ChannelBrandIcon channel={acc.channel} className="h-5 w-5" />
+                                                </div>
+                                                <div className="flex-1 text-left min-w-0">
+                                                    <div className="flex items-center gap-2 flex-wrap">
+                                                        <p className={`text-sm font-medium truncate ${isReachable ? 'text-neutral-800 dark:text-neutral-200' : 'text-neutral-500 dark:text-neutral-400'}`}>
+                                                            {acc.display_name || (CHANNEL_LABELS[acc.channel] ?? acc.channel)}
+                                                        </p>
+                                                        {!isReachable && (
+                                                            <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-neutral-200/80 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400 shrink-0">
+                                                                {reach.label}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                    <p className="text-xs text-neutral-400 truncate">
+                                                        {acc.phone_number_id ?? CHANNEL_LABELS[acc.channel]}
+                                                    </p>
+                                                </div>
+                                                {isReachable ? (
+                                                    <ChevronRight className="h-4 w-4 text-neutral-300 group-hover:text-brand-600 dark:group-hover:text-brand-400 transition shrink-0" />
+                                                ) : reach.actionType ? (
+                                                    <button
+                                                        type="button"
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            startEditing(reach.actionType);
+                                                        }}
+                                                        className="text-xs font-semibold text-brand-600 dark:text-brand-400 hover:underline px-2.5 py-1 rounded-lg hover:bg-brand-50 dark:hover:bg-brand-900/20 transition shrink-0"
+                                                    >
+                                                        {reach.actionLabel}
+                                                    </button>
+                                                ) : null}
                                             </div>
-                                            <div className="flex-1 text-left min-w-0">
-                                                <p className="text-sm font-medium text-neutral-800 dark:text-neutral-200">{acc.display_name || (CHANNEL_LABELS[acc.channel] ?? acc.channel)}</p>
-                                                <p className="text-xs text-neutral-400">{acc.phone_number_id ?? CHANNEL_LABELS[acc.channel]}</p>
-                                            </div>
-                                            <ChevronRight className="h-4 w-4 text-neutral-300 group-hover:text-brand-600 dark:group-hover:text-brand-400 transition shrink-0" />
-                                        </button>
-                                    ))}
+                                        );
+                                    })}
                                 </div>
                             )}
                         </div>
@@ -309,10 +521,15 @@ export default function NewConversationModal({ onClose }) {
                                     className="w-full rounded-xl border border-neutral-300 dark:border-neutral-600 bg-neutral-50 dark:bg-neutral-800 px-3 py-2.5 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-brand-500 placeholder-neutral-400"
                                 />
                                 {selectedAccount?.channel === 'whatsapp' && (
-                                    <p className="text-[11px] text-amber-600 dark:text-amber-400 mt-1.5 flex items-start gap-1">
-                                        <span className="shrink-0 mt-0.5">⚠️</span>
-                                        {t('inbox.whatsapp_freeform_warning')}
-                                    </p>
+                                    <div className="text-[11px] text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/60 rounded-xl p-3 mt-2 flex items-start gap-2">
+                                        <span className="shrink-0 mt-0.5 text-sm">ℹ️</span>
+                                        <div>
+                                            <p className="font-semibold">{t('inbox.whatsapp_window_title', 'WhatsApp 24-Hour Policy')}</p>
+                                            <p className="text-amber-600/90 dark:text-amber-400 mt-0.5">
+                                                {t('inbox.whatsapp_freeform_warning')}
+                                            </p>
+                                        </div>
+                                    </div>
                                 )}
                             </div>
 

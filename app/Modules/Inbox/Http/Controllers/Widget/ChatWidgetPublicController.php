@@ -2,6 +2,7 @@
 
 namespace App\Modules\Inbox\Http\Controllers\Widget;
 
+use App\Events\MessageStatusUpdated;
 use App\Http\Controllers\Controller;
 use App\Modules\Inbox\Models\ChatWidget;
 use App\Modules\Inbox\Services\ConversationHandoverService;
@@ -11,6 +12,8 @@ use App\Modules\Inbox\Services\WebchatPresence;
 use App\Modules\Inbox\Services\WidgetPayloadBuilder;
 use App\Modules\Inbox\Services\WidgetVisitorPushService;
 use App\Modules\Shared\Models\Conversation;
+use App\Modules\Shared\Models\Message;
+use App\Services\Media\AttachmentService;
 use App\Services\StorageManager;
 use App\Support\WebchatVisitorToken;
 use Illuminate\Http\JsonResponse;
@@ -33,6 +36,7 @@ class ChatWidgetPublicController extends Controller
         private readonly WebchatPresence $presence,
         private readonly WidgetPayloadBuilder $payloads,
         private readonly WidgetVisitorPushService $visitorPush,
+        private readonly AttachmentService $attachmentService,
     ) {}
 
     /** POST /widget/v1/session — start or restore a visitor's chat session. */
@@ -50,14 +54,16 @@ class ChatWidgetPublicController extends Controller
             'push' => ['nullable', 'array'],
             'push.token' => ['nullable', 'string', 'max:255'],
             'active' => ['nullable', 'boolean'],
+            'page_url' => ['nullable', 'string', 'max:1000'],
+            'page_title' => ['nullable', 'string', 'max:255'],
         ]);
 
         $widget = $this->resolveWidget($data['key']);
         $this->assertDomainAllowed($widget, $request);
 
-        $visitorId = ($data['visitor_id'] ?? '') ?: (string) Str::uuid();
         $identity = $this->resolveIdentity($widget, $data);
         $identity['ip_address'] = $request->ip();
+        $visitorId = ($data['visitor_id'] ?? '') ?: (string) Str::uuid();
 
         $conversation = $this->driver->findConversation($widget, $visitorId, $identity);
         if (! $conversation) {
@@ -65,7 +71,12 @@ class ChatWidgetPublicController extends Controller
         }
 
         if ((bool) ($data['active'] ?? false)) {
-            $this->presence->touch($conversation, $request->ip());
+            $this->presence->touch(
+                $conversation,
+                $request->ip(),
+                $data['page_url'] ?? null,
+                $data['page_title'] ?? null,
+            );
         }
 
         $this->visitorPush->register($widget, $conversation, $visitorId, $data['push']['token'] ?? null);
@@ -89,7 +100,7 @@ class ChatWidgetPublicController extends Controller
         $data = $request->validate([
             'key' => ['required', 'string'],
             'message' => ['nullable', 'string', 'max:4000'],
-            'type' => ['nullable', 'in:text,audio,image'],
+            'type' => ['nullable', 'in:text,audio,image,document,video'],
             'name' => ['nullable', 'string', 'max:120'],
             'email' => ['nullable', 'string', 'max:190'],
             'avatar' => ['nullable', 'string', 'max:512'],
@@ -97,10 +108,12 @@ class ChatWidgetPublicController extends Controller
             'user_hash' => ['nullable', 'string', 'max:128'],
             'identity_kind' => ['nullable', 'string', 'in:logged_in,prechat'],
             'attachment' => [
-                'nullable', 'file', 'max:10240',
-                'mimes:jpg,jpeg,png,webp,mp3,aac,m4a,amr,ogg,oga,wav,webm',
+                'nullable', 'file', 'max:'.AttachmentService::MAX_FILE_KILOBYTES,
+                'mimes:'.AttachmentService::ALLOWED_MIMES,
             ],
             'client_message_id' => ['nullable', 'string', 'max:64'],
+            'page_url' => ['nullable', 'string', 'max:1000'],
+            'page_title' => ['nullable', 'string', 'max:255'],
         ]);
 
         $widget = $this->resolveWidget($data['key']);
@@ -120,7 +133,12 @@ class ChatWidgetPublicController extends Controller
             $issuedToken = WebchatVisitorToken::issue($conversation->id, $widget->widget_key, (string) $payload['v']);
         }
 
-        $this->presence->touch($conversation, $request->ip());
+        $this->presence->touch(
+            $conversation,
+            $request->ip(),
+            $data['page_url'] ?? null,
+            $data['page_title'] ?? null,
+        );
 
         $type = $data['type'] ?? 'text';
         $body = trim((string) ($data['message'] ?? ''));
@@ -128,23 +146,29 @@ class ChatWidgetPublicController extends Controller
 
         if ($request->hasFile('attachment')) {
             $file = $request->file('attachment');
-            $mimeType = $file->getMimeType() ?? 'application/octet-stream';
-            $isAudioRecording = str_starts_with($mimeType, 'audio/')
-                || in_array($mimeType, ['video/webm', 'application/ogg'], true);
-            $isImage = str_starts_with($mimeType, 'image/');
-            abort_unless($isAudioRecording || $isImage, 422, 'Only image uploads and audio recordings are accepted here.');
+            $upload = $this->attachmentService->processUpload($file, 'message-media');
 
-            $type = $isImage ? 'image' : 'audio';
-            $storedPath = $this->storageManager->prefixedPath('message-media/'.$file->hashName());
-            $this->storageManager->disk()->putFileAs(dirname($storedPath), $file, basename($storedPath));
+            // Preserve explicit 'audio' voice recordings if indicated by client
+            $declaredType = $data['type'] ?? null;
+            if ($declaredType === 'audio' && in_array($upload['type'], ['audio', 'video', 'document'], true)) {
+                $type = 'audio';
+            } else {
+                $type = $upload['type'];
+            }
 
             $messagePayload = [
-                'preview_url' => $this->storageManager->disk()->url($storedPath),
-                'filename' => $file->getClientOriginalName(),
-                'mime_type' => $mimeType,
+                'preview_url' => $upload['url'],
+                'filename' => $upload['filename'],
+                'mime_type' => $upload['mime_type'],
+                'file_size' => $upload['size_bytes'],
                 'caption' => $body !== '' ? $body : null,
             ];
-            $body = $body !== '' ? $body : ($file->getClientOriginalName() ?: ($isImage ? 'Image attachment' : 'Voice message'));
+
+            $body = $body !== ''
+                ? $body
+                : ($type === 'image'
+                    ? ($upload['filename'] ?: 'Image attachment')
+                    : ($type === 'audio' ? 'Voice message' : ($upload['filename'] ?: 'Document attachment')));
         }
 
         abort_if($type === 'text' && $body === '', 422, 'Message body is required.');
@@ -213,6 +237,7 @@ class ChatWidgetPublicController extends Controller
             'key' => ['required', 'string'],
             'after' => ['nullable', 'integer'],
             'active' => ['nullable', 'boolean'],
+            'open' => ['nullable', 'boolean'],
         ]);
 
         $widget = $this->resolveWidget($data['key']);
@@ -238,8 +263,12 @@ class ChatWidgetPublicController extends Controller
             $this->presence->touch($conversation, $request->ip());
         }
 
+        $messages = $this->payloads->messages((int) $payload['c'], $widget, (int) ($data['after'] ?? 0));
+        $isOpen = (bool) ($data['open'] ?? false);
+        $this->acknowledgeOutboundMessages($conversation, $isOpen);
+
         return response()->json([
-            'messages' => $this->payloads->messages((int) $payload['c'], $widget, (int) ($data['after'] ?? 0)),
+            'messages' => $messages,
             'online' => $this->isOnline($widget),
             'handover' => $this->handoverState($conversation, $widget),
             'handoff' => $this->payloads->handoff($widget, $conversation),
@@ -249,6 +278,55 @@ class ChatWidgetPublicController extends Controller
             ],
             'command' => $this->presence->command($conversation),
         ]);
+    }
+
+    /** POST /widget/v1/read — visitor marks agent messages as read when opening panel. */
+    public function markRead(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'key' => ['required', 'string'],
+        ]);
+
+        $widget = $this->resolveWidget($data['key']);
+        $this->assertDomainAllowed($widget, $request);
+        $payload = $this->authVisitor($request, $widget);
+
+        if (! empty($payload['c'])) {
+            $conversation = Conversation::whereKey((int) $payload['c'])
+                ->where('workspace_id', $widget->workspace_id)
+                ->first();
+
+            if ($conversation) {
+                $this->acknowledgeOutboundMessages($conversation, true);
+            }
+        }
+
+        return response()->json(['ok' => true]);
+    }
+
+    private function acknowledgeOutboundMessages(Conversation $conversation, bool $isOpen = false): void
+    {
+        $targetStatus = $isOpen ? 'read' : 'delivered';
+
+        $query = Message::where('conversation_id', $conversation->id)
+            ->where('direction', 'out');
+
+        $messagesToUpdate = $isOpen
+            ? $query->whereIn('status', ['queued', 'sent', 'delivered'])->get()
+            : $query->whereIn('status', ['queued', 'sent'])->get();
+
+        if ($messagesToUpdate->isEmpty()) {
+            return;
+        }
+
+        Message::whereIn('id', $messagesToUpdate->pluck('id'))
+            ->update(['status' => $targetStatus]);
+
+        foreach ($messagesToUpdate as $message) {
+            $message->status = $targetStatus;
+            $message->setRelation('conversation', $conversation);
+            MessageStatusUpdated::dispatch($message);
+        }
     }
 
     /** POST /widget/v1/typing — visitor typing status. */
@@ -329,6 +407,48 @@ class ChatWidgetPublicController extends Controller
                 ->first();
             if ($conversation) {
                 $this->visitorPush->register($widget, $conversation, (string) $payload['v'], $data['token']);
+            }
+        }
+
+        return response()->json(['ok' => true]);
+    }
+
+    /** GET /widget/v1/pusher-config — retrieve Pusher realtime configuration for widget. */
+    public function pusherConfig(Request $request): JsonResponse
+    {
+        $widgetKey = (string) $request->query('key', '');
+        $widget = $this->resolveWidget($widgetKey);
+        $this->assertDomainAllowed($widget, $request);
+
+        $cfg = app(\App\Services\PusherPublicConfig::class)->widget();
+
+        return response()->json([
+            'key' => $cfg['key'] ?? '',
+            'cluster' => $cfg['cluster'] ?? 'mt1',
+            'authEndpoint' => url('/widget/v1/broadcasting/auth'),
+        ]);
+    }
+
+    /** POST /widget/v1/delivered — visitor acknowledges message delivery in background. */
+    public function delivered(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'key' => ['required', 'string'],
+            'message_id' => ['nullable', 'integer'],
+        ]);
+
+        $widget = $this->resolveWidget($data['key']);
+        $this->assertDomainAllowed($widget, $request);
+        $payload = $this->authVisitor($request, $widget);
+
+        if (! empty($payload['c'])) {
+            $conversation = Conversation::whereKey((int) $payload['c'])
+                ->where('workspace_id', $widget->workspace_id)
+                ->first();
+
+            if ($conversation) {
+                $this->acknowledgeOutboundMessages($conversation, false);
+                $this->presence->touch($conversation, $request->ip());
             }
         }
 

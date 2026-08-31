@@ -3,7 +3,9 @@
 namespace Tests\Feature;
 
 use App\Modules\Integrations\Models\IntegrationConfig;
+use App\Modules\Integrations\Services\ConnectionTester;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
 
 class IntegrationConfigurationTest extends TestCase
@@ -24,6 +26,17 @@ class IntegrationConfigurationTest extends TestCase
         $this->assertFalse($incomplete->isConfigured());
         $this->assertTrue($complete->isConfigured());
         $this->assertTrue((new IntegrationConfig(['provider' => 'storage_local']))->isConfigured());
+    }
+
+    public function test_google_oauth_flows_are_three_explicit_providers(): void
+    {
+        $this->assertContains('oauth_google_signin', IntegrationConfig::PROVIDERS);
+        $this->assertContains('oauth_youtube', IntegrationConfig::PROVIDERS);
+        $this->assertContains('oauth_google_mail', IntegrationConfig::PROVIDERS);
+
+        $this->assertSame('Google Sign-In', IntegrationConfig::LABELS['oauth_google_signin']);
+        $this->assertSame('YouTube OAuth', IntegrationConfig::LABELS['oauth_youtube']);
+        $this->assertSame('Google Gmail OAuth', IntegrationConfig::LABELS['oauth_google_mail']);
     }
 
     public function test_incomplete_credentials_cannot_be_enabled(): void
@@ -73,5 +86,31 @@ class IntegrationConfigurationTest extends TestCase
 
         $this->assertSame('untested', $live->fresh()->last_test_status);
         $this->assertSame('fail', $test->fresh()->last_test_status);
+    }
+
+    public function test_youtube_oauth_presence_check_is_not_recorded_as_a_failure(): void
+    {
+        Http::fake([
+            'https://accounts.google.com/.well-known/openid-configuration' => Http::response([
+                'authorization_endpoint' => 'https://accounts.google.com/o/oauth2/v2/auth',
+            ]),
+        ]);
+
+        $config = IntegrationConfig::create([
+            'provider' => 'oauth_youtube',
+            'label' => 'YouTube OAuth',
+            'mode' => 'live',
+            'enabled' => true,
+            'credentials' => [
+                'client_id' => 'youtube-client-id',
+                'client_secret' => 'youtube-client-secret',
+            ],
+        ]);
+
+        $result = app(ConnectionTester::class)->test($config);
+
+        $this->assertTrue($result['ok']);
+        $this->assertSame('ok', $config->fresh()->last_test_status);
+        $this->assertStringContainsString('Complete a YouTube account connection', $result['message']);
     }
 }

@@ -10,6 +10,7 @@ use App\Modules\Shared\Services\ContactService;
 use App\Services\StorageManager;
 use App\Support\Demo;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response as HttpResponse;
@@ -120,13 +121,21 @@ class ContactController extends Controller
         return back()->with('success', 'Contact saved.');
     }
 
-    public function update(Request $request, Contact $contact): RedirectResponse
+    public function update(Request $request, Contact $contact): RedirectResponse|JsonResponse
     {
         $this->authoriseContact($request, $contact);
         $workspaceId = $request->user()->current_workspace_id ?? $request->user()->workspace_id;
         $validated = $request->validate([
             'first_name' => ['nullable', 'string', 'max:128'],
             'last_name' => ['nullable', 'string', 'max:128'],
+            'phone_e164' => [
+                'nullable',
+                'string',
+                'max:20',
+                Rule::unique('contacts', 'phone_e164')
+                    ->where(fn ($q) => $q->where('workspace_id', $workspaceId)->whereNull('deleted_at'))
+                    ->ignore($contact->id),
+            ],
             'email' => ['nullable', 'email', 'max:191'],
             'country' => ['nullable', 'string', 'max:4'],
             'language' => ['nullable', 'string', 'max:8'],
@@ -148,6 +157,15 @@ class ContactController extends Controller
             $contact->segments()->sync($segmentIds);
             $affectedIds = array_unique(array_merge($oldSegmentIds, $segmentIds));
             Segment::whereIn('id', $affectedIds)->each(fn ($s) => $s->update(['contact_count' => $s->contacts()->count()]));
+        }
+
+        if ($request->wantsJson()) {
+            return response()->json([
+                'success' => true,
+                'contact' => array_merge($contact->fresh()->toArray(), [
+                    'avatar_url' => Demo::active() ? null : $contact->fresh()->avatar_url,
+                ]),
+            ]);
         }
 
         return back()->with('success', 'Contact updated.');

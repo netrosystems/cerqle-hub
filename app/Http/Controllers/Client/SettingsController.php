@@ -6,11 +6,15 @@ use App\Http\Controllers\Controller;
 use App\Models\ClientSetting;
 use App\Models\Currency;
 use App\Models\Locale;
+use App\Support\OrganizationPhone;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
+use InvalidArgumentException;
+use libphonenumber\PhoneNumberUtil;
 
 class SettingsController extends Controller
 {
@@ -27,11 +31,17 @@ class SettingsController extends Controller
         if ($user->client_id && $user->isClientAdministrator()) {
             $c = $user->client;
             if ($c) {
+                $phone = OrganizationPhone::split(
+                    $c->phone,
+                    OrganizationPhone::regionForTimezone($user->timezone, 'US'),
+                );
                 $client = [
                     'id' => $c->id,
                     'name' => $c->name,
                     'email' => $c->email,
                     'phone' => $c->phone,
+                    'phone_region' => $phone['region'],
+                    'phone_national' => $phone['national'],
                     'address' => $c->address,
                 ];
             }
@@ -49,6 +59,9 @@ class SettingsController extends Controller
                 'name' => data_get($locale, 'name'),
             ]),
             'supportedCurrencies' => $supportedCurrencies->map(fn ($c) => ['code' => $c->code, 'name' => $c->code, 'symbol' => $c->symbol ?? $c->code]),
+            'phoneCountries' => $client
+                ? OrganizationPhone::countries($user->locale ?? config('app.locale', 'en'))
+                : [],
             'client' => $client,
             'digestEnabled' => $user->client_id
                 ? ClientSetting::get($user->client_id, 'weekly_digest_enabled', '1') !== '0'
@@ -84,7 +97,7 @@ class SettingsController extends Controller
             'theme' => ['nullable', 'string', 'in:light,dark'],
             'timezone' => ['nullable', 'string', 'max:64', 'timezone:all'],
             'client_name' => ['nullable', 'string', 'max:255'],
-            'client_email' => ['nullable', 'email', 'max:255'],
+            'client_phone_country' => ['required_with:client_phone', 'nullable', 'string', 'size:2', Rule::in(PhoneNumberUtil::getInstance()->getSupportedRegions())],
             'client_phone' => ['nullable', 'string', 'max:64'],
             'client_address' => ['nullable', 'string'],
             'weekly_digest_enabled' => ['nullable', 'boolean'],
@@ -110,11 +123,15 @@ class SettingsController extends Controller
             if (array_key_exists('client_name', $validated)) {
                 $client->name = $validated['client_name'] ?? $client->name;
             }
-            if (array_key_exists('client_email', $validated)) {
-                $client->email = $validated['client_email'];
-            }
             if (array_key_exists('client_phone', $validated)) {
-                $client->phone = $validated['client_phone'];
+                try {
+                    $client->phone = OrganizationPhone::normalize(
+                        $validated['client_phone'],
+                        $validated['client_phone_country'] ?? 'US',
+                    );
+                } catch (InvalidArgumentException $exception) {
+                    throw ValidationException::withMessages(['client_phone' => $exception->getMessage()]);
+                }
             }
             if (array_key_exists('client_address', $validated)) {
                 $client->address = $validated['client_address'];

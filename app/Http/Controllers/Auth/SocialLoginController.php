@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Client;
 use App\Models\SocialAccount;
 use App\Models\User;
+use App\Services\GoogleSignInConfigurator;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -19,9 +20,10 @@ class SocialLoginController extends Controller
     /**
      * Redirect to the provider's OAuth page.
      */
-    public function redirect(string $provider): RedirectResponse
+    public function redirect(string $provider, GoogleSignInConfigurator $googleSignIn): RedirectResponse
     {
         abort_unless(in_array($provider, self::ALLOWED_PROVIDERS), 404);
+        abort_if($provider === 'google' && ! $googleSignIn->apply(), 503, 'Google Sign-In is not configured.');
 
         return Socialite::driver($provider)->redirect();
     }
@@ -29,9 +31,10 @@ class SocialLoginController extends Controller
     /**
      * Handle the provider callback.
      */
-    public function callback(string $provider): RedirectResponse
+    public function callback(string $provider, GoogleSignInConfigurator $googleSignIn): RedirectResponse
     {
         abort_unless(in_array($provider, self::ALLOWED_PROVIDERS), 404);
+        abort_if($provider === 'google' && ! $googleSignIn->apply(), 503, 'Google Sign-In is not configured.');
 
         try {
             $socialUser = Socialite::driver($provider)->user();
