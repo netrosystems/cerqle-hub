@@ -4009,7 +4009,17 @@
         "name_label": "Workspace name",
         "name_placeholder": "e.g. Acme Corp",
         "creating": "Creating…",
-        "create_workspace": "Create workspace"
+        "create_workspace": "Create workspace",
+        "edit_workspace": "Edit workspace",
+        "delete_workspace": "Permanently delete workspace",
+        "cannot_delete_only": "Create another workspace before deleting this one",
+        "saving": "Saving…",
+        "save_changes": "Save changes",
+        "delete_warning_title": "This action is permanent and cannot be undone",
+        "delete_warning_body": "Deleting “{{name}}” will permanently erase all contacts, conversations, emails, campaigns, integrations, automations, analytics, settings, and other related information. Deleted data cannot be retrieved or restored.",
+        "type_name_to_confirm": "To confirm permanent deletion, type the workspace name “{{name}}” below.",
+        "deleting": "Deleting permanently…",
+        "delete_permanently": "Permanently delete workspace"
     },
     "contact_page": {
         "title": "Contact Us",

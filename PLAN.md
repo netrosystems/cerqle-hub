@@ -38,12 +38,16 @@ journey
 #### Capabilities
 - **Authentication & Security**: Email/password authentication, Magic Link login, Google/Socialite OAuth, and Google Authenticator 2FA (`TwoFactorController`).
 - **Workspace Switching**: Seamless switching between client-owned workspaces (`WorkspaceController`) with strict scoped sessions.
+- **Workspace Management**: Authorized owners and client administrators can rename a workspace or permanently delete it after typing its exact name. Deletion is atomic, removes workspace-scoped records, selects a safe fallback workspace, and cannot remove the client's only workspace.
 - **Role-Based Team Access**: Client administrators can invite team members, assign granular roles (Admin, Agent, Viewer), and inspect audit logs (`TeamController`, `ClientAuditLogController`).
 - **Session Management**: View and revoke active browser sessions remotely (`SessionController`).
+- **Resilient Verification Email**: Account creation succeeds even when SMTP or fallback notification delivery is rejected; failures are logged for follow-up and transactional messages include branded HTML plus a readable plain-text part.
 
 #### Verification Criteria
 - [x] Unauthenticated requests redirect to `/login`.
 - [x] Workspace switching immediately re-scopes all active queries, broadcast channels, and settings.
+- [x] Same-client users cannot access workspace broadcasts without ownership or explicit membership.
+- [x] Permanent deletion requires exact-name confirmation, preserves a fallback workspace, and removes dependent workspace data.
 - [x] Deactivating a team member terminates their active sessions immediately.
 
 ---

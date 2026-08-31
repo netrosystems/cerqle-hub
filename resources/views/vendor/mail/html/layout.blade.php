@@ -12,6 +12,14 @@
 width: 100% !important;
 }
 
+.header {
+padding-left: 8px !important;
+}
+
+.content-cell {
+padding: 30px 24px !important;
+}
+
 .footer {
 width: 100% !important;
 }
