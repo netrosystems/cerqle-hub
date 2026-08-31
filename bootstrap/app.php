@@ -30,7 +30,14 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Route;
 use Sentry\Laravel\Integration;
-use Sentry\State\Scope;
+spl_autoload_register(function ($class) {
+    if (str_starts_with($class, 'App\\')) {
+        $file = __DIR__.'/../app/'.str_replace('\\', '/', substr($class, 4)).'.php';
+        if (is_file($file)) {
+            require_once $file;
+        }
+    }
+}, true, true);
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(

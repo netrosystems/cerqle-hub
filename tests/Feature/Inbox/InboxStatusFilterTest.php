@@ -5,6 +5,7 @@ namespace Tests\Feature\Inbox;
 use App\Modules\Shared\Models\ChannelAccount;
 use App\Modules\Shared\Models\Contact;
 use App\Modules\Shared\Models\Conversation;
+use App\Modules\Shared\Models\Message;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Inertia\Testing\AssertableInertia as Assert;
 use Tests\TestCase;
@@ -29,13 +30,22 @@ class InboxStatusFilterTest extends TestCase
                 'source' => 'webchat',
                 'first_name' => ucfirst($status),
             ]);
-            Conversation::create([
+            $conversation = Conversation::create([
                 'workspace_id' => $workspace->id,
                 'channel_account_id' => $account->id,
                 'contact_id' => $contact->id,
                 'status' => $status,
                 'external_thread_id' => 'visitor-'.$status,
                 'last_message_at' => now(),
+            ]);
+            Message::create([
+                'conversation_id' => $conversation->id,
+                'direction' => 'in',
+                'channel' => 'webchat',
+                'type' => 'text',
+                'body' => 'Hello',
+                'status' => 'delivered',
+                'sent_at' => now(),
             ]);
         }
 
@@ -72,12 +82,21 @@ class InboxStatusFilterTest extends TestCase
                 'source' => $channel,
                 'first_name' => ucfirst($channel),
             ]);
-            Conversation::create([
+            $conversation = Conversation::create([
                 'workspace_id' => $workspace->id,
                 'channel_account_id' => $account->id,
                 'contact_id' => $contact->id,
                 'status' => 'open',
                 'last_message_at' => now(),
+            ]);
+            Message::create([
+                'conversation_id' => $conversation->id,
+                'direction' => 'in',
+                'channel' => $channel,
+                'type' => 'text',
+                'body' => 'Hello',
+                'status' => 'delivered',
+                'sent_at' => now(),
             ]);
         }
 

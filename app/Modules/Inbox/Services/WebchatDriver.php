@@ -242,7 +242,7 @@ class WebchatDriver implements ChannelDriverInterface
 
         if ($isLoggedInIdentity && $externalId !== '') {
             $contact = Contact::where('workspace_id', $workspaceId)
-                ->whereJsonContains('custom_fields->webchat_external_id', $externalId)
+                ->where('custom_fields->webchat_external_id', $externalId)
                 ->first();
             if ($contact) {
                 return $contact;
@@ -250,7 +250,7 @@ class WebchatDriver implements ChannelDriverInterface
         }
 
         return Contact::where('workspace_id', $workspaceId)
-            ->whereJsonContains('custom_fields->webchat_visitor_id', $visitorId)
+            ->where('custom_fields->webchat_visitor_id', $visitorId)
             ->first();
     }
 

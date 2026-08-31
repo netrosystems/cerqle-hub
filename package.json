@@ -44,6 +44,7 @@
         "i18next-http-backend": "^3.0.2",
         "laravel-echo": "^2.3.4",
         "laravel-vite-plugin": "^1.2.0",
+        "leaflet": "^1.9.4",
         "lucide-react": "^0.575.0",
         "pusher-js": "^8.5.0",
         "react": "^19.2.4",

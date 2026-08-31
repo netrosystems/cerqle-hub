@@ -3,10 +3,11 @@ import InboxLayout from '@/Layouts/InboxLayout';
 import EmptyState from '@/Components/EmptyState';
 import NewConversationModal from '@/Components/Inbox/NewConversationModal';
 import ConversationStatusBadge from '@/Components/Inbox/ConversationStatusBadge';
+import LiveVisitorsMap, { getCountryFlagEmoji } from '@/Components/Inbox/LiveVisitorsMap';
 import { Skeleton } from '@/Components/ui';
 import {
     MessageSquare, Inbox, CheckCircle, Clock, User, RefreshCw,
-    Search, Plus,
+    Search, Plus, Radio, Globe2,
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -16,6 +17,7 @@ import axios from 'axios';
 
 const FOLDERS = [
     { key: null,         labelKey: 'inbox.folder_all',        icon: Inbox },
+    { key: 'live',       labelKey: 'inbox.folder_live_users', icon: Radio },
     { key: 'mine',       labelKey: 'inbox.folder_mine',       icon: User },
     { key: 'unassigned', labelKey: 'inbox.folder_unassigned', icon: MessageSquare },
     { key: 'resolved',   labelKey: 'inbox.folder_resolved',   icon: CheckCircle },
@@ -23,6 +25,80 @@ const FOLDERS = [
 ];
 
 const ALL_CHANNELS = ['whatsapp', 'instagram', 'messenger', 'webchat'];
+
+function LiveVisitorCard({ conv, isSelected, onSelect, onStartChat }) {
+    const { t } = useTranslation();
+    const cf = conv.contact?.custom_fields || {};
+    const countryCode = cf.webchat_country_code || 'UN';
+    const flag = getCountryFlagEmoji(countryCode);
+    const name = conv.contact?.first_name || conv.contact?.last_name
+        ? `${conv.contact?.first_name ?? ''} ${conv.contact?.last_name ?? ''}`.trim()
+        : (conv.contact?.phone_e164 ?? `visitor${conv.id}`);
+
+    const city = cf.webchat_city;
+    const country = cf.webchat_country;
+    const locationStr = [city, country].filter(Boolean).join(', ');
+    const pageTitle = cf.webchat_page_title || cf.webchat_page_url || locationStr || 'Browsing your website';
+
+    return (
+        <div
+            onClick={() => onSelect?.(conv.id)}
+            className={`group relative flex items-center justify-between gap-2.5 px-3 py-3 border-b border-neutral-100 dark:border-neutral-800 transition-colors cursor-pointer ${
+                isSelected
+                    ? 'bg-brand-50 dark:bg-brand-900/20 border-l-2 border-l-brand-600'
+                    : 'hover:bg-neutral-50 dark:hover:bg-neutral-800/50'
+            }`}
+        >
+            <div className="flex items-start gap-2.5 min-w-0 flex-1">
+                {/* Avatar with country flag badge */}
+                <div className="relative shrink-0 mt-0.5">
+                    <div className="h-9 w-9 rounded-full bg-brand-100 dark:bg-brand-900/30 flex items-center justify-center text-sm font-bold text-brand-700 dark:text-brand-300 ring-1 ring-black/5 dark:ring-white/10">
+                        {name[0]?.toUpperCase() ?? 'V'}
+                    </div>
+                    <span className="absolute -bottom-1 -right-1 h-4 w-4 rounded-full bg-white dark:bg-neutral-900 shadow-sm flex items-center justify-center text-[10px] select-none leading-none">
+                        {flag}
+                    </span>
+                </div>
+
+                {/* Info */}
+                <div className="min-w-0 flex-1">
+                    <div className="flex items-center justify-between gap-1">
+                        <p className="text-sm font-semibold text-neutral-900 dark:text-neutral-100 truncate">
+                            {name}
+                        </p>
+                        <span className="relative flex h-2 w-2 shrink-0" title="Online now">
+                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                            <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                        </span>
+                    </div>
+                    <p className="text-xs text-neutral-600 dark:text-neutral-300 truncate mt-0.5" title={pageTitle}>
+                        {pageTitle}
+                    </p>
+                    {locationStr && (
+                        <p className="text-[10px] text-neutral-400 dark:text-neutral-500 truncate mt-0.5 flex items-center gap-1">
+                            <Globe2 className="h-3 w-3 shrink-0" />
+                            <span>{locationStr}</span>
+                        </p>
+                    )}
+                </div>
+            </div>
+
+            {/* Chat Icon Button */}
+            <button
+                type="button"
+                onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    onStartChat?.(conv);
+                }}
+                title={t('inbox.start_conversation', 'Start Conversation')}
+                className="shrink-0 h-8 w-8 rounded-lg bg-brand-50 hover:bg-brand-600 dark:bg-brand-900/30 dark:hover:bg-brand-600 text-brand-600 hover:text-white dark:text-brand-300 dark:hover:text-white flex items-center justify-center transition shadow-sm"
+            >
+                <MessageSquare className="h-4 w-4" />
+            </button>
+        </div>
+    );
+}
 
 function ConversationCard({ conv, isFlashing, isActive, userTz }) {
     const { t } = useTranslation();
@@ -132,7 +208,7 @@ function ConversationSkeleton() {
     );
 }
 
-function FilterSidebar({ filters, labels, channelAccounts = [], onFolder, onChannel, onAccount, onLabel }) {
+function FilterSidebar({ filters, labels, channelAccounts = [], onFolder, onChannel, onAccount, onLabel, liveUsersCount = 0 }) {
     const { t } = useTranslation();
     return (
         <div className="flex flex-col h-full overflow-y-auto">
@@ -151,6 +227,11 @@ function FilterSidebar({ filters, labels, channelAccounts = [], onFolder, onChan
                     >
                         <Icon className="h-4 w-4 shrink-0" />
                         <span>{t(labelKey)}</span>
+                        {key === 'live' && liveUsersCount > 0 && (
+                            <span className="ml-auto rounded-full bg-emerald-100 dark:bg-emerald-950/50 px-1.5 py-0.5 text-[10px] font-bold text-emerald-700 dark:text-emerald-400">
+                                {liveUsersCount}
+                            </span>
+                        )}
                     </button>
                 ))}
             </div>
@@ -219,7 +300,7 @@ function FilterSidebar({ filters, labels, channelAccounts = [], onFolder, onChan
     );
 }
 
-export default function InboxIndex({ conversations: initialConversations, filters, labels = [], channelAccounts = [] }) {
+export default function InboxIndex({ conversations: initialConversations, filters, labels = [], channelAccounts = [], liveUsersCount = 0 }) {
     const { t } = useTranslation();
     const { props } = usePage();
     const authUser = props.auth?.user;
@@ -231,11 +312,21 @@ export default function InboxIndex({ conversations: initialConversations, filter
     const [loading, setLoading]             = useState(false);
     const [search, setSearch]               = useState('');
     const [showNewModal, setShowNewModal]   = useState(false);
+    const [selectedVisitorId, setSelectedVisitorId] = useState(null);
+
+    const isLiveFolder = filters.folder === 'live';
 
     useEffect(() => {
         setConversations(initialConversations);
         setLoading(false);
     }, [initialConversations]);
+
+    // Select first live visitor automatically if none selected
+    useEffect(() => {
+        if (isLiveFolder && conversations?.data?.length > 0 && !selectedVisitorId) {
+            setSelectedVisitorId(conversations.data[0].id);
+        }
+    }, [isLiveFolder, conversations, selectedVisitorId]);
 
     useEffect(() => {
         if (!window.Echo || !workspaceId) return;
@@ -262,29 +353,38 @@ export default function InboxIndex({ conversations: initialConversations, filter
                         ],
                     };
                 });
+            })
+            .listen('.ConversationAssigned', (e) => {
+                setConversations(prev => ({
+                    ...prev,
+                    data: prev.data.map(conv => conv.id === e.conversation_id
+                        ? { ...conv, assigned_to: e.mode ?? conv.assigned_to, handover_at: e.handover_at ?? conv.handover_at }
+                        : conv
+                    ),
+                }));
             });
         return () => { window.Echo.leave(`workspace.${workspaceId}`); };
     }, [workspaceId]);
 
-    // Polling fallback for servers where websocket broadcasting is not running.
     useEffect(() => {
-        let stopped = false;
-        const poll = () => {
-            axios.get(route('client.inbox.poll'), { params: filters })
-                .then(({ data }) => {
-                    if (!stopped && data?.conversations) {
-                        setConversations(data.conversations);
-                    }
-                })
-                .catch(() => {});
+        let refreshing = false;
+        const refreshList = () => {
+            if (document.hidden || refreshing) return;
+            refreshing = true;
+            router.reload({
+                only: ['conversations', 'liveUsersCount'],
+                preserveScroll: true,
+                preserveState: true,
+                onFinish: () => { refreshing = false; },
+            });
         };
-
-        const timer = setInterval(poll, 5000);
+        const timer = window.setInterval(refreshList, 6000);
+        document.addEventListener('visibilitychange', refreshList);
         return () => {
-            stopped = true;
-            clearInterval(timer);
+            window.clearInterval(timer);
+            document.removeEventListener('visibilitychange', refreshList);
         };
-    }, [JSON.stringify(filters)]);
+    }, []);
 
     const navigate = (params) => {
         setLoading(true);
@@ -296,10 +396,21 @@ export default function InboxIndex({ conversations: initialConversations, filter
     const handleAccount = (id)  => navigate({ account_id: String(filters.account_id) === String(id) ? undefined : id, channel: undefined });
     const handleLabel   = (id)  => navigate({ label: String(filters.label) === String(id) ? undefined : id });
 
+    const handleStartChat = (conv) => {
+        axios.post(route('client.inbox.open-widget', conv.uuid || conv.id))
+            .then(() => {
+                router.visit(route('client.inbox.show', conv.uuid || conv.id));
+            })
+            .catch(() => {
+                router.visit(route('client.inbox.show', conv.uuid || conv.id));
+            });
+    };
+
     const filtered = search.trim()
         ? conversations.data.filter(c => {
-            const name = `${c.contact?.first_name ?? ''} ${c.contact?.last_name ?? ''} ${c.contact?.phone_e164 ?? ''}`.toLowerCase();
-            return name.includes(search.toLowerCase());
+            const cf = c.contact?.custom_fields || {};
+            const searchStr = `${c.contact?.first_name ?? ''} ${c.contact?.last_name ?? ''} ${c.contact?.phone_e164 ?? ''} ${c.contact?.email ?? ''} ${cf.webchat_last_ip ?? ''} ${cf.webchat_city ?? ''} ${cf.webchat_country ?? ''} ${cf.webchat_page_title ?? ''}`.toLowerCase();
+            return searchStr.includes(search.toLowerCase());
         })
         : conversations.data;
 
@@ -334,21 +445,34 @@ export default function InboxIndex({ conversations: initialConversations, filter
                         onChannel={handleChannel}
                         onAccount={handleAccount}
                         onLabel={handleLabel}
+                        liveUsersCount={liveUsersCount}
                     />
                 </aside>
 
-                {/* Conversation list */}
-                <div className="w-72 shrink-0 border-r border-neutral-200 dark:border-neutral-700 flex flex-col bg-white dark:bg-neutral-900">
+                {/* Conversation / Visitor list */}
+                <div className="w-80 shrink-0 border-r border-neutral-200 dark:border-neutral-700 flex flex-col bg-white dark:bg-neutral-900">
                     {/* List header */}
                     <div className="px-3 py-2.5 border-b border-neutral-100 dark:border-neutral-800 space-y-2">
                         <div className="flex items-center justify-between">
                             <span className="text-sm font-semibold text-neutral-800 dark:text-neutral-200 flex items-center gap-1 flex-wrap">
-                                {activeFolder ? t(activeFolder.labelKey) : t('inbox.folder_all')}
-                                {filters.channel && <span className="text-xs font-normal text-neutral-400">· {CHANNEL_LABELS[filters.channel] ?? filters.channel}</span>}
-                                {filters.account_id && (() => {
-                                    const acct = channelAccounts.find(a => String(a.id) === String(filters.account_id));
-                                    return acct ? <span className="text-xs font-normal text-neutral-400">· {acct.display_name || acct.phone_number_id}</span> : null;
-                                })()}
+                                {isLiveFolder ? (
+                                    <span className="flex items-center gap-1.5">
+                                        <span>{t('inbox.folder_live_users', 'Live Visitors')}</span>
+                                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 px-1.5 py-0.5 text-[10px] font-bold text-emerald-600 dark:text-emerald-400">
+                                            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                                            Live
+                                        </span>
+                                    </span>
+                                ) : (
+                                    <>
+                                        {activeFolder ? t(activeFolder.labelKey) : t('inbox.folder_all')}
+                                        {filters.channel && <span className="text-xs font-normal text-neutral-400">· {CHANNEL_LABELS[filters.channel] ?? filters.channel}</span>}
+                                        {filters.account_id && (() => {
+                                            const acct = channelAccounts.find(a => String(a.id) === String(filters.account_id));
+                                            return acct ? <span className="text-xs font-normal text-neutral-400">· {acct.display_name || acct.phone_number_id}</span> : null;
+                                        })()}
+                                    </>
+                                )}
                             </span>
                             <div className="flex items-center gap-1">
                                 <span className="text-xs text-neutral-400 tabular-nums">{conversations.total}</span>
@@ -368,7 +492,7 @@ export default function InboxIndex({ conversations: initialConversations, filter
                                 type="text"
                                 value={search}
                                 onChange={e => setSearch(e.target.value)}
-                                placeholder={t('inbox.search_conversations')}
+                                placeholder={isLiveFolder ? t('inbox.filter_visitors', 'Filter by name, city...') : t('inbox.search_conversations')}
                                 className="w-full pl-8 pr-3 py-1.5 text-xs rounded-lg bg-neutral-100 dark:bg-neutral-800 border-0 focus:outline-none focus:ring-2 focus:ring-brand-500 placeholder-neutral-400"
                             />
                         </div>
@@ -381,11 +505,21 @@ export default function InboxIndex({ conversations: initialConversations, filter
                         ) : filtered.length === 0 ? (
                             <div className="py-10 px-4">
                                 <EmptyState
-                                    icon={<Inbox className="h-7 w-7" />}
-                                    title={t('inbox.no_conversations')}
-                                    description={t('inbox.no_conversations_desc')}
+                                    icon={isLiveFolder ? <Radio className="h-7 w-7" /> : <Inbox className="h-7 w-7" />}
+                                    title={isLiveFolder ? t('inbox.no_live_visitors', 'No live visitors online') : t('inbox.no_conversations')}
+                                    description={isLiveFolder ? t('inbox.no_live_visitors_desc', 'Website visitors currently browsing your site will appear here in real-time.') : t('inbox.no_conversations_desc')}
                                 />
                             </div>
+                        ) : isLiveFolder ? (
+                            filtered.map(conv => (
+                                <LiveVisitorCard
+                                    key={conv.id}
+                                    conv={conv}
+                                    isSelected={selectedVisitorId === conv.id}
+                                    onSelect={setSelectedVisitorId}
+                                    onStartChat={handleStartChat}
+                                />
+                            ))
                         ) : (
                             filtered.map(conv => (
                                 <ConversationCard
@@ -400,16 +534,25 @@ export default function InboxIndex({ conversations: initialConversations, filter
                     </div>
                 </div>
 
-                {/* Empty state – main pane */}
-                <div className="flex-1 flex items-center justify-center bg-neutral-50 dark:bg-neutral-950">
-                    <div className="text-center">
-                        <div className="mx-auto mb-4 h-16 w-16 rounded-2xl bg-neutral-100 dark:bg-neutral-800 flex items-center justify-center">
-                            <MessageSquare className="h-8 w-8 text-neutral-300 dark:text-neutral-600" />
+                {/* Main pane: World Map in Live Users mode, Empty state otherwise */}
+                {isLiveFolder ? (
+                    <LiveVisitorsMap
+                        visitors={conversations.data}
+                        selectedVisitorId={selectedVisitorId}
+                        onSelectVisitor={setSelectedVisitorId}
+                        onStartChat={handleStartChat}
+                    />
+                ) : (
+                    <div className="flex-1 flex items-center justify-center bg-neutral-50 dark:bg-neutral-950">
+                        <div className="text-center">
+                            <div className="mx-auto mb-4 h-16 w-16 rounded-2xl bg-neutral-100 dark:bg-neutral-800 flex items-center justify-center">
+                                <MessageSquare className="h-8 w-8 text-neutral-300 dark:text-neutral-600" />
+                            </div>
+                            <p className="text-base font-semibold text-neutral-500 dark:text-neutral-400">{t('inbox.select_conversation')}</p>
+                            <p className="text-sm text-neutral-400 dark:text-neutral-500 mt-1">{t('inbox.select_conversation_desc')}</p>
                         </div>
-                        <p className="text-base font-semibold text-neutral-500 dark:text-neutral-400">{t('inbox.select_conversation')}</p>
-                        <p className="text-sm text-neutral-400 dark:text-neutral-500 mt-1">{t('inbox.select_conversation_desc')}</p>
                     </div>
-                </div>
+                )}
             </div>
         </InboxLayout>
     );

@@ -114,6 +114,29 @@ class MicrosoftGraphMailClient
         return 'graph:'.bin2hex(random_bytes(12));
     }
 
+    public function sendMessage(ChannelAccount $account, string $to, string $subject, string $body, array $cc = [], array $bcc = []): string
+    {
+        $recipients = fn (array $addresses): array => array_map(
+            fn (string $address) => ['emailAddress' => ['address' => $address]],
+            $addresses,
+        );
+        $response = $this->request($account)->post('https://graph.microsoft.com/v1.0/me/sendMail', [
+            'message' => [
+                'subject' => $subject,
+                'body' => ['contentType' => 'HTML', 'content' => nl2br(e($body))],
+                'toRecipients' => $recipients([$to]),
+                'ccRecipients' => $recipients($cc),
+                'bccRecipients' => $recipients($bcc),
+            ],
+            'saveToSentItems' => true,
+        ]);
+        if (! $response->successful()) {
+            throw new RuntimeException($response->json('error.message') ?: 'Microsoft rejected the email dispatch.');
+        }
+
+        return 'graph:'.bin2hex(random_bytes(12));
+    }
+
     public function verify(ChannelAccount $account): bool
     {
         return $this->request($account)->get('https://graph.microsoft.com/v1.0/me?$select=id')->successful();

@@ -85,7 +85,7 @@ class SecureHeaders
     /** OneSignal (when configured), Meta JS SDK, and Cloudflare Web Analytics / beacon scripts. */
     private function thirdPartyScriptSources(): string
     {
-        $extra = ' https://static.cloudflareinsights.com';
+        $extra = ' https://static.cloudflareinsights.com https://js.pusher.com';
         if ($this->oneSignalEnabled()) {
             // SDK loads from cdn; runtime sync/scripts also come from api.* (see OneSignal v16 CSP docs).
             $extra .= ' https://cdn.onesignal.com https://*.onesignal.com';
@@ -109,10 +109,15 @@ class SecureHeaders
 
     private function connectSources(): string
     {
-        $sources = [];
+        $sources = [
+            'wss:',
+            'https://*.pusher.com',
+            'wss://*.pusher.com',
+            'https://*.pusherapp.com',
+            'wss://*.pusherapp.com',
+        ];
         if (config('app.env') !== 'production') {
             $sources[] = 'ws:';
-            $sources[] = 'wss:';
         }
         $url = config('app.url');
         if ($url) {
@@ -126,6 +131,7 @@ class SecureHeaders
             $sources[] = 'https://graph.facebook.com';
             $sources[] = 'https://www.facebook.com';
             $sources[] = 'https://web.facebook.com';
+            $sources[] = 'https://connect.facebook.net';
         }
         foreach ($this->firebaseConnectSources() as $source) {
             $sources[] = $source;

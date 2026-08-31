@@ -9,11 +9,12 @@ import {
     Paperclip, Image as ImageIcon, ChevronDown, UserCheck,
     LayoutTemplate, Plus, Loader2, Bot, Calendar, BarChart2, PhoneMissed,
     Mic, Square,
-    Volume2, VolumeX, ShoppingBag,
+    Volume2, VolumeX, ShoppingBag, Download, Radio,
 } from 'lucide-react';
 import { ChannelBrandIcon, CHANNEL_LABELS } from '@/Components/BrandIcons';
 import { formatTimeTz, formatInTz, formatInboxTimestamp } from '@/Utils/datetime';
 import { playInboundSound, getSoundPrefs, setChannelSoundEnabled, SOUND_CHANNELS } from '@/Utils/notificationSound';
+import { getCountryFlagEmoji } from '@/Components/Inbox/LiveVisitorsMap';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import axios from 'axios';
@@ -22,6 +23,7 @@ import axios from 'axios';
 
 const FOLDERS = [
     { key: null,         labelKey: 'inbox.folder_all',        icon: Inbox },
+    { key: 'live',       labelKey: 'inbox.folder_live_users', icon: Radio },
     { key: 'mine',       labelKey: 'inbox.folder_mine',       icon: User },
     { key: 'unassigned', labelKey: 'inbox.folder_unassigned', icon: MessageSquare },
     { key: 'resolved',   labelKey: 'inbox.folder_resolved',   icon: CheckCircle },
@@ -346,16 +348,18 @@ function MediaAudio({ src, conversationId, messageId }) {
 function MediaDocument({ src, filename, conversationId, messageId, isOut }) {
     const { t } = useTranslation();
     const proxyUrl = src ?? route('client.inbox.message-media', { conversation: conversationId, message: messageId });
+    const ext = (filename || '').split('.').pop().toUpperCase();
     return (
-        <a href={proxyUrl} target="_blank" rel="noopener noreferrer"
+        <a href={proxyUrl} target="_blank" rel="noopener noreferrer" download={filename || 'document'}
             className={`flex items-center gap-2.5 rounded-xl px-3 py-2.5 mb-1 transition ${isOut ? 'bg-white/20 hover:bg-white/30' : 'bg-neutral-100 dark:bg-neutral-700 hover:bg-neutral-200 dark:hover:bg-neutral-600'}`}>
-            <div className={`h-9 w-9 rounded-lg flex items-center justify-center shrink-0 ${isOut ? 'bg-white/20' : 'bg-neutral-200 dark:bg-neutral-600'}`}>
-                <Paperclip className="h-4 w-4" />
+            <div className={`h-9 w-9 rounded-lg flex items-center justify-center shrink-0 font-bold text-[10px] uppercase ${isOut ? 'bg-white/20 text-white' : 'bg-neutral-200 dark:bg-neutral-600 text-neutral-700 dark:text-neutral-200'}`}>
+                {ext ? (ext.length > 4 ? ext.slice(0, 4) : ext) : <Paperclip className="h-4 w-4" />}
             </div>
-            <div className="min-w-0">
+            <div className="min-w-0 flex-1">
                 <p className="text-xs font-medium truncate">{filename || t('inbox.document')}</p>
                 <p className="text-[10px] opacity-60">{t('inbox.tap_to_open')}</p>
             </div>
+            <Download className="h-3.5 w-3.5 opacity-60 shrink-0" />
         </a>
     );
 }
@@ -888,7 +892,7 @@ function ConversationCard({ conv, isActive, userTz }) {
     );
 }
 
-function FilterSidebar({ filters, labels, channelAccounts = [], onFolder, onChannel, onAccount, onLabel }) {
+function FilterSidebar({ filters, labels, channelAccounts = [], onFolder, onChannel, onAccount, onLabel, liveUsersCount = 0 }) {
     const { t } = useTranslation();
     return (
         <div className="flex flex-col h-full overflow-y-auto">
@@ -901,7 +905,13 @@ function FilterSidebar({ filters, labels, channelAccounts = [], onFolder, onChan
                                 ? 'bg-brand-50 dark:bg-brand-900/30 text-brand-700 dark:text-brand-300 font-semibold'
                                 : 'text-neutral-600 dark:text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-800'
                         }`}>
-                        <Icon className="h-4 w-4 shrink-0" />{t(labelKey)}
+                        <Icon className="h-4 w-4 shrink-0" />
+                        <span>{t(labelKey)}</span>
+                        {key === 'live' && liveUsersCount > 0 && (
+                            <span className="ml-auto rounded-full bg-emerald-100 dark:bg-emerald-950/50 px-1.5 py-0.5 text-[10px] font-bold text-emerald-700 dark:text-emerald-400">
+                                {liveUsersCount}
+                            </span>
+                        )}
                     </button>
                 ))}
             </div>
@@ -1418,6 +1428,7 @@ export default function InboxShow({
     whatsappTemplates = [],
     channelAccounts = [],
     hasEcommerceStore = false,
+    liveUsersCount = 0,
 }) {
     const { t } = useTranslation();
     const { props } = usePage();
@@ -1430,6 +1441,7 @@ export default function InboxShow({
     const channel = conversation.channel_account?.channel ?? 'whatsapp';
     const isWindowOpen = conversation.is_whatsapp_window_open ?? (channel !== 'whatsapp');
     const isWhatsApp = channel === 'whatsapp';
+    const isInstagram = channel === 'instagram';
 
     const [messages, setMessages]           = useState(initialMessages ?? []);
     const [viewers, setViewers]             = useState([]);
@@ -1732,10 +1744,16 @@ export default function InboxShow({
     const handleFileChange = (e) => {
         const file = e.target.files?.[0];
         if (!file) return;
-        const isImage = file.type.startsWith('image/');
+        if (file.size > 10 * 1024 * 1024) {
+            setSendError('Attachment exceeds the 10 MB file size limit.');
+            e.target.value = '';
+            return;
+        }
+        const ext = (file.name || '').split('.').pop().toLowerCase();
+        const isImage = file.type.startsWith('image/') || ['jpg', 'jpeg', 'png', 'webp', 'gif', 'heic', 'heif'].includes(ext);
         const isAudio = file.type.startsWith('audio/');
         const isVideo = file.type.startsWith('video/');
-        const url = URL.createObjectURL(file);
+        const url = isImage ? URL.createObjectURL(file) : null;
         setAttachPreview({ file, url, type: isImage ? 'image' : (isAudio ? 'audio' : (isVideo ? 'video' : 'document')) });
         e.target.value = '';
     };
@@ -1822,6 +1840,10 @@ export default function InboxShow({
     const handleStatus = (status) => router.post(route('client.inbox.status', conversation.uuid), { status }, { preserveScroll: true });
 
     const navigateList = (params) => {
+        if (params.folder === 'live') {
+            router.visit(route('client.inbox.index', { folder: 'live' }));
+            return;
+        }
         setListLoading(true);
         router.get(route('client.inbox.show', conversation.uuid), { ...filters, ...params }, { preserveState: true, replace: true });
     };
@@ -1876,6 +1898,7 @@ export default function InboxShow({
                         onChannel={(ch) => navigateList({ channel: filters.channel === ch ? undefined : ch, account_id: undefined })}
                         onAccount={(id) => navigateList({ account_id: String(filters.account_id) === String(id) ? undefined : id, channel: undefined })}
                         onLabel={(id) => navigateList({ label: String(filters.label) === String(id) ? undefined : id })}
+                        liveUsersCount={liveUsersCount}
                     />
                 </aside>
 
@@ -1933,10 +1956,19 @@ export default function InboxShow({
                         </div>
                         <div className="flex-1 min-w-0">
                             <p className="font-semibold text-sm text-neutral-900 dark:text-neutral-100 truncate">{contactName}</p>
-                            <p className="text-xs text-neutral-400 flex items-center gap-1.5">
+                            <p className="text-xs text-neutral-400 flex items-center gap-1.5 flex-wrap">
                                 {channel !== 'webchat' && <ChannelBrandIcon channel={channel} className="h-3 w-3 shrink-0" />}
                                 <span>{CHANNEL_LABELS[channel] ?? channel}</span>
                                 {conversation.channel_account?.name && <><span className="text-neutral-300 dark:text-neutral-600">·</span><span>{conversation.channel_account.name}</span></>}
+                                {conversation.contact?.custom_fields?.webchat_country_code && (
+                                    <>
+                                        <span className="text-neutral-300 dark:text-neutral-600">·</span>
+                                        <span className="flex items-center gap-1">
+                                            <span>{getCountryFlagEmoji(conversation.contact.custom_fields.webchat_country_code)}</span>
+                                            <span>{[conversation.contact.custom_fields.webchat_city, conversation.contact.custom_fields.webchat_country].filter(Boolean).join(', ')}</span>
+                                        </span>
+                                    </>
+                                )}
                             </p>
                         </div>
 
@@ -2179,12 +2211,13 @@ export default function InboxShow({
                                     </button>
                                     {/* Attachment */}
                                     <button type="button" onClick={() => fileRef.current?.click()}
-                                        title={t('inbox.attach_file')}
-                                        className="p-1.5 rounded-lg text-neutral-400 hover:text-neutral-600 hover:bg-neutral-100 dark:hover:bg-neutral-800 transition">
+                                        title={isInstagram ? 'Instagram DM does not support document attachments' : t('inbox.attach_file')}
+                                        disabled={isInstagram}
+                                        className="p-1.5 rounded-lg text-neutral-400 hover:text-neutral-600 hover:bg-neutral-100 dark:hover:bg-neutral-800 transition disabled:opacity-40 disabled:cursor-not-allowed">
                                         <Paperclip className="h-4 w-4" />
                                     </button>
                                     {/* Image */}
-                                    <button type="button" onClick={() => { const i = document.createElement('input'); i.type='file'; i.accept='image/*'; i.onchange=handleFileChange; i.click(); }}
+                                    <button type="button" onClick={() => { const i = document.createElement('input'); i.type='file'; i.accept='image/*,.heic,.heif'; i.onchange=handleFileChange; i.click(); }}
                                         title={t('inbox.attach_image')}
                                         className="p-1.5 rounded-lg text-neutral-400 hover:text-neutral-600 hover:bg-neutral-100 dark:hover:bg-neutral-800 transition">
                                         <ImageIcon className="h-4 w-4" />
@@ -2218,7 +2251,7 @@ export default function InboxShow({
                                         </button>
                                     )}
                                     {/* Hidden file input */}
-                                    <input ref={fileRef} type="file" className="hidden" onChange={handleFileChange} />
+                                    <input ref={fileRef} type="file" accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.zip,.heic,.heif" className="hidden" onChange={handleFileChange} />
                                 </div>
 
                                 {/* Text input + send */}

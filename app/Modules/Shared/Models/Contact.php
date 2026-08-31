@@ -129,6 +129,29 @@ class Contact extends Model
         return trim(($this->first_name ?? '').' '.($this->last_name ?? ''));
     }
 
+    public function getNameAttribute(): string
+    {
+        $fullName = $this->full_name;
+        if ($fullName !== '') {
+            return $fullName;
+        }
+
+        if (! empty($this->phone_e164)) {
+            return $this->phone_e164;
+        }
+
+        if (! empty($this->email)) {
+            return $this->email;
+        }
+
+        return 'Unknown';
+    }
+
+    public function getPhoneAttribute(): ?string
+    {
+        return $this->phone_e164;
+    }
+
     public function getAvatarUrlAttribute(): ?string
     {
         if (! $this->avatar) {

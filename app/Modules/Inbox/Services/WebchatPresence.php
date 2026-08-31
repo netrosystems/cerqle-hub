@@ -4,6 +4,7 @@ namespace App\Modules\Inbox\Services;
 
 use App\Events\WidgetCommand;
 use App\Modules\Shared\Models\Conversation;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
 
@@ -18,29 +19,59 @@ class WebchatPresence
 {
     public const ONLINE_SECONDS = 30;
 
-    public function touch(Conversation $conversation, ?string $ipAddress = null): void
-    {
-        $contact = $conversation->contact;
-        if (! $contact) {
-            return;
-        }
+    public function __construct(
+        private ?WebchatGeoService $geoService = null,
+    ) {
+        $this->geoService = $geoService ?? app(WebchatGeoService::class);
+    }
 
+    public function touch(
+        Conversation $conversation,
+        ?string $ipAddress = null,
+        ?string $pageUrl = null,
+        ?string $pageTitle = null,
+    ): void {
         $throttleKey = "webchat:presence-touch:{$conversation->id}";
-        if (! Cache::add($throttleKey, true, 10)) {
+        if (! Cache::add($throttleKey, true, 4)) {
             return;
-        }
-
-        $customFields = $contact->custom_fields ?? [];
-        if ($ipAddress) {
-            $customFields['webchat_last_ip'] = $ipAddress;
         }
 
         $conversation->forceFill(['webchat_last_seen_at' => now()])->save();
 
-        $contact->update([
-            'last_seen_at' => now(),
-            'custom_fields' => $customFields,
-        ]);
+        $conversation->loadMissing('contact');
+        $contact = $conversation->contact;
+        if ($contact) {
+            $customFields = $contact->custom_fields ?? [];
+            if ($ipAddress) {
+                $customFields['webchat_last_ip'] = $ipAddress;
+
+                if (empty($customFields['webchat_country']) || empty($customFields['webchat_lat']) || ($customFields['webchat_resolved_ip'] ?? '') !== $ipAddress) {
+                    $geo = $this->geoService->resolve($ipAddress);
+                    if (! empty($geo['country'])) {
+                        $customFields['webchat_country'] = $geo['country'];
+                        $customFields['webchat_country_code'] = $geo['country_code'];
+                        $customFields['webchat_city'] = $geo['city'];
+                        $customFields['webchat_region'] = $geo['region'];
+                        $customFields['webchat_lat'] = $geo['lat'];
+                        $customFields['webchat_lon'] = $geo['lon'];
+                        $customFields['webchat_timezone'] = $geo['timezone'];
+                        $customFields['webchat_resolved_ip'] = $ipAddress;
+                    }
+                }
+            }
+
+            if ($pageUrl) {
+                $customFields['webchat_page_url'] = $pageUrl;
+            }
+            if ($pageTitle) {
+                $customFields['webchat_page_title'] = $pageTitle;
+            }
+
+            $contact->update([
+                'last_seen_at' => now(),
+                'custom_fields' => $customFields,
+            ]);
+        }
     }
 
     /** @return array{id:string,type:string,created_at:string} */
@@ -70,7 +101,7 @@ class WebchatPresence
         return is_array($command) ? $command : null;
     }
 
-    public function onlineSince(): \Illuminate\Support\Carbon
+    public function onlineSince(): Carbon
     {
         return now()->subSeconds(self::ONLINE_SECONDS);
     }

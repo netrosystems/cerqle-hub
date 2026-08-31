@@ -2,11 +2,15 @@
 
 namespace Tests\Feature\Api\V1;
 
+use App\Events\MessageStatusUpdated;
 use App\Models\User;
 use App\Models\Workspace;
+use App\Modules\Shared\Models\ChannelAccount;
 use App\Modules\Shared\Models\Contact;
 use App\Modules\Shared\Models\Conversation;
+use App\Modules\Shared\Models\Message;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Event;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
@@ -82,5 +86,372 @@ class MobileConversationTest extends TestCase
         $response->assertOk();
         $this->assertCount(55, $response->json('messages'));
         $this->assertEquals('Message 55', $response->json('messages.54.body'));
+    }
+
+    public function test_mobile_conversations_index_supports_live_folder_and_returns_online_status(): void
+    {
+        $workspace = Workspace::factory()->create();
+        $user = User::factory()->create(['workspace_id' => $workspace->id]);
+        $channelAccount = ChannelAccount::create([
+            'workspace_id' => $workspace->id,
+            'channel' => 'webchat',
+            'display_name' => 'Website Widget',
+            'status' => 'active',
+        ]);
+        $contact = Contact::create([
+            'workspace_id' => $workspace->id,
+            'first_name' => 'Live',
+            'last_name' => 'Visitor',
+        ]);
+
+        $liveConv = Conversation::create([
+            'workspace_id' => $workspace->id,
+            'contact_id' => $contact->id,
+            'channel_account_id' => $channelAccount->id,
+            'status' => 'open',
+            'webchat_last_seen_at' => now(),
+        ]);
+
+        $offlineConv = Conversation::create([
+            'workspace_id' => $workspace->id,
+            'contact_id' => $contact->id,
+            'channel_account_id' => $channelAccount->id,
+            'status' => 'open',
+            'webchat_last_seen_at' => now()->subMinutes(5),
+        ]);
+
+        Sanctum::actingAs($user);
+
+        // Standard index
+        $res = $this->getJson('/api/v1/mobile/conversations');
+        $res->assertOk()
+            ->assertJsonPath('meta.live_users_count', 1);
+
+        // Filter folder=live
+        $liveRes = $this->getJson('/api/v1/mobile/conversations?folder=live');
+        $liveRes->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.id', $liveConv->id)
+            ->assertJsonPath('data.0.is_online', true);
+    }
+
+    public function test_mobile_inbox_setup_and_counts_include_live_users_count(): void
+    {
+        $workspace = Workspace::factory()->create();
+        $user = User::factory()->create(['workspace_id' => $workspace->id]);
+        $channelAccount = ChannelAccount::create([
+            'workspace_id' => $workspace->id,
+            'channel' => 'webchat',
+            'display_name' => 'Website Widget',
+            'status' => 'active',
+        ]);
+        $contact = Contact::create([
+            'workspace_id' => $workspace->id,
+            'first_name' => 'Online',
+            'last_name' => 'User',
+        ]);
+
+        Conversation::create([
+            'workspace_id' => $workspace->id,
+            'contact_id' => $contact->id,
+            'channel_account_id' => $channelAccount->id,
+            'status' => 'open',
+            'webchat_last_seen_at' => now(),
+        ]);
+
+        Sanctum::actingAs($user);
+
+        $setupRes = $this->getJson('/api/v1/mobile/inbox/setup');
+        $setupRes->assertOk()
+            ->assertJsonPath('live_users_count', 1);
+
+        $countsRes = $this->getJson('/api/v1/mobile/inbox/counts');
+        $countsRes->assertOk()
+            ->assertJsonPath('live', 1)
+            ->assertJsonPath('all', 1);
+    }
+
+    public function test_mobile_can_trigger_open_widget_for_live_visitor(): void
+    {
+        $workspace = Workspace::factory()->create();
+        $user = User::factory()->create(['workspace_id' => $workspace->id]);
+        $channelAccount = ChannelAccount::create([
+            'workspace_id' => $workspace->id,
+            'channel' => 'webchat',
+            'display_name' => 'Website Widget',
+            'status' => 'active',
+        ]);
+        $contact = Contact::create([
+            'workspace_id' => $workspace->id,
+            'first_name' => 'Live',
+            'last_name' => 'Visitor',
+        ]);
+
+        $conversation = Conversation::create([
+            'workspace_id' => $workspace->id,
+            'contact_id' => $contact->id,
+            'channel_account_id' => $channelAccount->id,
+            'status' => 'open',
+            'webchat_last_seen_at' => now(),
+        ]);
+
+        Sanctum::actingAs($user);
+
+        $response = $this->postJson("/api/v1/mobile/conversations/{$conversation->uuid}/open-widget");
+        $response->assertOk()
+            ->assertJsonPath('ok', true)
+            ->assertJsonPath('command.type', 'open_widget');
+    }
+
+    public function test_mobile_can_mark_conversation_as_read(): void
+    {
+        Event::fake([MessageStatusUpdated::class]);
+
+        $workspace = Workspace::factory()->create();
+        $user = User::factory()->create(['workspace_id' => $workspace->id]);
+        $channelAccount = ChannelAccount::create([
+            'workspace_id' => $workspace->id,
+            'channel' => 'webchat',
+            'display_name' => 'Website Widget',
+            'status' => 'active',
+        ]);
+        $contact = Contact::create([
+            'workspace_id' => $workspace->id,
+            'first_name' => 'John',
+            'last_name' => 'Doe',
+        ]);
+
+        $conversation = Conversation::create([
+            'workspace_id' => $workspace->id,
+            'contact_id' => $contact->id,
+            'channel_account_id' => $channelAccount->id,
+            'status' => 'open',
+            'unread_count' => 3,
+        ]);
+
+        $msg = Message::create([
+            'conversation_id' => $conversation->id,
+            'direction' => 'in',
+            'channel' => 'webchat',
+            'type' => 'text',
+            'body' => 'Need help',
+            'status' => 'delivered',
+            'sent_at' => now(),
+        ]);
+
+        Sanctum::actingAs($user);
+
+        $response = $this->postJson("/api/v1/mobile/conversations/{$conversation->uuid}/read");
+        $response->assertOk()
+            ->assertJsonPath('ok', true)
+            ->assertJsonPath('unread_count', 0);
+
+        $this->assertEquals(0, $conversation->fresh()->unread_count);
+        $this->assertEquals('read', $msg->fresh()->status);
+        Event::assertDispatched(MessageStatusUpdated::class);
+    }
+
+    public function test_mobile_can_update_contact_by_id(): void
+    {
+        $workspace = Workspace::factory()->create();
+        $user = User::factory()->create(['workspace_id' => $workspace->id]);
+        $contact = Contact::create([
+            'workspace_id' => $workspace->id,
+            'first_name' => 'Old',
+            'last_name' => 'Name',
+            'email' => 'old@example.com',
+        ]);
+
+        Sanctum::actingAs($user);
+
+        $response = $this->patchJson("/api/v1/mobile/contacts/{$contact->id}", [
+            'name' => 'John Doe',
+            'email' => 'john@example.com',
+            'phone' => '+1234567890',
+        ]);
+
+        $response->assertOk()
+            ->assertJsonPath('name', 'John Doe')
+            ->assertJsonPath('first_name', 'John')
+            ->assertJsonPath('last_name', 'Doe')
+            ->assertJsonPath('email', 'john@example.com');
+
+        $contact->refresh();
+        $this->assertSame('John', $contact->first_name);
+        $this->assertSame('Doe', $contact->last_name);
+        $this->assertSame('john@example.com', $contact->email);
+        $this->assertSame('+1234567890', $contact->phone_e164);
+    }
+
+    public function test_mobile_can_update_contact_by_conversation_uuid(): void
+    {
+        $workspace = Workspace::factory()->create();
+        $user = User::factory()->create(['workspace_id' => $workspace->id]);
+        $contact = Contact::create([
+            'workspace_id' => $workspace->id,
+            'first_name' => 'Customer',
+            'last_name' => '100',
+        ]);
+
+        $conversation = Conversation::create([
+            'workspace_id' => $workspace->id,
+            'contact_id' => $contact->id,
+            'status' => 'open',
+        ]);
+
+        Sanctum::actingAs($user);
+
+        $response = $this->patchJson("/api/v1/mobile/conversations/{$conversation->uuid}/contact", [
+            'name' => 'Jane Smith',
+            'email' => 'jane@example.com',
+        ]);
+
+        $response->assertOk()
+            ->assertJsonPath('name', 'Jane Smith')
+            ->assertJsonPath('email', 'jane@example.com');
+
+        $contact->refresh();
+        $this->assertSame('Jane', $contact->first_name);
+        $this->assertSame('Smith', $contact->last_name);
+        $this->assertSame('jane@example.com', $contact->email);
+    }
+
+    public function test_mobile_agent_can_reply_with_document_attachment(): void
+    {
+        \Illuminate\Support\Facades\Storage::fake('public');
+
+        $workspace = Workspace::factory()->create();
+        $user = User::factory()->create(['workspace_id' => $workspace->id]);
+        $channelAccount = \App\Modules\Shared\Models\ChannelAccount::create([
+            'workspace_id' => $workspace->id,
+            'channel' => 'webchat',
+            'display_name' => 'Website Widget',
+            'status' => 'active',
+        ]);
+        $contact = Contact::create([
+            'workspace_id' => $workspace->id,
+            'first_name' => 'Mobile',
+            'last_name' => 'User',
+        ]);
+
+        $conversation = Conversation::create([
+            'workspace_id' => $workspace->id,
+            'contact_id' => $contact->id,
+            'channel_account_id' => $channelAccount->id,
+            'status' => 'open',
+        ]);
+
+        Sanctum::actingAs($user);
+
+        $pdf = \Illuminate\Http\UploadedFile::fake()->create('report.pdf', 300, 'application/pdf');
+
+        $response = $this->post(
+            "/api/v1/mobile/conversations/{$conversation->uuid}/reply",
+            [
+                'body' => 'Here is your monthly report',
+                'type' => 'document',
+                'attachment' => $pdf,
+            ],
+            ['Accept' => 'application/json']
+        );
+
+        $response->assertOk()
+            ->assertJsonPath('message.type', 'document')
+            ->assertJsonPath('message.body', 'Here is your monthly report');
+
+        $this->assertNotEmpty($response->json('message.payload.preview_url'));
+        $this->assertGreaterThan(0, $response->json('message.payload.file_size'));
+    }
+
+    public function test_mobile_agent_cannot_send_document_to_instagram(): void
+    {
+        \Illuminate\Support\Facades\Storage::fake('public');
+
+        $workspace = Workspace::factory()->create();
+        $user = User::factory()->create(['workspace_id' => $workspace->id]);
+        $channelAccount = \App\Modules\Shared\Models\ChannelAccount::create([
+            'workspace_id' => $workspace->id,
+            'channel' => 'instagram',
+            'display_name' => 'Instagram Account',
+            'status' => 'active',
+        ]);
+        $contact = Contact::create([
+            'workspace_id' => $workspace->id,
+            'first_name' => 'IG',
+            'last_name' => 'User',
+        ]);
+
+        $conversation = Conversation::create([
+            'workspace_id' => $workspace->id,
+            'contact_id' => $contact->id,
+            'channel_account_id' => $channelAccount->id,
+            'status' => 'open',
+        ]);
+
+        Sanctum::actingAs($user);
+
+        $pdf = \Illuminate\Http\UploadedFile::fake()->create('invoice.pdf', 200, 'application/pdf');
+
+        $response = $this->post(
+            "/api/v1/mobile/conversations/{$conversation->uuid}/reply",
+            [
+                'body' => 'Here is the invoice',
+                'type' => 'document',
+                'attachment' => $pdf,
+            ],
+            ['Accept' => 'application/json']
+        );
+
+        $response->assertStatus(422)
+            ->assertJsonPath('error', 'Instagram direct messaging only supports image, video, and audio attachments. Documents cannot be sent via Instagram DM.');
+    }
+
+    public function test_mobile_conversations_index_returns_contact_location_and_custom_fields(): void
+    {
+        $workspace = Workspace::factory()->create();
+        $user = User::factory()->create(['workspace_id' => $workspace->id]);
+        $channelAccount = ChannelAccount::create([
+            'workspace_id' => $workspace->id,
+            'channel' => 'webchat',
+            'display_name' => 'Website Widget',
+            'status' => 'active',
+        ]);
+        $contact = Contact::create([
+            'workspace_id' => $workspace->id,
+            'first_name' => 'Geo',
+            'last_name' => 'Visitor',
+            'custom_fields' => [
+                'webchat_country' => 'Bangladesh',
+                'webchat_country_code' => 'BD',
+                'webchat_city' => 'Dhaka',
+                'webchat_region' => 'Dhaka Division',
+                'webchat_lat' => 23.8103,
+                'webchat_lon' => 90.4125,
+                'webchat_page_title' => 'Pricing Page',
+                'webchat_page_url' => 'https://cerqlehub.com/pricing',
+                'webchat_last_ip' => '103.100.100.1',
+            ],
+        ]);
+
+        $conversation = Conversation::create([
+            'workspace_id' => $workspace->id,
+            'contact_id' => $contact->id,
+            'channel_account_id' => $channelAccount->id,
+            'status' => 'open',
+            'webchat_last_seen_at' => now(),
+        ]);
+
+        Sanctum::actingAs($user);
+
+        $response = $this->getJson('/api/v1/mobile/conversations');
+
+        $response->assertOk()
+            ->assertJsonPath('data.0.contact.location.country', 'Bangladesh')
+            ->assertJsonPath('data.0.contact.location.country_code', 'BD')
+            ->assertJsonPath('data.0.contact.location.city', 'Dhaka')
+            ->assertJsonPath('data.0.contact.location.lat', 23.8103)
+            ->assertJsonPath('data.0.contact.location.lon', 90.4125)
+            ->assertJsonPath('data.0.contact.location.page_title', 'Pricing Page')
+            ->assertJsonPath('data.0.contact.custom_fields.webchat_country', 'Bangladesh');
     }
 }
