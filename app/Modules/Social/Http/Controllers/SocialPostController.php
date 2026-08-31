@@ -118,7 +118,6 @@ class SocialPostController extends Controller
         $network = $request->query('network');
 
         $accounts = SocialAccount::where('workspace_id', $wid)
-            ->where('active', true)
             ->get(['id', 'network', 'name', 'picture_url']);
 
         // Collect account IDs for the requested network filter

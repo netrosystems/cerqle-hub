@@ -129,6 +129,23 @@ class PublishedFacebookPostManagementTest extends TestCase
             );
     }
 
+    public function test_posts_index_keeps_inactive_accounts_available_for_published_post_management(): void
+    {
+        ['user' => $user, 'workspace' => $workspace] = $this->createWorkspaceContext();
+        [$post, $account] = $this->publishedPost($workspace->id, 'youtube');
+        $account->update(['active' => false]);
+
+        $this->actingAs($user)
+            ->get(route('client.social.posts.index'))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Social/Posts/Index')
+                ->where('posts.data.0.id', $post->id)
+                ->where('accounts.0.id', $account->id)
+                ->where('accounts.0.network', 'youtube')
+            );
+    }
+
     public function test_failed_instagram_delete_preserves_the_local_post_and_account_link(): void
     {
         Http::fake(['graph.facebook.com/*' => Http::response([
