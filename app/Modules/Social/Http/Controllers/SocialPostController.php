@@ -419,6 +419,19 @@ class SocialPostController extends Controller
         return back()->with('success', 'Post deleted.');
     }
 
+    public function removeLocalRecord(Request $request, SocialPost $post): RedirectResponse
+    {
+        abort_unless((int) $post->workspace_id === $this->workspaceId($request), 403);
+        abort_if($post->status === 'publishing', 422, 'Cannot remove a post that is currently being published.');
+
+        DB::transaction(function () use ($post): void {
+            $post->accountLinks()->delete();
+            $post->delete();
+        });
+
+        return back()->with('success', 'Post removed from Cerqle. The post on the connected platform was not changed.');
+    }
+
     public function updatePublishedFacebook(
         Request $request,
         SocialPost $post,

@@ -268,6 +268,22 @@ class PublishedFacebookPostManagementTest extends TestCase
         $this->assertDatabaseHas('social_media_posts', ['id' => $post->id]);
     }
 
+    public function test_published_post_can_be_explicitly_removed_from_cerqle_without_a_remote_request(): void
+    {
+        Http::fake();
+        ['user' => $user, 'workspace' => $workspace] = $this->createWorkspaceContext();
+        [$post] = $this->publishedPost($workspace->id, 'youtube');
+
+        $this->actingAs($user)
+            ->delete(route('client.social.posts.remove-local', $post))
+            ->assertRedirect()
+            ->assertSessionHas('success');
+
+        $this->assertDatabaseMissing('social_media_posts', ['id' => $post->id]);
+        $this->assertDatabaseMissing('social_media_post_accounts', ['post_id' => $post->id]);
+        Http::assertNothingSent();
+    }
+
     public function test_partially_failed_post_with_a_published_target_cannot_be_deleted_locally(): void
     {
         ['user' => $user, 'workspace' => $workspace] = $this->createWorkspaceContext();

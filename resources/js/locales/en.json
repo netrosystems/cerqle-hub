@@ -3878,6 +3878,8 @@
         "month_december": "December",
         "posts_title": "Posts",
         "post_actions": "Post actions",
+        "remove_from_cerqle": "Remove from Cerqle",
+        "confirm_remove_from_cerqle": "Remove this record from Cerqle only? This does not delete the published content from the social platform and cannot be undone.",
         "posts_head": "Social Posts",
         "posts_subtitle": "All your scheduled posts, drafts, and publish history.",
         "ai_plan": "AI Plan",

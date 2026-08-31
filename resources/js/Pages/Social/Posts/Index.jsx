@@ -370,7 +370,7 @@ function PostDetailModal({ post, accountMap, userTz, onClose, onDelete, onEditFa
 }
 
 /* ── Post Card ────────────────────────────────────────────────── */
-function PostCard({ post, accountMap, userTz, onView, onDelete, onEditFacebook, onDeleteFacebook, onDeleteInstagram, onEditYoutube, onDeleteYoutube }) {
+function PostCard({ post, accountMap, userTz, onView, onDelete, onRemoveLocal, onEditFacebook, onDeleteFacebook, onDeleteInstagram, onEditYoutube, onDeleteYoutube }) {
     const { t } = useTranslation();
     const [actioning, setActioning] = useState(null);
     const [menuOpen, setMenuOpen] = useState(false);
@@ -386,6 +386,7 @@ function PostCard({ post, accountMap, userTz, onView, onDelete, onEditFacebook, 
     const instagramTarget = publishedTargets.map((id) => accountMap[id]).find((account) => account?.network === 'instagram');
     const youtubeTarget = publishedTargets.map((id) => accountMap[id]).find((account) => account?.network === 'youtube');
     const canDelete = ['draft', 'scheduled', 'failed'].includes(post.status) && !hasPublishedTarget;
+    const canRemoveLocal = post.status !== 'publishing' && (post.status === 'published' || hasPublishedTarget);
     const canEdit   = ['draft', 'scheduled', 'failed'].includes(post.status) && !hasPublishedTarget;
     const canPublishNow = ['draft', 'scheduled', 'failed'].includes(post.status);
     const canCancel = post.status === 'scheduled';
@@ -467,7 +468,7 @@ function PostCard({ post, accountMap, userTz, onView, onDelete, onEditFacebook, 
                                 </a>
                             )}
 
-                            {(facebookTarget || instagramTarget || youtubeTarget || canDelete) && <div className="my-1 border-t border-neutral-100 dark:border-neutral-800" />}
+                            {(facebookTarget || instagramTarget || youtubeTarget || canDelete || canRemoveLocal) && <div className="my-1 border-t border-neutral-100 dark:border-neutral-800" />}
                             {facebookTarget && (
                                 <button type="button" role="menuitem" onClick={() => runMenuAction(() => onDeleteFacebook(post, facebookTarget))} className={destructiveMenuItemClass}>
                                     <Trash2 className="h-3.5 w-3.5" /> {t('social.delete_facebook_post')}
@@ -486,6 +487,11 @@ function PostCard({ post, accountMap, userTz, onView, onDelete, onEditFacebook, 
                             {canDelete && (
                                 <button type="button" role="menuitem" onClick={() => runMenuAction(() => onDelete(post.id))} className={destructiveMenuItemClass}>
                                     <Trash2 className="h-3.5 w-3.5" /> {post.status === 'scheduled' ? t('social.delete_schedule') : t('common.delete')}
+                                </button>
+                            )}
+                            {canRemoveLocal && (
+                                <button type="button" role="menuitem" onClick={() => runMenuAction(() => onRemoveLocal(post))} className={destructiveMenuItemClass}>
+                                    <Trash2 className="h-3.5 w-3.5" /> {t('social.remove_from_cerqle')}
                                 </button>
                             )}
                         </div>
@@ -562,6 +568,15 @@ export default function PostsIndex({ posts, accounts, filters }) {
                 onSuccess: () => setDetailPost(null),
             });
         }
+    };
+
+    const handleRemoveLocal = (post) => {
+        if (!confirm(t('social.confirm_remove_from_cerqle'))) return;
+
+        router.delete(route('client.social.posts.remove-local', post.id), {
+            preserveScroll: true,
+            onSuccess: () => setDetailPost(null),
+        });
     };
 
     const handleFacebookDelete = (post, account) => {
@@ -679,6 +694,7 @@ export default function PostsIndex({ posts, accounts, filters }) {
                                 userTz={userTz}
                                 onView={setDetailPost}
                                 onDelete={handleDelete}
+                                onRemoveLocal={handleRemoveLocal}
                                 onEditFacebook={(post, account, result) => setFacebookEdit({ post, account, result })}
                                 onDeleteFacebook={handleFacebookDelete}
                                 onDeleteInstagram={handleInstagramDelete}
