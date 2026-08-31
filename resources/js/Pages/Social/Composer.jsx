@@ -180,7 +180,7 @@ export default function SocialComposer({ accounts }) {
     const flash = props.flash ?? {};
     const userTz = props.timezone || browserTz() || 'Asia/Dhaka';
 
-    const { data, setData, post, processing, reset, errors, transform } = useForm({
+    const { data, setData, post, processing, reset, errors, transform, clearErrors } = useForm({
         body:            '',
         title:           '',
         media_urls:      [''],
@@ -204,6 +204,16 @@ export default function SocialComposer({ accounts }) {
     const toggleAccount = (id) => {
         const sid = id.toString();
         setData('target_accounts', data.target_accounts.includes(sid) ? data.target_accounts.filter(a => a !== sid) : [...data.target_accounts, sid]);
+    };
+
+    const addMediaSlot = () => {
+        clearErrors('media_urls');
+        setData('media_urls', [...(data.media_urls ?? []), '']);
+    };
+
+    const removeMediaSlot = (index) => {
+        clearErrors('media_urls', `media_urls.${index}`);
+        setData('media_urls', (data.media_urls ?? []).filter((_, itemIndex) => itemIndex !== index));
     };
 
     const generateWithAI = async () => {
@@ -334,9 +344,9 @@ export default function SocialComposer({ accounts }) {
                         <div className="space-y-2">
                             <div className="flex items-center justify-between">
                                 <label className="text-xs font-medium text-neutral-500 dark:text-neutral-400">{t('social.media')}</label>
-                                {!hasYoutube && <button
+                                {(!hasYoutube || (data.media_urls ?? []).length === 0) && <button
                                     type="button"
-                                    onClick={() => setData('media_urls', [...(data.media_urls ?? []), ''])}
+                                    onClick={addMediaSlot}
                                     className="flex items-center gap-1 text-xs text-brand-600 hover:text-brand-700 font-medium"
                                 >
                                     <Plus className="h-3.5 w-3.5" /> {t('social.add_media')}
@@ -348,13 +358,14 @@ export default function SocialComposer({ accounts }) {
                                         <MediaUpload
                                             value={url}
                                             onChange={v => {
+                                                clearErrors('media_urls', `media_urls.${i}`);
                                                 const next = [...(data.media_urls ?? [])];
                                                 next[i] = v;
                                                 setData('media_urls', next);
                                             }}
                                             accept={requiresDirectVideo ? 'video/mp4,video/webm,video/quicktime' : 'image/*,video/*'}
                                             collection={hasYoutube ? 'social-video' : 'social'}
-                                            maxSizeMb={hasYoutube ? 512 : undefined}
+                                            maxSizeMb={200}
                                             limitType={hasYoutube ? 'youtubeVideoMb' : 'mediaMb'}
                                             placeholder={requiresDirectVideo ? 'https://cdn.example.com/video.mp4' : 'https://cdn.example.com/image.jpg'}
                                             urlHelp={requiresDirectVideo ? t('social.direct_video_url_help') : null}
@@ -362,7 +373,7 @@ export default function SocialComposer({ accounts }) {
                                     </div>
                                     <button
                                         type="button"
-                                        onClick={() => setData('media_urls', (data.media_urls ?? []).filter((_, j) => j !== i))}
+                                        onClick={() => removeMediaSlot(i)}
                                         className="mt-7 shrink-0 text-neutral-400 hover:text-red-500"
                                     >
                                         <Trash2 className="h-4 w-4" />

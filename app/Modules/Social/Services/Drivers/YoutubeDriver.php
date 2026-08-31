@@ -16,7 +16,7 @@ class YoutubeDriver implements DeletesPublishedPosts, EditsPublishedPosts, Socia
 
     private const PLAYLIST_ITEMS_URL = 'https://www.googleapis.com/youtube/v3/playlistItems';
 
-    private const MAX_VIDEO_BYTES = 512 * 1024 * 1024;
+    private const MAX_VIDEO_BYTES = 200 * 1024 * 1024;
 
     private const MAX_THUMBNAIL_BYTES = 2 * 1024 * 1024;
 
@@ -89,7 +89,7 @@ class YoutubeDriver implements DeletesPublishedPosts, EditsPublishedPosts, Socia
             $this->assertSafeVideoUrl($videoUrl);
             $probe = Http::withoutRedirecting()->timeout(30)->head($videoUrl);
             if ($probe->successful() && (int) ($probe->header('Content-Length') ?? 0) > self::MAX_VIDEO_BYTES) {
-                throw new \RuntimeException('Video exceeds the 512 MB upload limit.');
+                throw new \RuntimeException('Video exceeds the 200 MB upload limit.');
             }
             $videoPath = tempnam(sys_get_temp_dir(), 'yt_');
             if ($videoPath === false) {
@@ -108,7 +108,7 @@ class YoutubeDriver implements DeletesPublishedPosts, EditsPublishedPosts, Socia
                 }
                 if ((int) ($download->header('Content-Length') ?? 0) > self::MAX_VIDEO_BYTES
                     || (int) filesize($videoPath) > self::MAX_VIDEO_BYTES) {
-                    throw new \RuntimeException('Video exceeds the 512 MB upload limit.');
+                    throw new \RuntimeException('Video exceeds the 200 MB upload limit.');
                 }
             } catch (\Throwable $e) {
                 @unlink($videoPath);
@@ -125,7 +125,7 @@ class YoutubeDriver implements DeletesPublishedPosts, EditsPublishedPosts, Socia
             throw new \RuntimeException('The video file is empty.');
         }
         if ($size > self::MAX_VIDEO_BYTES) {
-            throw new \RuntimeException('Video exceeds Cerqle\'s 512 MB YouTube upload limit.');
+            throw new \RuntimeException('Video exceeds Cerqle\'s 200 MB YouTube upload limit.');
         }
 
         $mimeType = mime_content_type($videoPath) ?: 'video/mp4';

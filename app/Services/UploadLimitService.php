@@ -6,9 +6,9 @@ use Symfony\Component\HttpFoundation\File\UploadedFile;
 
 class UploadLimitService
 {
-    private const MEDIA_MAX_MB = 50;
+    private const MEDIA_MAX_MB = 200;
 
-    private const YOUTUBE_VIDEO_MAX_MB = 512;
+    private const YOUTUBE_VIDEO_MAX_MB = 200;
 
     public function mediaMaxBytes(): int
     {

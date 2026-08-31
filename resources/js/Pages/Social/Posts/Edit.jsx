@@ -34,7 +34,7 @@ export default function EditPost({ post, accounts }) {
     const userTz = props.timezone || browserTz() || 'Asia/Dhaka';
     const postTz = post.timezone || userTz;
 
-    const { data, setData, put, processing, errors } = useForm({
+    const { data, setData, put, processing, errors, clearErrors } = useForm({
         title:           post.title ?? '',
         body:            post.body ?? '',
         media_urls:      (post.media_urls ?? []).filter(Boolean).length
@@ -51,6 +51,16 @@ export default function EditPost({ post, accounts }) {
         setData('target_accounts', data.target_accounts.includes(sid)
             ? data.target_accounts.filter(a => a !== sid)
             : [...data.target_accounts, sid]);
+    };
+
+    const addMediaSlot = () => {
+        clearErrors('media_urls');
+        setData('media_urls', [...(data.media_urls ?? []), '']);
+    };
+
+    const removeMediaSlot = (index) => {
+        clearErrors('media_urls', `media_urls.${index}`);
+        setData('media_urls', (data.media_urls ?? []).filter((_, itemIndex) => itemIndex !== index));
     };
 
     const selectedNetworks = accounts
@@ -190,8 +200,8 @@ export default function EditPost({ post, accounts }) {
                     <div className="rounded-xl border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 p-5 space-y-3">
                         <div className="flex items-center justify-between">
                             <h3 className="text-sm font-semibold text-neutral-800 dark:text-neutral-200">{t('social.media')}</h3>
-                            {!hasYoutube && <button type="button"
-                                onClick={() => setData('media_urls', [...(data.media_urls ?? []), ''])}
+                            {(!hasYoutube || (data.media_urls ?? []).length === 0) && <button type="button"
+                                onClick={addMediaSlot}
                                 className="inline-flex items-center gap-1 text-xs font-medium text-brand-600 hover:text-brand-700">
                                 <Plus className="h-3.5 w-3.5" /> {t('social.add_media')}
                             </button>}
@@ -202,20 +212,21 @@ export default function EditPost({ post, accounts }) {
                                     <MediaUpload
                                         value={url}
                                         onChange={v => {
+                                            clearErrors('media_urls', `media_urls.${i}`);
                                             const next = [...(data.media_urls ?? [])];
                                             next[i] = v;
                                             setData('media_urls', next);
                                         }}
                                         accept={requiresDirectVideo ? 'video/mp4,video/webm,video/quicktime' : 'image/*,video/*'}
                                         collection={hasYoutube ? 'social-video' : 'social'}
-                                        maxSizeMb={hasYoutube ? 512 : undefined}
+                                        maxSizeMb={200}
                                         limitType={hasYoutube ? 'youtubeVideoMb' : 'mediaMb'}
                                         placeholder={requiresDirectVideo ? 'https://cdn.example.com/video.mp4' : 'https://cdn.example.com/image.jpg'}
                                         urlHelp={requiresDirectVideo ? t('social.direct_video_url_help') : null}
                                     />
                                 </div>
                                 <button type="button"
-                                    onClick={() => setData('media_urls', (data.media_urls ?? []).filter((_, j) => j !== i))}
+                                    onClick={() => removeMediaSlot(i)}
                                     className="mt-7 shrink-0 text-neutral-400 hover:text-red-500 transition">
                                     <Trash2 className="h-4 w-4" />
                                 </button>

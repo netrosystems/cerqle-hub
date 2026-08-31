@@ -11,7 +11,7 @@ import { usePage } from '@inertiajs/react';
  *   value        (string)   — current URL value
  *   onChange     (fn)       — called with the new URL string
  *   accept       (string)   — file accept attribute (default: "image/*")
- *   maxSizeMb    (number)   — client-side size guard in MB (default: 50)
+ *   maxSizeMb    (number)   — client-side size guard in MB (default: 200)
  *   limitType    (string)   — uploadLimits key, e.g. "youtubeVideoMb"
  *   label        (string)   — optional label above the input
  *   placeholder  (string)   — URL input placeholder
@@ -35,7 +35,7 @@ export default function MediaUpload({
 }) {
     const { t } = useTranslation();
     const { props } = usePage();
-    const configuredMaxSizeMb = Number(maxSizeMb ?? 50);
+    const configuredMaxSizeMb = Number(maxSizeMb ?? 200);
     const serverMaxSizeMb = Number(props?.uploadLimits?.[limitType] ?? configuredMaxSizeMb);
     const effectiveMaxSizeMb = Math.max(1, Math.min(configuredMaxSizeMb, serverMaxSizeMb));
     const [mode, setMode] = useState('upload'); // 'url' | 'upload'
