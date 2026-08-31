@@ -1,5 +1,6 @@
 import MediaUpload from '@/Components/MediaUpload';
-import { Youtube } from 'lucide-react';
+import Tooltip from '@/Components/ui/Tooltip';
+import { Info, Youtube } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
@@ -132,9 +133,19 @@ export default function YouTubeVideoSettings({ value, onChange, errors = {}, rem
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div>
-                    <label className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-300">{t('social.youtube_playlist')}</label>
+                    <div className="mb-1 flex items-center gap-1.5">
+                        <label className="text-xs font-medium text-neutral-600 dark:text-neutral-300">{t('social.youtube_playlist')}</label>
+                        <Tooltip content={t('social.youtube_playlist_help')} position="top" wrap>
+                            <button
+                                type="button"
+                                aria-label={`${t('social.youtube_playlist')} instructions`}
+                                className="rounded-full text-neutral-400 transition hover:text-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-500/30 dark:hover:text-brand-300"
+                            >
+                                <Info className="h-3.5 w-3.5" aria-hidden="true" />
+                            </button>
+                        </Tooltip>
+                    </div>
                     <input value={options.playlist_id} onChange={e => update('playlist_id', e.target.value.trim())} placeholder="PLxxxxxxxxxxxxxxxx" className="w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm dark:border-neutral-600 dark:bg-neutral-800" />
-                    <p className="mt-1 text-xs text-neutral-400">{t('social.youtube_playlist_help')}</p>
                 </div>
                 <div>
                     <label className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-300">{t('social.youtube_language')}</label>

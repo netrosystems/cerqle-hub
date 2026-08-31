@@ -100,6 +100,7 @@ journey
 
 #### Capabilities
 - **Connected Accounts**: Connect Facebook Pages, Instagram Business Accounts, and LinkedIn profiles via OAuth 2.0.
+- **Persistent OAuth Connections**: YouTube uses the minimum sufficient `youtube.force-ssl` permission. YouTube, TikTok, and LinkedIn refresh short-lived access tokens automatically before use and on a ten-minute schedule. Application deployments preserve encrypted refresh tokens, and transient refresh failures never remove or disable a client connection. The dedicated Google Sign-In OAuth client takes precedence on the login page; legacy Firebase Google authentication remains a fallback only when that client is unavailable.
 - **Multi-Platform Post Composer (`/app/social/composer`)**: Compose copy, attach media, preview platform-specific layouts, and publish immediately or schedule for future delivery.
 - **Platform-Specific Payloads**: A shared base post can be overridden per selected network. Provider-only fields (YouTube metadata and TikTok creator privacy/interaction consent) are validated independently without conflating capabilities.
 - **Temporary Publishing Media**: Social uploads count against plan storage while active or retryable, are released from quota after all destinations publish, and are purged after a 24-hour safety window.

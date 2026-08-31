@@ -11,6 +11,7 @@ use App\Modules\Social\Services\Drivers\LinkedInDriver;
 use App\Modules\Social\Services\Drivers\TikTokDriver;
 use App\Modules\Social\Services\Drivers\YoutubeDriver;
 use App\Modules\Social\Services\OAuth\OAuthManager;
+use App\Modules\Social\Services\SocialAccessTokenService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -26,6 +27,7 @@ class SocialAccountController extends Controller
     public function __construct(
         private readonly OAuthManager $oauth,
         private readonly MetaPageDiscoveryService $metaPages,
+        private readonly SocialAccessTokenService $accessTokens,
     ) {
         $this->drivers = [
             'facebook' => new FacebookDriver,
@@ -44,7 +46,24 @@ class SocialAccountController extends Controller
     public function index(Request $request): Response
     {
         $wid = $this->workspaceId($request);
-        $accounts = SocialAccount::where('workspace_id', $wid)->get();
+        $accounts = SocialAccount::where('workspace_id', $wid)->get()->map(function (SocialAccount $account): SocialAccount {
+            if (! $account->isTokenExpired()) {
+                return $account;
+            }
+
+            try {
+                return $this->accessTokens->fresh($account);
+            } catch (\Throwable $e) {
+                Log::warning('Expired social token could not be refreshed while loading accounts.', [
+                    'workspace_id' => $account->workspace_id,
+                    'network' => $account->network,
+                    'account_id' => $account->id,
+                    'error' => $e->getMessage(),
+                ]);
+
+                return $account;
+            }
+        });
 
         return Inertia::render('Social/Accounts/Index', ['accounts' => $accounts]);
     }
@@ -52,9 +71,11 @@ class SocialAccountController extends Controller
     public function creatorOptions(Request $request, SocialAccount $account): JsonResponse
     {
         abort_unless((int) $account->workspace_id === $this->workspaceId($request), 403);
-        abort_unless($account->network === 'tiktok' && $account->active, 422);
+        abort_unless($account->network === 'tiktok', 422);
 
         try {
+            $account = $this->accessTokens->fresh($account);
+
             return response()->json(['data' => (new TikTokDriver)->creatorOptions($account)]);
         } catch (\Throwable $e) {
             Log::warning('TikTok creator options lookup failed.', [

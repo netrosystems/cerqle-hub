@@ -83,10 +83,13 @@ Schedule::job(new DispatchScheduledPostsJob, 'social')
     ->name('dispatch-social-posts')
     ->withoutOverlapping();
 
-// Refresh expiring social OAuth tokens daily
+// Refresh short-lived social OAuth access tokens before their expiry. Provider
+// refresh tokens remain persistent across application deployments.
 Schedule::job(new RefreshSocialTokensJob, 'social')
-    ->dailyAt('02:00')
-    ->name('refresh-social-tokens');
+    ->everyTenMinutes()
+    ->name('refresh-social-tokens')
+    ->withoutOverlapping()
+    ->onOneServer();
 
 Schedule::job(new PurgeTemporarySocialMediaJob, 'social')
     ->hourly()

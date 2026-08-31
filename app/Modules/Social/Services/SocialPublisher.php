@@ -23,8 +23,10 @@ class SocialPublisher
     /** @var array<string, SocialNetworkInterface> */
     private array $drivers;
 
-    public function __construct(private readonly SocialMediaLifecycleService $mediaLifecycle)
-    {
+    public function __construct(
+        private readonly SocialMediaLifecycleService $mediaLifecycle,
+        private readonly SocialAccessTokenService $accessTokens,
+    ) {
         $this->drivers = [
             'facebook' => new FacebookDriver,
             'instagram' => new InstagramSocialDriver,
@@ -71,6 +73,7 @@ class SocialPublisher
             }
 
             try {
+                $account = $this->accessTokens->fresh($account);
                 $platformId = $driver->publish($account, $this->payloadFor($post, $account));
                 $requiresProcessingCheck = $driver instanceof ChecksPublishProcessing;
                 $linkStatus = $requiresProcessingCheck ? 'processing' : 'published';
@@ -166,6 +169,7 @@ class SocialPublisher
             }
 
             try {
+                $account = $this->accessTokens->fresh($account);
                 $check = $driver->checkPublishProcessing($account, (string) $link->platform_post_id);
             } catch (\Throwable $e) {
                 Log::warning('Social processing confirmation failed and will retry.', [
@@ -257,6 +261,7 @@ class SocialPublisher
 
     public function updatePublishedPost(SocialAccount $account, string $platformPostId, array $postData): void
     {
+        $account = $this->accessTokens->fresh($account);
         $driver = $this->drivers[$account->network] ?? null;
 
         if (! $driver instanceof EditsPublishedPosts) {
@@ -268,6 +273,7 @@ class SocialPublisher
 
     public function deletePublishedPost(SocialAccount $account, string $platformPostId): void
     {
+        $account = $this->accessTokens->fresh($account);
         $driver = $this->drivers[$account->network] ?? null;
 
         if (! $driver instanceof DeletesPublishedPosts) {
