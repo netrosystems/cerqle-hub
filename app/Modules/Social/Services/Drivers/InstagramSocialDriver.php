@@ -40,19 +40,48 @@ class InstagramSocialDriver implements DeletesPublishedPosts, SocialNetworkInter
         $igUserId = $account->account_id;
         $token = $account->access_token;
 
-        // Step 1: Create media container
-        $containerPayload = ['caption' => $postData['body'] ?? '', 'access_token' => $token];
         $mediaUrls = array_values(array_filter($postData['media_urls'] ?? [], fn ($u) => $u !== null && $u !== ''));
-        if (! empty($mediaUrls)) {
-            $containerPayload['image_url'] = $mediaUrls[0];
-        } else {
+        if ($mediaUrls === []) {
             throw new \RuntimeException('Instagram posts require at least one image.');
         }
 
-        $container = Http::post("https://graph.facebook.com/v25.0/{$igUserId}/media", $containerPayload)->json();
-        $creationId = $container['id'] ?? null;
-        if (! $creationId) {
-            throw new \RuntimeException('Instagram container creation failed: '.json_encode($container));
+        // Step 1: Create a single image/Reel container or carousel children.
+        if (count($mediaUrls) === 1) {
+            $containerPayload = ['caption' => $postData['body'] ?? '', 'access_token' => $token];
+            if ($this->isVideoUrl($mediaUrls[0])) {
+                $containerPayload += ['media_type' => 'REELS', 'video_url' => $mediaUrls[0], 'share_to_feed' => true];
+            } else {
+                $containerPayload['image_url'] = $mediaUrls[0];
+            }
+
+            $creationId = $this->createContainer($igUserId, $containerPayload);
+            if ($this->isVideoUrl($mediaUrls[0])) {
+                $this->waitForContainer($creationId, $token);
+            }
+        } else {
+            if (count($mediaUrls) > 10) {
+                throw new \RuntimeException('Instagram carousels support at most 10 media items.');
+            }
+            $children = [];
+            foreach ($mediaUrls as $url) {
+                $child = ['is_carousel_item' => true, 'access_token' => $token];
+                if ($this->isVideoUrl($url)) {
+                    $child += ['media_type' => 'VIDEO', 'video_url' => $url];
+                } else {
+                    $child['image_url'] = $url;
+                }
+                $childId = $this->createContainer($igUserId, $child);
+                if ($this->isVideoUrl($url)) {
+                    $this->waitForContainer($childId, $token);
+                }
+                $children[] = $childId;
+            }
+            $creationId = $this->createContainer($igUserId, [
+                'media_type' => 'CAROUSEL',
+                'children' => implode(',', $children),
+                'caption' => $postData['body'] ?? '',
+                'access_token' => $token,
+            ]);
         }
 
         // Step 2: Publish
@@ -62,6 +91,38 @@ class InstagramSocialDriver implements DeletesPublishedPosts, SocialNetworkInter
         ])->json();
 
         return $res['id'] ?? throw new \RuntimeException('Instagram publish failed: '.json_encode($res));
+    }
+
+    private function createContainer(string $igUserId, array $payload): string
+    {
+        $container = Http::timeout(60)->post("https://graph.facebook.com/v25.0/{$igUserId}/media", $payload)->json();
+
+        return $container['id'] ?? throw new \RuntimeException('Instagram container creation failed: '.json_encode($container));
+    }
+
+    private function waitForContainer(string $creationId, string $token): void
+    {
+        for ($attempt = 0; $attempt < 60; $attempt++) {
+            sleep(5);
+            $response = Http::timeout(20)->get("https://graph.facebook.com/v25.0/{$creationId}", [
+                'fields' => 'status_code,status',
+                'access_token' => $token,
+            ]);
+            $status = (string) ($response->json('status_code') ?? '');
+            if ($status === 'FINISHED') {
+                return;
+            }
+            if (in_array($status, ['ERROR', 'EXPIRED'], true)) {
+                throw new \RuntimeException('Instagram could not process the uploaded video container.');
+            }
+        }
+
+        throw new \RuntimeException('Instagram video processing did not complete in time.');
+    }
+
+    private function isVideoUrl(string $url): bool
+    {
+        return (bool) preg_match('/\.(mp4|mov|webm|m4v)(?:\?|$)/i', $url);
     }
 
     public function permalink(SocialAccount $account, string $platformPostId): ?string

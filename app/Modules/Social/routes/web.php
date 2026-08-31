@@ -9,6 +9,7 @@ Route::middleware(['web', 'client-app'])->prefix('app/social')->name('client.soc
     Route::get('/accounts/connect/{network}', [SocialAccountController::class, 'connect'])->name('accounts.connect');
     Route::get('/accounts/callback/{network}', [SocialAccountController::class, 'callback'])->name('oauth.callback');
     Route::delete('/accounts/{account}', [SocialAccountController::class, 'disconnect'])->name('accounts.disconnect');
+    Route::get('/accounts/{account}/creator-options', [SocialAccountController::class, 'creatorOptions'])->name('accounts.creator-options');
 
     Route::get('/posts', [SocialPostController::class, 'index'])->name('posts.index');
     Route::get('/composer', [SocialPostController::class, 'composer'])->name('composer');

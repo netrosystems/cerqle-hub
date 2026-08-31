@@ -160,6 +160,29 @@ class YoutubeDriverTest extends TestCase
             && str_contains($request->url(), 'id=video-123'));
     }
 
+    public function test_it_waits_for_youtube_processing_before_marking_video_published(): void
+    {
+        Http::fake([
+            'www.googleapis.com/youtube/v3/videos*' => Http::sequence()
+                ->push(['items' => [[
+                    'status' => ['uploadStatus' => 'uploaded'],
+                    'processingDetails' => ['processingStatus' => 'processing'],
+                ]]])
+                ->push(['items' => [[
+                    'status' => ['uploadStatus' => 'processed'],
+                    'processingDetails' => ['processingStatus' => 'succeeded'],
+                ]]]),
+        ]);
+
+        $driver = new YoutubeDriver;
+        $account = new SocialAccount(['access_token' => 'token']);
+
+        $this->assertSame('processing', $driver->checkPublishProcessing($account, 'video-123')['status']);
+        $complete = $driver->checkPublishProcessing($account, 'video-123');
+        $this->assertSame('published', $complete['status']);
+        $this->assertSame('https://www.youtube.com/watch?v=video-123', $complete['url']);
+    }
+
     private function writeMinimalMp4(string $path): void
     {
         file_put_contents($path, "\x00\x00\x00\x18ftypisom\x00\x00\x02\x00isomiso2");

@@ -8,7 +8,7 @@ class UploadLimitService
 {
     private const MEDIA_MAX_MB = 200;
 
-    private const YOUTUBE_VIDEO_MAX_MB = 200;
+    private const YOUTUBE_VIDEO_MAX_MB = 500;
 
     public function mediaMaxBytes(): int
     {
@@ -44,11 +44,9 @@ class UploadLimitService
 
     private function youtubeVideoMaxBytes(): int
     {
-        $applicationLimit = self::YOUTUBE_VIDEO_MAX_MB * 1024 * 1024;
-        $phpLimit = UploadedFile::getMaxFilesize();
-
-        return ! is_numeric($phpLimit) || $phpLimit <= 0
-            ? $applicationLimit
-            : (int) min($applicationLimit, $phpLimit);
+        // This is Cerqle's application rule. PHP/Nginx are configured above
+        // this ceiling in deploy/server so the UI and validator consistently
+        // report 500 MB instead of silently inheriting a smaller host default.
+        return self::YOUTUBE_VIDEO_MAX_MB * 1024 * 1024;
     }
 }

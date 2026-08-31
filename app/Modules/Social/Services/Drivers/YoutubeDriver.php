@@ -6,7 +6,7 @@ use App\Modules\Social\Models\SocialAccount;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
-class YoutubeDriver implements DeletesPublishedPosts, EditsPublishedPosts, SocialNetworkInterface
+class YoutubeDriver implements ChecksPublishProcessing, DeletesPublishedPosts, EditsPublishedPosts, SocialNetworkInterface
 {
     private const VIDEOS_URL = 'https://www.googleapis.com/youtube/v3/videos';
 
@@ -16,7 +16,7 @@ class YoutubeDriver implements DeletesPublishedPosts, EditsPublishedPosts, Socia
 
     private const PLAYLIST_ITEMS_URL = 'https://www.googleapis.com/youtube/v3/playlistItems';
 
-    private const MAX_VIDEO_BYTES = 200 * 1024 * 1024;
+    private const MAX_VIDEO_BYTES = 500 * 1024 * 1024;
 
     private const MAX_THUMBNAIL_BYTES = 2 * 1024 * 1024;
 
@@ -89,7 +89,7 @@ class YoutubeDriver implements DeletesPublishedPosts, EditsPublishedPosts, Socia
             $this->assertSafeVideoUrl($videoUrl);
             $probe = Http::withoutRedirecting()->timeout(30)->head($videoUrl);
             if ($probe->successful() && (int) ($probe->header('Content-Length') ?? 0) > self::MAX_VIDEO_BYTES) {
-                throw new \RuntimeException('Video exceeds the 200 MB upload limit.');
+                throw new \RuntimeException('Video exceeds the 500 MB upload limit.');
             }
             $videoPath = tempnam(sys_get_temp_dir(), 'yt_');
             if ($videoPath === false) {
@@ -108,7 +108,7 @@ class YoutubeDriver implements DeletesPublishedPosts, EditsPublishedPosts, Socia
                 }
                 if ((int) ($download->header('Content-Length') ?? 0) > self::MAX_VIDEO_BYTES
                     || (int) filesize($videoPath) > self::MAX_VIDEO_BYTES) {
-                    throw new \RuntimeException('Video exceeds the 200 MB upload limit.');
+                    throw new \RuntimeException('Video exceeds the 500 MB upload limit.');
                 }
             } catch (\Throwable $e) {
                 @unlink($videoPath);
@@ -125,7 +125,7 @@ class YoutubeDriver implements DeletesPublishedPosts, EditsPublishedPosts, Socia
             throw new \RuntimeException('The video file is empty.');
         }
         if ($size > self::MAX_VIDEO_BYTES) {
-            throw new \RuntimeException('Video exceeds Cerqle\'s 200 MB YouTube upload limit.');
+            throw new \RuntimeException('Video exceeds Cerqle\'s 500 MB YouTube upload limit.');
         }
 
         $mimeType = mime_content_type($videoPath) ?: 'video/mp4';
@@ -233,6 +233,36 @@ class YoutubeDriver implements DeletesPublishedPosts, EditsPublishedPosts, Socia
     public function warnings(): array
     {
         return $this->warnings;
+    }
+
+    public function checkPublishProcessing(SocialAccount $account, string $platformPostId): array
+    {
+        $videoId = $this->validatedVideoId($platformPostId);
+        $response = Http::withToken($account->access_token)
+            ->timeout(20)
+            ->get(self::VIDEOS_URL, [
+                'part' => 'processingDetails,status',
+                'id' => $videoId,
+            ]);
+
+        if (! $response->successful()) {
+            throw new \RuntimeException('YouTube processing lookup failed (HTTP '.$response->status().').');
+        }
+
+        $video = $response->json('items.0');
+        if (! is_array($video)) {
+            return ['status' => 'failed', 'error' => 'YouTube no longer returns this uploaded video.'];
+        }
+
+        $processingStatus = data_get($video, 'processingDetails.processingStatus');
+        if ($processingStatus === 'failed' || data_get($video, 'status.uploadStatus') === 'failed') {
+            return ['status' => 'failed', 'error' => 'YouTube could not process the uploaded video.'];
+        }
+        if ($processingStatus === 'succeeded' || data_get($video, 'status.uploadStatus') === 'processed') {
+            return ['status' => 'published', 'url' => 'https://www.youtube.com/watch?v='.$videoId];
+        }
+
+        return ['status' => 'processing'];
     }
 
     public function updatePublishedPost(SocialAccount $account, string $platformPostId, array $postData): void

@@ -1,12 +1,14 @@
 import { Head, Link, useForm, usePage } from '@inertiajs/react';
 import ClientLayout from '@/Layouts/ClientLayout';
 import MediaUpload from '@/Components/MediaUpload';
-import YouTubeVideoSettings, { DEFAULT_YOUTUBE_OPTIONS } from '@/Components/YouTubeVideoSettings';
+import { DEFAULT_YOUTUBE_OPTIONS } from '@/Components/YouTubeVideoSettings';
+import SocialPlatformOverrides from '@/Components/SocialPlatformOverrides';
 import TimezonePicker from '@/Components/TimezonePicker';
 import { DatePicker } from '@/Components/ui';
 import { SocialBrandIcon } from '@/Components/BrandIcons';
 import { ArrowLeft, Clock, Trash2, Plus, Send, Calendar } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { useState } from 'react';
 import { browserTz, tzLocalToUtcIso, formatInTz } from '@/Utils/datetime';
 
 const CHAR_LIMITS = { tiktok: 2200, linkedin: 3000, facebook: 63206, instagram: 2200, youtube: 5000 };
@@ -28,22 +30,25 @@ function toLocalDatetime(utcStr, tz) {
     }
 }
 
-export default function EditPost({ post, accounts }) {
+export default function EditPost({ post, accounts, storageUsage }) {
     const { t } = useTranslation();
     const { props } = usePage();
     const userTz = props.timezone || browserTz() || 'Asia/Dhaka';
     const postTz = post.timezone || userTz;
+    const [liveStorage, setLiveStorage] = useState(storageUsage);
 
-    const { data, setData, put, processing, errors, clearErrors } = useForm({
+    const { data, setData, put, processing, errors, clearErrors, transform } = useForm({
         title:           post.title ?? '',
         body:            post.body ?? '',
         media_urls:      (post.media_urls ?? []).filter(Boolean).length
                             ? post.media_urls.filter(Boolean)
                             : [''],
+        media_ids:       post.media_ids ?? [],
         target_accounts: (post.target_accounts ?? []).map(String),
         scheduled_at:    toLocalDatetime(post.scheduled_at, postTz),
         timezone:        postTz,
         youtube_options: { ...DEFAULT_YOUTUBE_OPTIONS, ...(post.youtube_options ?? {}) },
+        platform_payloads: post.platform_payloads ?? {},
     });
 
     const toggleAccount = (id) => {
@@ -61,11 +66,12 @@ export default function EditPost({ post, accounts }) {
     const removeMediaSlot = (index) => {
         clearErrors('media_urls', `media_urls.${index}`);
         setData('media_urls', (data.media_urls ?? []).filter((_, itemIndex) => itemIndex !== index));
+        setData('media_ids', (data.media_ids ?? []).filter((_, itemIndex) => itemIndex !== index));
     };
 
-    const selectedNetworks = accounts
-        .filter(a => data.target_accounts.includes(a.id.toString()))
-        .map(a => a.network);
+    const selectedAccounts = accounts
+        .filter(a => data.target_accounts.includes(a.id.toString()));
+    const selectedNetworks = [...new Set(selectedAccounts.map(a => a.network))];
     const requiresDirectVideo = selectedNetworks.some(network => ['youtube', 'tiktok'].includes(network));
     const hasYoutube = selectedNetworks.includes('youtube');
     const isYoutubeOnly = selectedNetworks.length === 1 && hasYoutube;
@@ -75,17 +81,15 @@ export default function EditPost({ post, accounts }) {
 
     const handleSubmit = (e) => {
         e.preventDefault();
-        put(route('client.social.posts.update', post.id), {
-            data: {
-                ...data,
-                scheduled_at: data.scheduled_at
-                    ? tzLocalToUtcIso(data.scheduled_at, data.timezone || 'UTC')
-                    : null,
-                media_urls: (data.media_urls ?? []).filter(Boolean),
-                target_accounts: data.target_accounts.map(Number),
-            },
-            preserveScroll: true,
-        });
+        transform(current => ({
+            ...current,
+            scheduled_at: current.scheduled_at ? tzLocalToUtcIso(current.scheduled_at, current.timezone || 'UTC') : null,
+            media_urls: (current.media_urls ?? []).filter(Boolean),
+            media_ids: (current.media_ids ?? []).filter(Boolean),
+            platform_payloads: Object.fromEntries(Object.entries(current.platform_payloads ?? {}).filter(([network]) => selectedNetworks.includes(network))),
+            target_accounts: current.target_accounts.map(Number),
+        }));
+        put(route('client.social.posts.update', post.id), { preserveScroll: true });
     };
 
     const statusColor = {
@@ -200,7 +204,7 @@ export default function EditPost({ post, accounts }) {
                     <div className="rounded-xl border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 p-5 space-y-3">
                         <div className="flex items-center justify-between">
                             <h3 className="text-sm font-semibold text-neutral-800 dark:text-neutral-200">{t('social.media')}</h3>
-                            {(!hasYoutube || (data.media_urls ?? []).length === 0) && <button type="button"
+                            {(!requiresDirectVideo || (data.media_urls ?? []).length === 0) && <button type="button"
                                 onClick={addMediaSlot}
                                 className="inline-flex items-center gap-1 text-xs font-medium text-brand-600 hover:text-brand-700">
                                 <Plus className="h-3.5 w-3.5" /> {t('social.add_media')}
@@ -216,11 +220,24 @@ export default function EditPost({ post, accounts }) {
                                             const next = [...(data.media_urls ?? [])];
                                             next[i] = v;
                                             setData('media_urls', next);
+                                            if (!v) {
+                                                const ids = [...(data.media_ids ?? [])];
+                                                ids[i] = null;
+                                                setData('media_ids', ids);
+                                            }
+                                        }}
+                                        onUploaded={upload => {
+                                            const ids = [...(data.media_ids ?? [])];
+                                            ids[i] = upload.media_id;
+                                            setData('media_ids', ids);
+                                            setLiveStorage(upload.storage);
                                         }}
                                         accept={requiresDirectVideo ? 'video/mp4,video/webm,video/quicktime' : 'image/*,video/*'}
-                                        collection={hasYoutube ? 'social-video' : 'social'}
-                                        maxSizeMb={200}
-                                        limitType={hasYoutube ? 'youtubeVideoMb' : 'mediaMb'}
+                                        collection={requiresDirectVideo ? 'social-video' : 'social'}
+                                        maxSizeMb={requiresDirectVideo ? 500 : 200}
+                                        videoMaxSizeMb={500}
+                                        limitType={requiresDirectVideo ? 'youtubeVideoMb' : 'mediaMb'}
+                                        remainingBytes={liveStorage?.remaining_bytes ?? null}
                                         placeholder={requiresDirectVideo ? 'https://cdn.example.com/video.mp4' : 'https://cdn.example.com/image.jpg'}
                                         urlHelp={requiresDirectVideo ? t('social.direct_video_url_help') : null}
                                     />
@@ -243,13 +260,7 @@ export default function EditPost({ post, accounts }) {
                         {errors.media_urls && <p className="text-xs text-red-500">{errors.media_urls}</p>}
                     </div>
 
-                    {hasYoutube && (
-                        <YouTubeVideoSettings
-                            value={data.youtube_options}
-                            onChange={options => setData('youtube_options', options)}
-                            errors={errors}
-                        />
-                    )}
+                    <SocialPlatformOverrides networks={selectedNetworks} accounts={selectedAccounts} value={data.platform_payloads} onChange={payloads => setData('platform_payloads', payloads)} errors={errors} storageUsage={liveStorage} onStorageChange={setLiveStorage} />
 
                     {/* Schedule */}
                     <div className="rounded-xl border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 p-5 space-y-3">

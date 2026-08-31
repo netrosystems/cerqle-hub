@@ -5,7 +5,8 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { SocialBrandIcon } from '@/Components/BrandIcons';
 import MediaUpload from '@/Components/MediaUpload';
-import YouTubeVideoSettings, { DEFAULT_YOUTUBE_OPTIONS } from '@/Components/YouTubeVideoSettings';
+import { DEFAULT_YOUTUBE_OPTIONS } from '@/Components/YouTubeVideoSettings';
+import SocialPlatformOverrides from '@/Components/SocialPlatformOverrides';
 import TimezonePicker from '@/Components/TimezonePicker';
 import { DatePicker } from '@/Components/ui';
 import { browserTz, tzLocalToUtcIso, formatInTz } from '@/Utils/datetime';
@@ -174,7 +175,7 @@ const PREVIEW_COMPONENTS = {
 
 /* ── main component ─────────────────────────────────────────── */
 
-export default function SocialComposer({ accounts }) {
+export default function SocialComposer({ accounts, storageUsage }) {
     const { t } = useTranslation();
     const { props } = usePage();
     const flash = props.flash ?? {};
@@ -184,18 +185,21 @@ export default function SocialComposer({ accounts }) {
         body:            '',
         title:           '',
         media_urls:      [''],
+        media_ids:       [],
         target_accounts: [],
         scheduled_at:    '',
         timezone:        userTz,
         youtube_options: { ...DEFAULT_YOUTUBE_OPTIONS },
+        platform_payloads: {},
     });
 
     const [aiLoading, setAiLoading] = useState(false);
     const [aiPrompt, setAiPrompt] = useState('');
     const [aiError, setAiError] = useState('');
+    const [liveStorage, setLiveStorage] = useState(storageUsage);
 
     const selectedAccounts = accounts.filter(a => data.target_accounts.includes(a.id.toString()));
-    const selectedNetworks  = selectedAccounts.map(a => a.network);
+    const selectedNetworks  = [...new Set(selectedAccounts.map(a => a.network))];
     const requiresDirectVideo = selectedNetworks.some(network => ['youtube', 'tiktok'].includes(network));
     const hasYoutube = selectedNetworks.includes('youtube');
     const isYoutubeOnly = selectedNetworks.length === 1 && hasYoutube;
@@ -214,6 +218,7 @@ export default function SocialComposer({ accounts }) {
     const removeMediaSlot = (index) => {
         clearErrors('media_urls', `media_urls.${index}`);
         setData('media_urls', (data.media_urls ?? []).filter((_, itemIndex) => itemIndex !== index));
+        setData('media_ids', (data.media_ids ?? []).filter((_, itemIndex) => itemIndex !== index));
     };
 
     const generateWithAI = async () => {
@@ -246,6 +251,8 @@ export default function SocialComposer({ accounts }) {
             ...d,
             scheduled_at: d.scheduled_at ? tzLocalToUtcIso(d.scheduled_at, d.timezone || 'UTC') : null,
             media_urls: (d.media_urls ?? []).filter(Boolean),
+            media_ids: (d.media_ids ?? []).filter(Boolean),
+            platform_payloads: Object.fromEntries(Object.entries(d.platform_payloads ?? {}).filter(([network]) => selectedNetworks.includes(network))),
         }));
         post(route('client.social.posts.store'), { preserveScroll: true, onSuccess: () => reset() });
     };
@@ -265,6 +272,8 @@ export default function SocialComposer({ accounts }) {
                     </div>
 
                     {flash.success && <div className="rounded-lg bg-green-50 dark:bg-green-900/30 text-green-800 dark:text-green-200 px-4 py-2 text-sm">{flash.success}</div>}
+                    {liveStorage?.is_full && <div className="rounded-soft border border-coral-200 bg-coral-50 px-4 py-3 text-sm text-coral-800 dark:border-coral-800 dark:bg-coral-950/30 dark:text-coral-300">Storage is full. Delete unused media, wait for published-media cleanup, or upgrade your plan before uploading.</div>}
+                    {!liveStorage?.unlimited && liveStorage?.percent_used >= 80 && !liveStorage?.is_full && <div className="rounded-soft border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-200">Storage is {liveStorage.percent_used}% full. New uploads must fit within the remaining quota.</div>}
 
                     {/* Account selector */}
                     <div className={`rounded-xl border bg-white dark:bg-neutral-900 p-4 ${errors.target_accounts ? 'border-red-400 ring-2 ring-red-300 dark:ring-red-700' : 'border-neutral-200 dark:border-neutral-700'}`}>
@@ -344,7 +353,7 @@ export default function SocialComposer({ accounts }) {
                         <div className="space-y-2">
                             <div className="flex items-center justify-between">
                                 <label className="text-xs font-medium text-neutral-500 dark:text-neutral-400">{t('social.media')}</label>
-                                {(!hasYoutube || (data.media_urls ?? []).length === 0) && <button
+                                {(!requiresDirectVideo || (data.media_urls ?? []).length === 0) && <button
                                     type="button"
                                     onClick={addMediaSlot}
                                     className="flex items-center gap-1 text-xs text-brand-600 hover:text-brand-700 font-medium"
@@ -362,11 +371,24 @@ export default function SocialComposer({ accounts }) {
                                                 const next = [...(data.media_urls ?? [])];
                                                 next[i] = v;
                                                 setData('media_urls', next);
+                                                if (!v) {
+                                                    const ids = [...(data.media_ids ?? [])];
+                                                    ids[i] = null;
+                                                    setData('media_ids', ids);
+                                                }
+                                            }}
+                                            onUploaded={upload => {
+                                                const ids = [...(data.media_ids ?? [])];
+                                                ids[i] = upload.media_id;
+                                                setData('media_ids', ids);
+                                                setLiveStorage(upload.storage);
                                             }}
                                             accept={requiresDirectVideo ? 'video/mp4,video/webm,video/quicktime' : 'image/*,video/*'}
-                                            collection={hasYoutube ? 'social-video' : 'social'}
-                                            maxSizeMb={200}
-                                            limitType={hasYoutube ? 'youtubeVideoMb' : 'mediaMb'}
+                                            collection={requiresDirectVideo ? 'social-video' : 'social'}
+                                            maxSizeMb={requiresDirectVideo ? 500 : 200}
+                                            videoMaxSizeMb={500}
+                                            limitType={requiresDirectVideo ? 'youtubeVideoMb' : 'mediaMb'}
+                                            remainingBytes={liveStorage?.remaining_bytes ?? null}
                                             placeholder={requiresDirectVideo ? 'https://cdn.example.com/video.mp4' : 'https://cdn.example.com/image.jpg'}
                                             urlHelp={requiresDirectVideo ? t('social.direct_video_url_help') : null}
                                         />
@@ -391,13 +413,15 @@ export default function SocialComposer({ accounts }) {
                             {errors.media_urls && <p className="text-xs text-red-500">{errors.media_urls}</p>}
                         </div>
 
-                        {hasYoutube && (
-                            <YouTubeVideoSettings
-                                value={data.youtube_options}
-                                onChange={options => setData('youtube_options', options)}
-                                errors={errors}
-                            />
-                        )}
+                        <SocialPlatformOverrides
+                            networks={selectedNetworks}
+                            accounts={selectedAccounts}
+                            value={data.platform_payloads}
+                            onChange={payloads => setData('platform_payloads', payloads)}
+                            errors={errors}
+                            storageUsage={liveStorage}
+                            onStorageChange={setLiveStorage}
+                        />
 
                         <div className="space-y-2">
                             <label className="text-xs font-medium text-neutral-500 dark:text-neutral-400 flex items-center gap-1"><Clock className="h-3.5 w-3.5" /> {t('social.schedule_optional')}</label>

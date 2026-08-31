@@ -20,9 +20,10 @@ export const DEFAULT_YOUTUBE_OPTIONS = {
     contains_synthetic_media: false,
     notify_subscribers: true,
     default_language: '',
+    thumbnail_media_id: null,
 };
 
-export default function YouTubeVideoSettings({ value, onChange, errors = {} }) {
+export default function YouTubeVideoSettings({ value, onChange, errors = {}, remainingBytes = null, onStorageChange }) {
     const { t } = useTranslation();
     const options = { ...DEFAULT_YOUTUBE_OPTIONS, ...(value ?? {}) };
     const update = (key, next) => onChange?.({ ...options, [key]: next });
@@ -70,12 +71,21 @@ export default function YouTubeVideoSettings({ value, onChange, errors = {} }) {
                 <label className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-300">{t('social.youtube_thumbnail')}</label>
                 <MediaUpload
                     value={options.thumbnail_url}
-                    onChange={next => update('thumbnail_url', next)}
+                    onChange={next => onChange?.({
+                        ...options,
+                        thumbnail_url: next,
+                        thumbnail_media_id: next ? options.thumbnail_media_id : null,
+                    })}
+                    onUploaded={upload => {
+                        onChange?.({ ...options, thumbnail_url: upload.url, thumbnail_media_id: upload.media_id });
+                        onStorageChange?.(upload.storage);
+                    }}
                     accept="image/jpeg,image/png"
                     maxSizeMb={2}
                     collection="social-thumbnail"
                     placeholder="https://cdn.example.com/thumbnail.jpg"
                     urlHelp={t('social.youtube_thumbnail_help')}
+                    remainingBytes={remainingBytes}
                 />
                 {errors['youtube_options.thumbnail_url'] && <p className="mt-1 text-xs text-red-500">{errors['youtube_options.thumbnail_url']}</p>}
             </div>

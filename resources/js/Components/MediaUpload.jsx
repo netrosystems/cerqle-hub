@@ -10,6 +10,7 @@ import { usePage } from '@inertiajs/react';
  * Props:
  *   value        (string)   — current URL value
  *   onChange     (fn)       — called with the new URL string
+ *   onUploaded   (fn)       — called with the upload response (including media_id)
  *   accept       (string)   — file accept attribute (default: "image/*")
  *   maxSizeMb    (number)   — client-side size guard in MB (default: 200)
  *   limitType    (string)   — uploadLimits key, e.g. "youtubeVideoMb"
@@ -23,21 +24,28 @@ import { usePage } from '@inertiajs/react';
 export default function MediaUpload({
     value = '',
     onChange,
+    onUploaded,
     accept = 'image/*',
     maxSizeMb,
+    videoMaxSizeMb = null,
     limitType = 'mediaMb',
+    videoLimitType = 'youtubeVideoMb',
     label,
     placeholder = 'https://',
     urlHelp,
     collection = 'default',
     disabled = false,
     className = '',
+    remainingBytes = null,
 }) {
     const { t } = useTranslation();
     const { props } = usePage();
     const configuredMaxSizeMb = Number(maxSizeMb ?? 200);
     const serverMaxSizeMb = Number(props?.uploadLimits?.[limitType] ?? configuredMaxSizeMb);
     const effectiveMaxSizeMb = Math.max(1, Math.min(configuredMaxSizeMb, serverMaxSizeMb));
+    const configuredVideoMaxSizeMb = Number(videoMaxSizeMb ?? configuredMaxSizeMb);
+    const serverVideoMaxSizeMb = Number(props?.uploadLimits?.[videoLimitType] ?? configuredVideoMaxSizeMb);
+    const effectiveVideoMaxSizeMb = Math.max(1, Math.min(configuredVideoMaxSizeMb, serverVideoMaxSizeMb));
     const [mode, setMode] = useState('upload'); // 'url' | 'upload'
     const [uploading, setUploading] = useState(false);
     const [error, setError] = useState(null);
@@ -49,8 +57,13 @@ export default function MediaUpload({
     const uploadFile = useCallback(async (file) => {
         if (!file) return;
 
-        if (file.size > effectiveMaxSizeMb * 1024 * 1024) {
-            setError(t('ui.file_exceeds_limit', { max: effectiveMaxSizeMb }));
+        const fileMaxSizeMb = file.type?.startsWith('video/') ? effectiveVideoMaxSizeMb : effectiveMaxSizeMb;
+        if (file.size > fileMaxSizeMb * 1024 * 1024) {
+            setError(t('ui.file_exceeds_limit', { max: fileMaxSizeMb }));
+            return;
+        }
+        if (remainingBytes !== null && file.size > remainingBytes) {
+            setError(t('ui.storage_quota_exceeded', { defaultValue: 'This file is larger than your remaining plan storage. Delete unused media, wait for published-media cleanup, or upgrade your plan.' }));
             return;
         }
 
@@ -67,6 +80,7 @@ export default function MediaUpload({
             const resp = await axios.post(route('client.media.store'), form);
 
             onChange?.(resp.data.url);
+            onUploaded?.(resp.data);
             setMode('url');
         } catch (err) {
             const validationMessage = Object.values(err?.response?.data?.errors ?? {})
@@ -76,7 +90,7 @@ export default function MediaUpload({
             const msg = err?.response?.status === 413
                 ? t('ui.server_rejected_upload', {
                     size: fileSizeMb,
-                    max: effectiveMaxSizeMb,
+                    max: fileMaxSizeMb,
                     defaultValue: 'The web server rejected this {{size}} MB upload before it reached Cerqle. Increase the active Nginx request limit to at least {{max}} MB.',
                 })
                 :
@@ -88,7 +102,7 @@ export default function MediaUpload({
         } finally {
             setUploading(false);
         }
-    }, [collection, effectiveMaxSizeMb, onChange, t]);
+    }, [collection, effectiveMaxSizeMb, effectiveVideoMaxSizeMb, onChange, onUploaded, remainingBytes, t]);
 
     const handleFileChange = (e) => {
         const file = e.target.files?.[0];
@@ -197,7 +211,7 @@ export default function MediaUpload({
                                 {t('ui.drag_drop_or')} <span className="text-brand-600 dark:text-brand-400 font-medium">{t('ui.browse')}</span>
                             </span>
                             <span className="text-xs text-neutral-400">
-                                {accept} · {t('ui.max_size_mb', { max: effectiveMaxSizeMb })}
+                                {accept} · {videoMaxSizeMb ? `images ${effectiveMaxSizeMb} MB · videos ${effectiveVideoMaxSizeMb} MB` : t('ui.max_size_mb', { max: effectiveMaxSizeMb })}
                             </span>
                         </>
                     )}

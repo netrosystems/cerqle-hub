@@ -11,6 +11,7 @@ use App\Modules\Social\Services\Drivers\LinkedInDriver;
 use App\Modules\Social\Services\Drivers\TikTokDriver;
 use App\Modules\Social\Services\Drivers\YoutubeDriver;
 use App\Modules\Social\Services\OAuth\OAuthManager;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -46,6 +47,24 @@ class SocialAccountController extends Controller
         $accounts = SocialAccount::where('workspace_id', $wid)->get();
 
         return Inertia::render('Social/Accounts/Index', ['accounts' => $accounts]);
+    }
+
+    public function creatorOptions(Request $request, SocialAccount $account): JsonResponse
+    {
+        abort_unless((int) $account->workspace_id === $this->workspaceId($request), 403);
+        abort_unless($account->network === 'tiktok' && $account->active, 422);
+
+        try {
+            return response()->json(['data' => (new TikTokDriver)->creatorOptions($account)]);
+        } catch (\Throwable $e) {
+            Log::warning('TikTok creator options lookup failed.', [
+                'workspace_id' => $account->workspace_id,
+                'account_id' => $account->id,
+                'error' => $e->getMessage(),
+            ]);
+
+            return response()->json(['error' => 'TikTok publishing options could not be loaded. Reconnect the account and try again.'], 422);
+        }
     }
 
     public function connect(Request $request, string $network): RedirectResponse
