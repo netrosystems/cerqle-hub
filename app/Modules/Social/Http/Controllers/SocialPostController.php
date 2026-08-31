@@ -518,6 +518,98 @@ class SocialPostController extends Controller
         return back()->with('success', 'Facebook post deleted.');
     }
 
+    public function updatePublishedYoutube(
+        Request $request,
+        SocialPost $post,
+        int $account,
+        SocialPublisher $publisher
+    ): RedirectResponse {
+        [$socialAccount, $link] = $this->publishedTarget($request, $post, $account, 'youtube');
+        $validated = $request->validate([
+            'title' => ['required', 'string', 'max:100'],
+            'body' => ['nullable', 'string', 'max:5000'],
+            'youtube_options' => ['required', 'array'],
+            'youtube_options.privacy_status' => ['required', 'in:private,unlisted,public'],
+            'youtube_options.category_id' => ['required', 'integer', 'between:1,44'],
+            'youtube_options.tags' => ['nullable', 'array', 'max:50'],
+            'youtube_options.tags.*' => ['string', 'max:60'],
+            'youtube_options.made_for_kids' => ['nullable', 'boolean'],
+            'youtube_options.contains_synthetic_media' => ['nullable', 'boolean'],
+            'youtube_options.default_language' => ['nullable', 'string', 'max:16', 'regex:/^[A-Za-z0-9-]+$/'],
+        ]);
+
+        $tags = array_map(fn ($tag) => trim((string) $tag), $validated['youtube_options']['tags'] ?? []);
+        if (mb_strlen(implode(',', $tags)) > 500) {
+            throw ValidationException::withMessages([
+                'youtube_options.tags' => ['YouTube tags cannot exceed 500 total characters.'],
+            ]);
+        }
+        $validated['youtube_options']['tags'] = array_values(array_filter($tags));
+
+        try {
+            $publisher->updatePublishedPost($socialAccount, (string) $link->platform_post_id, $validated);
+        } catch (\Throwable $e) {
+            Log::warning('YouTube published video update failed', [
+                'post_id' => $post->id,
+                'account_id' => $socialAccount->id,
+                'error' => $e->getMessage(),
+            ]);
+
+            return back()->withErrors([
+                'youtube' => 'YouTube could not update this video. '.$this->publicProviderError($e->getMessage()),
+            ]);
+        }
+
+        $results = $post->publish_results ?? [];
+        $results[$socialAccount->id] = array_merge($results[$socialAccount->id] ?? [], [
+            'status' => 'published',
+            'post_id' => $link->platform_post_id,
+            'edited_title' => $validated['title'],
+            'edited_body' => $validated['body'] ?? '',
+            'edited_youtube_options' => $validated['youtube_options'],
+            'edited_at' => now()->toIso8601String(),
+        ]);
+
+        $updates = ['publish_results' => $results];
+        if (count($post->target_accounts ?? []) === 1) {
+            $updates = array_merge($updates, [
+                'title' => $validated['title'],
+                'body' => $validated['body'] ?? '',
+                'youtube_options' => array_merge($post->youtube_options ?? [], $validated['youtube_options']),
+            ]);
+        }
+        $post->update($updates);
+
+        return back()->with('success', 'YouTube video updated on YouTube and Cerqle.');
+    }
+
+    public function deletePublishedYoutube(
+        Request $request,
+        SocialPost $post,
+        int $account,
+        SocialPublisher $publisher
+    ): RedirectResponse {
+        [$socialAccount, $link] = $this->publishedTarget($request, $post, $account, 'youtube');
+
+        try {
+            $publisher->deletePublishedPost($socialAccount, (string) $link->platform_post_id);
+        } catch (\Throwable $e) {
+            Log::error('YouTube published video deletion failed', [
+                'post_id' => $post->id,
+                'account_id' => $socialAccount->id,
+                'error' => $e->getMessage(),
+            ]);
+
+            return back()->withErrors([
+                'youtube' => 'YouTube could not delete this video. Nothing was removed from Cerqle. '.$this->publicProviderError($e->getMessage()),
+            ]);
+        }
+
+        $this->removePublishedTarget($post, $socialAccount, $link);
+
+        return back()->with('success', 'Video permanently deleted from YouTube and Cerqle.');
+    }
+
     public function deletePublishedInstagram(
         Request $request,
         SocialPost $post,

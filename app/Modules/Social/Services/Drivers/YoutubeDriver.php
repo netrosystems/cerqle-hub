@@ -6,8 +6,10 @@ use App\Modules\Social\Models\SocialAccount;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
-class YoutubeDriver implements SocialNetworkInterface
+class YoutubeDriver implements DeletesPublishedPosts, EditsPublishedPosts, SocialNetworkInterface
 {
+    private const VIDEOS_URL = 'https://www.googleapis.com/youtube/v3/videos';
+
     private const UPLOAD_URL = 'https://www.googleapis.com/upload/youtube/v3/videos';
 
     private const THUMBNAIL_URL = 'https://www.googleapis.com/upload/youtube/v3/thumbnails/set';
@@ -231,6 +233,97 @@ class YoutubeDriver implements SocialNetworkInterface
     public function warnings(): array
     {
         return $this->warnings;
+    }
+
+    public function updatePublishedPost(SocialAccount $account, string $platformPostId, array $postData): void
+    {
+        $videoId = $this->validatedVideoId($platformPostId);
+        $currentResponse = Http::withToken($account->access_token)
+            ->timeout(20)
+            ->get(self::VIDEOS_URL, [
+                'part' => 'snippet,status',
+                'id' => $videoId,
+            ]);
+
+        if (! $currentResponse->successful()) {
+            throw new \RuntimeException('YouTube video lookup failed (HTTP '.$currentResponse->status().'): '.$this->providerError($currentResponse->json(), $currentResponse->body()));
+        }
+
+        $current = $currentResponse->json('items.0');
+        if (! is_array($current)) {
+            throw new \RuntimeException('YouTube could not find this video. It may already have been deleted.');
+        }
+
+        $options = $postData['youtube_options'] ?? [];
+        $currentSnippet = $current['snippet'] ?? [];
+        $currentStatus = $current['status'] ?? [];
+
+        // videos.update replaces mutable fields in every included part. Merge
+        // the current resource first so an edit never clears metadata that the
+        // user did not change in Cerqle.
+        $snippet = [
+            'title' => trim((string) ($postData['title'] ?? $currentSnippet['title'] ?? '')),
+            'description' => (string) ($postData['body'] ?? $currentSnippet['description'] ?? ''),
+            'categoryId' => (string) ($options['category_id'] ?? $currentSnippet['categoryId'] ?? '22'),
+            'tags' => array_values($options['tags'] ?? $currentSnippet['tags'] ?? []),
+        ];
+        if (filled($options['default_language'] ?? $currentSnippet['defaultLanguage'] ?? null)) {
+            $snippet['defaultLanguage'] = (string) ($options['default_language'] ?? $currentSnippet['defaultLanguage']);
+        }
+
+        $status = [
+            'privacyStatus' => (string) ($options['privacy_status'] ?? $currentStatus['privacyStatus'] ?? 'private'),
+        ];
+        foreach (['embeddable', 'license', 'publicStatsViewable'] as $field) {
+            if (array_key_exists($field, $currentStatus)) {
+                $status[$field] = $currentStatus[$field];
+            }
+        }
+        if (array_key_exists('made_for_kids', $options)) {
+            $status['selfDeclaredMadeForKids'] = (bool) $options['made_for_kids'];
+        } elseif (array_key_exists('selfDeclaredMadeForKids', $currentStatus)) {
+            $status['selfDeclaredMadeForKids'] = (bool) $currentStatus['selfDeclaredMadeForKids'];
+        }
+        if (array_key_exists('contains_synthetic_media', $options)) {
+            $status['containsSyntheticMedia'] = (bool) $options['contains_synthetic_media'];
+        } elseif (array_key_exists('containsSyntheticMedia', $currentStatus)) {
+            $status['containsSyntheticMedia'] = (bool) $currentStatus['containsSyntheticMedia'];
+        }
+
+        $response = Http::withToken($account->access_token)
+            ->timeout(30)
+            ->put(self::VIDEOS_URL.'?'.http_build_query(['part' => 'snippet,status']), [
+                'id' => $videoId,
+                'snippet' => $snippet,
+                'status' => $status,
+            ]);
+
+        if (! $response->successful()) {
+            throw new \RuntimeException('YouTube video update failed (HTTP '.$response->status().'): '.$this->providerError($response->json(), $response->body()));
+        }
+    }
+
+    public function deletePublishedPost(SocialAccount $account, string $platformPostId): void
+    {
+        $videoId = $this->validatedVideoId($platformPostId);
+        $response = Http::withToken($account->access_token)
+            ->timeout(30)
+            ->delete(self::VIDEOS_URL.'?'.http_build_query(['id' => $videoId]));
+
+        // A missing video already satisfies the desired remote state, so the
+        // stale Cerqle record can be safely removed as well.
+        if (! $response->successful() && $response->status() !== 404) {
+            throw new \RuntimeException('YouTube video deletion failed (HTTP '.$response->status().'): '.$this->providerError($response->json(), $response->body()));
+        }
+    }
+
+    private function validatedVideoId(string $platformPostId): string
+    {
+        if ($platformPostId === '' || ! preg_match('/^[A-Za-z0-9_-]{3,128}$/', $platformPostId)) {
+            throw new \InvalidArgumentException('YouTube returned an invalid video ID.');
+        }
+
+        return $platformPostId;
     }
 
     private function runOptionalStep(string $label, callable $callback): void
