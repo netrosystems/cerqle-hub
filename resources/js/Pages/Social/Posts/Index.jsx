@@ -106,7 +106,7 @@ function YoutubeEditModal({ post, account, result, onClose }) {
     const { t } = useTranslation();
     const savedOptions = result?.edited_youtube_options ?? post?.youtube_options ?? {};
     const { data, setData, put, processing, errors } = useForm({
-        title: result?.edited_title ?? post?.title ?? '',
+        title: result?.edited_title || post?.title || '',
         body: result?.edited_body ?? post?.body ?? '',
         youtube_options: {
             privacy_status: savedOptions.privacy_status ?? 'private',
