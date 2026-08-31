@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Workspace;
+use App\Services\WorkspaceLimitService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -14,7 +15,7 @@ class WorkspaceController extends Controller
     /**
      * List workspaces the user can access (for switcher).
      */
-    public function index(Request $request): Response
+    public function index(Request $request, WorkspaceLimitService $workspaceLimits): Response
     {
         $workspaces = $request->user()->accessibleWorkspaces();
 
@@ -24,6 +25,7 @@ class WorkspaceController extends Controller
                 'name' => $w->name,
                 'is_owner' => $w->owner_id === $request->user()->id,
             ]),
+            'workspaceUsage' => $workspaceLimits->usageFor($request->user()),
         ]);
     }
 
@@ -49,23 +51,17 @@ class WorkspaceController extends Controller
     /**
      * Create a new workspace (owner is current user).
      */
-    public function store(Request $request): RedirectResponse
+    public function store(Request $request, WorkspaceLimitService $workspaceLimits): RedirectResponse
     {
         $this->authorize('create', Workspace::class);
+
+        $request->merge(['name' => trim((string) $request->input('name'))]);
 
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
         ]);
 
-        $workspace = Workspace::create([
-            'name' => $validated['name'],
-            'owner_id' => $request->user()->id,
-            'client_id' => $request->user()->client_id,
-            'default_locale' => $request->user()->locale ?? 'en',
-            'currency_code' => $request->user()->display_currency,
-        ]);
-
-        $workspace->members()->attach($request->user()->id, ['role' => 'owner']);
+        $workspace = $workspaceLimits->createFor($request->user(), $validated);
 
         $request->session()->put('current_workspace_id', $workspace->id);
         $request->user()->update(['workspace_id' => $workspace->id]);

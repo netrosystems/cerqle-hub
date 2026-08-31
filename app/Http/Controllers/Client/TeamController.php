@@ -142,7 +142,7 @@ class TeamController extends Controller
 
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
-            'email' => ['required', 'email', 'max:255', Rule::unique('users', 'email')->ignore($member->id)],
+            'email' => ['required', 'email', 'max:255', Rule::in([$member->email])],
             'password' => ['nullable', 'string', 'min:8', 'confirmed'],
             'status' => ['required', 'string', 'in:active,inactive'],
             'workspace_assignments' => ['required', 'array', 'min:1'],
@@ -152,7 +152,6 @@ class TeamController extends Controller
 
         DB::transaction(function () use ($member, $client, $validated): void {
             $member->name = $validated['name'];
-            $member->email = $validated['email'];
             $member->status = $validated['status'];
             if (! empty($validated['password'])) {
                 $member->password = $validated['password'];

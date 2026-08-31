@@ -10,6 +10,7 @@ class IntegrationConfig extends Model
     public const PROVIDERS = [
         'meta_app',
         'oauth_linkedin',
+        'oauth_google_signin',
         'oauth_youtube',
         'oauth_tiktok',
         'oauth_shopify',
@@ -43,7 +44,8 @@ class IntegrationConfig extends Model
     public const LABELS = [
         'meta_app' => 'Meta App (WhatsApp / Instagram / Messenger / Facebook)',
         'oauth_linkedin' => 'LinkedIn OAuth',
-        'oauth_youtube' => 'YouTube / Google OAuth',
+        'oauth_google_signin' => 'Google Sign-In',
+        'oauth_youtube' => 'YouTube OAuth',
         'oauth_tiktok' => 'TikTok OAuth',
         'oauth_shopify' => 'Shopify App (OAuth)',
         'oauth_bigcommerce' => 'BigCommerce App (OAuth)',
@@ -65,6 +67,7 @@ class IntegrationConfig extends Model
     public const CATEGORIES = [
         'meta_app' => 'Meta',
         'oauth_linkedin' => 'Social OAuth',
+        'oauth_google_signin' => 'Authentication',
         'oauth_youtube' => 'Social OAuth',
         'oauth_tiktok' => 'Social OAuth',
         'oauth_shopify' => 'E-Commerce OAuth',
@@ -96,6 +99,10 @@ class IntegrationConfig extends Model
         'oauth_linkedin' => [
             ['key' => 'client_id',     'label' => 'Client ID',     'type' => 'text',     'required' => true],
             ['key' => 'client_secret', 'label' => 'Client Secret', 'type' => 'password', 'required' => true],
+        ],
+        'oauth_google_signin' => [
+            ['key' => 'client_id', 'label' => 'OAuth Client ID', 'type' => 'text', 'required' => true, 'hint' => 'Use the dedicated Google Sign-In Web application client.'],
+            ['key' => 'client_secret', 'label' => 'OAuth Client Secret', 'type' => 'password', 'required' => true],
         ],
         'oauth_youtube' => [
             ['key' => 'client_id',     'label' => 'Client ID',     'type' => 'text',     'required' => true],

@@ -1,5 +1,6 @@
 import { Link, usePage } from '@inertiajs/react';
-import { useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { ChevronDown, Plus, X } from 'lucide-react';
 
@@ -26,8 +27,152 @@ function writeScrollPosition(storageKey, position) {
     }
 }
 
-function NavGroup({ label, items, onClose }) {
-    const [open, setOpen] = useState(true);
+function isNavItemActive(item) {
+    return typeof item.active === 'function'
+        ? item.active()
+        : item.active ?? (item.route && route().current(item.route));
+}
+
+function NavLinks({ items, onClose, flyout = false }) {
+    return items.map((item, i) => {
+        const isActive = isNavItemActive(item);
+        return (
+            <Link
+                key={item.key ?? item.route ?? item.href ?? i}
+                href={item.href ?? (item.route ? route(item.route) : '#')}
+                onClick={onClose}
+                className={[
+                    'group flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-150',
+                    isActive
+                        ? 'bg-brand-600 text-white shadow-sm'
+                        : flyout
+                            ? 'text-neutral-700 hover:bg-brand-50 hover:text-brand-700 dark:text-neutral-300 dark:hover:bg-brand-950/30 dark:hover:text-brand-300'
+                            : 'text-white/80 hover:bg-white/10 hover:text-white',
+                ].join(' ')}
+            >
+                {item.icon && (
+                    <span className={[
+                        'shrink-0 transition-colors duration-150',
+                        isActive
+                            ? 'text-white'
+                            : flyout
+                                ? 'text-neutral-400 group-hover:text-brand-600 dark:group-hover:text-brand-400'
+                                : 'text-white/65 group-hover:text-white',
+                    ].join(' ')}>
+                        {item.icon}
+                    </span>
+                )}
+                <span className="truncate">{item.label}</span>
+                {isActive && <span className="ml-auto h-1.5 w-1.5 shrink-0 rounded-full bg-white/70" />}
+            </Link>
+        );
+    });
+}
+
+function NavGroup({ label, items, onClose, defaultOpen = true, surface = 'desktop' }) {
+    const hasActiveItem = items.some((item) => (
+        isNavItemActive(item)
+    ));
+    const [open, setOpen] = useState(defaultOpen || hasActiveItem);
+    const [flyoutOpen, setFlyoutOpen] = useState(false);
+    const [flyoutPinned, setFlyoutPinned] = useState(false);
+    const [flyoutPosition, setFlyoutPosition] = useState({ left: 264, top: 12 });
+    const triggerRef = useRef(null);
+    const flyoutRef = useRef(null);
+    const closeTimerRef = useRef(null);
+    const useFlyout = surface === 'desktop' && !defaultOpen;
+
+    const cancelFlyoutClose = () => {
+        if (closeTimerRef.current) window.clearTimeout(closeTimerRef.current);
+    };
+
+    const openFlyout = () => {
+        cancelFlyoutClose();
+        const rect = triggerRef.current?.getBoundingClientRect();
+        if (rect) {
+            const estimatedHeight = Math.min(items.length * 41 + 52, 420);
+            setFlyoutPosition({
+                left: rect.right + 8,
+                top: Math.max(12, Math.min(rect.top, window.innerHeight - estimatedHeight - 12)),
+            });
+        }
+        setFlyoutOpen(true);
+    };
+
+    const scheduleFlyoutClose = () => {
+        if (flyoutPinned) return;
+        cancelFlyoutClose();
+        closeTimerRef.current = window.setTimeout(() => setFlyoutOpen(false), 140);
+    };
+
+    useEffect(() => {
+        if (!flyoutPinned) return undefined;
+
+        const closeOnOutsideClick = (event) => {
+            if (!triggerRef.current?.contains(event.target) && !flyoutRef.current?.contains(event.target)) {
+                setFlyoutPinned(false);
+                setFlyoutOpen(false);
+            }
+        };
+        document.addEventListener('mousedown', closeOnOutsideClick);
+        return () => document.removeEventListener('mousedown', closeOnOutsideClick);
+    }, [flyoutPinned]);
+
+    if (useFlyout) {
+        return (
+            <div className="mb-0.5" onMouseEnter={openFlyout} onMouseLeave={scheduleFlyoutClose}>
+                <button
+                    ref={triggerRef}
+                    type="button"
+                    onClick={() => {
+                        if (flyoutPinned) {
+                            setFlyoutPinned(false);
+                            setFlyoutOpen(false);
+                        } else {
+                            openFlyout();
+                            setFlyoutPinned(true);
+                        }
+                    }}
+                    onFocus={openFlyout}
+                    onKeyDown={(event) => {
+                        if (event.key === 'Escape') {
+                            setFlyoutPinned(false);
+                            setFlyoutOpen(false);
+                        }
+                    }}
+                    aria-expanded={flyoutOpen}
+                    aria-haspopup="menu"
+                    className={[
+                        'mt-1 flex w-full items-center justify-between rounded-lg px-3 py-2 text-[10px] font-bold uppercase tracking-widest transition-colors duration-150 select-none',
+                        hasActiveItem ? 'bg-white/10 text-white' : 'text-white/70 hover:bg-white/5 hover:text-white',
+                    ].join(' ')}
+                >
+                    <span>{label}</span>
+                    <ChevronDown className={`h-3 w-3 -rotate-90 transition-transform duration-200 ${flyoutOpen ? 'translate-x-0.5' : ''}`} />
+                </button>
+
+                {flyoutOpen && typeof document !== 'undefined' && createPortal(
+                    <div
+                        ref={flyoutRef}
+                        role="menu"
+                        aria-label={label}
+                        onMouseEnter={cancelFlyoutClose}
+                        onMouseLeave={scheduleFlyoutClose}
+                        className="fixed z-50 w-60 overflow-hidden rounded-xl border border-neutral-200 bg-white shadow-2xl dark:border-neutral-700 dark:bg-neutral-900"
+                        style={{ left: flyoutPosition.left, top: flyoutPosition.top }}
+                    >
+                        <div className="border-b border-neutral-100 px-4 py-3 dark:border-neutral-800">
+                            <p className="text-xs font-bold uppercase tracking-wider text-neutral-500 dark:text-neutral-400">{label}</p>
+                        </div>
+                        <div className="max-h-[360px] space-y-0.5 overflow-y-auto p-2">
+                            <NavLinks items={items} onClose={() => { setFlyoutPinned(false); setFlyoutOpen(false); onClose?.(); }} flyout />
+                        </div>
+                    </div>,
+                    document.body,
+                )}
+            </div>
+        );
+    }
 
     return (
         <div className="mb-0.5">
@@ -49,41 +194,7 @@ function NavGroup({ label, items, onClose }) {
 
             {open && (
                 <div id={`nav-group-${label.replace(/\s+/g, '-').toLowerCase()}`} className="mt-0.5 space-y-0.5">
-                    {items.map((item, i) => {
-                        const isActive =
-                            typeof item.active === 'function'
-                                ? item.active()
-                                : item.route
-                                    ? route().current(item.route)
-                                    : false;
-                        return (
-                            <Link
-                                key={item.key ?? item.route ?? item.href ?? i}
-                                href={item.href ?? (item.route ? route(item.route) : '#')}
-                                onClick={onClose}
-                                className={[
-                                    'group flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-150',
-                                    isActive
-                                        ? 'bg-brand-600 text-white shadow-sm'
-                                        : 'text-white/80 hover:bg-white/10 hover:text-white',
-                                ].join(' ')}
-                                style={!isActive ? undefined : undefined}
-                            >
-                                {item.icon && (
-                                    <span className={[
-                                        'shrink-0 transition-colors duration-150',
-                                        isActive ? 'text-white' : 'text-white/65 group-hover:text-white',
-                                    ].join(' ')}>
-                                        {item.icon}
-                                    </span>
-                                )}
-                                <span className="truncate">{item.label}</span>
-                                {isActive && (
-                                    <span className="ml-auto h-1.5 w-1.5 rounded-full bg-white/70 shrink-0" />
-                                )}
-                            </Link>
-                        );
-                    })}
+                    <NavLinks items={items} onClose={onClose} />
                 </div>
             )}
         </div>
@@ -164,6 +275,8 @@ export default function Sidebar({
                             label={group.label}
                             items={group.items ?? []}
                             onClose={onClose}
+                            defaultOpen={group.defaultOpen ?? true}
+                            surface={surface}
                         />
                     ))}
 

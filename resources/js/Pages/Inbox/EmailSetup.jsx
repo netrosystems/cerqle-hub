@@ -1,5 +1,6 @@
-import { Head, Link, router, useForm } from '@inertiajs/react';
+import { Head, router, useForm } from '@inertiajs/react';
 import ClientLayout from '@/Layouts/ClientLayout';
+import Modal from '@/Components/ui/Modal';
 import { Mail, RefreshCw, Trash2, ShieldCheck, Server, AlertTriangle, AtSign } from 'lucide-react';
 import { useState } from 'react';
 
@@ -21,32 +22,95 @@ function AccountCard({ account }) {
     </div>;
 }
 
-export default function EmailSetup({ accounts, googleEnabled, googleCallbackUrl, microsoftEnabled, microsoftCallbackUrl, imapExtensionAvailable }) {
+function ProviderCard({ icon: Icon, iconClass, iconWrapClass, title, count, description, action, disabled = false, disabledMessage }) {
+    return (
+        <section className="flex min-h-[250px] flex-col overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-sm dark:border-neutral-700 dark:bg-neutral-900">
+            <div className="flex items-center gap-3 border-b border-neutral-100 px-5 py-4 dark:border-neutral-800">
+                <div className={`rounded-xl p-2 ${iconWrapClass}`}><Icon className={`h-4 w-4 ${iconClass}`} /></div>
+                <h2 className="text-sm font-semibold text-neutral-900 dark:text-neutral-100">{title}</h2>
+                <span className={`ml-auto rounded-full px-2 py-0.5 text-xs font-medium ${count > 0 ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300' : 'bg-neutral-100 text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400'}`}>
+                    {count} connected
+                </span>
+            </div>
+            <div className="flex flex-1 flex-col items-center justify-center px-6 py-7 text-center">
+                <div className={`mb-4 flex h-12 w-12 items-center justify-center rounded-2xl ${iconWrapClass}`}>
+                    <Icon className={`h-6 w-6 ${iconClass}`} />
+                </div>
+                <p className="max-w-xs text-sm leading-6 text-neutral-500 dark:text-neutral-400">{description}</p>
+                <div className="mt-5">
+                    {action}
+                    {disabled && disabledMessage && <p className="mt-2 max-w-xs text-xs text-amber-600 dark:text-amber-400">{disabledMessage}</p>}
+                </div>
+            </div>
+        </section>
+    );
+}
+
+export default function EmailSetup({ accounts, googleEnabled, microsoftEnabled, imapExtensionAvailable }) {
+    const [showGenericSetup, setShowGenericSetup] = useState(false);
     const form = useForm({ email: '', display_name: '', imap_host: '', imap_port: 993, imap_encryption: 'ssl', smtp_host: '', smtp_port: 465, smtp_encryption: 'ssl', username: '', password: '', verify_tls: true });
-    const submit = e => { e.preventDefault(); form.post(route('client.inbox.email.generic.store'), { preserveScroll: true, onSuccess: () => form.reset() }); };
-    return <ClientLayout><Head title="Email Setup" /><div className="mx-auto max-w-5xl space-y-6 p-4 sm:p-6">
-        <div className="flex flex-wrap items-center justify-between gap-3"><div><h1 className="text-2xl font-bold text-neutral-900 dark:text-white">Email Setup</h1><p className="text-sm text-neutral-500">Connect mailboxes to the Master Email Inbox.</p></div><Link href={route('client.inbox.email-inbox')} className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white">Open Master Email Inbox</Link></div>
+    const providerCount = provider => accounts.filter(account => account.provider === provider).length;
+    const submit = e => {
+        e.preventDefault();
+        form.post(route('client.inbox.email.generic.store'), {
+            preserveScroll: true,
+            onSuccess: () => {
+                form.reset();
+                setShowGenericSetup(false);
+            },
+        });
+    };
+    return <ClientLayout title="Email Setup"><Head title="Email Setup" /><div className="space-y-6">
+        <div><h1 className="text-xl font-bold text-neutral-900 dark:text-white">Email Setup</h1><p className="mt-0.5 text-sm text-neutral-500 dark:text-neutral-400">Connect mailboxes to the Master Email Inbox.</p></div>
         {accounts.length > 0 && <section className="space-y-3">
             <div className="flex flex-wrap items-end justify-between gap-2">
                 <div><h2 className="text-base font-semibold text-neutral-900 dark:text-white">Connected mailboxes</h2><p className="text-xs text-neutral-500">All mailboxes sync independently into one Master Email Inbox.</p></div>
                 <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">{accounts.length} connected</span>
             </div>
-            <div className="grid gap-3 lg:grid-cols-2">{accounts.map(a => <AccountCard key={a.id} account={a} />)}</div>
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">{accounts.map(a => <AccountCard key={a.id} account={a} />)}</div>
         </section>}
-        <div>
-            <h2 className="text-base font-semibold text-neutral-900 dark:text-white">{accounts.length ? 'Add another mailbox' : 'Connect your first mailbox'}</h2>
-            <p className="mt-1 text-xs text-neutral-500">Choose any provider below. You can connect multiple accounts from the same or different providers.</p>
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+            <ProviderCard
+                icon={AtSign}
+                iconClass="text-red-600 dark:text-red-400"
+                iconWrapClass="bg-red-50 dark:bg-red-950/30"
+                title="Google Gmail OAuth"
+                count={providerCount('gmail')}
+                description="Connect Gmail or Google Workspace securely without sharing a password."
+                disabled={!googleEnabled}
+                disabledMessage="Gmail OAuth must be configured by a Super Admin first."
+                action={<a href={googleEnabled ? route('client.inbox.email.google.connect') : undefined} aria-disabled={!googleEnabled} className={`inline-flex items-center rounded-lg px-4 py-2 text-xs font-semibold transition ${googleEnabled ? 'bg-[#4285F4] text-white hover:bg-[#3578e5]' : 'cursor-not-allowed bg-neutral-100 text-neutral-400 dark:bg-neutral-800'}`}>Connect Gmail</a>}
+            />
+            <ProviderCard
+                icon={ShieldCheck}
+                iconClass="text-blue-600 dark:text-blue-400"
+                iconWrapClass="bg-blue-50 dark:bg-blue-950/30"
+                title="Microsoft 365 OAuth"
+                count={providerCount('microsoft_365')}
+                description="Connect Outlook or Microsoft 365 securely through Microsoft Graph."
+                disabled={!microsoftEnabled}
+                disabledMessage="Microsoft OAuth must be configured by a Super Admin first."
+                action={<a href={microsoftEnabled ? route('client.inbox.email.microsoft.connect') : undefined} aria-disabled={!microsoftEnabled} className={`inline-flex items-center rounded-lg px-4 py-2 text-xs font-semibold transition ${microsoftEnabled ? 'bg-[#2F2F2F] text-white hover:bg-black' : 'cursor-not-allowed bg-neutral-100 text-neutral-400 dark:bg-neutral-800'}`}>Connect Microsoft</a>}
+            />
+            <ProviderCard
+                icon={Server}
+                iconClass="text-violet-600 dark:text-violet-400"
+                iconWrapClass="bg-violet-50 dark:bg-violet-950/30"
+                title="Generic IMAP / SMTP"
+                count={providerCount('imap_smtp')}
+                description="Connect a cPanel or custom mailbox using its incoming and outgoing server details."
+                disabled={!imapExtensionAvailable}
+                disabledMessage="PHP IMAP must be installed on the server first."
+                action={<button type="button" onClick={() => setShowGenericSetup(true)} disabled={!imapExtensionAvailable} className="rounded-lg bg-brand-600 px-4 py-2 text-xs font-semibold text-white transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:bg-neutral-100 disabled:text-neutral-400 dark:disabled:bg-neutral-800">Connect custom mailbox</button>}
+            />
         </div>
-        <div className="grid gap-5 lg:grid-cols-2">
-            <section className="rounded-2xl border border-neutral-200 bg-white p-5 dark:border-neutral-700 dark:bg-neutral-900"><div className="mb-4 flex items-center gap-3"><div className="rounded-xl bg-red-50 p-2 text-red-600"><AtSign className="h-5 w-5" /></div><div><h2 className="font-semibold">Google Gmail OAuth</h2><p className="text-xs text-neutral-500">Recommended for Gmail and Google Workspace mail.</p></div></div><p className="mb-4 text-sm text-neutral-600 dark:text-neutral-300">Uses the Gmail API with per-user consent. Passwords are never collected and access can be revoked from Google.</p><a href={googleEnabled ? route('client.inbox.email.google.connect') : '#'} className={`block rounded-lg px-4 py-2.5 text-center text-sm font-semibold ${googleEnabled ? 'bg-[#4285F4] text-white' : 'cursor-not-allowed bg-neutral-100 text-neutral-400'}`}>Add Gmail mailbox</a>{!googleEnabled && <p className="mt-3 text-xs text-amber-600">A Super Admin must configure Google Gmail OAuth under Integrations first.</p>}<div className="mt-4 rounded-lg bg-neutral-50 p-3 text-xs text-neutral-500 dark:bg-neutral-800">Redirect URI: <code className="break-all">{googleCallbackUrl}</code></div></section>
-            <section className="rounded-2xl border border-neutral-200 bg-white p-5 dark:border-neutral-700 dark:bg-neutral-900"><div className="mb-4 flex items-center gap-3"><div className="rounded-xl bg-blue-50 p-2 text-blue-600"><ShieldCheck className="h-5 w-5" /></div><div><h2 className="font-semibold">Microsoft 365 OAuth</h2><p className="text-xs text-neutral-500">Recommended for Outlook and Microsoft 365.</p></div></div><p className="mb-4 text-sm text-neutral-600 dark:text-neutral-300">Uses Microsoft Graph. Passwords are never shared and access can be revoked from Microsoft.</p><a href={microsoftEnabled ? route('client.inbox.email.microsoft.connect') : '#'} className={`block rounded-lg px-4 py-2.5 text-center text-sm font-semibold ${microsoftEnabled ? 'bg-[#2F2F2F] text-white' : 'cursor-not-allowed bg-neutral-100 text-neutral-400'}`}>Add Microsoft mailbox</a>{!microsoftEnabled && <p className="mt-3 text-xs text-amber-600">A Super Admin must configure Microsoft 365 OAuth under Integrations first.</p>}<div className="mt-4 rounded-lg bg-neutral-50 p-3 text-xs text-neutral-500 dark:bg-neutral-800">Redirect URI: <code className="break-all">{microsoftCallbackUrl}</code></div></section>
-            <section className="rounded-2xl border border-neutral-200 bg-white p-5 dark:border-neutral-700 dark:bg-neutral-900 lg:col-span-2 lg:mx-auto lg:w-full lg:max-w-3xl">
-                <div className="mb-4 flex items-center gap-3">
-                    <div className="rounded-xl bg-violet-50 p-2 text-violet-600"><Server className="h-5 w-5" /></div>
-                    <div><h2 className="font-semibold">Generic IMAP / SMTP</h2><p className="text-xs text-neutral-500">Connect a cPanel or custom mailbox.</p></div>
-                </div>
-                {!imapExtensionAvailable && <div className="mb-4 flex gap-2 rounded-lg bg-amber-50 p-3 text-xs text-amber-700"><AlertTriangle className="h-4 w-4 shrink-0" /><span>PHP IMAP is not installed on this server. Ask the server administrator to install and enable the PHP IMAP extension before connecting a mailbox.</span></div>}
-                <form onSubmit={submit} className="space-y-4">
+
+        <Modal show={showGenericSetup} onClose={() => !form.processing && setShowGenericSetup(false)} maxWidth="3xl">
+            <form onSubmit={submit}>
+                <Modal.Header title="Connect a custom mailbox" onClose={() => setShowGenericSetup(false)} />
+                <Modal.Body className="max-h-[70vh] space-y-4 overflow-y-auto">
+                    <p className="text-sm text-neutral-500 dark:text-neutral-400">Enter the IMAP and SMTP settings supplied by your email hosting provider.</p>
+                    {!imapExtensionAvailable && <div className="flex gap-2 rounded-lg bg-amber-50 p-3 text-xs text-amber-700 dark:bg-amber-950/30 dark:text-amber-300"><AlertTriangle className="h-4 w-4 shrink-0" /><span>PHP IMAP is not installed on this server. Ask the server administrator to install and enable the PHP IMAP extension before connecting a mailbox.</span></div>}
                     <div className="grid gap-3 sm:grid-cols-2">
                         <Input label="Mailbox email" value={form.data.email} onChange={v => form.setData('email', v)} type="email" />
                         <Input label="Display name" value={form.data.display_name} onChange={v => form.setData('display_name', v)} />
@@ -72,12 +136,13 @@ export default function EmailSetup({ accounts, googleEnabled, googleCallbackUrl,
                         <Input label="Password / app password" value={form.data.password} onChange={v => form.setData('password', v)} type="password" />
                     </div>
                     {Object.keys(form.errors).length > 0 && <p className="rounded-lg bg-red-50 p-3 text-xs text-red-700">{Object.values(form.errors)[0]}</p>}
-                    <div className="flex justify-end">
-                        <button disabled={form.processing || !imapExtensionAvailable} className="w-full rounded-lg bg-brand-600 px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-50 sm:w-auto">{form.processing ? 'Testing IMAP and SMTP…' : 'Test and connect'}</button>
-                    </div>
-                </form>
-            </section>
-        </div>
+                </Modal.Body>
+                <Modal.Footer>
+                    <button type="button" onClick={() => setShowGenericSetup(false)} disabled={form.processing} className="rounded-lg border border-neutral-300 px-4 py-2 text-sm font-semibold text-neutral-700 transition hover:bg-neutral-50 disabled:opacity-50 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800">Cancel</button>
+                    <button disabled={form.processing || !imapExtensionAvailable} className="rounded-lg bg-brand-600 px-5 py-2 text-sm font-semibold text-white disabled:opacity-50">{form.processing ? 'Testing IMAP and SMTP…' : 'Test and connect'}</button>
+                </Modal.Footer>
+            </form>
+        </Modal>
     </div></ClientLayout>;
 }
 function Input({ label, value, onChange, type = 'text' }) { return <label className="block text-xs font-medium text-neutral-600 dark:text-neutral-300">{label}<input required={label !== 'Display name'} type={type} value={value} onChange={e => onChange(e.target.value)} className="mt-1 w-full rounded-lg border-neutral-300 text-sm dark:border-neutral-700 dark:bg-neutral-800" /></label>; }

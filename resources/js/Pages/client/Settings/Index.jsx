@@ -2,7 +2,7 @@ import ClientLayout from '@/Layouts/ClientLayout';
 import { Button } from '@/Components/ui';
 import { Head, Link, useForm, usePage } from '@inertiajs/react';
 import { useTranslation } from 'react-i18next';
-import { Settings as SettingsIcon, Bell, Download } from 'lucide-react';
+import { Settings as SettingsIcon, Bell, Download, LockKeyhole } from 'lucide-react';
 import { browserTz } from '@/Utils/datetime';
 import TimezonePicker from '@/Components/TimezonePicker';
 
@@ -10,6 +10,7 @@ export default function ClientSettingsIndex({
     preferences = {},
     supportedLocales = [],
     supportedCurrencies = [],
+    phoneCountries = [],
     client = null,
     digestEnabled = true,
     pendingReplyNotificationsEnabled = true,
@@ -22,8 +23,8 @@ export default function ClientSettingsIndex({
         theme: preferences.theme ?? 'light',
         timezone: preferences.timezone ?? browserTz() ?? 'Asia/Dhaka',
         client_name: client?.name ?? '',
-        client_email: client?.email ?? '',
-        client_phone: client?.phone ?? '',
+        client_phone_country: client?.phone_region ?? 'US',
+        client_phone: client?.phone_national ?? '',
         client_address: client?.address ?? '',
         weekly_digest_enabled: digestEnabled,
         pending_reply_notifications_enabled: pendingReplyNotificationsEnabled,
@@ -140,21 +141,46 @@ export default function ClientSettingsIndex({
                                     </label>
                                     <input
                                         type="email"
-                                        value={form.data.client_email}
-                                        onChange={e => form.setData('client_email', e.target.value)}
-                                        className="w-full rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm"
+                                        value={client.email ?? ''}
+                                        readOnly
+                                        aria-readonly="true"
+                                        className="w-full cursor-not-allowed rounded-lg border border-neutral-200 bg-neutral-100 px-3 py-2 text-sm text-neutral-500 dark:border-neutral-700 dark:bg-neutral-900/60 dark:text-neutral-400"
                                     />
+                                    <p className="mt-1.5 flex items-center gap-1 text-xs text-neutral-500 dark:text-neutral-400">
+                                        <LockKeyhole className="h-3 w-3" />
+                                        {t('client.organization_email_locked', { defaultValue: 'Locked for account security. Contact a Super Admin to change this email.' })}
+                                    </p>
                                 </div>
                                 <div>
                                     <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">
                                         {t('client.phone') || 'Phone'}
                                     </label>
-                                    <input
-                                        type="text"
-                                        value={form.data.client_phone}
-                                        onChange={e => form.setData('client_phone', e.target.value)}
-                                        className="w-full rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm"
-                                    />
+                                    <div className="flex overflow-hidden rounded-lg border border-neutral-300 bg-white focus-within:border-brand-500 focus-within:ring-2 focus-within:ring-brand-500/20 dark:border-neutral-600 dark:bg-neutral-800">
+                                        <select
+                                            value={form.data.client_phone_country}
+                                            onChange={e => form.setData('client_phone_country', e.target.value)}
+                                            aria-label={t('client.phone_country_code', { defaultValue: 'Phone country code' })}
+                                            className="max-w-[48%] shrink-0 border-0 border-r border-neutral-300 bg-neutral-50 px-2.5 py-2 text-sm focus:ring-0 dark:border-neutral-600 dark:bg-neutral-900"
+                                        >
+                                            {phoneCountries.map(country => (
+                                                <option key={country.region} value={country.region}>
+                                                    {String.fromCodePoint(...[...country.region].map(char => 127397 + char.charCodeAt()))} {country.name} ({country.dial_code})
+                                                </option>
+                                            ))}
+                                        </select>
+                                        <input
+                                            type="tel"
+                                            inputMode="tel"
+                                            autoComplete="tel-national"
+                                            value={form.data.client_phone}
+                                            onChange={e => form.setData('client_phone', e.target.value)}
+                                            placeholder={t('client.phone_number_placeholder', { defaultValue: 'Phone number' })}
+                                            className="min-w-0 flex-1 border-0 bg-transparent px-3 py-2 text-sm focus:ring-0"
+                                        />
+                                    </div>
+                                    {form.errors.client_phone_country && <p className="mt-1 text-xs text-red-500">{form.errors.client_phone_country}</p>}
+                                    {form.errors.client_phone && <p className="mt-1 text-xs text-red-500">{form.errors.client_phone}</p>}
+                                    <p className="mt-1 text-xs text-neutral-400">{t('client.phone_international_hint', { defaultValue: 'Select the country code, then enter the phone number.' })}</p>
                                 </div>
                                 <div className="sm:col-span-2">
                                     <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">

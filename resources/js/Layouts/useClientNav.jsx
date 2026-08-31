@@ -42,8 +42,8 @@ export default function useClientNav() {
     ];
 
     const accountSettingsItems = [
-        { label: t('nav.workspaces'), href: safeRoute('client.workspaces.index'), icon: <Layers className={iconClass} />,   activePattern: 'client.workspaces.*' },
         { label: t('nav.settings'),   href: safeRoute('client.settings.index'),   icon: <Settings className={iconClass} />, activePattern: 'client.settings.*' },
+        { label: t('nav.workspaces'), href: safeRoute('client.workspaces.index'), icon: <Layers className={iconClass} />,   activePattern: 'client.workspaces.*' },
     ];
 
     if (isClientAdmin) {
@@ -84,14 +84,12 @@ export default function useClientNav() {
         { label: t('nav.auto_replies'),  href: safeRoute('client.whatsapp.auto-replies.index'),  icon: whatsappNavIcon, activePattern: 'client.whatsapp.auto-replies.*' },
     ];
 
-    const broadcastItems = [
-        { label: t('nav.sms_campaigns'), href: safeRoute('client.campaigns.index'),    icon: <Radio className={iconClass} />,        activePattern: 'client.campaigns.*' },
-        { label: t('nav.sms_gateways'), href: safeRoute('client.sms-gateways.index'), icon: <MessageSquare className={iconClass} />, activePattern: 'client.sms-gateways.*' },
+    const inboxItems = [
+        { label: 'inBOX', href: safeRoute('client.inbox.index'), icon: <Inbox className={iconClass} />, activePattern: 'client.inbox.index' },
+        { label: 'Email inBOX', href: safeRoute('client.inbox.email-inbox'), icon: <Mail className={iconClass} />, activePattern: 'client.inbox.email-inbox' },
     ];
 
-    const inboxItems = [
-        { label: t('nav.inbox'),          href: safeRoute('client.inbox.index'),               icon: <Inbox className={iconClass} />,         activePattern: 'client.inbox.index' },
-        { label: t('nav.master_email_inbox', { defaultValue: 'Master Email Inbox' }), href: safeRoute('client.inbox.email-inbox'), icon: <Mail className={iconClass} />, activePattern: 'client.inbox.email-inbox' },
+    const inboxSetupItems = [
         { label: t('nav.channel_setup'),  href: safeRoute('client.inbox.setup'),               icon: <Inbox className={iconClass} />,         activePattern: 'client.inbox.setup' },
         { label: t('nav.email_setup', { defaultValue: 'Email Setup' }), href: safeRoute('client.inbox.email.index'), icon: <Mail className={iconClass} />, activePattern: 'client.inbox.email.*' },
     ];
@@ -101,21 +99,29 @@ export default function useClientNav() {
         { label: t('nav.chat_widget'), href: safeRoute('client.whatsapp.widget.index'), icon: whatsappNavIcon, activePattern: 'client.whatsapp.widget.*' },
     ];
 
-    const aiItems = [
+    const automationToolsItems = [
+        { label: t('nav.automations'), href: safeRoute('client.automations.index'), icon: <Zap className={iconClass} />, activePattern: 'client.automations.*' },
         { label: t('nav.chatbots'),        href: safeRoute('client.ai.chatbots.index'),        icon: <Bot className={iconClass} />,      activePattern: 'client.ai.chatbots.*' },
         { label: t('nav.knowledge_bases'), href: safeRoute('client.ai.knowledge-bases.index'), icon: <Database className={iconClass} />, activePattern: 'client.ai.knowledge-bases.*' },
-        { label: t('nav.ai_providers'),    href: safeRoute('client.ai.providers.index'),        icon: <Bot className={iconClass} />,      activePattern: 'client.ai.providers.*' },
     ];
 
-    const socialItems = [
+    const socialPublishingItems = [
         { label: t('nav.post_composer'),   href: safeRoute('client.social.composer'),        icon: <FileText className={iconClass} />,       activePattern: 'client.social.composer' },
         { label: t('nav.posts'),           href: safeRoute('client.social.posts.index'),     icon: <Radio className={iconClass} />,           activePattern: 'client.social.posts.*' },
         { label: t('nav.calendar'),        href: safeRoute('client.social.calendar'),         icon: <LayoutDashboard className={iconClass} />, activePattern: 'client.social.calendar' },
-        { label: t('nav.social_accounts'), href: safeRoute('client.social.accounts.index'),  icon: <Share2 className={iconClass} />,          activePattern: 'client.social.accounts.*' },
     ];
 
-    const automationItems = [
-        { label: t('nav.automations'), href: safeRoute('client.automations.index'), icon: <Zap className={iconClass} />, activePattern: 'client.automations.*' },
+    const campaignItems = [
+        { label: t('nav.sms_campaigns'), href: safeRoute('client.campaigns.index'), icon: <Radio className={iconClass} />, activePattern: 'client.campaigns.*' },
+        ...messagingItems,
+    ];
+
+    const setupItems = [
+        ...inboxSetupItems,
+        ...chatbotSetupItems,
+        { label: t('nav.social_accounts'), href: safeRoute('client.social.accounts.index'), icon: <Share2 className={iconClass} />, activePattern: 'client.social.accounts.*' },
+        { label: t('nav.sms_gateways'), href: safeRoute('client.sms-gateways.index'), icon: <MessageSquare className={iconClass} />, activePattern: 'client.sms-gateways.*' },
+        { label: t('nav.ai_providers'), href: safeRoute('client.ai.providers.index'), icon: <Bot className={iconClass} />, activePattern: 'client.ai.providers.*' },
     ];
 
     const reportsItems = [
@@ -129,22 +135,20 @@ export default function useClientNav() {
     // E-Commerce remains available at route level but is intentionally omitted
     // from the client sidebar until the product area is ready to be promoted.
     return [
-        { type: 'group', label: t('nav.group_landing'), items: landingItems },
-        { type: 'group', label: t('nav.group_inbox'), items: inboxItems },
-        { type: 'group', label: t('nav.group_chatbot_setup'), items: chatbotSetupItems },
-        { type: 'group', label: t('nav.group_social_media'), items: socialItems },
-        { type: 'group', label: t('nav.group_messaging'), items: messagingItems },
-        { type: 'group', label: t('nav.group_contacts'), items: contactsItems },
-        { type: 'group', label: t('nav.group_broadcasting'), items: broadcastItems },
-        { type: 'group', label: t('nav.group_automations'), items: automationItems },
-        { type: 'group', label: t('nav.group_ai'), items: aiItems },
-        { type: 'group', label: t('nav.group_reports'), items: reportsItems },
-        { type: 'group', label: t('nav.group_assets', { defaultValue: 'Assets' }), items: assetItems },
-        { type: 'group', label: t('nav.group_support'), items: supportItems },
-        { type: 'group', label: t('nav.group_billing'), items: billingItems },
+        { type: 'group', label: t('nav.home'), items: landingItems, defaultOpen: true },
+        { type: 'group', label: t('nav.group_inbox'), items: inboxItems, defaultOpen: true },
+        { type: 'group', label: t('nav.group_contacts'), items: contactsItems, defaultOpen: true },
+        { type: 'group', label: t('nav.group_campaigns', { defaultValue: 'Campaigns' }), items: campaignItems, defaultOpen: false },
+        { type: 'group', label: t('nav.group_social_media'), items: socialPublishingItems, defaultOpen: false },
+        { type: 'group', label: t('nav.group_automations'), items: automationToolsItems, defaultOpen: false },
+        { type: 'group', label: t('nav.group_reports'), items: reportsItems, defaultOpen: false },
+        { type: 'group', label: t('nav.group_setup', { defaultValue: 'Setup' }), items: setupItems, defaultOpen: false },
+        { type: 'group', label: 'Assets', items: assetItems, defaultOpen: false },
+        { type: 'group', label: t('nav.group_support'), items: supportItems, defaultOpen: false },
+        { type: 'group', label: t('nav.group_billing'), items: billingItems, defaultOpen: false },
         ...(entitlements?.developer_tools
-            ? [{ type: 'group', label: t('nav.group_developer'), items: developerItems }]
+            ? [{ type: 'group', label: t('nav.group_developer'), items: developerItems, defaultOpen: false }]
             : []),
-        { type: 'group', label: t('nav.group_account'), items: accountSettingsItems },
+        { type: 'group', label: t('nav.group_account'), items: accountSettingsItems, defaultOpen: false },
     ];
 }

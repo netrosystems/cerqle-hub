@@ -401,7 +401,8 @@ export default function TeamIndex({ users = [], client = {}, invitations = [], w
                                 </div>
                                 <div>
                                     <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">{t('client.email') || 'Email'}</label>
-                                    <input type="email" value={editForm.data.email} onChange={e => editForm.setData('email', e.target.value)} className="w-full rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm" required />
+                                    <input type="email" value={editForm.data.email} readOnly aria-readonly="true" className="w-full cursor-not-allowed rounded-lg border border-neutral-200 bg-neutral-100 px-3 py-2 text-sm text-neutral-500 dark:border-neutral-700 dark:bg-neutral-900/60 dark:text-neutral-400" required />
+                                    <p className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">{t('profile.email_locked', { defaultValue: 'Email is locked. Contact a Super Admin if it must be changed.' })}</p>
                                     {editForm.errors.email && <p className="text-coral-600 text-xs mt-1">{editForm.errors.email}</p>}
                                 </div>
                                 <WorkspaceAssignments

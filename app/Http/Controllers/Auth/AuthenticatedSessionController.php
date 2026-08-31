@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Auth\LoginRequest;
+use App\Services\GoogleSignInConfigurator;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -15,7 +16,7 @@ use Inertia\Response;
 
 class AuthenticatedSessionController extends Controller
 {
-    public function create(): Response|RedirectResponse
+    public function create(GoogleSignInConfigurator $googleSignIn): Response|RedirectResponse
     {
         // The admin and client sign-in pages are unified on this single route.
         // An admin who is already authenticated (on the separate `admin` guard)
@@ -29,7 +30,9 @@ class AuthenticatedSessionController extends Controller
         // Determine which social providers are configured
         $socialProviders = array_filter(
             ['google', 'github', 'microsoft'],
-            fn ($p) => ! empty(config("services.{$p}.client_id"))
+            fn ($provider) => $provider === 'google'
+                ? $googleSignIn->apply()
+                : ! empty(config("services.{$provider}.client_id"))
         );
 
         return Inertia::render('Auth/Login', [
@@ -98,7 +101,7 @@ class AuthenticatedSessionController extends Controller
      * account is inactive we throw — we must not silently fall through and try
      * the same credentials as a client.
      *
-     * @throws \Illuminate\Validation\ValidationException
+     * @throws ValidationException
      */
     protected function attemptAdmin(LoginRequest $request): bool
     {

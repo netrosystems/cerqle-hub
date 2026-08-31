@@ -153,6 +153,61 @@ export function formatTimeTz(utcStr, tz) {
 }
 
 /**
+ * Format a conversation-list timestamp using familiar inbox conventions:
+ * time for today, "Yesterday" for the previous calendar day, and a date for
+ * older conversations. Calendar-day comparisons are made in the user's
+ * timezone so the label remains correct around midnight and DST changes.
+ */
+export function formatInboxTimestamp(utcStr, tz, options = {}) {
+    if (!utcStr) return '';
+
+    const date = new Date(utcStr);
+    const now = options.now instanceof Date ? options.now : new Date(options.now ?? Date.now());
+    if (Number.isNaN(date.getTime()) || Number.isNaN(now.getTime())) return '';
+
+    const timeZone = tz || 'UTC';
+    const locale = options.locale;
+    const calendarParts = (value) => new Intl.DateTimeFormat('en-US', {
+        timeZone,
+        year: 'numeric',
+        month: 'numeric',
+        day: 'numeric',
+    })
+        .formatToParts(value)
+        .reduce((parts, part) => {
+            if (part.type !== 'literal') parts[part.type] = Number(part.value);
+            return parts;
+        }, {});
+
+    try {
+        const messageDay = calendarParts(date);
+        const currentDay = calendarParts(now);
+        const messageDayNumber = Date.UTC(messageDay.year, messageDay.month - 1, messageDay.day) / 86_400_000;
+        const currentDayNumber = Date.UTC(currentDay.year, currentDay.month - 1, currentDay.day) / 86_400_000;
+        const daysAgo = currentDayNumber - messageDayNumber;
+
+        if (daysAgo === 0) {
+            return new Intl.DateTimeFormat(locale, {
+                timeZone,
+                hour: '2-digit',
+                minute: '2-digit',
+            }).format(date);
+        }
+
+        if (daysAgo === 1) return 'Yesterday';
+
+        return new Intl.DateTimeFormat(locale, {
+            timeZone,
+            month: 'short',
+            day: 'numeric',
+            ...(messageDay.year !== currentDay.year ? { year: 'numeric' } : {}),
+        }).format(date);
+    } catch {
+        return '';
+    }
+}
+
+/**
  * Format only the date portion in the given timezone.
  *
  *   formatDateTz('2026-05-04T09:30:00Z', 'Asia/Dhaka')
