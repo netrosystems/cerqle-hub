@@ -6,10 +6,9 @@ import EmptyState from '@/Components/EmptyState';
 import { SocialBrandIcon } from '@/Components/BrandIcons';
 import {
     Plus, Trash2, ExternalLink, Share2, Clock, CheckCircle2, XCircle,
-    Pencil, Send, Sparkles, Eye, Image, X, Calendar, Zap, Ban,
+    Pencil, Send, Eye, Image, X, Calendar, Zap, Ban,
 } from 'lucide-react';
 import { browserTz, formatInTz } from '@/Utils/datetime';
-import AiPlannerModal from './AiPlannerModal';
 
 const STATUS_META = {
     draft:      { labelKey: 'social.status_draft',      cls: 'bg-neutral-100 text-neutral-600 dark:bg-neutral-700 dark:text-neutral-300', icon: <Pencil className="h-3 w-3" /> },
@@ -103,8 +102,117 @@ function FacebookEditModal({ post, account, result, onClose }) {
     );
 }
 
+function YoutubeEditModal({ post, account, result, onClose }) {
+    const { t } = useTranslation();
+    const savedOptions = result?.edited_youtube_options ?? post?.youtube_options ?? {};
+    const { data, setData, put, processing, errors } = useForm({
+        title: result?.edited_title || post?.title || '',
+        body: result?.edited_body ?? post?.body ?? '',
+        youtube_options: {
+            privacy_status: savedOptions.privacy_status ?? 'private',
+            category_id: savedOptions.category_id ?? 22,
+            tags: savedOptions.tags ?? [],
+            made_for_kids: Boolean(savedOptions.made_for_kids),
+            contains_synthetic_media: Boolean(savedOptions.contains_synthetic_media),
+            default_language: savedOptions.default_language ?? '',
+        },
+    });
+    const [tagText, setTagText] = useState((savedOptions.tags ?? []).join(', '));
+
+    if (!post || !account) return null;
+
+    const setYoutubeOption = (key, value) => setData('youtube_options', {
+        ...data.youtube_options,
+        [key]: value,
+    });
+    const submit = (event) => {
+        event.preventDefault();
+        put(route('client.social.posts.youtube.update', [post.id, account.id]), {
+            preserveScroll: true,
+            onSuccess: onClose,
+        });
+    };
+
+    return (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+            <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
+            <form onSubmit={submit} className="relative max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-2xl bg-white p-5 shadow-2xl dark:bg-neutral-900">
+                <div className="mb-4 flex items-center justify-between gap-3">
+                    <div>
+                        <h3 className="font-semibold text-neutral-900 dark:text-neutral-100">{t('social.edit_youtube_video')}</h3>
+                        <p className="mt-0.5 text-xs text-neutral-500">{account.name}</p>
+                    </div>
+                    <button type="button" onClick={onClose} className="text-neutral-400 hover:text-neutral-700">
+                        <X className="h-5 w-5" />
+                    </button>
+                </div>
+
+                <div className="space-y-4">
+                    <div>
+                        <label className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-300">{t('social.youtube_video_title')}</label>
+                        <input value={data.title} onChange={(event) => setData('title', event.target.value)} maxLength={100} autoFocus
+                            className="w-full rounded-xl border border-neutral-300 bg-white px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-100" />
+                        {errors.title && <p className="mt-1 text-xs text-red-500">{errors.title}</p>}
+                    </div>
+                    <div>
+                        <label className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-300">{t('social.youtube_description')}</label>
+                        <textarea value={data.body} onChange={(event) => setData('body', event.target.value)} rows={6} maxLength={5000}
+                            className="w-full resize-none rounded-xl border border-neutral-300 bg-white px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-100" />
+                        {errors.body && <p className="mt-1 text-xs text-red-500">{errors.body}</p>}
+                    </div>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                        <div>
+                            <label className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-300">{t('social.youtube_visibility')}</label>
+                            <select value={data.youtube_options.privacy_status} onChange={(event) => setYoutubeOption('privacy_status', event.target.value)}
+                                className="w-full rounded-xl border border-neutral-300 bg-white px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-100">
+                                <option value="private">{t('social.youtube_private')}</option>
+                                <option value="unlisted">{t('social.youtube_unlisted')}</option>
+                                <option value="public">{t('social.youtube_public')}</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-300">{t('social.youtube_category')}</label>
+                            <input type="number" min="1" max="44" value={data.youtube_options.category_id}
+                                onChange={(event) => setYoutubeOption('category_id', Number(event.target.value))}
+                                className="w-full rounded-xl border border-neutral-300 bg-white px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-100" />
+                        </div>
+                    </div>
+                    <div>
+                        <label className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-300">{t('social.youtube_tags')}</label>
+                        <input value={tagText} onChange={(event) => {
+                            const value = event.target.value;
+                            setTagText(value);
+                            setYoutubeOption('tags', value.split(',').map((tag) => tag.trim()).filter(Boolean));
+                        }}
+                            className="w-full rounded-xl border border-neutral-300 bg-white px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-100" />
+                        {errors['youtube_options.tags'] && <p className="mt-1 text-xs text-red-500">{errors['youtube_options.tags']}</p>}
+                    </div>
+                    <label className="flex items-center gap-2 text-sm text-neutral-700 dark:text-neutral-300">
+                        <input type="checkbox" checked={data.youtube_options.made_for_kids}
+                            onChange={(event) => setYoutubeOption('made_for_kids', event.target.checked)} />
+                        {t('social.youtube_made_for_kids')}
+                    </label>
+                    <label className="flex items-center gap-2 text-sm text-neutral-700 dark:text-neutral-300">
+                        <input type="checkbox" checked={data.youtube_options.contains_synthetic_media}
+                            onChange={(event) => setYoutubeOption('contains_synthetic_media', event.target.checked)} />
+                        {t('social.youtube_synthetic_media')}
+                    </label>
+                    {errors.youtube && <p className="text-xs text-red-500">{errors.youtube}</p>}
+                </div>
+
+                <div className="mt-5 flex justify-end gap-2">
+                    <button type="button" onClick={onClose} className="rounded-lg border border-neutral-300 px-4 py-2 text-sm dark:border-neutral-700">{t('common.cancel')}</button>
+                    <button type="submit" disabled={processing || !data.title.trim()} className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-60">
+                        {processing ? t('social.saving') : t('social.update_on_youtube')}
+                    </button>
+                </div>
+            </form>
+        </div>
+    );
+}
+
 /* ── Detail Modal ─────────────────────────────────────────────── */
-function PostDetailModal({ post, accountMap, userTz, onClose, onDelete, onEditFacebook, onDeleteFacebook, onDeleteInstagram }) {
+function PostDetailModal({ post, accountMap, userTz, onClose, onDelete, onEditFacebook, onDeleteFacebook, onDeleteInstagram, onEditYoutube, onDeleteYoutube }) {
     const { t } = useTranslation();
     if (!post) return null;
     const targets = post.target_accounts ?? [];
@@ -201,6 +309,20 @@ function PostDetailModal({ post, accountMap, userTz, onClose, onDelete, onEditFa
                                                             <Trash2 className="h-3.5 w-3.5" />
                                                         </button>
                                                     )}
+                                                    {result.status === 'published' && acct?.network === 'youtube' && (
+                                                        <>
+                                                            <button type="button" onClick={() => onEditYoutube(post, acct, result)}
+                                                                className="rounded-md border border-neutral-200 p-1 text-neutral-500 hover:border-brand-300 hover:text-brand-600 dark:border-neutral-700"
+                                                                title={t('social.edit_youtube_video')}>
+                                                                <Pencil className="h-3.5 w-3.5" />
+                                                            </button>
+                                                            <button type="button" onClick={() => onDeleteYoutube(post, acct)}
+                                                                className="rounded-md border border-neutral-200 p-1 text-neutral-500 hover:border-red-300 hover:text-red-500 dark:border-neutral-700"
+                                                                title={t('social.delete_youtube_video')}>
+                                                                <Trash2 className="h-3.5 w-3.5" />
+                                                            </button>
+                                                        </>
+                                                    )}
                                                 </div>
                                             </div>
                                             {(result.warnings ?? []).map((warning, index) => (
@@ -248,7 +370,7 @@ function PostDetailModal({ post, accountMap, userTz, onClose, onDelete, onEditFa
 }
 
 /* ── Post Card ────────────────────────────────────────────────── */
-function PostCard({ post, accountMap, userTz, onView, onDelete, onEditFacebook, onDeleteFacebook, onDeleteInstagram }) {
+function PostCard({ post, accountMap, userTz, onView, onDelete, onEditFacebook, onDeleteFacebook, onDeleteInstagram, onEditYoutube, onDeleteYoutube }) {
     const { t } = useTranslation();
     const [actioning, setActioning] = useState(null);
     const targets = post.target_accounts ?? [];
@@ -261,6 +383,7 @@ function PostCard({ post, accountMap, userTz, onView, onDelete, onEditFacebook, 
     const hasPublishedTarget = publishedTargets.length > 0;
     const facebookTarget = publishedTargets.map((id) => accountMap[id]).find((account) => account?.network === 'facebook');
     const instagramTarget = publishedTargets.map((id) => accountMap[id]).find((account) => account?.network === 'instagram');
+    const youtubeTarget = publishedTargets.map((id) => accountMap[id]).find((account) => account?.network === 'youtube');
     const canDelete = ['draft', 'scheduled', 'failed'].includes(post.status) && !hasPublishedTarget;
     const canEdit   = ['draft', 'scheduled', 'failed'].includes(post.status) && !hasPublishedTarget;
     const canPublishNow = ['draft', 'scheduled', 'failed'].includes(post.status);
@@ -338,6 +461,12 @@ function PostCard({ post, accountMap, userTz, onView, onDelete, onEditFacebook, 
                             <Pencil className="h-3.5 w-3.5" /> Facebook
                         </button>
                     )}
+                    {youtubeTarget && (
+                        <button type="button" onClick={() => onEditYoutube(post, youtubeTarget, post.publish_results?.[youtubeTarget.id])}
+                            className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-lg border border-neutral-200 dark:border-neutral-700 px-3 py-1.5 text-xs font-medium text-neutral-600 dark:text-neutral-300 hover:border-brand-400 hover:text-brand-600 transition">
+                            <Pencil className="h-3.5 w-3.5" /> YouTube
+                        </button>
+                    )}
                 </div>
 
                 {/* Secondary actions */}
@@ -380,6 +509,13 @@ function PostCard({ post, accountMap, userTz, onView, onDelete, onEditFacebook, 
                             <Trash2 className="h-3 w-3" /> Instagram
                         </button>
                     )}
+                    {youtubeTarget && (
+                        <button type="button" onClick={() => onDeleteYoutube(post, youtubeTarget)}
+                            className="ml-auto inline-flex items-center gap-1 rounded-lg border border-neutral-200 px-2 py-1 text-[11px] text-neutral-400 hover:border-red-300 hover:text-red-500 dark:border-neutral-700"
+                            title={t('social.delete_youtube_video')}>
+                            <Trash2 className="h-3 w-3" /> YouTube
+                        </button>
+                    )}
                     {canDelete && (
                         <button onClick={() => onDelete(post.id)}
                             className="ml-auto inline-flex items-center gap-1 rounded-lg border border-neutral-200 dark:border-neutral-700 px-2 py-1 text-[11px] text-neutral-400 hover:text-red-500 hover:border-red-300 transition">
@@ -399,9 +535,9 @@ export default function PostsIndex({ posts, accounts, filters }) {
     const flash = props.flash ?? {};
     const userTz = props.timezone || browserTz() || 'Asia/Dhaka';
 
-    const [plannerOpen, setPlannerOpen] = useState(false);
     const [detailPost, setDetailPost] = useState(null);
     const [facebookEdit, setFacebookEdit] = useState(null);
+    const [youtubeEdit, setYoutubeEdit] = useState(null);
     const accountMap = accounts.reduce((acc, a) => { acc[a.id] = a; return acc; }, {});
 
     const handleFilter = (key, val) =>
@@ -434,6 +570,15 @@ export default function PostsIndex({ posts, accounts, filters }) {
         });
     };
 
+    const handleYoutubeDelete = (post, account) => {
+        if (!confirm(t('social.confirm_delete_youtube_video'))) return;
+
+        router.delete(route('client.social.posts.youtube.destroy', [post.id, account.id]), {
+            preserveScroll: true,
+            onSuccess: () => setDetailPost(null),
+        });
+    };
+
     return (
         <ClientLayout title={t('social.posts_title')}>
             <Head title={t('social.posts_head')} />
@@ -444,18 +589,10 @@ export default function PostsIndex({ posts, accounts, filters }) {
                         <h2 className="text-xl font-semibold text-neutral-900 dark:text-neutral-100">{t('social.posts_title')}</h2>
                         <p className="text-sm text-neutral-500 dark:text-neutral-400 mt-0.5">{t('social.posts_subtitle')}</p>
                     </div>
-                    {(
-                        <div className="flex items-center gap-2">
-                            <button onClick={() => setPlannerOpen(true)}
-                                className="ai-glow inline-flex items-center gap-1.5 rounded-lg border border-brand-600 px-3 py-2 text-sm font-medium text-brand-600 hover:bg-brand-50 dark:hover:bg-brand-900/20 transition">
-                                <Sparkles className="h-4 w-4" /> {t('social.ai_plan')}
-                            </button>
-                            <Link href={route('client.social.composer')}
-                                className="inline-flex items-center gap-1.5 rounded-lg bg-brand-600 px-3 py-2 text-sm font-medium text-white hover:bg-brand-700 transition">
-                                <Plus className="h-4 w-4" /> {t('social.new_post')}
-                            </Link>
-                        </div>
-                    )}
+                    <Link href={route('client.social.composer')}
+                        className="inline-flex items-center gap-1.5 rounded-lg bg-brand-600 px-3 py-2 text-sm font-medium text-white hover:bg-brand-700 transition">
+                        <Plus className="h-4 w-4" /> {t('social.new_post')}
+                    </Link>
                 </div>
 
                 {flash.success && (
@@ -466,6 +603,9 @@ export default function PostsIndex({ posts, accounts, filters }) {
                 )}
                 {props.errors?.instagram && (
                     <div className="rounded-lg bg-red-50 px-4 py-2 text-sm text-red-700 dark:bg-red-900/30 dark:text-red-200">{props.errors.instagram}</div>
+                )}
+                {props.errors?.youtube && (
+                    <div className="rounded-lg bg-red-50 px-4 py-2 text-sm text-red-700 dark:bg-red-900/30 dark:text-red-200">{props.errors.youtube}</div>
                 )}
                 {/* Filters */}
                 <div className="flex flex-wrap items-center gap-3 rounded-xl border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 px-4 py-3">
@@ -530,6 +670,8 @@ export default function PostsIndex({ posts, accounts, filters }) {
                                 onEditFacebook={(post, account, result) => setFacebookEdit({ post, account, result })}
                                 onDeleteFacebook={handleFacebookDelete}
                                 onDeleteInstagram={handleInstagramDelete}
+                                onEditYoutube={(post, account, result) => setYoutubeEdit({ post, account, result })}
+                                onDeleteYoutube={handleYoutubeDelete}
                             />
                         ))}
                     </div>
@@ -561,17 +703,26 @@ export default function PostsIndex({ posts, accounts, filters }) {
                 onEditFacebook={(post, account, result) => setFacebookEdit({ post, account, result })}
                 onDeleteFacebook={handleFacebookDelete}
                 onDeleteInstagram={handleInstagramDelete}
+                onEditYoutube={(post, account, result) => setYoutubeEdit({ post, account, result })}
+                onDeleteYoutube={handleYoutubeDelete}
             />
 
-            <FacebookEditModal
-                post={facebookEdit?.post}
-                account={facebookEdit?.account}
-                result={facebookEdit?.result}
-                onClose={() => { setFacebookEdit(null); setDetailPost(null); }}
-            />
-
-            <AiPlannerModal show={plannerOpen} onClose={() => setPlannerOpen(false)} accounts={accounts}
-                onSuccess={() => { setPlannerOpen(false); router.reload({ only: ['posts'] }); }} />
+            {facebookEdit && (
+                <FacebookEditModal
+                    post={facebookEdit.post}
+                    account={facebookEdit.account}
+                    result={facebookEdit.result}
+                    onClose={() => { setFacebookEdit(null); setDetailPost(null); }}
+                />
+            )}
+            {youtubeEdit && (
+                <YoutubeEditModal
+                    post={youtubeEdit.post}
+                    account={youtubeEdit.account}
+                    result={youtubeEdit.result}
+                    onClose={() => { setYoutubeEdit(null); setDetailPost(null); }}
+                />
+            )}
         </ClientLayout>
     );
 }

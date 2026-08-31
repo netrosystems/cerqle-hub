@@ -164,6 +164,81 @@ class PublishedFacebookPostManagementTest extends TestCase
         Http::assertNothingSent();
     }
 
+    public function test_published_youtube_video_can_be_updated_on_youtube(): void
+    {
+        Http::fake([
+            'www.googleapis.com/youtube/v3/videos*' => Http::sequence()
+                ->push([
+                    'items' => [[
+                        'snippet' => ['title' => 'Original', 'description' => 'Original copy', 'categoryId' => '22'],
+                        'status' => ['privacyStatus' => 'public'],
+                    ]],
+                ])
+                ->push(['id' => 'page_123']),
+        ]);
+        ['user' => $user, 'workspace' => $workspace] = $this->createWorkspaceContext();
+        [$post, $account] = $this->publishedPost($workspace->id, 'youtube');
+
+        $response = $this->actingAs($user)->put(
+            route('client.social.posts.youtube.update', [$post, $account]),
+            [
+                'title' => 'Updated YouTube title',
+                'body' => 'Updated description',
+                'youtube_options' => [
+                    'privacy_status' => 'unlisted',
+                    'category_id' => 22,
+                    'tags' => ['cerqle'],
+                    'made_for_kids' => false,
+                    'contains_synthetic_media' => false,
+                ],
+            ]
+        );
+
+        $response->assertRedirect()->assertSessionHasNoErrors();
+        $this->assertSame('Updated YouTube title', $post->fresh()->title);
+        $this->assertSame('Updated description', $post->fresh()->body);
+        $this->assertSame('unlisted', $post->fresh()->youtube_options['privacy_status']);
+        Http::assertSent(fn (Request $request): bool => $request->method() === 'PUT'
+            && data_get($request->data(), 'snippet.title') === 'Updated YouTube title');
+    }
+
+    public function test_published_youtube_video_is_deleted_remotely_before_cerqle(): void
+    {
+        Http::fake(['www.googleapis.com/youtube/v3/videos*' => Http::response('', 204)]);
+        ['user' => $user, 'workspace' => $workspace] = $this->createWorkspaceContext();
+        [$post, $account] = $this->publishedPost($workspace->id, 'youtube');
+
+        $this->actingAs($user)
+            ->delete(route('client.social.posts.youtube.destroy', [$post, $account]))
+            ->assertRedirect()
+            ->assertSessionHasNoErrors();
+
+        $this->assertDatabaseMissing('social_media_posts', ['id' => $post->id]);
+        Http::assertSent(fn (Request $request): bool => $request->method() === 'DELETE'
+            && str_contains($request->url(), 'id=page_123'));
+    }
+
+    public function test_failed_youtube_delete_preserves_the_cerqle_record(): void
+    {
+        Http::fake(['www.googleapis.com/youtube/v3/videos*' => Http::response([
+            'error' => ['message' => 'Insufficient permissions'],
+        ], 403)]);
+        ['user' => $user, 'workspace' => $workspace] = $this->createWorkspaceContext();
+        [$post, $account] = $this->publishedPost($workspace->id, 'youtube');
+
+        $this->actingAs($user)
+            ->delete(route('client.social.posts.youtube.destroy', [$post, $account]))
+            ->assertRedirect()
+            ->assertSessionHasErrors('youtube');
+
+        $this->assertDatabaseHas('social_media_posts', ['id' => $post->id]);
+        $this->assertDatabaseHas('social_media_post_accounts', [
+            'post_id' => $post->id,
+            'social_account_id' => $account->id,
+            'status' => 'published',
+        ]);
+    }
+
     public function test_local_delete_does_not_orphan_a_live_published_post(): void
     {
         ['user' => $user, 'workspace' => $workspace] = $this->createWorkspaceContext();
