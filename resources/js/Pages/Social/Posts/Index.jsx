@@ -707,18 +707,22 @@ export default function PostsIndex({ posts, accounts, filters }) {
                 onDeleteYoutube={handleYoutubeDelete}
             />
 
-            <FacebookEditModal
-                post={facebookEdit?.post}
-                account={facebookEdit?.account}
-                result={facebookEdit?.result}
-                onClose={() => { setFacebookEdit(null); setDetailPost(null); }}
-            />
-            <YoutubeEditModal
-                post={youtubeEdit?.post}
-                account={youtubeEdit?.account}
-                result={youtubeEdit?.result}
-                onClose={() => { setYoutubeEdit(null); setDetailPost(null); }}
-            />
+            {facebookEdit && (
+                <FacebookEditModal
+                    post={facebookEdit.post}
+                    account={facebookEdit.account}
+                    result={facebookEdit.result}
+                    onClose={() => { setFacebookEdit(null); setDetailPost(null); }}
+                />
+            )}
+            {youtubeEdit && (
+                <YoutubeEditModal
+                    post={youtubeEdit.post}
+                    account={youtubeEdit.account}
+                    result={youtubeEdit.result}
+                    onClose={() => { setYoutubeEdit(null); setDetailPost(null); }}
+                />
+            )}
         </ClientLayout>
     );
 }
