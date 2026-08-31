@@ -28,6 +28,14 @@ Route::prefix('widget/v1')->name('widget.')->group(function () {
         ->middleware('throttle:10,1')->name('handoff');
     Route::get('/messages', [ChatWidgetPublicController::class, 'poll'])
         ->middleware('throttle:300,1')->name('poll');
+    Route::post('/read', [ChatWidgetPublicController::class, 'markRead'])
+        ->middleware('throttle:120,1')->name('read');
+    Route::post('/delivered', [ChatWidgetPublicController::class, 'delivered'])
+        ->middleware('throttle:300,1')->name('delivered');
+    Route::get('/pusher-config', [ChatWidgetPublicController::class, 'pusherConfig'])
+        ->middleware('throttle:120,1')->name('pusher-config');
+    Route::post('/pusher-auth', [ChatWidgetPublicController::class, 'broadcastingAuth'])
+        ->middleware('throttle:300,1')->name('pusher-auth');
     Route::post('/broadcasting/auth', [ChatWidgetPublicController::class, 'broadcastingAuth'])
         ->middleware('throttle:300,1')->name('broadcasting-auth');
     Route::post('/typing', [ChatWidgetPublicController::class, 'typing'])

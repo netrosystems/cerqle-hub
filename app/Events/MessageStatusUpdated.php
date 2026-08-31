@@ -5,15 +5,15 @@ namespace App\Events;
 use App\Modules\Shared\Models\Message;
 use Illuminate\Broadcasting\InteractsWithSockets;
 use Illuminate\Broadcasting\PrivateChannel;
-use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
+use Illuminate\Contracts\Broadcasting\ShouldBroadcastNow;
 use Illuminate\Foundation\Events\Dispatchable;
 use Illuminate\Queue\SerializesModels;
 
 /**
  * Fired whenever a message's delivery status changes (sent/delivered/read/failed)
- * so the inbox UI can update the ✓ ✓✓ indicators in real time.
+ * so the inbox UI and chat widget can update the ✓ ✓✓ indicators in real time.
  */
-class MessageStatusUpdated implements ShouldBroadcast
+class MessageStatusUpdated implements ShouldBroadcastNow
 {
     use Dispatchable, InteractsWithSockets, SerializesModels;
 
@@ -22,9 +22,12 @@ class MessageStatusUpdated implements ShouldBroadcast
     public function broadcastOn(): array
     {
         $wsId = $this->message->conversation->workspace_id ?? null;
-        $convId = $this->message->conversation_id;
+        $convId = (int) $this->message->conversation_id;
 
-        $channels = [new PrivateChannel("conversation.{$convId}")];
+        $channels = [
+            new PrivateChannel("conversation.{$convId}"),
+            new PrivateChannel("widget-conversation.{$convId}"),
+        ];
 
         if ($wsId) {
             $channels[] = new PrivateChannel("workspace.{$wsId}");

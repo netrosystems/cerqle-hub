@@ -24,13 +24,20 @@ class EmailDriver implements ChannelDriverInterface
             throw new RuntimeException('This email conversation has no connected mailbox or recipient address.');
         }
         $inbound = $conversation->messages()->where('direction', 'in')->latest('id')->first();
-        $subject = (string) ($inbound?->payload['subject'] ?? 'Re: Message');
-        if (! str_starts_with(strtolower($subject), 're:')) {
-            $subject = 'Re: '.$subject;
+        if ($inbound) {
+            $subject = (string) ($inbound->payload['subject'] ?? 'Message');
+            if (! str_starts_with(strtolower($subject), 're:')) {
+                $subject = 'Re: '.$subject;
+            }
+        } else {
+            $senderName = $account->display_name ?: config('app.name');
+            $subject = (string) ($message->payload['subject'] ?? "Message from {$senderName}");
         }
 
         return match ($account->provider) {
-            'microsoft_365' => $this->microsoft->sendReply($account, (string) $inbound?->provider_message_id, (string) $message->body),
+            'microsoft_365' => $inbound?->provider_message_id
+                ? $this->microsoft->sendReply($account, (string) $inbound->provider_message_id, (string) $message->body)
+                : $this->microsoft->sendMessage($account, $conversation->contact->email, $subject, (string) $message->body),
             'gmail' => $this->google->send(
                 $account,
                 $conversation->contact->email,

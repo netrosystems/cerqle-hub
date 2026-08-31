@@ -36,10 +36,12 @@ Schedule::job(new LaunchScheduledCampaignsJob, 'broadcast')
     ->withoutOverlapping();
 
 // Self-healing safety net for a worker/VPS restart between chained SMS jobs.
-Schedule::job(new RecoverSmsCampaignsJob, 'broadcast')
-    ->everyMinute()
-    ->name('recover-sms-campaigns')
-    ->withoutOverlapping();
+if (class_exists(RecoverSmsCampaignsJob::class)) {
+    Schedule::job(new RecoverSmsCampaignsJob, 'broadcast')
+        ->everyMinute()
+        ->name('recover-sms-campaigns')
+        ->withoutOverlapping();
+}
 
 Schedule::call(function () {
     ChannelAccount::where('channel', 'email')

@@ -4,26 +4,32 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Events\ConversationAssigned;
 use App\Events\MessageSent;
+use App\Events\MessageStatusUpdated;
 use App\Events\TypingChanged;
-use App\Models\InternalNote;
 use App\Models\User;
 use App\Modules\Inbox\Models\InboxLabel;
+use App\Modules\Inbox\Services\WebchatPresence;
 use App\Modules\Shared\Models\ChannelAccount;
+use App\Modules\Shared\Models\Contact;
 use App\Modules\Shared\Models\Conversation;
 use App\Modules\Shared\Models\Message;
 use App\Modules\Shared\Services\ChannelManager;
 use App\Modules\Whatsapp\Services\CloudApiClient;
+use App\Services\Media\AttachmentService;
 use App\Services\StorageManager;
 use App\Support\Demo;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Validation\ValidationException;
 
 class MobileConversationController extends WorkspaceScopedController
 {
     public function __construct(
         private ChannelManager $channelManager,
         private StorageManager $storageManager,
+        private AttachmentService $attachmentService,
     ) {}
 
     /**
@@ -36,11 +42,17 @@ class MobileConversationController extends WorkspaceScopedController
         $userId = $request->user()->id;
         $folder = $request->input('folder', 'all');
 
+        $liveSince = app(WebchatPresence::class)->onlineSince();
+        $isLiveFolder = $folder === 'live';
+
         $conversations = Conversation::where('workspace_id', $wsId)
             ->with(['contact', 'channelAccount', 'lastMessage', 'labels', 'assignedUser'])
+            ->when($isLiveFolder, fn ($q) => $q
+                ->whereHas('channelAccount', fn ($account) => $account->where('channel', 'webchat'))
+                ->where('webchat_last_seen_at', '>=', $liveSince))
+            ->when(! $isLiveFolder && ! in_array($folder, ['resolved', 'snoozed'], true), fn ($q) => $q->where('status', 'open'))
             ->when($folder === 'mine', fn ($q) => $q->where('assigned_user_id', $userId))
             ->when($folder === 'unassigned', fn ($q) => $q->whereNull('assigned_user_id'))
-            ->when(! in_array($folder, ['resolved', 'snoozed'], true), fn ($q) => $q->where('status', 'open'))
             ->when($folder === 'resolved', fn ($q) => $q->where('status', 'resolved'))
             ->when($folder === 'snoozed', fn ($q) => $q->where('status', 'snoozed'))
             ->when($request->channel, fn ($q) => $q->whereHas('channelAccount', fn ($q) => $q->where('channel', $request->channel)))
@@ -55,7 +67,7 @@ class MobileConversationController extends WorkspaceScopedController
                         ->orWhere('email', 'like', $term);
                 });
             })
-            ->orderByDesc('last_message_at')
+            ->when($isLiveFolder, fn ($q) => $q->orderByDesc('webchat_last_seen_at'), fn ($q) => $q->orderByDesc('last_message_at'))
             ->paginate(30);
 
         return response()->json([
@@ -64,6 +76,7 @@ class MobileConversationController extends WorkspaceScopedController
                 'current_page' => $conversations->currentPage(),
                 'last_page' => $conversations->lastPage(),
                 'total' => $conversations->total(),
+                'live_users_count' => $this->liveUsersQuery($wsId, $liveSince)->distinct('contact_id')->count('contact_id'),
             ],
         ]);
     }
@@ -140,53 +153,67 @@ class MobileConversationController extends WorkspaceScopedController
             'type' => ['nullable', 'in:text,template,image,document,video,audio'],
             'payload' => ['nullable', 'array'],
             'attachment' => [
-                'nullable', 'file', 'max:20480',
-                'mimes:jpg,jpeg,png,webp,mp4,3gp,mov,mp3,aac,m4a,amr,ogg,oga,wav,webm,pdf,doc,docx,xls,xlsx,ppt,pptx,txt',
+                'nullable', 'file', 'max:'.AttachmentService::MAX_FILE_KILOBYTES,
+                'mimes:'.AttachmentService::ALLOWED_MIMES,
             ],
         ]);
 
         $msgType = $validated['type'] ?? 'text';
         $msgPayload = $validated['payload'] ?? null;
+        $channel = $conversation->channelAccount?->channel ?? 'whatsapp';
 
         if ($request->hasFile('attachment')) {
             $file = $request->file('attachment');
-            $mimeType = $file->getMimeType() ?? 'application/octet-stream';
+            $upload = $this->attachmentService->processUpload($file, 'message-media');
 
-            if ($msgType === 'text') {
-                $msgType = str_starts_with($mimeType, 'image/') ? 'image'
-                    : (str_starts_with($mimeType, 'video/') ? 'video'
-                        : (str_starts_with($mimeType, 'audio/') ? 'audio' : 'document'));
+            if ($msgType === 'text' || empty($msgType)) {
+                $msgType = $upload['type'];
+            } elseif ($msgType === 'audio' && in_array($upload['type'], ['audio', 'video', 'document'], true)) {
+                $msgType = 'audio';
+            } else {
+                $msgType = $upload['type'];
             }
 
-            $channel = $conversation->channelAccount?->channel ?? 'whatsapp';
+            if ($channel === 'instagram' && ! in_array($msgType, ['image', 'video', 'audio'], true)) {
+                return response()->json([
+                    'error' => 'Instagram direct messaging only supports image, video, and audio attachments. Documents cannot be sent via Instagram DM.',
+                ], 422);
+            }
+
+            $attachmentPayload = [
+                'preview_url' => $upload['url'],
+                'caption' => $validated['body'] ?? null,
+                'filename' => $upload['filename'],
+                'mime_type' => $upload['mime_type'],
+                'file_size' => $upload['size_bytes'],
+            ];
+
             if ($channel === 'whatsapp') {
                 $client = CloudApiClient::forWorkspace($conversation->workspace_id);
                 if (! $client) {
                     return response()->json(['error' => 'No active WhatsApp account.'], 422);
                 }
-                $mediaId = $client->uploadMedia($file->getRealPath(), $mimeType);
-                $storedPath = $this->storageManager->prefixedPath('message-media/'.$file->hashName());
-                $this->storageManager->disk()->putFileAs(dirname($storedPath), $file, basename($storedPath));
-                $previewUrl = $this->storageManager->disk()->url($storedPath);
 
-                $msgPayload = array_merge($msgPayload ?? [], [
-                    'media_id' => $mediaId,
-                    'preview_url' => $previewUrl,
-                    'caption' => $validated['body'] ?? null,
-                    'filename' => $file->getClientOriginalName(),
-                ]);
-            } else {
-                $storedPath = $this->storageManager->prefixedPath('message-media/'.$file->hashName());
-                $this->storageManager->disk()->putFileAs(dirname($storedPath), $file, basename($storedPath));
-                $previewUrl = $this->storageManager->disk()->url($storedPath);
-                $msgPayload = array_merge($msgPayload ?? [], [
-                    'preview_url' => $previewUrl,
-                    'caption' => $validated['body'] ?? null,
-                    'filename' => $file->getClientOriginalName(),
-                ]);
+                $tempPath = null;
+                if ($upload['is_converted_heic']) {
+                    $tempPath = tempnam(sys_get_temp_dir(), 'wa_upload_').'.jpg';
+                    file_put_contents($tempPath, $this->storageManager->disk()->get($upload['path']));
+                    $uploadPath = $tempPath;
+                } else {
+                    $uploadPath = $file->getRealPath();
+                }
+
+                try {
+                    $attachmentPayload['media_id'] = $client->uploadMedia($uploadPath, $upload['mime_type']);
+                } finally {
+                    if ($tempPath && file_exists($tempPath)) {
+                        @unlink($tempPath);
+                    }
+                }
             }
 
-            $validated['body'] = $validated['body'] ?? $file->getClientOriginalName();
+            $msgPayload = array_merge($msgPayload ?? [], $attachmentPayload);
+            $validated['body'] = $validated['body'] ?? ($msgType === 'audio' ? 'Voice message' : $upload['filename']);
         }
 
         if ($msgType === 'text' && empty($validated['body'])) {
@@ -238,6 +265,7 @@ class MobileConversationController extends WorkspaceScopedController
         MessageSent::dispatch($message);
 
         return response()->json([
+            'data' => $this->formatMessage($message),
             'message' => $this->formatMessage($message),
             'error' => $sendError,
         ]);
@@ -402,7 +430,7 @@ class MobileConversationController extends WorkspaceScopedController
     }
 
     /**
-     * POST /api/v1/mobile/conversations/start
+     * POST /api/v1/mobile/conversations
      * Start a new conversation.
      */
     public function start(Request $request): JsonResponse
@@ -412,20 +440,89 @@ class MobileConversationController extends WorkspaceScopedController
         $validated = $request->validate([
             'contact_id' => ['required', 'integer'],
             'channel_account_id' => ['required', 'integer'],
+            'body' => ['nullable', 'string', 'max:4096'],
         ]);
 
+        $contact = Contact::where('workspace_id', $wsId)->findOrFail($validated['contact_id']);
         $channelAccount = ChannelAccount::where('workspace_id', $wsId)
             ->where('status', 'active')
             ->findOrFail($validated['channel_account_id']);
 
+        // Channel reachability and delivery target validation
+        match ($channelAccount->channel) {
+            'whatsapp', 'sms' => throw_if(
+                empty($contact->phone_e164),
+                ValidationException::withMessages([
+                    'channel_account_id' => 'Contact does not have a valid phone number for messaging.',
+                ])
+            ),
+            'email' => throw_if(
+                empty($contact->email),
+                ValidationException::withMessages([
+                    'channel_account_id' => 'Contact does not have an email address.',
+                ])
+            ),
+            'messenger', 'instagram' => throw_if(
+                ! Conversation::where('workspace_id', $wsId)
+                    ->where('contact_id', $contact->id)
+                    ->where('channel_account_id', $channelAccount->id)
+                    ->exists(),
+                ValidationException::withMessages([
+                    'channel_account_id' => "Outbound conversations on {$channelAccount->channel} cannot be initiated without an existing customer thread.",
+                ])
+            ),
+            'webchat' => throw_if(
+                empty($contact->custom_fields['webchat_visitor_id'])
+                && ! Conversation::where('workspace_id', $wsId)
+                    ->where('contact_id', $contact->id)
+                    ->where('channel_account_id', $channelAccount->id)
+                    ->exists(),
+                ValidationException::withMessages([
+                    'channel_account_id' => 'Contact does not have an active website chat session.',
+                ])
+            ),
+            default => null,
+        };
+
         $conversation = Conversation::firstOrCreate(
             [
                 'workspace_id' => $wsId,
-                'contact_id' => $validated['contact_id'],
+                'contact_id' => $contact->id,
                 'channel_account_id' => $channelAccount->id,
             ],
             ['status' => 'open']
         );
+
+        if (! empty($validated['body'])) {
+            $message = Message::create([
+                'conversation_id' => $conversation->id,
+                'direction' => 'out',
+                'channel' => $channelAccount->channel,
+                'type' => 'text',
+                'body' => $validated['body'],
+                'status' => 'queued',
+                'sent_by' => 'human',
+                'user_id' => $request->user()->id,
+                'sent_at' => now(),
+            ]);
+
+            try {
+                $driver = $this->channelManager->driver($channelAccount->channel);
+                $messageId = $driver->send($message);
+                $message->update(['status' => 'sent', 'provider_message_id' => $messageId]);
+            } catch (\Throwable $e) {
+                Log::error('Mobile start conversation send failed', [
+                    'conversation_id' => $conversation->id,
+                    'channel' => $channelAccount->channel,
+                    'error' => $e->getMessage(),
+                ]);
+                $message->update(['status' => 'failed', 'error_json' => ['message' => $e->getMessage()]]);
+            }
+
+            $conversation->update(['last_message_at' => now()]);
+            $message->load('conversation');
+            MessageSent::dispatch($message);
+        }
 
         $conversation->load(['contact', 'channelAccount', 'labels']);
 
@@ -434,10 +531,91 @@ class MobileConversationController extends WorkspaceScopedController
         ], 201);
     }
 
+    /**
+     * POST /api/v1/mobile/conversations/{uuid}/open-widget
+     * Prompt a currently-online website visitor's widget to open.
+     */
+    public function openWidget(Request $request, string $uuid, WebchatPresence $presence): JsonResponse
+    {
+        $conversation = Conversation::where('workspace_id', $this->workspaceId($request))
+            ->where('uuid', $uuid)
+            ->with(['channelAccount', 'contact'])
+            ->firstOrFail();
+
+        abort_unless($conversation->channelAccount?->channel === 'webchat', 422, 'This action is only available for website visitors.');
+        abort_unless($conversation->webchat_last_seen_at?->gte($presence->onlineSince()), 409, 'This visitor is no longer online.');
+
+        return response()->json([
+            'ok' => true,
+            'command' => $presence->requestWidgetOpen($conversation),
+        ]);
+    }
+
+    /**
+     * POST /api/v1/mobile/conversations/{uuid}/read
+     * Mark all unread incoming messages as read for this conversation.
+     */
+    public function markRead(Request $request, string $uuid): JsonResponse
+    {
+        $conversation = Conversation::where('workspace_id', $this->workspaceId($request))
+            ->where('uuid', $uuid)
+            ->firstOrFail();
+
+        $conversation->update(['unread_count' => 0]);
+
+        $unreadMessages = $conversation->messages()
+            ->where('direction', 'in')
+            ->whereIn('status', ['queued', 'sent', 'delivered'])
+            ->get();
+
+        if ($unreadMessages->isNotEmpty()) {
+            $conversation->messages()
+                ->whereIn('id', $unreadMessages->pluck('id'))
+                ->update(['status' => 'read']);
+
+            foreach ($unreadMessages as $msg) {
+                $msg->status = 'read';
+                $msg->setRelation('conversation', $conversation);
+                MessageStatusUpdated::dispatch($msg);
+            }
+        }
+
+        return response()->json(['ok' => true, 'unread_count' => 0]);
+    }
+
+    /**
+     * PATCH/PUT/POST /api/v1/mobile/conversations/{uuid}/contact
+     * Update the contact attached to this conversation.
+     */
+    public function updateContact(Request $request, string $uuid): JsonResponse
+    {
+        $conversation = Conversation::where('workspace_id', $this->workspaceId($request))
+            ->where('uuid', $uuid)
+            ->with('contact')
+            ->firstOrFail();
+
+        if (! $conversation->contact) {
+            return response()->json(['error' => 'No contact attached to this conversation.'], 404);
+        }
+
+        return app(MobileInboxController::class)->updateContact($request, $conversation->contact->id);
+    }
+
+    private function liveUsersQuery(int $workspaceId, Carbon $liveSince)
+    {
+        return Conversation::query()
+            ->where('workspace_id', $workspaceId)
+            ->whereHas('channelAccount', fn ($account) => $account->where('channel', 'webchat'))
+            ->where('webchat_last_seen_at', '>=', $liveSince);
+    }
+
     // ─── Private formatters ───────────────────────────────────────────────────
 
     private function formatConversation(Conversation $c, bool $detail = false): array
     {
+        $isWebchat = $c->channelAccount?->channel === 'webchat';
+        $isOnline = $isWebchat && $c->webchat_last_seen_at !== null && $c->webchat_last_seen_at->gte(app(WebchatPresence::class)->onlineSince());
+
         $data = [
             'id' => $c->id,
             'uuid' => $c->uuid,
@@ -446,6 +624,8 @@ class MobileConversationController extends WorkspaceScopedController
             'channel_account_id' => $c->channel_account_id,
             'unread_count' => (int) $c->unread_count,
             'last_message_at' => $c->last_message_at?->toIso8601String(),
+            'is_online' => $isOnline,
+            'webchat_last_seen_at' => $c->webchat_last_seen_at?->toIso8601String(),
             'assigned_user_id' => $c->assigned_user_id,
             'assigned_to' => $c->assigned_to,
             'assigned_user' => $c->assignedUser ? [
@@ -455,10 +635,24 @@ class MobileConversationController extends WorkspaceScopedController
             ] : null,
             'contact' => $c->contact ? [
                 'id' => $c->contact->id,
-                'name' => Demo::name($c->contact->full_name),
+                'name' => Demo::name($c->contact->name),
                 'phone' => Demo::phone($c->contact->phone_e164),
                 'email' => Demo::email($c->contact->email),
                 'avatar' => Demo::active() ? null : $c->contact->avatar_url,
+                'location' => [
+                    'country' => $c->contact->custom_fields['webchat_country'] ?? null,
+                    'country_code' => $c->contact->custom_fields['webchat_country_code'] ?? null,
+                    'city' => $c->contact->custom_fields['webchat_city'] ?? null,
+                    'region' => $c->contact->custom_fields['webchat_region'] ?? null,
+                    'lat' => $c->contact->custom_fields['webchat_lat'] ?? null,
+                    'lon' => $c->contact->custom_fields['webchat_lon'] ?? null,
+                    'page_title' => $c->contact->custom_fields['webchat_page_title'] ?? null,
+                    'page_url' => $c->contact->custom_fields['webchat_page_url'] ?? null,
+                    'ip' => $c->contact->custom_fields['webchat_last_ip'] ?? null,
+                ],
+                'custom_fields' => Demo::active()
+                    ? Demo::maskArrayValues($c->contact->custom_fields ?? [])
+                    : ($c->contact->custom_fields ?? []),
             ] : null,
             'channel_account' => $c->channelAccount ? [
                 'id' => $c->channelAccount->id,
@@ -492,6 +686,7 @@ class MobileConversationController extends WorkspaceScopedController
             'channel' => $m->channel,
             'type' => $m->type,
             'body' => Demo::text($m->body),
+            'attachment_url' => $m->payload['preview_url'] ?? null,
             'payload' => $m->payload,
             'status' => $m->status,
             'sent_by' => $m->sent_by,

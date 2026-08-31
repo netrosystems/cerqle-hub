@@ -2,6 +2,7 @@
 
 namespace App\Modules\Inbox\Services;
 
+use App\Events\MessageStatusUpdated;
 use App\Modules\Inbox\Models\ChatWidget;
 use App\Modules\Inbox\Models\WidgetPushSubscription;
 use App\Modules\Shared\Models\Conversation;
@@ -39,7 +40,7 @@ class WidgetVisitorPushService
     /**
      * @param  array<string, mixed>  $widgetMessage
      */
-    public function notifyReply(Conversation $conversation, ChatWidget $widget, Message $message, array $widgetMessage): void
+    public function notifyReply(Conversation $conversation, ChatWidget $widget, Message $message, array $widgetMessage): bool
     {
         $tokens = WidgetPushSubscription::query()
             ->where('conversation_id', $conversation->id)
@@ -51,16 +52,24 @@ class WidgetVisitorPushService
             ->all();
 
         if ($tokens === []) {
-            return;
+            return false;
         }
 
         $title = (string) ($widgetMessage['agent_name'] ?? $widget->agent_name ?? 'Support');
         $body = trim((string) ($message->body ?: $widgetMessage['body'] ?? 'New message'));
         $body = $body !== '' ? Str::limit($body, 180) : 'New message';
 
-        $this->oneSignal->sendToSubscriptionIds($tokens, $title, $body, null, $conversation->id, [
+        $sent = $this->oneSignal->sendToSubscriptionIds($tokens, $title, $body, null, $conversation->id, [
             'type' => 'widget_message',
             'conversation_id' => $conversation->id,
         ]);
+
+        if ($sent && in_array($message->status, ['queued', 'sent'], true)) {
+            $message->update(['status' => 'delivered']);
+            $message->load('conversation');
+            MessageStatusUpdated::dispatch($message);
+        }
+
+        return $sent;
     }
 }
