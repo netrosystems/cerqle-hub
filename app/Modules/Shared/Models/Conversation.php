@@ -35,7 +35,7 @@ class Conversation extends Model
         'status', 'assigned_user_id', 'assigned_to', 'handover_at',
         'last_message_at', 'unread_count',
         'first_response_at', 'resolved_at', 'last_inbound_at',
-        'pending_reply_notified_at',
+        'pending_reply_notified_at', 'webchat_last_seen_at',
     ];
 
     protected function casts(): array
@@ -47,6 +47,7 @@ class Conversation extends Model
             'last_inbound_at' => 'datetime',
             'handover_at' => 'datetime',
             'pending_reply_notified_at' => 'datetime',
+            'webchat_last_seen_at' => 'datetime',
             'unread_count' => 'integer',
         ];
     }

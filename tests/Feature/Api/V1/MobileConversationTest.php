@@ -454,4 +454,72 @@ class MobileConversationTest extends TestCase
             ->assertJsonPath('data.0.contact.location.page_title', 'Pricing Page')
             ->assertJsonPath('data.0.contact.custom_fields.webchat_country', 'Bangladesh');
     }
+
+    public function test_mobile_conversations_index_with_folder_all_and_pagination(): void
+    {
+        $workspace = Workspace::factory()->create();
+        $user = User::factory()->create(['workspace_id' => $workspace->id]);
+        $webchatAccount = ChannelAccount::create([
+            'workspace_id' => $workspace->id,
+            'channel' => 'webchat',
+            'display_name' => 'Web Widget',
+            'status' => 'active',
+        ]);
+        $waAccount = ChannelAccount::create([
+            'workspace_id' => $workspace->id,
+            'channel' => 'whatsapp',
+            'display_name' => 'WhatsApp Line',
+            'status' => 'active',
+        ]);
+
+        $contact1 = Contact::create([
+            'workspace_id' => $workspace->id,
+            'first_name' => 'Online',
+            'last_name' => 'Visitor',
+            'custom_fields' => ['webchat_country' => 'United States', 'webchat_city' => 'New York'],
+        ]);
+
+        $contact2 = Contact::create([
+            'workspace_id' => $workspace->id,
+            'first_name' => 'WA',
+            'last_name' => 'Customer',
+            'phone_e164' => '+15551234567',
+        ]);
+
+        $c1 = Conversation::create([
+            'workspace_id' => $workspace->id,
+            'contact_id' => $contact1->id,
+            'channel_account_id' => $webchatAccount->id,
+            'status' => 'open',
+            'webchat_last_seen_at' => now(),
+            'last_message_at' => now(),
+        ]);
+
+        $c2 = Conversation::create([
+            'workspace_id' => $workspace->id,
+            'contact_id' => $contact2->id,
+            'channel_account_id' => $waAccount->id,
+            'status' => 'open',
+            'last_message_at' => now()->subMinute(),
+        ]);
+
+        Sanctum::actingAs($user);
+
+        $response = $this->getJson('/api/v1/mobile/conversations?folder=all&page=1');
+
+        $response->assertOk()
+            ->assertJsonStructure([
+                'data' => [
+                    '*' => [
+                        'id', 'uuid', 'status', 'channel', 'is_online', 'webchat_last_seen_at',
+                        'contact' => ['id', 'name', 'location'],
+                    ],
+                ],
+                'meta' => ['current_page', 'last_page', 'total', 'live_users_count'],
+            ])
+            ->assertJsonCount(2, 'data')
+            ->assertJsonPath('meta.current_page', 1)
+            ->assertJsonPath('meta.total', 2)
+            ->assertJsonPath('meta.live_users_count', 1);
+    }
 }

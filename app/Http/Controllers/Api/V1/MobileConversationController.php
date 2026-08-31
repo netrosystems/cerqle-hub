@@ -543,7 +543,10 @@ class MobileConversationController extends WorkspaceScopedController
             ->firstOrFail();
 
         abort_unless($conversation->channelAccount?->channel === 'webchat', 422, 'This action is only available for website visitors.');
-        abort_unless($conversation->webchat_last_seen_at?->gte($presence->onlineSince()), 409, 'This visitor is no longer online.');
+        $lastSeen = $conversation->webchat_last_seen_at instanceof Carbon
+            ? $conversation->webchat_last_seen_at
+            : ($conversation->webchat_last_seen_at ? Carbon::parse($conversation->webchat_last_seen_at) : null);
+        abort_unless($lastSeen?->gte($presence->onlineSince()), 409, 'This visitor is no longer online.');
 
         return response()->json([
             'ok' => true,
@@ -614,7 +617,10 @@ class MobileConversationController extends WorkspaceScopedController
     private function formatConversation(Conversation $c, bool $detail = false): array
     {
         $isWebchat = $c->channelAccount?->channel === 'webchat';
-        $isOnline = $isWebchat && $c->webchat_last_seen_at !== null && $c->webchat_last_seen_at->gte(app(WebchatPresence::class)->onlineSince());
+        $lastSeen = $c->webchat_last_seen_at instanceof Carbon
+            ? $c->webchat_last_seen_at
+            : ($c->webchat_last_seen_at ? Carbon::parse($c->webchat_last_seen_at) : null);
+        $isOnline = $isWebchat && $lastSeen !== null && $lastSeen->gte(app(WebchatPresence::class)->onlineSince());
 
         $data = [
             'id' => $c->id,
@@ -623,9 +629,9 @@ class MobileConversationController extends WorkspaceScopedController
             'channel' => $c->channelAccount?->channel,
             'channel_account_id' => $c->channel_account_id,
             'unread_count' => (int) $c->unread_count,
-            'last_message_at' => $c->last_message_at?->toIso8601String(),
+            'last_message_at' => $c->last_message_at instanceof Carbon ? $c->last_message_at->toIso8601String() : ($c->last_message_at ? Carbon::parse($c->last_message_at)->toIso8601String() : null),
             'is_online' => $isOnline,
-            'webchat_last_seen_at' => $c->webchat_last_seen_at?->toIso8601String(),
+            'webchat_last_seen_at' => $lastSeen?->toIso8601String(),
             'assigned_user_id' => $c->assigned_user_id,
             'assigned_to' => $c->assigned_to,
             'assigned_user' => $c->assignedUser ? [

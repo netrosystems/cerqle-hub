@@ -897,7 +897,10 @@ class InboxController extends Controller
         $conversation->loadMissing(['channelAccount', 'contact']);
 
         abort_unless($conversation->channelAccount?->channel === 'webchat', 422, 'This action is only available for website visitors.');
-        abort_unless($conversation->webchat_last_seen_at?->gte($presence->onlineSince()), 409, 'This visitor is no longer online.');
+        $lastSeen = $conversation->webchat_last_seen_at instanceof Carbon
+            ? $conversation->webchat_last_seen_at
+            : ($conversation->webchat_last_seen_at ? Carbon::parse($conversation->webchat_last_seen_at) : null);
+        abort_unless($lastSeen?->gte($presence->onlineSince()), 409, 'This visitor is no longer online.');
 
         return response()->json([
             'ok' => true,
