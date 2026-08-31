@@ -1,6 +1,6 @@
 import { Head, usePage, useForm } from '@inertiajs/react';
 import ClientLayout from '@/Layouts/ClientLayout';
-import { Send, Sparkles, Clock, Plus, Trash2, ThumbsUp, MessageCircle, Share2, Heart, Bookmark, Repeat2 } from 'lucide-react';
+import { Send, Sparkles, Clock, Plus, Trash2, ThumbsUp, MessageCircle, Share2, Heart, Bookmark, Repeat2, Info } from 'lucide-react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { SocialBrandIcon } from '@/Components/BrandIcons';
@@ -8,8 +8,9 @@ import MediaUpload from '@/Components/MediaUpload';
 import { DEFAULT_YOUTUBE_OPTIONS } from '@/Components/YouTubeVideoSettings';
 import SocialPlatformOverrides from '@/Components/SocialPlatformOverrides';
 import TimezonePicker from '@/Components/TimezonePicker';
-import { DatePicker } from '@/Components/ui';
+import { DatePicker, Tooltip } from '@/Components/ui';
 import { browserTz, tzLocalToUtcIso, formatInTz } from '@/Utils/datetime';
+import { toast } from 'sonner';
 
 const CHAR_LIMITS = { tiktok: 2200, linkedin: 3000, facebook: 63206, instagram: 2200, youtube: 5000 };
 
@@ -178,7 +179,6 @@ const PREVIEW_COMPONENTS = {
 export default function SocialComposer({ accounts, storageUsage }) {
     const { t } = useTranslation();
     const { props } = usePage();
-    const flash = props.flash ?? {};
     const userTz = props.timezone || browserTz() || 'Asia/Dhaka';
 
     const { data, setData, post, processing, reset, errors, transform, clearErrors } = useForm({
@@ -254,7 +254,14 @@ export default function SocialComposer({ accounts, storageUsage }) {
             media_ids: (d.media_ids ?? []).filter(Boolean),
             platform_payloads: Object.fromEntries(Object.entries(d.platform_payloads ?? {}).filter(([network]) => selectedNetworks.includes(network))),
         }));
-        post(route('client.social.posts.store'), { preserveScroll: true, onSuccess: () => reset() });
+        post(route('client.social.posts.store'), {
+            preserveScroll: true,
+            onSuccess: (page) => {
+                reset();
+                const message = page.props.flash?.success;
+                if (message) toast.success(message);
+            },
+        });
     };
 
     const mediaUrls = (data.media_urls ?? []).filter(Boolean);
@@ -271,7 +278,6 @@ export default function SocialComposer({ accounts, storageUsage }) {
                         <p className="text-sm text-neutral-500 dark:text-neutral-400 mt-0.5">{t('social.composer_subtitle')}</p>
                     </div>
 
-                    {flash.success && <div className="rounded-lg bg-green-50 dark:bg-green-900/30 text-green-800 dark:text-green-200 px-4 py-2 text-sm">{flash.success}</div>}
                     {liveStorage?.is_full && <div className="rounded-soft border border-coral-200 bg-coral-50 px-4 py-3 text-sm text-coral-800 dark:border-coral-800 dark:bg-coral-950/30 dark:text-coral-300">Storage is full. Delete unused media, wait for published-media cleanup, or upgrade your plan before uploading.</div>}
                     {!liveStorage?.unlimited && liveStorage?.percent_used >= 80 && !liveStorage?.is_full && <div className="rounded-soft border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-200">Storage is {liveStorage.percent_used}% full. New uploads must fit within the remaining quota.</div>}
 
@@ -352,7 +358,20 @@ export default function SocialComposer({ accounts, storageUsage }) {
 
                         <div className="space-y-2">
                             <div className="flex items-center justify-between">
-                                <label className="text-xs font-medium text-neutral-500 dark:text-neutral-400">{t('social.media')}</label>
+                                <div className="flex items-center gap-1.5">
+                                    <label className="text-xs font-medium text-neutral-500 dark:text-neutral-400">{t('social.media')}</label>
+                                    {requiresDirectVideo && (
+                                        <Tooltip content={t('social.direct_video_url_help')} position="right" wrap>
+                                            <button
+                                                type="button"
+                                                aria-label={t('social.video_media_help_label')}
+                                                className="rounded-full text-neutral-400 transition-colors hover:text-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-500/30 dark:hover:text-brand-300"
+                                            >
+                                                <Info className="h-3.5 w-3.5" />
+                                            </button>
+                                        </Tooltip>
+                                    )}
+                                </div>
                                 {(!requiresDirectVideo || (data.media_urls ?? []).length === 0) && <button
                                     type="button"
                                     onClick={addMediaSlot}
@@ -385,12 +404,11 @@ export default function SocialComposer({ accounts, storageUsage }) {
                                             }}
                                             accept={requiresDirectVideo ? 'video/mp4,video/webm,video/quicktime' : 'image/*,video/*'}
                                             collection={requiresDirectVideo ? 'social-video' : 'social'}
-                                            maxSizeMb={requiresDirectVideo ? 500 : 200}
+                                            maxSizeMb={25}
                                             videoMaxSizeMb={500}
-                                            limitType={requiresDirectVideo ? 'youtubeVideoMb' : 'mediaMb'}
+                                            limitType="socialImageMb"
                                             remainingBytes={liveStorage?.remaining_bytes ?? null}
                                             placeholder={requiresDirectVideo ? 'https://cdn.example.com/video.mp4' : 'https://cdn.example.com/image.jpg'}
-                                            urlHelp={requiresDirectVideo ? t('social.direct_video_url_help') : null}
                                         />
                                     </div>
                                     <button
@@ -404,11 +422,6 @@ export default function SocialComposer({ accounts, storageUsage }) {
                             ))}
                             {(data.media_urls ?? []).length === 0 && (
                                 <p className="text-xs text-neutral-400">{t('social.no_media_hint')}</p>
-                            )}
-                            {requiresDirectVideo && (
-                                <div className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs leading-relaxed text-blue-800 dark:border-blue-800 dark:bg-blue-900/20 dark:text-blue-200">
-                                    <strong>{t('social.video_media_how_to_title')}</strong> {t('social.direct_video_url_help')}
-                                </div>
                             )}
                             {errors.media_urls && <p className="text-xs text-red-500">{errors.media_urls}</p>}
                         </div>

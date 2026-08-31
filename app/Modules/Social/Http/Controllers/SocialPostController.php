@@ -226,7 +226,10 @@ class SocialPostController extends Controller
             : collect();
 
         $query = SocialPost::where('workspace_id', $wid)
-            ->with(['accountLinks:id,post_id,social_account_id,status,platform_post_id'])
+            ->with([
+                'accountLinks:id,post_id,social_account_id,status,platform_post_id',
+                'media:id,disk,path,mime_type',
+            ])
             ->when($status, fn ($q) => $q->where('status', $status))
             ->when($network && $networkAccountIds->isNotEmpty(), function ($q) use ($networkAccountIds) {
                 $q->where(function ($inner) use ($networkAccountIds) {
@@ -240,6 +243,12 @@ class SocialPostController extends Controller
 
         $posts = $query->paginate(20)->withQueryString();
         $posts->getCollection()->each(function (SocialPost $post) use ($accounts): void {
+            $mediaMimeTypes = $post->media
+                ->mapWithKeys(fn (Media $media) => [$media->url() => $media->mime_type])
+                ->all();
+
+            $post->setAttribute('media_mime_types', $mediaMimeTypes);
+
             // Older published posts may not have publish_results, but their
             // durable account link still identifies the remote post target.
             // Expose that authoritative state so the UI never hides the
@@ -266,8 +275,11 @@ class SocialPostController extends Controller
                 $post->setAttribute('media_urls', $youtubeLink?->platform_post_id
                     ? ['https://i.ytimg.com/vi/'.rawurlencode($youtubeLink->platform_post_id).'/hqdefault.jpg']
                     : []);
+                $post->setAttribute('media_mime_types', $youtubeLink?->platform_post_id
+                    ? ['https://i.ytimg.com/vi/'.rawurlencode($youtubeLink->platform_post_id).'/hqdefault.jpg' => 'image/jpeg']
+                    : []);
             }
-            $post->unsetRelation('accountLinks');
+            $post->unsetRelation('accountLinks')->unsetRelation('media');
         });
 
         return Inertia::render('Social/Posts/Index', [

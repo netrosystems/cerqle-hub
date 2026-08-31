@@ -86,6 +86,7 @@ class HandleInertiaRequests extends Middleware
                 'entitlements' => ['developer_tools' => false],
                 'uploadLimits' => [
                     'mediaMb' => app(UploadLimitService::class)->mediaMaxMegabytes(),
+                    'socialImageMb' => app(UploadLimitService::class)->socialImageMaxMegabytes(),
                     'youtubeVideoMb' => app(UploadLimitService::class)->youtubeVideoMaxMegabytes(),
                 ],
             ];
@@ -373,6 +374,7 @@ class HandleInertiaRequests extends Middleware
             'metaAppId' => $this->metaAppId(),
             'uploadLimits' => [
                 'mediaMb' => app(UploadLimitService::class)->mediaMaxMegabytes(),
+                'socialImageMb' => app(UploadLimitService::class)->socialImageMaxMegabytes(),
                 'youtubeVideoMb' => app(UploadLimitService::class)->youtubeVideoMaxMegabytes(),
             ],
             'entitlements' => [

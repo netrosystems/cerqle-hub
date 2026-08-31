@@ -53,6 +53,13 @@ export default function MediaUpload({
     const fileRef = useRef(null);
 
     const isImage = value && /\.(jpe?g|png|gif|webp|svg|avif)(\?.*)?$/i.test(value);
+    const acceptsImages = accept.includes('image');
+    const acceptsVideos = accept.includes('video');
+    const limitLabel = acceptsImages && acceptsVideos
+        ? `images ${effectiveMaxSizeMb} MB · videos ${effectiveVideoMaxSizeMb} MB`
+        : acceptsVideos
+            ? `videos ${effectiveVideoMaxSizeMb} MB`
+            : t('ui.max_size_mb', { max: effectiveMaxSizeMb });
 
     const uploadFile = useCallback(async (file) => {
         if (!file) return;
@@ -211,7 +218,7 @@ export default function MediaUpload({
                                 {t('ui.drag_drop_or')} <span className="text-brand-600 dark:text-brand-400 font-medium">{t('ui.browse')}</span>
                             </span>
                             <span className="text-xs text-neutral-400">
-                                {accept} · {videoMaxSizeMb ? `images ${effectiveMaxSizeMb} MB · videos ${effectiveVideoMaxSizeMb} MB` : t('ui.max_size_mb', { max: effectiveMaxSizeMb })}
+                                {accept} · {videoMaxSizeMb ? limitLabel : t('ui.max_size_mb', { max: effectiveMaxSizeMb })}
                             </span>
                         </>
                     )}

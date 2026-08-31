@@ -8,6 +8,8 @@ class UploadLimitService
 {
     private const MEDIA_MAX_MB = 200;
 
+    private const SOCIAL_IMAGE_MAX_MB = 25;
+
     private const YOUTUBE_VIDEO_MAX_MB = 500;
 
     public function mediaMaxBytes(): int
@@ -40,6 +42,23 @@ class UploadLimitService
     public function youtubeVideoMaxMegabytes(): int
     {
         return max(1, (int) floor($this->youtubeVideoMaxBytes() / 1024 / 1024));
+    }
+
+    public function socialImageMaxKilobytes(): int
+    {
+        return max(1, (int) floor($this->socialImageMaxBytes() / 1024));
+    }
+
+    public function socialImageMaxMegabytes(): int
+    {
+        return max(1, (int) floor($this->socialImageMaxBytes() / 1024 / 1024));
+    }
+
+    private function socialImageMaxBytes(): int
+    {
+        // Keep the product rule stable across environments. Production upload
+        // infrastructure is configured for the larger 500 MB video ceiling.
+        return self::SOCIAL_IMAGE_MAX_MB * 1024 * 1024;
     }
 
     private function youtubeVideoMaxBytes(): int

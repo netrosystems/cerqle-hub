@@ -2,9 +2,18 @@ import { useEffect, useMemo, useState } from 'react';
 import { SocialBrandIcon } from '@/Components/BrandIcons';
 import MediaUpload from '@/Components/MediaUpload';
 import YouTubeVideoSettings, { DEFAULT_YOUTUBE_OPTIONS } from '@/Components/YouTubeVideoSettings';
+import Tooltip from '@/Components/ui/Tooltip';
+import { Info } from 'lucide-react';
 
 const LABELS = { youtube: 'YouTube', tiktok: 'TikTok', instagram: 'Instagram', facebook: 'Facebook', linkedin: 'LinkedIn' };
 const LIMITS = { youtube: 5000, tiktok: 2200, instagram: 2200, facebook: 63206, linkedin: 3000 };
+const PLATFORM_GUIDANCE = {
+    youtube: 'YouTube requires one compatible video. You can set its title, description, visibility, category, tags, thumbnail, audience, and other video-specific options below.',
+    tiktok: 'TikTok privacy and interaction choices come from the connected creator account. Complete the required publishing consent before publishing.',
+    instagram: 'Images publish to the feed, videos publish as Reels, and 2–10 compatible items publish as a carousel. Available capabilities depend on the connected Instagram account and API.',
+    facebook: 'Facebook supports text, images, video, and link posts. Cerqle applies the publishing capabilities available to the connected Page.',
+    linkedin: 'LinkedIn supports commentary with compatible media or a link. Cerqle applies the publishing capabilities available to the connected account.',
+};
 
 const defaultTikTokOptions = {
     privacy_level: '', allow_comment: false, allow_duet: false, allow_stitch: false,
@@ -84,10 +93,21 @@ export default function SocialPlatformOverrides({ networks, accounts, value = {}
                 ))}
             </div>
 
-            <label className="flex items-center gap-2 text-sm text-neutral-700 dark:text-neutral-300">
-                <input type="checkbox" checked={Boolean(payload.customize)} onChange={event => updatePayload({ customize: event.target.checked })} />
-                Customize content for {LABELS[active]}
-            </label>
+            <div className="flex items-center gap-2">
+                <label className="flex items-center gap-2 text-sm text-neutral-700 dark:text-neutral-300">
+                    <input type="checkbox" checked={Boolean(payload.customize)} onChange={event => updatePayload({ customize: event.target.checked })} />
+                    Customize content for {LABELS[active]}
+                </label>
+                <Tooltip content={PLATFORM_GUIDANCE[active]} position="bottom" wrap>
+                    <button
+                        type="button"
+                        aria-label={`${LABELS[active]} publishing instructions`}
+                        className="inline-flex h-5 w-5 items-center justify-center rounded-full text-neutral-400 transition hover:bg-neutral-200 hover:text-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-500/30 dark:hover:bg-neutral-700 dark:hover:text-brand-300"
+                    >
+                        <Info className="h-4 w-4" aria-hidden="true" />
+                    </button>
+                </Tooltip>
+            </div>
 
             {payload.customize && (
                 <div className="space-y-3 rounded-soft border border-neutral-200 bg-white p-3 dark:border-neutral-700 dark:bg-neutral-900">
@@ -108,9 +128,9 @@ export default function SocialPlatformOverrides({ networks, accounts, value = {}
                         }}
                         accept={isVideo ? 'video/mp4,video/webm,video/quicktime' : 'image/*,video/*'}
                         collection={isVideo ? 'social-video' : 'social'}
-                        maxSizeMb={isVideo ? 500 : 200}
+                        maxSizeMb={25}
                         videoMaxSizeMb={500}
-                        limitType={isVideo ? 'youtubeVideoMb' : 'mediaMb'}
+                        limitType="socialImageMb"
                         remainingBytes={storageUsage?.remaining_bytes ?? null}
                     />
                 </div>
@@ -146,14 +166,18 @@ export default function SocialPlatformOverrides({ networks, accounts, value = {}
             )}
 
             {['facebook', 'instagram', 'linkedin'].includes(active) && (
-                <div className="space-y-3 rounded-soft border border-neutral-200 bg-white p-3 text-xs text-neutral-500 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-400">
-                    {(active === 'facebook' || active === 'linkedin') && <div>
-                        <label className="mb-1 block font-medium text-neutral-700 dark:text-neutral-300">Link URL (optional)</label>
+                (active === 'facebook' || active === 'linkedin') && <div className="rounded-soft border border-neutral-200 bg-white p-3 text-xs text-neutral-500 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-400">
+                    <div>
+                        <div className="mb-1 flex items-center gap-1.5">
+                            <label className="font-medium text-neutral-700 dark:text-neutral-300">Link URL (optional)</label>
+                            <Tooltip content="Used when this platform override does not include uploaded media." position="top" wrap>
+                                <button type="button" aria-label="Link URL instructions" className="text-neutral-400 hover:text-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-500/30 rounded-full">
+                                    <Info className="h-3.5 w-3.5" aria-hidden="true" />
+                                </button>
+                            </Tooltip>
+                        </div>
                         <input type="url" value={payload.options?.link_url ?? ''} onChange={event => updateOption('link_url', event.target.value)} placeholder="https://example.com/article" className="w-full rounded-soft border border-neutral-300 px-3 py-2 text-sm dark:border-neutral-600 dark:bg-neutral-800" />
-                        <p className="mt-1">Used when this platform override does not include uploaded media.</p>
-                    </div>}
-                    {active === 'instagram' && <p>Images publish to the feed, videos publish as Reels, and 2–10 compatible items publish as a carousel.</p>}
-                    <p>Cerqle will apply the publishing capabilities currently supported by the connected {LABELS[active]} account and API.</p>
+                    </div>
                 </div>
             )}
 

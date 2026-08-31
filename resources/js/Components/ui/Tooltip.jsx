@@ -3,7 +3,7 @@ import { useState } from 'react';
 /**
  * Simple tooltip on hover. Wraps trigger and shows content on hover/focus.
  */
-export default function Tooltip({ content, children, position = 'top' }) {
+export default function Tooltip({ content, children, position = 'top', wrap = false }) {
     const [visible, setVisible] = useState(false);
 
     const positionClasses = {
@@ -18,13 +18,16 @@ export default function Tooltip({ content, children, position = 'top' }) {
             className="relative inline-flex"
             onMouseEnter={() => setVisible(true)}
             onMouseLeave={() => setVisible(false)}
+            onFocusCapture={() => setVisible(true)}
+            onBlurCapture={() => setVisible(false)}
         >
             {children}
             {visible && (
                 <div
                     role="tooltip"
                     className={[
-                        'absolute z-50 px-2.5 py-1.5 text-xs font-medium text-white bg-neutral-800 rounded-soft shadow-soft-md whitespace-nowrap',
+                        'absolute z-50 px-2.5 py-1.5 text-xs font-medium text-white bg-neutral-800 rounded-soft shadow-soft-md',
+                        wrap ? 'w-72 max-w-[min(18rem,calc(100vw-2rem))] whitespace-normal text-left leading-relaxed' : 'whitespace-nowrap',
                         positionClasses[position],
                     ].join(' ')}
                 >

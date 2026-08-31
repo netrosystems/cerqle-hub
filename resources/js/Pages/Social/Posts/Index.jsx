@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import ClientLayout from '@/Layouts/ClientLayout';
 import EmptyState from '@/Components/EmptyState';
 import { SocialBrandIcon } from '@/Components/BrandIcons';
+import PostMediaPreview from '@/Components/Social/PostMediaPreview';
 import {
     Plus, Trash2, ExternalLink, Share2, Clock, CheckCircle2, XCircle,
     Pencil, Send, Eye, Image, X, Calendar, Zap, Ban, MoreHorizontal,
@@ -219,6 +220,7 @@ function PostDetailModal({ post, accountMap, userTz, onClose, onDelete, onEditFa
     const dateField = post.published_at ?? post.scheduled_at;
     const tz = post.timezone || userTz;
     const mediaUrls = (post.media_urls ?? []).filter(Boolean);
+    const prefersVideo = targets.some((id) => ['youtube', 'tiktok'].includes(accountMap[id]?.network));
     const publishedTargets = [...new Set([
         ...targets.filter((id) => post.publish_results?.[id]?.status === 'published'),
         ...(post.published_account_ids ?? []),
@@ -251,8 +253,15 @@ function PostDetailModal({ post, accountMap, userTz, onClose, onDelete, onEditFa
 
                     {mediaUrls.length > 0 && (
                         <div className={`grid gap-2 ${mediaUrls.length === 1 ? 'grid-cols-1' : 'grid-cols-2'}`}>
-                            {mediaUrls.map((url, i) => (
-                                <img key={i} src={url} alt="" className="w-full rounded-lg object-cover max-h-48" />
+                            {mediaUrls.map((url) => (
+                                <PostMediaPreview
+                                    key={url}
+                                    url={url}
+                                    mimeType={post.media_mime_types?.[url]}
+                                    preferVideo={prefersVideo}
+                                    controls
+                                    className="max-h-48 w-full rounded-lg object-cover"
+                                />
                             ))}
                         </div>
                     )}
@@ -391,6 +400,7 @@ function PostCard({ post, accountMap, userTz, onView, onDelete, onRemoveLocal, o
     const canPublishNow = ['draft', 'scheduled', 'failed'].includes(post.status);
     const canCancel = post.status === 'scheduled';
     const mediaUrls = (post.media_urls ?? []).filter(Boolean);
+    const prefersVideo = targets.some((id) => ['youtube', 'tiktok'].includes(accountMap[id]?.network));
 
     const action = (type, confirmMsg, fn) => {
         if (!confirm(confirmMsg)) return;
@@ -502,7 +512,12 @@ function PostCard({ post, accountMap, userTz, onView, onDelete, onRemoveLocal, o
             {/* Media thumbnail / accent bar */}
             {mediaUrls.length > 0 ? (
                 <div className="relative h-40 overflow-hidden rounded-t-xl bg-neutral-100 dark:bg-neutral-800 shrink-0">
-                    <img src={mediaUrls[0]} alt="" className="w-full h-full object-cover" />
+                    <PostMediaPreview
+                        url={mediaUrls[0]}
+                        mimeType={post.media_mime_types?.[mediaUrls[0]]}
+                        preferVideo={prefersVideo}
+                        className="h-full w-full object-cover"
+                    />
                     {mediaUrls.length > 1 && (
                         <span className="absolute left-2 top-2 flex items-center gap-1 rounded-full bg-black/60 px-2 py-0.5 text-[10px] text-white">
                             <Image className="h-3 w-3" /> {mediaUrls.length}

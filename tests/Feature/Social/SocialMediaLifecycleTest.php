@@ -14,6 +14,7 @@ use App\Services\MediaService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
+use Inertia\Testing\AssertableInertia as Assert;
 use Tests\TestCase;
 
 class SocialMediaLifecycleTest extends TestCase
@@ -100,6 +101,26 @@ class SocialMediaLifecycleTest extends TestCase
 
         $this->assertSame(3072, app(MediaService::class)->usedBytes($owner));
         $this->assertSame(3072, app(MediaService::class)->usedBytes($member));
+    }
+
+    public function test_posts_index_exposes_uploaded_media_mime_types_for_previews(): void
+    {
+        Storage::fake('public');
+        ['user' => $user, 'workspace' => $workspace] = $this->createWorkspaceContext();
+        $media = $this->media($user, 'media/preview-video');
+        $media->update(['mime_type' => 'video/mp4']);
+        Storage::disk('public')->put($media->path, 'video');
+        $post = $this->socialPost($workspace->id, 'scheduled');
+        $post->update(['media_urls' => [$media->url()]]);
+        $post->media()->attach($media);
+
+        $this->actingAs($user)
+            ->get(route('client.social.posts.index'))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Social/Posts/Index')
+                ->where('posts.data.0.media_mime_types', [$media->url() => 'video/mp4'])
+            );
     }
 
     public function test_youtube_media_is_released_only_after_processing_completes(): void

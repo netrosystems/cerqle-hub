@@ -4,9 +4,9 @@ import MediaUpload from '@/Components/MediaUpload';
 import { DEFAULT_YOUTUBE_OPTIONS } from '@/Components/YouTubeVideoSettings';
 import SocialPlatformOverrides from '@/Components/SocialPlatformOverrides';
 import TimezonePicker from '@/Components/TimezonePicker';
-import { DatePicker } from '@/Components/ui';
+import { DatePicker, Tooltip } from '@/Components/ui';
 import { SocialBrandIcon } from '@/Components/BrandIcons';
-import { ArrowLeft, Clock, Trash2, Plus, Send, Calendar } from 'lucide-react';
+import { ArrowLeft, Clock, Trash2, Plus, Send, Calendar, Info } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useState } from 'react';
 import { browserTz, tzLocalToUtcIso, formatInTz } from '@/Utils/datetime';
@@ -203,7 +203,20 @@ export default function EditPost({ post, accounts, storageUsage }) {
                     {/* Media */}
                     <div className="rounded-xl border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 p-5 space-y-3">
                         <div className="flex items-center justify-between">
-                            <h3 className="text-sm font-semibold text-neutral-800 dark:text-neutral-200">{t('social.media')}</h3>
+                            <div className="flex items-center gap-1.5">
+                                <h3 className="text-sm font-semibold text-neutral-800 dark:text-neutral-200">{t('social.media')}</h3>
+                                {requiresDirectVideo && (
+                                    <Tooltip content={t('social.direct_video_url_help')} position="right" wrap>
+                                        <button
+                                            type="button"
+                                            aria-label={t('social.video_media_help_label')}
+                                            className="rounded-full text-neutral-400 transition-colors hover:text-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-500/30 dark:hover:text-brand-300"
+                                        >
+                                            <Info className="h-4 w-4" />
+                                        </button>
+                                    </Tooltip>
+                                )}
+                            </div>
                             {(!requiresDirectVideo || (data.media_urls ?? []).length === 0) && <button type="button"
                                 onClick={addMediaSlot}
                                 className="inline-flex items-center gap-1 text-xs font-medium text-brand-600 hover:text-brand-700">
@@ -234,12 +247,11 @@ export default function EditPost({ post, accounts, storageUsage }) {
                                         }}
                                         accept={requiresDirectVideo ? 'video/mp4,video/webm,video/quicktime' : 'image/*,video/*'}
                                         collection={requiresDirectVideo ? 'social-video' : 'social'}
-                                        maxSizeMb={requiresDirectVideo ? 500 : 200}
+                                        maxSizeMb={25}
                                         videoMaxSizeMb={500}
-                                        limitType={requiresDirectVideo ? 'youtubeVideoMb' : 'mediaMb'}
+                                        limitType="socialImageMb"
                                         remainingBytes={liveStorage?.remaining_bytes ?? null}
                                         placeholder={requiresDirectVideo ? 'https://cdn.example.com/video.mp4' : 'https://cdn.example.com/image.jpg'}
-                                        urlHelp={requiresDirectVideo ? t('social.direct_video_url_help') : null}
                                     />
                                 </div>
                                 <button type="button"
@@ -251,11 +263,6 @@ export default function EditPost({ post, accounts, storageUsage }) {
                         ))}
                         {(data.media_urls ?? []).filter(Boolean).length === 0 && (
                             <p className="text-xs text-neutral-400">{t('social.no_media_attached')}</p>
-                        )}
-                        {requiresDirectVideo && (
-                            <div className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs leading-relaxed text-blue-800 dark:border-blue-800 dark:bg-blue-900/20 dark:text-blue-200">
-                                <strong>{t('social.video_media_how_to_title')}</strong> {t('social.direct_video_url_help')}
-                            </div>
                         )}
                         {errors.media_urls && <p className="text-xs text-red-500">{errors.media_urls}</p>}
                     </div>

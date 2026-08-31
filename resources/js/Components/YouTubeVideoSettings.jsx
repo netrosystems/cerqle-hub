@@ -1,5 +1,6 @@
 import MediaUpload from '@/Components/MediaUpload';
-import { Info, Youtube } from 'lucide-react';
+import { Youtube } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 const CATEGORIES = [
@@ -22,6 +23,45 @@ export const DEFAULT_YOUTUBE_OPTIONS = {
     default_language: '',
     thumbnail_media_id: null,
 };
+
+const parseTags = (value) => value
+    .split(',')
+    .map((tag) => tag.trim())
+    .filter(Boolean);
+
+export function YouTubeTagsInput({ tags = [], onChange, className = '', ...props }) {
+    const canonicalTags = Array.isArray(tags) ? tags.join(', ') : '';
+    const [draft, setDraft] = useState(canonicalTags);
+    const lastEmittedTags = useRef(canonicalTags);
+
+    useEffect(() => {
+        // Parent echoes from this input must not remove a trailing comma while
+        // the user is still typing. Genuine external changes still sync in.
+        if (canonicalTags !== lastEmittedTags.current) {
+            setDraft(canonicalTags);
+            lastEmittedTags.current = canonicalTags;
+        }
+    }, [canonicalTags]);
+
+    const handleChange = (event) => {
+        const nextDraft = event.target.value;
+        const nextTags = parseTags(nextDraft);
+
+        setDraft(nextDraft);
+        lastEmittedTags.current = nextTags.join(', ');
+        onChange?.(nextTags);
+    };
+
+    return (
+        <input
+            {...props}
+            value={draft}
+            onChange={handleChange}
+            maxLength={500}
+            className={className}
+        />
+    );
+}
 
 export default function YouTubeVideoSettings({ value, onChange, errors = {}, remainingBytes = null, onStorageChange }) {
     const { t } = useTranslation();
@@ -57,9 +97,9 @@ export default function YouTubeVideoSettings({ value, onChange, errors = {}, rem
 
             <div>
                 <label className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-300">{t('social.youtube_tags')}</label>
-                <input
-                    value={(options.tags ?? []).join(', ')}
-                    onChange={e => update('tags', e.target.value.split(',').map(tag => tag.trim()).filter(Boolean))}
+                <YouTubeTagsInput
+                    tags={options.tags}
+                    onChange={(tags) => update('tags', tags)}
                     placeholder="travel, esim, tutorial"
                     className="w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm dark:border-neutral-600 dark:bg-neutral-800"
                 />
@@ -108,10 +148,6 @@ export default function YouTubeVideoSettings({ value, onChange, errors = {}, rem
                 <label className="flex items-center gap-2"><input type="checkbox" checked={Boolean(options.notify_subscribers)} onChange={e => update('notify_subscribers', e.target.checked)} /> {t('social.youtube_notify_subscribers')}</label>
             </div>
 
-            <div className="flex gap-2 rounded-lg bg-white/80 p-3 text-xs leading-relaxed text-neutral-600 dark:bg-neutral-900/60 dark:text-neutral-300">
-                <Info className="mt-0.5 h-4 w-4 shrink-0 text-blue-500" />
-                <span>{t('social.youtube_reconnect_notice')}</span>
-            </div>
         </section>
     );
 }

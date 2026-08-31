@@ -88,6 +88,26 @@ class MediaLibraryTest extends TestCase
         $this->assertSame(500 * 1024, app(UploadLimitService::class)->youtubeVideoMaxKilobytes());
     }
 
+    public function test_social_image_application_limit_is_25_megabytes(): void
+    {
+        $this->assertSame(25, app(UploadLimitService::class)->socialImageMaxMegabytes());
+        $this->assertSame(25 * 1024, app(UploadLimitService::class)->socialImageMaxKilobytes());
+    }
+
+    public function test_social_image_above_25_megabytes_is_rejected(): void
+    {
+        Storage::fake('public');
+        $user = $this->clientUser();
+
+        $this->actingAs($user)
+            ->postJson(route('client.media.store'), [
+                'file' => UploadedFile::fake()->image('social.jpg')->size((25 * 1024) + 1),
+                'collection' => 'social',
+            ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('file');
+    }
+
     public function test_499_megabyte_social_video_passes_application_upload_validation(): void
     {
         Storage::fake('public');

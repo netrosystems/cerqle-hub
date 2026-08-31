@@ -57,10 +57,17 @@ class MediaController extends Controller
         $isSocialVideo = in_array($collection, ['social', 'social-video'], true)
             && $uploadedFile
             && str_starts_with((string) $uploadedFile->getMimeType(), 'video/');
+        $isSocialImage = $collection === 'social'
+            && $uploadedFile
+            && str_starts_with((string) $uploadedFile->getMimeType(), 'image/');
         $isYoutubeThumbnail = $collection === 'social-thumbnail';
         $maxKilobytes = $isSocialVideo
             ? $this->uploadLimitService->youtubeVideoMaxKilobytes()
-            : ($isYoutubeThumbnail ? 2048 : $this->uploadLimitService->mediaMaxKilobytes());
+            : ($isYoutubeThumbnail
+                ? 2048
+                : ($isSocialImage
+                    ? $this->uploadLimitService->socialImageMaxKilobytes()
+                    : $this->uploadLimitService->mediaMaxKilobytes()));
         $allowedExtensions = $collection === 'social-video'
             ? 'mp4,webm,mov'
             : ($isYoutubeThumbnail
@@ -78,7 +85,9 @@ class MediaController extends Controller
         ], [
             'file.max' => $isSocialVideo
                 ? __('Social videos cannot be larger than 500 MB.')
-                : __('This file is larger than the allowed upload limit.'),
+                : ($isSocialImage
+                    ? __('Social images cannot be larger than 25 MB.')
+                    : __('This file is larger than the allowed upload limit.')),
             'file.mimes' => __('This media type is not supported for upload.'),
         ]);
 
