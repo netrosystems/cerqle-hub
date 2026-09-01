@@ -6,6 +6,7 @@ use App\Events\MessageSent;
 use App\Modules\Inbox\Jobs\SyncEmailAccountJob;
 use App\Modules\Inbox\Services\EmailInboxSyncDispatcher;
 use App\Modules\Shared\Models\ChannelAccount;
+use App\Modules\Shared\Models\Contact;
 use App\Modules\Shared\Models\Conversation;
 use App\Modules\Shared\Models\Message;
 use App\Modules\Shared\Services\ChannelManager;
@@ -13,6 +14,7 @@ use App\Support\Demo;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 
 class MobileEmailInboxController extends WorkspaceScopedController
 {
@@ -212,6 +214,87 @@ class MobileEmailInboxController extends WorkspaceScopedController
         ]);
     }
 
+    /** POST /api/v1/mobile/email/compose */
+    public function compose(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'account_id' => ['required', 'integer'],
+            'to' => ['required', 'email', 'max:255'],
+            'subject' => ['required', 'string', 'max:998'],
+            'body' => ['required', 'string', 'max:100000'],
+            'cc' => ['nullable'],
+            'bcc' => ['nullable'],
+        ]);
+
+        $workspaceId = $this->workspaceId($request);
+        $account = $this->emailAccount($request, (int) $validated['account_id']);
+
+        $recipient = strtolower(trim((string) $validated['to']));
+        $cc = $this->parseEmailList($validated['cc'] ?? null);
+        $bcc = $this->parseEmailList($validated['bcc'] ?? null);
+
+        $contact = Contact::firstOrCreate(
+            ['workspace_id' => $workspaceId, 'email' => $recipient],
+            [
+                'first_name' => Str::before($recipient, '@'),
+                'source' => 'email',
+                'opt_in_email' => false,
+            ]
+        );
+
+        $conversation = Conversation::create([
+            'workspace_id' => $workspaceId,
+            'channel_account_id' => $account->id,
+            'contact_id' => $contact->id,
+            'external_thread_id' => 'outbound:'.Str::uuid(),
+            'status' => 'open',
+            'assigned_to' => 'human',
+            'assigned_user_id' => $request->user()->id,
+            'last_message_at' => now(),
+        ]);
+
+        $message = Message::create([
+            'conversation_id' => $conversation->id,
+            'direction' => 'out',
+            'channel' => 'email',
+            'type' => 'text',
+            'body' => $validated['body'],
+            'payload' => [
+                'subject' => $validated['subject'],
+                'to' => $recipient,
+                'cc' => $cc,
+                'bcc' => $bcc,
+            ],
+            'status' => 'queued',
+            'sent_by' => 'human',
+            'user_id' => $request->user()->id,
+            'sent_at' => now(),
+        ]);
+
+        $sendError = null;
+        try {
+            $providerMessageId = $this->channelManager->driver('email')->send($message);
+            $message->update(['status' => 'sent', 'provider_message_id' => $providerMessageId]);
+        } catch (\Throwable $exception) {
+            $sendError = $exception->getMessage();
+            $message->update(['status' => 'failed', 'error_json' => ['message' => $sendError]]);
+            Log::error('Mobile email compose failed', [
+                'conversation_id' => $conversation->id,
+                'error' => $sendError,
+            ]);
+        }
+
+        $conversation->update(['last_message_at' => now()]);
+        $message->load(['conversation', 'user:id,name,avatar']);
+        MessageSent::dispatch($message);
+
+        return response()->json([
+            'thread' => $this->formatThread($conversation->fresh(['contact', 'channelAccount', 'lastMessage.user:id,name,avatar', 'assignedUser:id,name,avatar'])),
+            'message' => $this->formatMessage($message),
+            'error' => $sendError,
+        ], 201);
+    }
+
     /** PATCH /api/v1/mobile/email/threads/{uuid}/status */
     public function updateStatus(Request $request, string $uuid): JsonResponse
     {
@@ -321,5 +404,26 @@ class MobileEmailInboxController extends WorkspaceScopedController
             'sent_at' => $message->sent_at?->toIso8601String(),
             'created_at' => $message->created_at->toIso8601String(),
         ];
+    }
+
+    private function parseEmailList(mixed $value): array
+    {
+        if (is_array($value)) {
+            $emails = $value;
+        } elseif (is_string($value) && trim($value) !== '') {
+            $emails = preg_split('/[,;]+/', $value) ?: [];
+        } else {
+            return [];
+        }
+
+        $cleaned = [];
+        foreach ($emails as $email) {
+            $email = strtolower(trim((string) $email));
+            if (filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                $cleaned[] = $email;
+            }
+        }
+
+        return array_values(array_unique($cleaned));
     }
 }

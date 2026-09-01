@@ -2,6 +2,7 @@
 
 namespace App\Modules\Inbox\Http\Controllers;
 
+use App\Events\MessageSent;
 use App\Http\Controllers\Controller;
 use App\Modules\Inbox\Jobs\SyncEmailAccountJob;
 use App\Modules\Inbox\Services\GenericMailboxClient;
@@ -9,10 +10,15 @@ use App\Modules\Inbox\Services\GoogleGmailClient;
 use App\Modules\Inbox\Services\MicrosoftGraphMailClient;
 use App\Modules\Integrations\Models\IntegrationConfig;
 use App\Modules\Shared\Models\ChannelAccount;
+use App\Modules\Shared\Models\Contact;
+use App\Modules\Shared\Models\Conversation;
+use App\Modules\Shared\Models\Message;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 use Throwable;
@@ -253,6 +259,92 @@ class EmailAccountController extends Controller
         $channelAccount->delete();
 
         return back()->with('success', 'Mailbox disconnected. Existing conversations were kept.');
+    }
+
+    public function compose(
+        Request $request,
+        GoogleGmailClient $google,
+        MicrosoftGraphMailClient $microsoft,
+        GenericMailboxClient $generic,
+    ): RedirectResponse {
+        $validated = $request->validate([
+            'channel_account_id' => ['required', 'integer'],
+            'to' => ['required', 'email', 'max:255'],
+            'cc' => ['nullable', 'string', 'max:2000'],
+            'bcc' => ['nullable', 'string', 'max:2000'],
+            'subject' => ['required', 'string', 'max:998'],
+            'body' => ['required', 'string', 'max:100000'],
+        ]);
+        $workspaceId = $this->workspaceId($request);
+        $account = ChannelAccount::where('workspace_id', $workspaceId)
+            ->where('channel', 'email')
+            ->where('status', 'active')
+            ->findOrFail($validated['channel_account_id']);
+        $cc = $this->emailList($validated['cc'] ?? '');
+        $bcc = $this->emailList($validated['bcc'] ?? '');
+        $recipient = strtolower(trim((string) $validated['to']));
+
+        $contact = Contact::firstOrCreate(
+            ['workspace_id' => $workspaceId, 'email' => $recipient],
+            ['first_name' => Str::before($recipient, '@'), 'source' => 'email', 'opt_in_email' => false],
+        );
+        $conversation = Conversation::create([
+            'workspace_id' => $workspaceId,
+            'channel_account_id' => $account->id,
+            'contact_id' => $contact->id,
+            'external_thread_id' => 'outbound:'.Str::uuid(),
+            'status' => 'open',
+            'assigned_to' => 'human',
+            'assigned_user_id' => $request->user()->id,
+            'last_message_at' => now(),
+        ]);
+        $message = Message::create([
+            'conversation_id' => $conversation->id,
+            'direction' => 'out',
+            'channel' => 'email',
+            'type' => 'text',
+            'body' => $validated['body'],
+            'payload' => ['subject' => $validated['subject'], 'to' => $recipient, 'cc' => $cc, 'bcc' => $bcc],
+            'status' => 'queued',
+            'sent_by' => 'human',
+            'user_id' => $request->user()->id,
+            'sent_at' => now(),
+        ]);
+
+        try {
+            $providerId = match ($account->provider) {
+                'gmail' => $google->send($account, $recipient, $validated['subject'], $validated['body']),
+                'microsoft_365' => $microsoft->sendMessage($account, $recipient, $validated['subject'], $validated['body']),
+                default => $generic->send($account, $recipient, $validated['subject'], $validated['body'], null, $cc, $bcc),
+            };
+            $message->update(['status' => 'sent', 'provider_message_id' => $providerId]);
+            MessageSent::dispatch($message->load('conversation'));
+
+            return redirect()->route('client.inbox.email-inbox', ['conversation' => $conversation->uuid])
+                ->with('success', 'Email sent.');
+        } catch (Throwable $e) {
+            $message->update(['status' => 'failed', 'error_json' => ['message' => $e->getMessage()]]);
+            Log::warning('Email compose failed', ['account_id' => $account->id, 'error' => $e->getMessage()]);
+
+            return back()->withErrors(['compose' => $e->getMessage()])->withInput();
+        }
+    }
+
+    private function emailList(string $value): array
+    {
+        $emails = array_values(array_filter(array_map(
+            fn (string $email) => strtolower(trim($email)),
+            preg_split('/[,;]+/', $value) ?: [],
+        )));
+        foreach ($emails as $email) {
+            if (! filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                throw ValidationException::withMessages([
+                    'cc' => 'Every CC and BCC recipient must be a valid email address.',
+                ]);
+            }
+        }
+
+        return array_values(array_unique($emails));
     }
 
     private function authorise(Request $request, ChannelAccount $account): void
