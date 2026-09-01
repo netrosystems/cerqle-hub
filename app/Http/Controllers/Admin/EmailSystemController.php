@@ -35,13 +35,13 @@ class EmailSystemController extends Controller
         ]);
 
         $emailTemplates = Template::where('type', 'email')->orderBy('name')->get()->map(fn (Template $t) => [
-            'id'           => $t->id,
-            'name'         => $t->name,
-            'slug'         => $t->slug,
-            'subject'      => $t->subject,
-            'content'      => $t->content,
-            'enabled'      => $t->enabled,
-            'description'  => $t->meta['description'] ?? null,
+            'id' => $t->id,
+            'name' => $t->name,
+            'slug' => $t->slug,
+            'subject' => $t->subject,
+            'content' => $t->content,
+            'enabled' => $t->enabled,
+            'description' => $t->meta['description'] ?? null,
             'placeholders' => $t->meta['placeholders'] ?? [],
         ]);
 
@@ -133,6 +133,7 @@ class EmailSystemController extends Controller
     public function destroySmtp(SmtpConfiguration $smtpConfiguration): RedirectResponse
     {
         $smtpConfiguration->delete();
+
         return redirect()->route('admin.email-system.index')->with('success', __('SMTP configuration removed.'));
     }
 
@@ -140,6 +141,7 @@ class EmailSystemController extends Controller
     {
         SmtpConfiguration::query()->update(['is_active' => false]);
         $smtpConfiguration->update(['is_active' => true]);
+
         return redirect()->route('admin.email-system.index')->with('success', __('SMTP configuration activated.'));
     }
 
@@ -158,10 +160,10 @@ class EmailSystemController extends Controller
         }
 
         try {
-            $subject = '[Test] ' . ($template->subject ?? $template->name);
+            $subject = '[Test] '.($template->subject ?? $template->name);
             $content = $template->content ?? '<p>No content.</p>';
 
-            $this->mailService->sendRaw($smtp, $validated['email'], $subject, $content);
+            $this->mailService->sendRaw($smtp, $validated['email'], $subject, $content, transactional: true);
 
             return response()->json(['message' => __('Test email sent successfully.')]);
         } catch (\Throwable $e) {
@@ -192,11 +194,13 @@ class EmailSystemController extends Controller
                 $smtp,
                 $validated['email'],
                 __('Test email from :app', ['app' => $appName]),
-                '<p>'.__('This is a test email. Your SMTP configuration is working.').'</p>'
+                '<p>'.__('This is a test email. Your SMTP configuration is working.').'</p>',
+                transactional: true,
             );
             if ($request->wantsJson()) {
                 return response()->json(['message' => __('Test email sent successfully.')]);
             }
+
             return redirect()->route('admin.email-system.index')->with('success', __('Test email sent.'));
         } catch (\Throwable $e) {
             if ($request->wantsJson()) {

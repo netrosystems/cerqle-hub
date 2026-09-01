@@ -2,13 +2,17 @@ import AuthLayout from '@/Layouts/AuthLayout';
 import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
 import { useTranslation } from 'react-i18next';
 import { LogIn, Sparkles, ArrowUpRight, Eye, EyeOff } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 const PROVIDERS = [
     { id: 'google',    label: 'Google',    color: 'text-red-500' },
     { id: 'github',    label: 'GitHub',    color: 'text-neutral-800 dark:text-neutral-200' },
     { id: 'microsoft', label: 'Microsoft', color: 'text-blue-500' },
 ];
+
+export function shouldUseFirebaseGoogle(firebase = {}, socialProviders = []) {
+    return Boolean(firebase.enabled && firebase.apiKey && !socialProviders.includes('google'));
+}
 
 function GoogleIcon() {
     return (
@@ -26,7 +30,7 @@ function GoogleIcon() {
 function FirebaseGoogleButton() {
     const { t } = useTranslation();
     const { props } = usePage();
-    const firebase = props.firebase ?? {};
+    const firebase = useMemo(() => props.firebase ?? {}, [props.firebase]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
     const initRef = useRef(false);
@@ -300,7 +304,11 @@ export default function Login({ status, canResetPassword, socialProviders = [], 
     };
 
     const enabledProviders = PROVIDERS.filter(p => socialProviders.includes(p.id));
-    const hasSocialButtons = enabledProviders.length > 0 || firebase.enabled;
+    // The dedicated Google OAuth client is the canonical sign-in flow. Keep
+    // Firebase only as a backwards-compatible fallback for installations that
+    // have not configured Google Sign-In in Super Admin yet.
+    const useFirebaseGoogle = shouldUseFirebaseGoogle(firebase, socialProviders);
+    const hasSocialButtons = enabledProviders.length > 0 || useFirebaseGoogle;
 
     return (
         <AuthLayout
@@ -322,7 +330,7 @@ export default function Login({ status, canResetPassword, socialProviders = [], 
             {hasSocialButtons && (
                 <>
                     <div className="space-y-2 mb-2">
-                        <FirebaseGoogleButton />
+                        {useFirebaseGoogle && <FirebaseGoogleButton />}
                         {enabledProviders.map((provider) => (
                             <a
                                 key={provider.id}

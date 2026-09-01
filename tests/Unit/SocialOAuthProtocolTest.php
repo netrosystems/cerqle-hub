@@ -19,7 +19,7 @@ class SocialOAuthProtocolTest extends TestCase
         $url = $this->managerFor('youtube')->getAuthUrl('youtube', 1, 'https://app.test/callback');
         parse_str((string) parse_url($url, PHP_URL_QUERY), $query);
 
-        $this->assertSame('https://www.googleapis.com/auth/youtube', $query['scope']);
+        $this->assertSame('https://www.googleapis.com/auth/youtube.force-ssl', $query['scope']);
         $this->assertSame('offline', $query['access_type']);
         $this->assertSame('consent', $query['prompt']);
         $this->assertSame('true', $query['include_granted_scopes']);
@@ -41,6 +41,25 @@ class SocialOAuthProtocolTest extends TestCase
                 && str_starts_with((string) $request->header('Content-Type')[0], 'application/x-www-form-urlencoded')
                 && $request['code'] === 'auth-code'
                 && $request['grant_type'] === 'authorization_code';
+        });
+    }
+
+    public function test_google_refresh_preserves_the_persistent_refresh_token(): void
+    {
+        Http::fake(['oauth2.googleapis.com/token' => Http::response([
+            'access_token' => 'fresh-google-access',
+            'expires_in' => 3600,
+        ])]);
+
+        $tokens = $this->managerFor('youtube')->refresh('youtube', 'persistent-google-refresh');
+
+        $this->assertSame('fresh-google-access', $tokens['access_token']);
+        $this->assertSame('persistent-google-refresh', $tokens['refresh_token']);
+        $this->assertSame(3600, $tokens['expires_in']);
+        Http::assertSent(function (Request $request) {
+            return $request->url() === 'https://oauth2.googleapis.com/token'
+                && $request['grant_type'] === 'refresh_token'
+                && $request['refresh_token'] === 'persistent-google-refresh';
         });
     }
 

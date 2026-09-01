@@ -32,6 +32,8 @@ class MediaService
             throw new \RuntimeException('The configured storage provider rejected the media upload.');
         }
 
+        $temporary = in_array($collection, ['social', 'social-video', 'social-thumbnail'], true);
+
         return Media::create([
             'mediable_type' => get_class($owner),
             'mediable_id' => $owner->getKey(),
@@ -41,6 +43,10 @@ class MediaService
             'mime_type' => $file->getMimeType(),
             'size_bytes' => $file->getSize(),
             'collection' => $collection,
+            'is_temporary' => $temporary,
+            // An upload is an orphan until a post references it. This prevents
+            // abandoned composer uploads from consuming storage forever.
+            'purge_after' => $temporary ? now()->addDay() : null,
         ]);
     }
 
@@ -49,8 +55,17 @@ class MediaService
      */
     public function usedBytes(Model $owner, ?string $collection = null): int
     {
-        $query = Media::where('mediable_type', get_class($owner))
-            ->where('mediable_id', $owner->getKey());
+        $query = Media::whereNull('quota_released_at');
+
+        // Client plans are organization-wide. Count media owned by every team
+        // member so changing users cannot create a separate quota bucket.
+        if ($owner instanceof User && $owner->client_id) {
+            $query->where('mediable_type', User::class)
+                ->whereIn('mediable_id', $owner->client()->firstOrFail()->users()->select('id'));
+        } else {
+            $query->where('mediable_type', get_class($owner))
+                ->where('mediable_id', $owner->getKey());
+        }
 
         if ($collection) {
             $query->where('collection', $collection);
@@ -78,5 +93,25 @@ class MediaService
 
         // Preserve a safe default for users without an assigned plan.
         return 1024 * 1024 * 1024;
+    }
+
+    /** @return array{used_bytes:int,quota_bytes:?int,remaining_bytes:?int,percent_used:float,unlimited:bool,is_full:bool} */
+    public function usage(User $user): array
+    {
+        $used = $this->usedBytes($user);
+        $rawQuota = $this->quotaBytes($user);
+        $unlimited = $rawQuota === PHP_INT_MAX;
+        $quota = $unlimited ? null : $rawQuota;
+        $remaining = $unlimited ? null : max(0, $rawQuota - $used);
+        $percent = $unlimited ? 0.0 : ($rawQuota <= 0 ? 100.0 : min(100, round(($used / $rawQuota) * 100, 1)));
+
+        return [
+            'used_bytes' => $used,
+            'quota_bytes' => $quota,
+            'remaining_bytes' => $remaining,
+            'percent_used' => $percent,
+            'unlimited' => $unlimited,
+            'is_full' => ! $unlimited && $used >= $rawQuota,
+        ];
     }
 }

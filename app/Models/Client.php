@@ -63,7 +63,12 @@ class Client extends Model
 
     public function activeSubscription(): HasOne
     {
-        return $this->hasOne(ClientSubscription::class)->where('status', 'active')->latestOfMany();
+        return $this->hasOne(ClientSubscription::class)
+            ->where('status', ClientSubscription::STATUS_ACTIVE)
+            ->where(function ($query) {
+                $query->whereNull('ends_at')->orWhere('ends_at', '>', now());
+            })
+            ->latestOfMany();
     }
 
     public function activePlan(): ?Plan

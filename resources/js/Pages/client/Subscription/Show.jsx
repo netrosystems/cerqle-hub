@@ -2,11 +2,19 @@ import { useState } from 'react';
 import ClientLayout from '@/Layouts/ClientLayout';
 import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
 import { useTranslation } from 'react-i18next';
-import { Package, ArrowRightCircle, CreditCard, ChevronDown, FileText, RefreshCw } from 'lucide-react';
+import { Package, ArrowRightCircle, CreditCard, FileText, RefreshCw, HardDrive, AlertTriangle } from 'lucide-react';
 import { formatDateTz } from '@/Utils/datetime';
 
 function formatCurrency(cents, currency = 'USD') {
     return new Intl.NumberFormat(undefined, { style: 'currency', currency: (currency ?? 'USD').toUpperCase() }).format(cents / 100);
+}
+
+function formatBytes(bytes) {
+    if (bytes == null) return 'Unlimited';
+    if (bytes === 0) return '0 MB';
+    const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+    const index = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+    return `${(bytes / (1024 ** index)).toFixed(index > 1 ? 1 : 0)} ${units[index]}`;
 }
 
 function ChangePlanModal({ subscription, plans, onClose }) {
@@ -105,7 +113,7 @@ function ChangePlanModal({ subscription, plans, onClose }) {
     );
 }
 
-export default function SubscriptionShow({ subscription, canCancel, canUpgrade, plans = [], transactions = [] }) {
+export default function SubscriptionShow({ subscription, canCancel, canUpgrade, plans = [], transactions = [], storageUsage }) {
     const { t } = useTranslation();
     const { flash, timezone } = usePage().props;
     const userTz = timezone || 'Asia/Dhaka';
@@ -232,6 +240,40 @@ export default function SubscriptionShow({ subscription, canCancel, canUpgrade, 
                             <CreditCard className="h-4 w-4" />
                             {t('client.view_plans') || 'View plans'}
                         </Link>
+                    </div>
+                )}
+
+                {storageUsage && (
+                    <div className={`rounded-soft-lg border bg-white p-6 dark:bg-neutral-800/50 ${storageUsage.is_full ? 'border-coral-300 dark:border-coral-800' : storageUsage.percent_used >= 80 ? 'border-amber-300 dark:border-amber-800' : 'border-neutral-200 dark:border-neutral-700'}`}>
+                        <div className="flex items-start justify-between gap-4">
+                            <div className="flex items-center gap-3">
+                                <span className="flex h-10 w-10 items-center justify-center rounded-soft-lg bg-brand-50 text-brand-600 dark:bg-brand-900/30 dark:text-brand-300">
+                                    <HardDrive className="h-5 w-5" />
+                                </span>
+                                <div>
+                                    <h3 className="text-base font-semibold text-neutral-900 dark:text-neutral-100">Storage usage</h3>
+                                    <p className="text-sm text-neutral-500 dark:text-neutral-400">
+                                        {formatBytes(storageUsage.used_bytes)} used of {storageUsage.unlimited ? 'unlimited storage' : formatBytes(storageUsage.quota_bytes)}
+                                    </p>
+                                </div>
+                            </div>
+                            {!storageUsage.unlimited && <span className="text-sm font-semibold text-neutral-700 dark:text-neutral-200">{storageUsage.percent_used}%</span>}
+                        </div>
+                        {!storageUsage.unlimited && (
+                            <div className="mt-4 h-2.5 overflow-hidden rounded-full bg-neutral-100 dark:bg-neutral-700">
+                                <div className={`h-full rounded-full transition-all ${storageUsage.is_full ? 'bg-coral-500' : storageUsage.percent_used >= 80 ? 'bg-amber-500' : 'bg-brand-500'}`} style={{ width: `${Math.min(100, storageUsage.percent_used)}%` }} />
+                            </div>
+                        )}
+                        <div className="mt-3 flex items-center justify-between gap-4 text-xs text-neutral-500 dark:text-neutral-400">
+                            <span>{storageUsage.unlimited ? 'Your plan has no storage ceiling.' : `${formatBytes(storageUsage.remaining_bytes)} remaining`}</span>
+                            <Link href={route('client.media.index')} className="font-medium text-brand-600 hover:text-brand-700">Manage media</Link>
+                        </div>
+                        {storageUsage.is_full && (
+                            <div className="mt-4 flex gap-2 rounded-soft border border-coral-200 bg-coral-50 p-3 text-sm text-coral-800 dark:border-coral-800 dark:bg-coral-950/30 dark:text-coral-300">
+                                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                                <span>Storage is full. Delete unused media, wait for published-media cleanup, or upgrade your plan before uploading again.</span>
+                            </div>
+                        )}
                     </div>
                 )}
 

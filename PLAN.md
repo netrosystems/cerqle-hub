@@ -38,12 +38,16 @@ journey
 #### Capabilities
 - **Authentication & Security**: Email/password authentication, Magic Link login, Google/Socialite OAuth, and Google Authenticator 2FA (`TwoFactorController`).
 - **Workspace Switching**: Seamless switching between client-owned workspaces (`WorkspaceController`) with strict scoped sessions.
+- **Workspace Management**: Authorized owners and client administrators can rename a workspace or permanently delete it after typing its exact name. Deletion is atomic, removes workspace-scoped records, selects a safe fallback workspace, and cannot remove the client's only workspace.
 - **Role-Based Team Access**: Client administrators can invite team members, assign granular roles (Admin, Agent, Viewer), and inspect audit logs (`TeamController`, `ClientAuditLogController`).
 - **Session Management**: View and revoke active browser sessions remotely (`SessionController`).
+- **Resilient Verification Email**: Account creation succeeds even when SMTP or fallback notification delivery is rejected; failures are logged for follow-up and transactional messages include branded HTML plus a readable plain-text part.
 
 #### Verification Criteria
 - [x] Unauthenticated requests redirect to `/login`.
 - [x] Workspace switching immediately re-scopes all active queries, broadcast channels, and settings.
+- [x] Same-client users cannot access workspace broadcasts without ownership or explicit membership.
+- [x] Permanent deletion requires exact-name confirmation, preserves a fallback workspace, and removes dependent workspace data.
 - [x] Deactivating a team member terminates their active sessions immediately.
 
 ---
@@ -96,7 +100,13 @@ journey
 
 #### Capabilities
 - **Connected Accounts**: Connect Facebook Pages, Instagram Business Accounts, and LinkedIn profiles via OAuth 2.0.
+- **Persistent OAuth Connections**: YouTube uses the minimum sufficient `youtube.force-ssl` permission. YouTube, TikTok, and LinkedIn refresh short-lived access tokens automatically before use and on a ten-minute schedule. Application deployments preserve encrypted refresh tokens, and transient refresh failures never remove or disable a client connection. The dedicated Google Sign-In OAuth client takes precedence on the login page; legacy Firebase Google authentication remains a fallback only when that client is unavailable.
 - **Multi-Platform Post Composer (`/app/social/composer`)**: Compose copy, attach media, preview platform-specific layouts, and publish immediately or schedule for future delivery.
+- **Platform-Specific Payloads**: A shared base post can be overridden per selected network. Provider-only fields (YouTube metadata and TikTok creator privacy/interaction consent) are validated independently without conflating capabilities.
+- **Temporary Publishing Media**: Social uploads count against plan storage while active or retryable, are released from quota after all destinations publish, and are purged after a 24-hour safety window.
+- **Reliable Post Previews**: Scheduled and retryable post cards use stored MIME metadata to render uploaded videos as video-frame previews and images as images. Unavailable media uses a neutral placeholder instead of a broken browser image.
+- **Social Upload Limits**: Social images accept up to 25 MB, social videos accept up to 500 MB, and YouTube thumbnails retain their 2 MB provider limit. These application limits are identical across environments; deployment templates align PHP-FPM and Nginx with a 520 MB multipart request ceiling for video.
+- **Storage Visibility**: The Subscription page and subscription APIs report organization-wide used, remaining, percentage, unlimited, and full storage states.
 - **Interactive Visual Calendar (`/app/social/calendar`)**: Month/Week/Day calendar view for managing scheduled and past social media campaigns.
 - **Capability-Driven Deletion**: Safely distinguishes remote platform deletion capabilities between Facebook (supported) and Instagram (API limited).
 
