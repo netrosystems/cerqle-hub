@@ -30,6 +30,7 @@ class RegisteredUserController extends Controller
             'plan_id' => $request->query('plan_id'),
             'cycle' => $request->query('cycle', 'month'),
             'googleSignupEnabled' => $googleSignIn->apply(),
+            'oauthRequiresRegistration' => $request->session()->get('oauth_requires_registration', false),
         ]);
     }
 

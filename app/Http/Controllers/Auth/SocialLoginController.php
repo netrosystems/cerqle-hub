@@ -129,6 +129,15 @@ class SocialLoginController extends Controller
         }
 
         if (! $user && $intent !== 'signup') {
+            if ($provider === 'google' && config('auth.allow_registration', true)) {
+                return redirect()->route('register')
+                    ->with('oauth_provider', $provider)
+                    ->with('oauth_requires_registration', true)
+                    ->withErrors([
+                        'oauth' => __('This Google account is not registered with Cerqle. Accept the Terms below, then select Continue with Google to create your account.'),
+                    ]);
+            }
+
             return $this->oauthErrorRedirect($intent, $provider, __('No Cerqle account matches this :provider account. Create an account first, or try a different account.', [
                 'provider' => Str::headline($provider),
             ]));

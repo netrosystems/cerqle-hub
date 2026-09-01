@@ -2380,6 +2380,8 @@
         "per_month": "month",
         "trial_days": "{{days}}-day free trial",
         "get_started_free": "Start for free",
+        "activate_free": "Get Cerqle free",
+        "activating": "Activating…",
         "get_started": "Get started",
         "free_no_payment": "Free plan — no payment needed.",
         "no_gateway": "No payment gateway configured.",

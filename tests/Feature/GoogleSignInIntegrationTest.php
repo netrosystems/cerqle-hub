@@ -119,7 +119,7 @@ class GoogleSignInIntegrationTest extends TestCase
         $this->assertSame($refreshToken, $account->fresh()->refresh_token);
     }
 
-    public function test_google_login_returns_a_visible_oauth_error_when_no_account_matches(): void
+    public function test_google_login_redirects_an_unknown_account_to_terms_gated_registration(): void
     {
         $this->googleSignInIntegration(enabled: true);
         $this->mockGoogleCallbackUser('new-google-user', 'new-user@example.test');
@@ -130,16 +130,17 @@ class GoogleSignInIntegrationTest extends TestCase
                 'provider' => 'google',
             ],
         ])->get(route('auth.social.callback', 'google'))
-            ->assertRedirect(route('login'))
+            ->assertRedirect(route('register'))
             ->assertSessionHas('oauth_provider', 'google')
+            ->assertSessionHas('oauth_requires_registration', true)
             ->assertSessionHasErrors('oauth');
 
-        $this->get(route('login'))
+        $this->get(route('register'))
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
-                ->component('Auth/Login')
-                ->where('oauthProvider', 'google')
-                ->where('errors.oauth', 'No Cerqle account matches this Google account. Create an account first, or try a different account.')
+                ->component('Auth/Register')
+                ->where('oauthRequiresRegistration', true)
+                ->where('errors.oauth', 'This Google account is not registered with Cerqle. Accept the Terms below, then select Continue with Google to create your account.')
             );
 
         $this->assertGuest();
@@ -165,6 +166,25 @@ class GoogleSignInIntegrationTest extends TestCase
             'provider' => 'google',
             'provider_id' => 'existing-google-user',
         ]);
+    }
+
+    public function test_unknown_google_login_stays_on_login_when_registration_is_disabled(): void
+    {
+        config()->set('auth.allow_registration', false);
+        $this->googleSignInIntegration(enabled: true);
+        $this->mockGoogleCallbackUser('blocked-google-user', 'blocked-user@example.test');
+
+        $this->withSession([
+            'social_auth_context' => [
+                'intent' => 'login',
+                'provider' => 'google',
+            ],
+        ])->get(route('auth.social.callback', 'google'))
+            ->assertRedirect(route('login'))
+            ->assertSessionMissing('oauth_requires_registration')
+            ->assertSessionHasErrors('oauth');
+
+        $this->assertGuest();
     }
 
     private function googleSignInIntegration(bool $enabled): IntegrationConfig

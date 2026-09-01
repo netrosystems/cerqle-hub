@@ -1,4 +1,5 @@
 import AuthLayout from '@/Layouts/AuthLayout';
+import GoogleOAuthButton from '@/Components/Auth/GoogleOAuthButton';
 import OAuthErrorAlert from '@/Components/Auth/OAuthErrorAlert';
 import { Button, Input, Checkbox } from '@/Components/ui';
 import { Head, Link, useForm } from '@inertiajs/react';
@@ -6,7 +7,7 @@ import { useTranslation } from 'react-i18next';
 import { UserPlus } from 'lucide-react';
 import { browserTz } from '@/Utils/datetime';
 
-export default function Register({ plan_id = null, cycle = 'month', googleSignupEnabled = false }) {
+export default function Register({ plan_id = null, cycle = 'month', googleSignupEnabled = false, oauthRequiresRegistration = false }) {
     const { t } = useTranslation();
     const { data, setData, post, processing, errors, reset, setError, clearErrors } = useForm({
         name:                  '',
@@ -51,26 +52,29 @@ export default function Register({ plan_id = null, cycle = 'month', googleSignup
             <Head title={t('auth.register') || 'Register'} />
 
             <OAuthErrorAlert message={errors.oauth}>
-                <Link
-                    href={route('login')}
-                    className="underline decoration-coral-300 underline-offset-2 hover:text-coral-950 dark:hover:text-coral-100"
-                >
-                    {t('auth.sign_in_instead', { defaultValue: 'Sign in instead' })}
-                </Link>
+                {!oauthRequiresRegistration && (
+                    <Link
+                        href={route('login')}
+                        className="underline decoration-coral-300 underline-offset-2 hover:text-coral-950 dark:hover:text-coral-100"
+                    >
+                        {t('auth.sign_in_instead', { defaultValue: 'Sign in instead' })}
+                    </Link>
+                )}
             </OAuthErrorAlert>
 
             {googleSignupEnabled && (
                 <>
-                    <Button type="button" variant="outline" className="w-full" disabled={processing} onClick={googleSignup}>
-                        <svg className="mr-2 h-4 w-4" viewBox="0 0 24 24" aria-hidden="true">
-                            <path fill="#4285F4" d="M21.6 12.23c0-.71-.06-1.4-.18-2.07H12v3.91h5.38a4.6 4.6 0 0 1-2 3.02v2.54h3.24c1.9-1.75 2.98-4.33 2.98-7.4Z" />
-                            <path fill="#34A853" d="M12 22c2.7 0 4.97-.9 6.62-2.43l-3.24-2.54c-.9.6-2.05.96-3.38.96-2.6 0-4.8-1.76-5.6-4.12H3.05v2.62A10 10 0 0 0 12 22Z" />
-                            <path fill="#FBBC05" d="M6.4 13.87A6.02 6.02 0 0 1 6.08 12c0-.65.11-1.29.32-1.87V7.51H3.05A10 10 0 0 0 2 12c0 1.61.39 3.14 1.05 4.49l3.35-2.62Z" />
-                            <path fill="#EA4335" d="M12 6.01c1.47 0 2.79.5 3.83 1.5l2.87-2.87A9.63 9.63 0 0 0 12 2a10 10 0 0 0-8.95 5.51l3.35 2.62C7.2 7.77 9.4 6.01 12 6.01Z" />
-                        </svg>
-                        Continue with Google
-                    </Button>
-                    <div className="flex items-center gap-3 text-xs text-neutral-400"><span className="h-px flex-1 bg-neutral-200 dark:bg-neutral-700" /><span>or use email</span><span className="h-px flex-1 bg-neutral-200 dark:bg-neutral-700" /></div>
+                    <GoogleOAuthButton
+                        onClick={googleSignup}
+                        disabled={processing}
+                        loading={processing}
+                        label={processing ? t('auth.signing_in') : t('auth.continue_with_google')}
+                    />
+                    <div className="flex items-center gap-3 text-xs text-neutral-400">
+                        <span className="h-px flex-1 bg-neutral-200 dark:bg-neutral-700" />
+                        <span>{t('auth.or_continue_with_email', { defaultValue: 'or continue with email' })}</span>
+                        <span className="h-px flex-1 bg-neutral-200 dark:bg-neutral-700" />
+                    </div>
                 </>
             )}
 

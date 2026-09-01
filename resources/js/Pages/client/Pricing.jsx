@@ -172,7 +172,9 @@ export default function Pricing({
                                             disabled={loadingGateway !== null}
                                             onClick={() => activateFree(plan.id)}
                                         >
-                                            {loadingGateway === `free-${plan.id}` ? 'Activating…' : (t('pricing.activate_free') || 'Activate free plan')}
+                                            {loadingGateway === `free-${plan.id}`
+                                                ? t('pricing.activating', { defaultValue: 'Activating…' })
+                                                : t('pricing.activate_free', { defaultValue: 'Get Cerqle free' })}
                                         </Button>
                                     ) : configuredGateways.length === 0 ? (
                                         <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-soft px-3 py-2 text-center">

@@ -97,6 +97,7 @@ Primary Plum:    #3E2A49   Brand Lilac:    #8F5FA7   Cool Accent:  #45B6D6   Cor
 - **`ghost`**: `bg-transparent text-neutral-700 hover:bg-neutral-100` — Used for inline toolbars and list actions.
 - **`danger`**: `bg-coral-500 text-white hover:bg-coral-600` — Used for irreversible delete actions.
 - **`outline`**: `border-neutral-300 text-neutral-700 hover:bg-neutral-50` — Used for filter triggers and downloads.
+- Google authentication on Sign In and Register uses the shared `GoogleOAuthButton` component so provider branding, shape, spacing, focus treatment, and disabled state remain identical across both entry points.
 
 ### 5.2 Status Badges & Semantic Pills (`Badge.jsx`)
 
