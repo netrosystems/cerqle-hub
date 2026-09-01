@@ -114,20 +114,47 @@ class MicrosoftGraphMailClient
         return 'graph:'.bin2hex(random_bytes(12));
     }
 
-    public function sendMessage(ChannelAccount $account, string $to, string $subject, string $body, array $cc = [], array $bcc = []): string
-    {
+    public function sendMessage(
+        ChannelAccount $account,
+        string $to,
+        string $subject,
+        string $body,
+        array $cc = [],
+        array $bcc = [],
+        array $attachments = []
+    ): string {
         $recipients = fn (array $addresses): array => array_map(
             fn (string $address) => ['emailAddress' => ['address' => $address]],
             $addresses,
         );
+
+        $graphAttachments = [];
+        foreach ($attachments as $att) {
+            $rawBytes = $att['raw_bytes'] ?? (file_exists($att['path'] ?? '') ? file_get_contents($att['path']) : null);
+            if ($rawBytes === null) {
+                continue;
+            }
+            $graphAttachments[] = [
+                '@odata.type' => '#microsoft.graph.fileAttachment',
+                'name' => $att['filename'] ?? 'attachment',
+                'contentType' => $att['mime_type'] ?? 'application/octet-stream',
+                'contentBytes' => base64_encode($rawBytes),
+            ];
+        }
+
+        $messagePayload = [
+            'subject' => $subject,
+            'body' => ['contentType' => 'HTML', 'content' => nl2br(e($body))],
+            'toRecipients' => $recipients([$to]),
+            'ccRecipients' => $recipients($cc),
+            'bccRecipients' => $recipients($bcc),
+        ];
+        if (! empty($graphAttachments)) {
+            $messagePayload['attachments'] = $graphAttachments;
+        }
+
         $response = $this->request($account)->post('https://graph.microsoft.com/v1.0/me/sendMail', [
-            'message' => [
-                'subject' => $subject,
-                'body' => ['contentType' => 'HTML', 'content' => nl2br(e($body))],
-                'toRecipients' => $recipients([$to]),
-                'ccRecipients' => $recipients($cc),
-                'bccRecipients' => $recipients($bcc),
-            ],
+            'message' => $messagePayload,
             'saveToSentItems' => true,
         ]);
         if (! $response->successful()) {
