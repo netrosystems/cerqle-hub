@@ -8,6 +8,9 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Inertia\Testing\AssertableInertia as Assert;
+use Laravel\Socialite\Facades\Socialite;
+use Laravel\Socialite\Two\User as SocialiteUser;
+use Mockery;
 use Tests\TestCase;
 
 class GoogleSignInIntegrationTest extends TestCase
@@ -116,6 +119,54 @@ class GoogleSignInIntegrationTest extends TestCase
         $this->assertSame($refreshToken, $account->fresh()->refresh_token);
     }
 
+    public function test_google_login_returns_a_visible_oauth_error_when_no_account_matches(): void
+    {
+        $this->googleSignInIntegration(enabled: true);
+        $this->mockGoogleCallbackUser('new-google-user', 'new-user@example.test');
+
+        $this->withSession([
+            'social_auth_context' => [
+                'intent' => 'login',
+                'provider' => 'google',
+            ],
+        ])->get(route('auth.social.callback', 'google'))
+            ->assertRedirect(route('login'))
+            ->assertSessionHas('oauth_provider', 'google')
+            ->assertSessionHasErrors('oauth');
+
+        $this->get(route('login'))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Auth/Login')
+                ->where('oauthProvider', 'google')
+                ->where('errors.oauth', 'No Cerqle account matches this Google account. Create an account first, or try a different account.')
+            );
+
+        $this->assertGuest();
+    }
+
+    public function test_google_login_links_a_verified_matching_email_and_signs_in(): void
+    {
+        $this->googleSignInIntegration(enabled: true);
+        $user = User::factory()->create(['email' => 'existing-user@example.test']);
+        $this->mockGoogleCallbackUser('existing-google-user', $user->email);
+
+        $this->withSession([
+            'social_auth_context' => [
+                'intent' => 'login',
+                'provider' => 'google',
+            ],
+        ])->get(route('auth.social.callback', 'google'))
+            ->assertRedirect(route('client.dashboard'));
+
+        $this->assertAuthenticatedAs($user);
+        $this->assertDatabaseHas('social_accounts', [
+            'user_id' => $user->id,
+            'provider' => 'google',
+            'provider_id' => 'existing-google-user',
+        ]);
+    }
+
     private function googleSignInIntegration(bool $enabled): IntegrationConfig
     {
         return IntegrationConfig::create([
@@ -128,5 +179,23 @@ class GoogleSignInIntegrationTest extends TestCase
                 'client_secret' => 'admin-google-secret',
             ],
         ]);
+    }
+
+    private function mockGoogleCallbackUser(string $providerId, string $email): void
+    {
+        $socialUser = (new SocialiteUser)
+            ->map([
+                'id' => $providerId,
+                'name' => 'Google User',
+                'email' => $email,
+                'avatar' => 'https://example.test/avatar.png',
+            ])
+            ->setRaw(['email_verified' => true])
+            ->setToken('google-access-token')
+            ->setRefreshToken('google-refresh-token');
+
+        $driver = Mockery::mock();
+        $driver->shouldReceive('user')->once()->andReturn($socialUser);
+        Socialite::shouldReceive('driver')->once()->with('google')->andReturn($driver);
     }
 }

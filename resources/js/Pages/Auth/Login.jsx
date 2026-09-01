@@ -1,4 +1,5 @@
 import AuthLayout from '@/Layouts/AuthLayout';
+import OAuthErrorAlert from '@/Components/Auth/OAuthErrorAlert';
 import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
 import { useTranslation } from 'react-i18next';
 import { LogIn, Sparkles, ArrowUpRight, Eye, EyeOff } from 'lucide-react';
@@ -288,7 +289,7 @@ function CreamDivider({ label }) {
 
 // ── Page ────────────────────────────────────────────────────────────────────
 
-export default function Login({ status, canResetPassword, socialProviders = [], demo = null }) {
+export default function Login({ status, canResetPassword, socialProviders = [], oauthProvider = null, demo = null }) {
     const { t } = useTranslation();
     const { props } = usePage();
     const firebase = props.firebase ?? {};
@@ -309,6 +310,7 @@ export default function Login({ status, canResetPassword, socialProviders = [], 
     // have not configured Google Sign-In in Super Admin yet.
     const useFirebaseGoogle = shouldUseFirebaseGoogle(firebase, socialProviders);
     const hasSocialButtons = enabledProviders.length > 0 || useFirebaseGoogle;
+    const retryProvider = oauthProvider && socialProviders.includes(oauthProvider) ? oauthProvider : null;
 
     return (
         <AuthLayout
@@ -317,6 +319,26 @@ export default function Login({ status, canResetPassword, socialProviders = [], 
             status={status}
         >
             <Head title={t('auth.log_in') || 'Log in'} />
+
+            <OAuthErrorAlert message={errors.oauth}>
+                {retryProvider && (
+                    <a
+                        href={route('auth.social.redirect', { provider: retryProvider })}
+                        className="underline decoration-coral-300 underline-offset-2 hover:text-coral-950 dark:hover:text-coral-100"
+                    >
+                        {t('auth.try_provider_again', {
+                            provider: PROVIDERS.find(({ id }) => id === retryProvider)?.label ?? retryProvider,
+                            defaultValue: 'Try {{provider}} again',
+                        })}
+                    </a>
+                )}
+                <Link
+                    href={route('register')}
+                    className="underline decoration-coral-300 underline-offset-2 hover:text-coral-950 dark:hover:text-coral-100"
+                >
+                    {t('auth.create_account', { defaultValue: 'Create an account' })}
+                </Link>
+            </OAuthErrorAlert>
 
             {/* Demo mode: one-click sign-in with the seeded demo accounts */}
             {demo && demo.length > 0 && (

@@ -1,4 +1,5 @@
 import AuthLayout from '@/Layouts/AuthLayout';
+import OAuthErrorAlert from '@/Components/Auth/OAuthErrorAlert';
 import { Button, Input, Checkbox } from '@/Components/ui';
 import { Head, Link, useForm } from '@inertiajs/react';
 import { useTranslation } from 'react-i18next';
@@ -48,6 +49,15 @@ export default function Register({ plan_id = null, cycle = 'month', googleSignup
             subtitle={t('auth.register_subtitle') || 'Get started for free today'}
         >
             <Head title={t('auth.register') || 'Register'} />
+
+            <OAuthErrorAlert message={errors.oauth}>
+                <Link
+                    href={route('login')}
+                    className="underline decoration-coral-300 underline-offset-2 hover:text-coral-950 dark:hover:text-coral-100"
+                >
+                    {t('auth.sign_in_instead', { defaultValue: 'Sign in instead' })}
+                </Link>
+            </OAuthErrorAlert>
 
             {googleSignupEnabled && (
                 <>

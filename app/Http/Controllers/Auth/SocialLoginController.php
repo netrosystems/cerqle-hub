@@ -86,15 +86,17 @@ class SocialLoginController extends Controller
 
         try {
             $socialUser = Socialite::driver($provider)->user();
-        } catch (\Throwable) {
-            return redirect()->route($intent === 'signup' ? 'register' : 'login')
-                ->withErrors(['email' => __('Social login failed. Please try again.')]);
+        } catch (\Throwable $exception) {
+            report($exception);
+
+            return $this->oauthErrorRedirect($intent, $provider, __('Social login failed. Please try again.'));
         }
 
         $email = $socialUser->getEmail();
         if (! $email) {
-            return redirect()->route($intent === 'signup' ? 'register' : 'login')
-                ->withErrors(['email' => __('No email address returned by Google.')]);
+            return $this->oauthErrorRedirect($intent, $provider, __('No email address was returned by :provider.', [
+                'provider' => Str::headline($provider),
+            ]));
         }
 
         $existing = SocialAccount::where('provider', $provider)
@@ -104,8 +106,7 @@ class SocialLoginController extends Controller
 
         if ($existing?->user) {
             if ($intent === 'signup') {
-                return redirect()->route('register')
-                    ->withErrors(['email' => __('An account already exists. Sign in instead.')]);
+                return $this->oauthErrorRedirect($intent, $provider, __('An account already exists. Sign in instead.'));
             }
 
             $existing->update([
@@ -120,24 +121,22 @@ class SocialLoginController extends Controller
 
         $user = User::where('email', $email)->first();
         if ($user && $intent === 'signup') {
-            return redirect()->route('register')
-                ->withErrors(['email' => __('An account already exists. Sign in instead.')]);
+            return $this->oauthErrorRedirect($intent, $provider, __('An account already exists. Sign in instead.'));
         }
 
         if ($user && ! $this->providerEmailIsVerified($provider, $socialUser)) {
-            return redirect()->route('login')
-                ->withErrors(['email' => __('The provider could not confirm ownership of this email address.')]);
+            return $this->oauthErrorRedirect($intent, $provider, __('The provider could not confirm ownership of this email address.'));
         }
 
         if (! $user && $intent !== 'signup') {
-            return redirect()->route('login')
-                ->withErrors(['email' => __('No account found. Create an account first.')]);
+            return $this->oauthErrorRedirect($intent, $provider, __('No Cerqle account matches this :provider account. Create an account first, or try a different account.', [
+                'provider' => Str::headline($provider),
+            ]));
         }
 
         if (! $user) {
             if (! config('auth.allow_registration', true)) {
-                return redirect()->route('register')
-                    ->withErrors(['email' => __('New account registration is disabled.')]);
+                return $this->oauthErrorRedirect($intent, $provider, __('New account registration is disabled.'));
             }
 
             $verified = $this->providerEmailIsVerified($provider, $socialUser);
@@ -197,6 +196,13 @@ class SocialLoginController extends Controller
         }
 
         return redirect()->intended(route('client.dashboard'));
+    }
+
+    private function oauthErrorRedirect(string $intent, string $provider, string $message): RedirectResponse
+    {
+        return redirect()->route($intent === 'signup' ? 'register' : 'login')
+            ->with('oauth_provider', $provider)
+            ->withErrors(['oauth' => $message]);
     }
 
     private function markProviderVerifiedEmail(User $user, string $provider, mixed $socialUser): void

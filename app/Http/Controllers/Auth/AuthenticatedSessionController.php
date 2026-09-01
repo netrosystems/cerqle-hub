@@ -38,6 +38,7 @@ class AuthenticatedSessionController extends Controller
         return Inertia::render('Auth/Login', [
             'canResetPassword' => Route::has('password.request'),
             'status' => session('status'),
+            'oauthProvider' => session('oauth_provider'),
             'socialProviders' => array_values($socialProviders),
             // In demo mode, surface the seeded demo credentials so the login
             // screen can offer single-click sign-in cards. Null otherwise. The
