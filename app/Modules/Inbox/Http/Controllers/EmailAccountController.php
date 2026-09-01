@@ -13,6 +13,8 @@ use App\Modules\Shared\Models\ChannelAccount;
 use App\Modules\Shared\Models\Contact;
 use App\Modules\Shared\Models\Conversation;
 use App\Modules\Shared\Models\Message;
+use App\Services\Media\AttachmentService;
+use App\Services\StorageManager;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -274,6 +276,7 @@ class EmailAccountController extends Controller
             'bcc' => ['nullable', 'string', 'max:2000'],
             'subject' => ['required', 'string', 'max:998'],
             'body' => ['required', 'string', 'max:100000'],
+            'attachment' => ['nullable', 'file', 'max:'.AttachmentService::MAX_FILE_KILOBYTES, 'mimes:'.AttachmentService::ALLOWED_MIMES],
         ]);
         $workspaceId = $this->workspaceId($request);
         $account = ChannelAccount::where('workspace_id', $workspaceId)
@@ -298,13 +301,39 @@ class EmailAccountController extends Controller
             'assigned_user_id' => $request->user()->id,
             'last_message_at' => now(),
         ]);
+
+        $payload = ['subject' => $validated['subject'], 'to' => $recipient, 'cc' => $cc, 'bcc' => $bcc];
+        $attachments = [];
+        $msgType = 'text';
+
+        if ($request->hasFile('attachment')) {
+            $attachmentService = app(AttachmentService::class);
+            $upload = $attachmentService->processUpload($request->file('attachment'), 'message-media');
+            $msgType = $upload['type'];
+            $payload['path'] = $upload['path'];
+            $payload['preview_url'] = $upload['url'];
+            $payload['filename'] = $upload['filename'];
+            $payload['mime_type'] = $upload['mime_type'];
+            $payload['file_size'] = $upload['size_bytes'];
+            $payload['has_attachments'] = true;
+
+            $disk = app(StorageManager::class)->disk();
+            if ($disk->exists($upload['path'])) {
+                $attachments[] = [
+                    'raw_bytes' => $disk->get($upload['path']),
+                    'filename' => $upload['filename'],
+                    'mime_type' => $upload['mime_type'],
+                ];
+            }
+        }
+
         $message = Message::create([
             'conversation_id' => $conversation->id,
             'direction' => 'out',
             'channel' => 'email',
-            'type' => 'text',
+            'type' => $msgType,
             'body' => $validated['body'],
-            'payload' => ['subject' => $validated['subject'], 'to' => $recipient, 'cc' => $cc, 'bcc' => $bcc],
+            'payload' => $payload,
             'status' => 'queued',
             'sent_by' => 'human',
             'user_id' => $request->user()->id,
@@ -313,9 +342,9 @@ class EmailAccountController extends Controller
 
         try {
             $providerId = match ($account->provider) {
-                'gmail' => $google->send($account, $recipient, $validated['subject'], $validated['body']),
-                'microsoft_365' => $microsoft->sendMessage($account, $recipient, $validated['subject'], $validated['body']),
-                default => $generic->send($account, $recipient, $validated['subject'], $validated['body'], null, $cc, $bcc),
+                'gmail' => $google->send($account, $recipient, $validated['subject'], $validated['body'], null, null, $attachments),
+                'microsoft_365' => $microsoft->sendMessage($account, $recipient, $validated['subject'], $validated['body'], $cc, $bcc, $attachments),
+                default => $generic->send($account, $recipient, $validated['subject'], $validated['body'], null, $cc, $bcc, $attachments),
             };
             $message->update(['status' => 'sent', 'provider_message_id' => $providerId]);
             MessageSent::dispatch($message->load('conversation'));
