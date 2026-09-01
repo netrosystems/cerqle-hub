@@ -1,13 +1,13 @@
 import AuthLayout from '@/Layouts/AuthLayout';
 import { Button, Input, Checkbox } from '@/Components/ui';
-import { Head, Link, router, useForm } from '@inertiajs/react';
+import { Head, Link, useForm } from '@inertiajs/react';
 import { useTranslation } from 'react-i18next';
 import { UserPlus } from 'lucide-react';
 import { browserTz } from '@/Utils/datetime';
 
 export default function Register({ plan_id = null, cycle = 'month', googleSignupEnabled = false }) {
     const { t } = useTranslation();
-    const { data, setData, post, processing, errors, reset } = useForm({
+    const { data, setData, post, processing, errors, reset, setError, clearErrors } = useForm({
         name:                  '',
         email:                 '',
         password:              '',
@@ -26,12 +26,20 @@ export default function Register({ plan_id = null, cycle = 'month', googleSignup
     };
 
     const googleSignup = () => {
-        router.post(route('auth.google.signup'), {
-            agree_terms: data.agree_terms,
-            plan_id: data.plan_id || null,
-            cycle: data.cycle,
-            timezone: data.timezone,
-        }, { preserveScroll: true });
+        if (!data.agree_terms) {
+            setError(
+                'agree_terms',
+                t('auth.google_terms_required', {
+                    defaultValue: 'Accept the Terms & Conditions and Privacy Policy to continue with Google.',
+                }),
+            );
+            document.getElementById('agree_terms')?.focus();
+            return;
+        }
+
+        // Use the same Inertia form instance as the email registration flow so
+        // server-side validation errors remain attached to the visible form.
+        post(route('auth.google.signup'), { preserveScroll: true });
     };
 
     return (
@@ -109,7 +117,10 @@ export default function Register({ plan_id = null, cycle = 'month', googleSignup
                     id="agree_terms"
                     name="agree_terms"
                     checked={data.agree_terms}
-                    onChange={(e) => setData('agree_terms', e.target.checked)}
+                    onChange={(e) => {
+                        setData('agree_terms', e.target.checked);
+                        if (e.target.checked) clearErrors('agree_terms');
+                    }}
                     error={errors.agree_terms}
                     label={
                         <span>
