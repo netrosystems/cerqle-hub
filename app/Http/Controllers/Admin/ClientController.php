@@ -8,6 +8,7 @@ use App\Models\ClientSubscription;
 use App\Models\Plan;
 use App\Models\User;
 use App\Services\AuditLogService;
+use App\Services\ClientDeletionService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -19,7 +20,10 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class ClientController extends Controller
 {
-    public function __construct(private AuditLogService $auditLog) {}
+    public function __construct(
+        private AuditLogService $auditLog,
+        private ClientDeletionService $clientDeletion,
+    ) {}
 
     public function index(Request $request): Response
     {
@@ -138,12 +142,17 @@ class ClientController extends Controller
     {
         $this->authorizeForUser($request->user('admin'), 'delete', $client);
 
-        $name = $client->name;
-        $client->delete();
+        $request->validate([
+            'confirmation' => ['required', 'string', Rule::in([$client->name])],
+        ], [
+            'confirmation.in' => __('Enter the client name exactly to confirm permanent deletion.'),
+        ]);
 
-        $this->auditLog->logAdmin('client.deleted', null, null, ['name' => $name]);
+        $result = $this->clientDeletion->delete($client);
 
-        return redirect()->route('admin.clients.index')->with('success', __('Client deleted.'));
+        $this->auditLog->logAdmin('client.deleted', null, null, $result);
+
+        return redirect()->route('admin.clients.index')->with('success', __('Client and all related operational data were permanently deleted.'));
     }
 
     public function users(Request $request, Client $client): JsonResponse

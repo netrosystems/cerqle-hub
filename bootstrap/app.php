@@ -9,6 +9,7 @@ use App\Http\Middleware\CheckApiAbility;
 use App\Http\Middleware\EnforceLimit;
 use App\Http\Middleware\EnsureAddonEntitled;
 use App\Http\Middleware\EnsureAdminRole;
+use App\Http\Middleware\EnsureClientAccess;
 use App\Http\Middleware\EnsureClientScope;
 use App\Http\Middleware\EnsureInstalled;
 use App\Http\Middleware\EnsureLicensed;
@@ -140,14 +141,15 @@ return Application::configure(basePath: dirname(__DIR__))
             'limit' => EnforceLimit::class,
             'api.ability' => CheckApiAbility::class,
             'addon' => EnsureAddonEntitled::class,
+            'client.access' => EnsureClientAccess::class,
         ]);
         // Shared middleware stack for all client module routes (mirrors routes/client.php).
         $middleware->appendToGroup('client-app', [
             'auth',
-            'verified',
             'role:client',
             EnsureClientScope::class,
             EnsureNotDemoMode::class,
+            EnsureClientAccess::class,
         ]);
         // Trust all proxies so X-Forwarded-For is used for real client IPs.
         // In production, restrict to your actual load balancer IPs via TRUSTED_PROXIES env var.

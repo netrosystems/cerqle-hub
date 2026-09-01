@@ -10,7 +10,9 @@ use App\Modules\Shared\Models\Contact;
 use App\Modules\Shared\Models\Conversation;
 use App\Modules\Shared\Models\Message;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Storage;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
@@ -318,11 +320,11 @@ class MobileConversationTest extends TestCase
 
     public function test_mobile_agent_can_reply_with_document_attachment(): void
     {
-        \Illuminate\Support\Facades\Storage::fake('public');
+        Storage::fake('public');
 
         $workspace = Workspace::factory()->create();
         $user = User::factory()->create(['workspace_id' => $workspace->id]);
-        $channelAccount = \App\Modules\Shared\Models\ChannelAccount::create([
+        $channelAccount = ChannelAccount::create([
             'workspace_id' => $workspace->id,
             'channel' => 'webchat',
             'display_name' => 'Website Widget',
@@ -343,7 +345,7 @@ class MobileConversationTest extends TestCase
 
         Sanctum::actingAs($user);
 
-        $pdf = \Illuminate\Http\UploadedFile::fake()->create('report.pdf', 300, 'application/pdf');
+        $pdf = UploadedFile::fake()->create('report.pdf', 300, 'application/pdf');
 
         $response = $this->post(
             "/api/v1/mobile/conversations/{$conversation->uuid}/reply",
@@ -365,11 +367,11 @@ class MobileConversationTest extends TestCase
 
     public function test_mobile_agent_cannot_send_document_to_instagram(): void
     {
-        \Illuminate\Support\Facades\Storage::fake('public');
+        Storage::fake('public');
 
         $workspace = Workspace::factory()->create();
         $user = User::factory()->create(['workspace_id' => $workspace->id]);
-        $channelAccount = \App\Modules\Shared\Models\ChannelAccount::create([
+        $channelAccount = ChannelAccount::create([
             'workspace_id' => $workspace->id,
             'channel' => 'instagram',
             'display_name' => 'Instagram Account',
@@ -390,7 +392,7 @@ class MobileConversationTest extends TestCase
 
         Sanctum::actingAs($user);
 
-        $pdf = \Illuminate\Http\UploadedFile::fake()->create('invoice.pdf', 200, 'application/pdf');
+        $pdf = UploadedFile::fake()->create('invoice.pdf', 200, 'application/pdf');
 
         $response = $this->post(
             "/api/v1/mobile/conversations/{$conversation->uuid}/reply",

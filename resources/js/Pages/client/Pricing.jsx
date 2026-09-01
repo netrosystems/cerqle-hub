@@ -21,7 +21,7 @@ export default function Pricing({
     const { t } = useTranslation();
     const [billingCycle, setBillingCycle]     = useState('month');
     const [loadingGateway, setLoadingGateway] = useState(null);
-    const { url } = usePage();
+    const { url, props: { clientAccess } } = usePage();
 
     const hasSuccess   = url.includes('checkout=success');
     const hasCanceled  = url.includes('checkout=canceled');
@@ -44,10 +44,16 @@ export default function Pricing({
         });
     };
 
+    const activateFree = (planId) => {
+        setLoadingGateway(`free-${planId}`);
+        router.post(route('client.subscription.activate-free'), {
+            plan_id: planId,
+            billing_cycle: billingCycle,
+        }, { onFinish: () => setLoadingGateway(null) });
+    };
+
     const getStartedHref = (plan) => {
-        if (plan.is_free) {
-            return is_authenticated ? route('client.dashboard') : register_url;
-        }
+        if (is_authenticated && plan.is_free) return route('client.pricing');
         return `${register_url}?plan_id=${plan.id}&cycle=${billingCycle}`;
     };
 
@@ -154,8 +160,20 @@ export default function Pricing({
                                         >
                                             {isFree ? t('pricing.get_started_free') : t('pricing.get_started')}
                                         </Link>
+                                    ) : isFree && clientAccess?.has_active_subscription ? (
+                                        <p className="text-center text-sm text-neutral-500 dark:text-neutral-400">An active plan is already assigned.</p>
+                                    ) : isFree && clientAccess?.can_select_plan === false ? (
+                                        <p className="text-center text-sm text-neutral-500 dark:text-neutral-400">Ask a client administrator to activate this plan.</p>
                                     ) : isFree ? (
-                                        <p className="text-sm text-neutral-500 dark:text-neutral-400 text-center">{t('pricing.free_no_payment')}</p>
+                                        <Button
+                                            type="button"
+                                            variant={isPopular ? 'primary' : 'outline'}
+                                            className="w-full"
+                                            disabled={loadingGateway !== null}
+                                            onClick={() => activateFree(plan.id)}
+                                        >
+                                            {loadingGateway === `free-${plan.id}` ? 'Activating…' : (t('pricing.activate_free') || 'Activate free plan')}
+                                        </Button>
                                     ) : configuredGateways.length === 0 ? (
                                         <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-soft px-3 py-2 text-center">
                                             {t('pricing.no_gateway')}

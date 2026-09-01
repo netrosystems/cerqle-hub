@@ -180,6 +180,8 @@ classDiagram
 4. **WebSocket Authorization**: Channel authorization rules in `BroadcastChannelsServiceProvider` authenticate the active user's workspace membership before granting access to `workspace.{id}` or `conversation.{id}` channels.
 5. **Explicit Membership**: Sharing a `client_id` does not by itself grant workspace or realtime-channel access. Access requires ownership, primary/current workspace assignment, or an explicit workspace membership pivot.
 6. **Permanent Workspace Deletion**: `WorkspaceDeletionService` deletes workspace-scoped and dependent records atomically, reassigns affected users to an accessible fallback workspace, and refuses to delete the client's only workspace. The browser action requires the exact workspace name as confirmation.
+7. **Subscription access boundary**: `client.access` is enforced on client web modules and operational APIs. Verified users with an active or trialing organization subscription have full access; users without a plan remain in the dashboard/settings/subscription shell; expired subscriptions permit safe reads but reject writes and outbound work. Social publishing, campaign launch, and automation-trigger jobs re-check this state at execution time. Inbound provider webhooks remain available so customer data is not lost while billing is inactive.
+8. **Permanent client deletion**: `ClientDeletionService` purges client users, workspaces, and operational data after exact-name confirmation. It retains only anonymized payment and audit history, so the deleted users' email addresses become reusable. `clients:purge-orphans` is dry-run by default and repairs legacy client deletions only with `--execute`.
 
 ---
 
@@ -213,7 +215,7 @@ Cerqle Hub integrates with multiple third-party providers with resilient fallbac
 | :--- | :--- | :--- | :--- |
 | **WhatsApp Cloud API** | Graph API / Webhooks | WABA messaging, template syncing | Webhooks verified via `hub.verify_token`. Inbound payloads processed on `whatsapp` queue. |
 | **Meta (FB & IG)** | Graph API / OAuth 2.0 | Page inbox, Instagram DM, Post publishing | Granular `target_ids` used for asset binding. Post deletion respects provider capability. |
-| **Google Sign-In** | OAuth 2.0 / OpenID Connect | Browser authentication | Provider identifiers link the Cerqle user account. Returned access and refresh tokens use encrypted model casts and unbounded text columns so provider credential length cannot break the callback. |
+| **Google Sign-In** | OAuth 2.0 / OpenID Connect | Browser authentication | Login and signup have separate intent. Login never provisions an unknown account; signup requires Terms acceptance, may preserve a selected plan, and trusts only Google's verified-email claim. Provider identifiers link the Cerqle user account. Returned access and refresh tokens use encrypted model casts and unbounded text columns so provider credential length cannot break the callback. |
 | **Telegram Business** | Bot API / Webhooks | Inbound updates & agent replies | Webhook secret token verified on arrival. |
 | **Email (Gmail/M365/IMAP)** | OAuth 2.0 / IMAP & SMTP | Master Email Inbox synchronization | Sync worker runs every minute; multi-mailbox support per workspace. |
 | **AI Providers** | REST / SSE Streaming | Knowledge retrieval, smart bot generation | Supports OpenAI, Anthropic, Gemini, DeepSeek. MySQL fallback for vectors; optional Qdrant. |

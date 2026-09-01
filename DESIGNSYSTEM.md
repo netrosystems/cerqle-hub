@@ -105,6 +105,8 @@ Primary Plum:    #3E2A49   Brand Lilac:    #8F5FA7   Cool Accent:  #45B6D6   Cor
 | **Brand / Active** | `bg-brand-50 text-brand-700 border-brand-200` | `dark:bg-brand-900/30 dark:text-brand-300 dark:border-brand-700` | Active channels, Pro plan, Verified |
 | **Success / Synced** | `bg-emerald-50 text-emerald-700 border-emerald-200` | `dark:bg-emerald-900/30 dark:text-emerald-300 dark:border-emerald-700` | Delivered, Resolved, Connected, Paid |
 | **Warning / Pending** | `bg-amber-50 text-amber-700 border-amber-200` | `dark:bg-amber-900/30 dark:text-amber-300 dark:border-amber-700` | Snoozed, Quota Warning, Pending OAuth |
+
+Account-access states use persistent, accessible banners beneath the top bar: amber for pending email verification, brand lilac for plan selection, and red for an expired/read-only subscription. Destructive client deletion uses a red warning panel, states that recovery is impossible, requires the exact client name, and keeps the permanent-delete action disabled until it matches.
 | **Danger / Failed** | `bg-coral-50 text-coral-800 border-coral-200` | `dark:bg-coral-950/40 dark:text-coral-300 dark:border-coral-800` | Failed delivery, Expired token, Canceled |
 | **Neutral / Default** | `bg-neutral-100 text-neutral-700 border-neutral-200` | `dark:bg-neutral-800 dark:text-neutral-300 dark:border-neutral-700` | Draft, Archived, Unassigned |
 

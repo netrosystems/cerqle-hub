@@ -29,6 +29,36 @@ class GoogleSignInIntegrationTest extends TestCase
             );
     }
 
+    public function test_enabled_google_credentials_expose_terms_gated_signup(): void
+    {
+        config()->set('services.google.client_id', null);
+        config()->set('services.google.client_secret', null);
+        $this->googleSignInIntegration(enabled: true);
+
+        $this->get(route('register'))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Auth/Register')
+                ->where('googleSignupEnabled', true)
+            );
+
+        $this->post(route('auth.google.signup'), ['agree_terms' => false])
+            ->assertSessionHasErrors('agree_terms');
+
+        $this->post(route('auth.google.signup'), [
+            'agree_terms' => true,
+            'timezone' => 'Asia/Dhaka',
+        ])->assertRedirect();
+        $this->assertSame('signup', session('social_auth_context.intent'));
+
+        $this->post(route('auth.google.signup'), [
+            'agree_terms' => true,
+            'timezone' => 'Asia/Dhaka',
+        ], ['X-Inertia' => 'true'])
+            ->assertStatus(409)
+            ->assertHeader('X-Inertia-Location');
+    }
+
     public function test_google_redirect_uses_super_admin_client_and_exact_callback(): void
     {
         config()->set('services.google.client_id', 'legacy-environment-client');

@@ -2,7 +2,6 @@
 
 namespace App\Http\Middleware;
 
-use App\Models\Workspace;
 use App\Modules\Broadcasting\Models\UsageMeter;
 use Closure;
 use Illuminate\Http\Request;
@@ -32,9 +31,22 @@ class EnforceLimit
             return $next($request);
         }
 
-        // Retrieve the current workspace's active plan limits
-        $workspace = Workspace::with('client')->find($workspaceId);
-        $plan = $workspace?->client?->activePlan();
+        // Resolve the same effective organization-wide plan used by the access
+        // gate. Missing plans fail closed instead of being treated as unlimited.
+        $plan = $user->effectiveSubscription()?->plan;
+        if (! $plan) {
+            if (app()->environment('testing') && ! config('saas.enforce_client_subscription', true)) {
+                return $next($request);
+            }
+
+            return $request->expectsJson()
+                ? response()->json([
+                    'error' => 'An active subscription plan is required.',
+                    'code' => 'subscription_required',
+                    'upgrade_required' => true,
+                ], 402)
+                : redirect()->route('client.pricing')->with('error', __('Select a plan to continue.'));
+        }
         $limits = $plan?->limits ?? [];
 
         $limit = $limits[$limitKey] ?? null;

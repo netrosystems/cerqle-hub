@@ -90,7 +90,7 @@ export default function Dashboard({
     tables = {},
 }) {
     const { t } = useTranslation();
-    const { first_run = false } = usePage().props;
+    const { first_run = false, clientAccess } = usePage().props;
     const { team_members_count = 0, team_members_limit = 0 } = usage;
     const s = stats ?? {};
 
@@ -105,6 +105,36 @@ export default function Dashboard({
     ];
     const hasAutomationData = (charts.automation_runs ?? []).some((d) => sumRow(d) > 0);
     const hasSocialData = (charts.social_posts ?? []).length > 0;
+
+    if (clientAccess?.state === 'unverified' || clientAccess?.state === 'no_plan') {
+        const needsVerification = clientAccess.state === 'unverified';
+        return (
+            <ClientLayout title={t('client.dashboard') || 'Dashboard'}>
+                <Head title={t('client.dashboard') || 'Dashboard'} />
+                <div className="mx-auto max-w-2xl rounded-xl border border-neutral-200 bg-white p-8 text-center shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
+                    <h1 className="text-2xl font-semibold text-neutral-900 dark:text-white">
+                        {needsVerification ? 'Verify your email to continue' : 'Choose a plan to start using Cerqle'}
+                    </h1>
+                    <p className="mx-auto mt-3 max-w-lg text-sm leading-6 text-neutral-600 dark:text-neutral-300">
+                        {needsVerification
+                            ? 'Your account is ready. Verify the email address on your profile before connecting channels or creating content.'
+                            : 'An active plan is required before you can connect channels, publish content, send messages, or run automations. The free plan also has defined usage limits.'}
+                    </p>
+                    <div className="mt-6">
+                        {needsVerification ? (
+                            <Link as="button" method="post" href={route('verification.send')} className="inline-flex rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-brand-700">
+                                Resend verification email
+                            </Link>
+                        ) : (
+                            <Link href={route('client.pricing')} className="inline-flex rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-brand-700">
+                                View plans
+                            </Link>
+                        )}
+                    </div>
+                </div>
+            </ClientLayout>
+        );
+    }
 
     const tiles = [
         {

@@ -10,6 +10,7 @@ use App\Models\Plan;
 use App\Models\Subscription;
 use App\Services\Billing\BillingGatewayRegistry;
 use App\Services\Billing\InvoiceService;
+use App\Services\FreePlanActivationService;
 use App\Services\MediaService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -25,7 +26,22 @@ class SubscriptionController extends Controller
         protected BillingGatewayRegistry $gateways,
         protected InvoiceService $invoiceService,
         protected MediaService $mediaService,
+        protected FreePlanActivationService $freePlans,
     ) {}
+
+    public function activateFree(Request $request): RedirectResponse
+    {
+        $validated = $request->validate([
+            'plan_id' => ['required', 'integer', Rule::exists('plans', 'id')],
+            'billing_cycle' => ['nullable', Rule::in(['month', 'year'])],
+        ]);
+
+        $plan = Plan::where('enabled', true)->findOrFail($validated['plan_id']);
+        $this->freePlans->activate($request->user(), $plan, $validated['billing_cycle'] ?? 'month');
+
+        return redirect()->route('client.dashboard')
+            ->with('success', __('Your free plan is now active.'));
+    }
 
     public function show(Request $request): Response
     {

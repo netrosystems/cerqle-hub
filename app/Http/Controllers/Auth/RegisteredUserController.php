@@ -6,6 +6,8 @@ use App\Http\Controllers\Controller;
 use App\Models\Client;
 use App\Models\Plan;
 use App\Models\User;
+use App\Services\FreePlanActivationService;
+use App\Services\GoogleSignInConfigurator;
 use Illuminate\Auth\Events\Registered;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -22,11 +24,12 @@ class RegisteredUserController extends Controller
     /**
      * Display the registration view.
      */
-    public function create(Request $request): Response
+    public function create(Request $request, GoogleSignInConfigurator $googleSignIn): Response
     {
         return Inertia::render('Auth/Register', [
             'plan_id' => $request->query('plan_id'),
             'cycle' => $request->query('cycle', 'month'),
+            'googleSignupEnabled' => $googleSignIn->apply(),
         ]);
     }
 
@@ -35,14 +38,14 @@ class RegisteredUserController extends Controller
      *
      * @throws ValidationException
      */
-    public function store(Request $request): RedirectResponse
+    public function store(Request $request, FreePlanActivationService $freePlans): RedirectResponse
     {
         $request->validate([
-            'name'        => 'required|string|max:255',
-            'email'       => 'required|string|lowercase|email|max:255|unique:'.User::class,
-            'password'    => ['required', 'confirmed', Rules\Password::defaults()],
+            'name' => 'required|string|max:255',
+            'email' => 'required|string|lowercase|email|max:255|unique:'.User::class,
+            'password' => ['required', 'confirmed', Rules\Password::defaults()],
             'agree_terms' => ['accepted'],
-            'timezone'    => ['nullable', 'string', 'max:64'],
+            'timezone' => ['nullable', 'string', 'max:64'],
         ], [
             'agree_terms.accepted' => 'You must accept the Terms & Conditions to create an account.',
         ]);
@@ -80,7 +83,9 @@ class RegisteredUserController extends Controller
         $cycle = $request->input('cycle', 'month');
         if ($planId) {
             $plan = Plan::find($planId);
-            if ($plan && ! $plan->is_free) {
+            if ($plan?->isFree()) {
+                $freePlans->activate($user, $plan, $cycle);
+            } elseif ($plan) {
                 return redirect()->route('client.pricing')->with([
                     'plan_id' => $planId,
                     'cycle' => $cycle,
@@ -100,6 +105,7 @@ class RegisteredUserController extends Controller
         }
         try {
             new \DateTimeZone($tz);
+
             return $tz;
         } catch (\Exception) {
             return $default;

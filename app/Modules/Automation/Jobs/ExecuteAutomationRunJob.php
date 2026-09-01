@@ -5,6 +5,7 @@ namespace App\Modules\Automation\Jobs;
 use App\Events\AutomationFailed;
 use App\Modules\Automation\Models\AutomationRun;
 use App\Modules\Automation\Services\AutomationEngine;
+use App\Services\ClientAccessService;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 
@@ -20,8 +21,18 @@ class ExecuteAutomationRunJob implements ShouldQueue
 
     public function handle(AutomationEngine $engine): void
     {
+        $access = app(ClientAccessService::class);
         $run = AutomationRun::with('automation')->find($this->runId);
         if (! $run || in_array($run->status, ['cancelled', 'failed'], true)) {
+            return;
+        }
+
+        if (! $access->allowsWorkspaceWrite($run->automation->workspace_id)) {
+            $run->update([
+                'status' => 'waiting',
+                'error' => 'Automation paused because the subscription is inactive.',
+            ]);
+
             return;
         }
 

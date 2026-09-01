@@ -11,6 +11,7 @@ use App\Modules\Broadcasting\Services\SmsCampaignCapacityService;
 use App\Modules\Shared\Models\Contact;
 use App\Modules\Shared\Models\Segment;
 use App\Modules\Shared\Services\ContactService;
+use App\Services\ClientAccessService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -29,8 +30,18 @@ class LaunchCampaignJob implements ShouldQueue
 
     public function handle(): void
     {
+        $access = app(ClientAccessService::class);
         $campaign = Campaign::find($this->campaignId);
         if (! $campaign || ! in_array($campaign->status, ['queued', 'waiting_capacity'], true)) {
+            return;
+        }
+
+        if (! $access->allowsWorkspaceWrite($campaign->workspace_id)) {
+            $campaign->update([
+                'status' => 'safety_paused',
+                'pause_reason' => 'Campaign paused because the subscription is inactive.',
+            ]);
+
             return;
         }
 

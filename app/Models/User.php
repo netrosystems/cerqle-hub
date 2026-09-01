@@ -247,6 +247,21 @@ class User extends Authenticatable implements MustVerifyEmail
             }
         }
 
+        if ($this->client_id && $this->client) {
+            $shared = Subscription::query()
+                ->whereIn('user_id', $this->client->users()->select('id'))
+                ->whereIn('status', ['active', 'trialing'])
+                ->where(function ($query) {
+                    $query->whereNull('ends_at')->orWhere('ends_at', '>', now());
+                })
+                ->latest('id')
+                ->first();
+
+            if ($shared) {
+                return $shared;
+            }
+        }
+
         return $this->activeSubscription;
     }
 

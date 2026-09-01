@@ -36,9 +36,10 @@ journey
 ### Feature 1: Multi-Tenancy, Auth & Team Management (`app/Http/Controllers/Client/*`)
 
 #### Capabilities
-- **Authentication & Security**: Email/password authentication, Magic Link login, Google/Socialite OAuth, and Google Authenticator 2FA (`TwoFactorController`).
+- **Authentication & Security**: Email/password authentication, Magic Link login, Google/Socialite OAuth, and Google Authenticator 2FA (`TwoFactorController`). Google signup is available separately from Google login, requires Terms acceptance, and can create an account; Google login only admits an existing identity. Email/password registrations enter the dashboard immediately but operational features remain locked until email verification.
 - **Workspace Switching**: Seamless switching between client-owned workspaces (`WorkspaceController`) with strict scoped sessions.
 - **Workspace Management**: Authorized owners and client administrators can rename a workspace or permanently delete it after typing its exact name. Deletion is atomic, removes workspace-scoped records, selects a safe fallback workspace, and cannot remove the client's only workspace.
+- **Client lifecycle**: Super Admin client deletion requires exact-name confirmation, permanently purges identity and operational records, anonymizes retained finance/audit rows, and releases user emails for reuse.
 - **Role-Based Team Access**: Client administrators can invite team members, assign granular roles (Admin, Agent, Viewer), and inspect audit logs (`TeamController`, `ClientAuditLogController`).
 - **Session Management**: View and revoke active browser sessions remotely (`SessionController`).
 - **Resilient Verification Email**: Account creation succeeds even when SMTP or fallback notification delivery is rejected; failures are logged for follow-up and transactional messages include branded HTML plus a readable plain-text part.
@@ -107,6 +108,7 @@ journey
 - **Reliable Post Previews**: Scheduled and retryable post cards use stored MIME metadata to render uploaded videos as video-frame previews and images as images. Unavailable media uses a neutral placeholder instead of a broken browser image.
 - **Social Upload Limits**: Social images accept up to 25 MB, social videos accept up to 500 MB, and YouTube thumbnails retain their 2 MB provider limit. These application limits are identical across environments; deployment templates align PHP-FPM and Nginx with a 520 MB multipart request ceiling for video.
 - **Storage Visibility**: The Subscription page and subscription APIs report organization-wide used, remaining, percentage, unlimited, and full storage states.
+- **Plan activation and enforcement**: Even a zero-cost plan must be explicitly activated. No-plan users can access only dashboard, billing/subscription, pricing, profile/settings, verification, and logout. Expired plans are read-only: inbound data continues, while outbound actions, mutations, scheduled social publishing, campaigns, and automations pause until renewal.
 - **Interactive Visual Calendar (`/app/social/calendar`)**: Month/Week/Day calendar view for managing scheduled and past social media campaigns.
 - **Capability-Driven Deletion**: Safely distinguishes remote platform deletion capabilities between Facebook (supported) and Instagram (API limited).
 
