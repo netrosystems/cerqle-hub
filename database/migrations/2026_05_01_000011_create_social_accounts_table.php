@@ -15,8 +15,11 @@ return new class extends Migration
             $table->string('provider_id');
             $table->string('email')->nullable();
             $table->string('avatar_url')->nullable();
-            $table->string('access_token')->nullable();
-            $table->string('refresh_token')->nullable();
+            // OAuth credentials regularly exceed VARCHAR(255), especially
+            // after Laravel's encrypted cast adds authenticated-ciphertext
+            // overhead.
+            $table->longText('access_token')->nullable();
+            $table->longText('refresh_token')->nullable();
             $table->timestamps();
 
             $table->unique(['provider', 'provider_id']);
