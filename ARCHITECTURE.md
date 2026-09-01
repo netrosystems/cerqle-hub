@@ -213,6 +213,7 @@ Cerqle Hub integrates with multiple third-party providers with resilient fallbac
 | :--- | :--- | :--- | :--- |
 | **WhatsApp Cloud API** | Graph API / Webhooks | WABA messaging, template syncing | Webhooks verified via `hub.verify_token`. Inbound payloads processed on `whatsapp` queue. |
 | **Meta (FB & IG)** | Graph API / OAuth 2.0 | Page inbox, Instagram DM, Post publishing | Granular `target_ids` used for asset binding. Post deletion respects provider capability. |
+| **Google Sign-In** | OAuth 2.0 / OpenID Connect | Browser authentication | Provider identifiers link the Cerqle user account. Returned access and refresh tokens use encrypted model casts and unbounded text columns so provider credential length cannot break the callback. |
 | **Telegram Business** | Bot API / Webhooks | Inbound updates & agent replies | Webhook secret token verified on arrival. |
 | **Email (Gmail/M365/IMAP)** | OAuth 2.0 / IMAP & SMTP | Master Email Inbox synchronization | Sync worker runs every minute; multi-mailbox support per workspace. |
 | **AI Providers** | REST / SSE Streaming | Knowledge retrieval, smart bot generation | Supports OpenAI, Anthropic, Gemini, DeepSeek. MySQL fallback for vectors; optional Qdrant. |
