@@ -6,9 +6,11 @@ use Symfony\Component\HttpFoundation\File\UploadedFile;
 
 class UploadLimitService
 {
-    private const MEDIA_MAX_MB = 50;
+    private const MEDIA_MAX_MB = 200;
 
-    private const YOUTUBE_VIDEO_MAX_MB = 512;
+    private const SOCIAL_IMAGE_MAX_MB = 25;
+
+    private const YOUTUBE_VIDEO_MAX_MB = 500;
 
     public function mediaMaxBytes(): int
     {
@@ -42,13 +44,28 @@ class UploadLimitService
         return max(1, (int) floor($this->youtubeVideoMaxBytes() / 1024 / 1024));
     }
 
+    public function socialImageMaxKilobytes(): int
+    {
+        return max(1, (int) floor($this->socialImageMaxBytes() / 1024));
+    }
+
+    public function socialImageMaxMegabytes(): int
+    {
+        return max(1, (int) floor($this->socialImageMaxBytes() / 1024 / 1024));
+    }
+
+    private function socialImageMaxBytes(): int
+    {
+        // Keep the product rule stable across environments. Production upload
+        // infrastructure is configured for the larger 500 MB video ceiling.
+        return self::SOCIAL_IMAGE_MAX_MB * 1024 * 1024;
+    }
+
     private function youtubeVideoMaxBytes(): int
     {
-        $applicationLimit = self::YOUTUBE_VIDEO_MAX_MB * 1024 * 1024;
-        $phpLimit = UploadedFile::getMaxFilesize();
-
-        return ! is_numeric($phpLimit) || $phpLimit <= 0
-            ? $applicationLimit
-            : (int) min($applicationLimit, $phpLimit);
+        // This is Cerqle's application rule. PHP/Nginx are configured above
+        // this ceiling in deploy/server so the UI and validator consistently
+        // report 500 MB instead of silently inheriting a smaller host default.
+        return self::YOUTUBE_VIDEO_MAX_MB * 1024 * 1024;
     }
 }

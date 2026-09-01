@@ -113,9 +113,17 @@ export default function TeamIndex({ users = [], client = {}, invitations = [], w
     });
 
     const openAdd = () => {
+        addForm.clearErrors();
         addForm.reset();
         addForm.setData({ status: STATUS_ACTIVE, workspace_assignments: [] });
         setAddOpen(true);
+    };
+
+    const closeAdd = () => {
+        if (addForm.processing) return;
+        setAddOpen(false);
+        addForm.reset();
+        addForm.clearErrors();
     };
 
     const submitAdd = (e) => {
@@ -125,6 +133,7 @@ export default function TeamIndex({ users = [], client = {}, invitations = [], w
             onSuccess: () => {
                 setAddOpen(false);
                 addForm.reset();
+                addForm.clearErrors();
             },
         });
     };
@@ -352,8 +361,8 @@ export default function TeamIndex({ users = [], client = {}, invitations = [], w
                 </Modal>
 
                 {/* Add member modal */}
-                <Modal show={addOpen} onClose={() => setAddOpen(false)} maxWidth="md">
-                    <Modal.Header title={t('client.add_member') || 'Add member'} onClose={() => setAddOpen(false)} />
+                <Modal show={addOpen} onClose={closeAdd} maxWidth="md">
+                    <Modal.Header title={t('client.add_member') || 'Add member'} onClose={closeAdd} />
                     <Modal.Body>
                         <form id="addMemberForm" onSubmit={submitAdd} className="space-y-4">
                                 <div>
@@ -384,7 +393,7 @@ export default function TeamIndex({ users = [], client = {}, invitations = [], w
                         </form>
                     </Modal.Body>
                     <Modal.Footer>
-                        <Button type="button" variant="secondary" onClick={() => setAddOpen(false)}>{t('client.cancel') || 'Cancel'}</Button>
+                        <Button type="button" variant="secondary" onClick={closeAdd}>{t('client.cancel') || 'Cancel'}</Button>
                         <Button type="submit" form="addMemberForm" variant="primary" disabled={addForm.processing}>{t('client.add_member') || 'Add member'}</Button>
                     </Modal.Footer>
                 </Modal>

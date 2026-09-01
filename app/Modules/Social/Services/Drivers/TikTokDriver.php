@@ -7,7 +7,7 @@ use App\Modules\Social\Models\SocialPost;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
-class TikTokDriver implements SocialNetworkInterface
+class TikTokDriver implements ChecksPublishProcessing, SocialNetworkInterface
 {
     public function network(): string
     {
@@ -39,6 +39,11 @@ class TikTokDriver implements SocialNetworkInterface
 
     public function publish(SocialAccount $account, array $postData): string
     {
+        $options = (array) ($postData['tiktok_options'] ?? []);
+        if (! ($options['consent'] ?? false)) {
+            throw new \RuntimeException('TikTok publishing requires explicit user consent.');
+        }
+
         $videoUrl = $postData['media_urls'][0] ?? null;
         if (! is_string($videoUrl) || ! filter_var($videoUrl, FILTER_VALIDATE_URL)) {
             throw new \RuntimeException('TikTok publishing requires one publicly reachable HTTPS video URL.');
@@ -50,11 +55,15 @@ class TikTokDriver implements SocialNetworkInterface
         $res = Http::withToken($account->access_token)
             ->post('https://open.tiktokapis.com/v2/post/publish/video/init/', [
                 'post_info' => [
-                    'title' => $postData['title'] ?? ($postData['body'] ?? ''),
-                    'privacy_level' => 'SELF_ONLY',
-                    'disable_duet' => false,
-                    'disable_comment' => false,
-                    'disable_stitch' => false,
+                    'title' => $postData['body'] ?? ($postData['title'] ?? ''),
+                    'privacy_level' => $options['privacy_level'] ?? 'SELF_ONLY',
+                    'disable_duet' => ! (bool) ($options['allow_duet'] ?? false),
+                    'disable_comment' => ! (bool) ($options['allow_comment'] ?? false),
+                    'disable_stitch' => ! (bool) ($options['allow_stitch'] ?? false),
+                    'video_cover_timestamp_ms' => max(0, (int) ($options['video_cover_timestamp_ms'] ?? 0)),
+                    'brand_content_toggle' => (bool) ($options['brand_content'] ?? false),
+                    'brand_organic_toggle' => (bool) ($options['brand_organic'] ?? false),
+                    'is_aigc' => (bool) ($options['is_aigc'] ?? false),
                 ],
                 'source_info' => [
                     'source' => 'PULL_FROM_URL',
@@ -78,6 +87,56 @@ class TikTokDriver implements SocialNetworkInterface
         Log::info('TikTok video published', ['publish_id' => $publishId, 'url' => $postUrl]);
 
         return $publishId;
+    }
+
+    /** @return array<string, mixed> */
+    public function creatorOptions(SocialAccount $account): array
+    {
+        $response = Http::withToken($account->access_token)
+            ->timeout(15)
+            ->post('https://open.tiktokapis.com/v2/post/publish/creator_info/query/');
+
+        if (! $response->successful() || data_get($response->json(), 'error.code') !== 'ok') {
+            throw new \RuntimeException('TikTok creator publishing options could not be loaded.');
+        }
+
+        $data = (array) data_get($response->json(), 'data', []);
+
+        return [
+            'privacy_level_options' => array_values((array) ($data['privacy_level_options'] ?? [])),
+            'comment_disabled' => (bool) ($data['comment_disabled'] ?? false),
+            'duet_disabled' => (bool) ($data['duet_disabled'] ?? false),
+            'stitch_disabled' => (bool) ($data['stitch_disabled'] ?? false),
+            'max_video_post_duration_sec' => (int) ($data['max_video_post_duration_sec'] ?? 0),
+        ];
+    }
+
+    public function checkPublishProcessing(SocialAccount $account, string $platformPostId): array
+    {
+        $response = Http::withToken($account->access_token)
+            ->timeout(20)
+            ->post('https://open.tiktokapis.com/v2/post/publish/status/fetch/', [
+                'publish_id' => $platformPostId,
+            ]);
+
+        if (! $response->successful() || data_get($response->json(), 'error.code') !== 'ok') {
+            throw new \RuntimeException('TikTok processing lookup failed.');
+        }
+
+        $status = (string) data_get($response->json(), 'data.status', '');
+        if (in_array($status, ['FAILED', 'CANCELED'], true)) {
+            return ['status' => 'failed', 'error' => 'TikTok could not process the uploaded video.'];
+        }
+        if ($status !== 'PUBLISH_COMPLETE') {
+            return ['status' => 'processing'];
+        }
+
+        $postId = data_get($response->json(), 'data.publicly_available_post_id.0');
+
+        return array_filter([
+            'status' => 'published',
+            'url' => $postId ? "https://www.tiktok.com/@me/video/{$postId}" : null,
+        ]);
     }
 
     private function pollPublishStatus(string $accessToken, string $publishId, int $maxAttempts = 3): ?string

@@ -6,7 +6,9 @@ use App\Models\Media;
 use App\Models\Plan;
 use App\Models\Subscription;
 use App\Models\User;
+use App\Modules\Social\Models\SocialPost;
 use App\Services\MediaService;
+use App\Services\UploadLimitService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
@@ -78,6 +80,107 @@ class MediaLibraryTest extends TestCase
             5120 * 1024 * 1024,
             app(MediaService::class)->quotaBytes($user->fresh()),
         );
+    }
+
+    public function test_social_video_application_limit_is_500_megabytes(): void
+    {
+        $this->assertSame(500, app(UploadLimitService::class)->youtubeVideoMaxMegabytes());
+        $this->assertSame(500 * 1024, app(UploadLimitService::class)->youtubeVideoMaxKilobytes());
+    }
+
+    public function test_social_image_application_limit_is_25_megabytes(): void
+    {
+        $this->assertSame(25, app(UploadLimitService::class)->socialImageMaxMegabytes());
+        $this->assertSame(25 * 1024, app(UploadLimitService::class)->socialImageMaxKilobytes());
+    }
+
+    public function test_social_image_above_25_megabytes_is_rejected(): void
+    {
+        Storage::fake('public');
+        $user = $this->clientUser();
+
+        $this->actingAs($user)
+            ->postJson(route('client.media.store'), [
+                'file' => UploadedFile::fake()->image('social.jpg')->size((25 * 1024) + 1),
+                'collection' => 'social',
+            ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('file');
+    }
+
+    public function test_499_megabyte_social_video_passes_application_upload_validation(): void
+    {
+        Storage::fake('public');
+        $user = $this->clientUser();
+
+        $this->actingAs($user)
+            ->postJson(route('client.media.store'), [
+                'file' => UploadedFile::fake()->create('video.mp4', 499 * 1024, 'video/mp4'),
+                'collection' => 'social-video',
+            ])
+            ->assertCreated();
+    }
+
+    public function test_social_video_above_500_megabytes_is_rejected(): void
+    {
+        Storage::fake('public');
+        $user = $this->clientUser();
+
+        $this->actingAs($user)
+            ->postJson(route('client.media.store'), [
+                'file' => UploadedFile::fake()->create('video.mp4', (500 * 1024) + 1, 'video/mp4'),
+                'collection' => 'social-video',
+            ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('file');
+    }
+
+    public function test_upload_is_rejected_when_remaining_plan_storage_is_too_small(): void
+    {
+        Storage::fake('public');
+        $user = $this->clientUser();
+        $plan = Plan::factory()->create(['limits' => ['storage' => 1]]);
+        Subscription::create([
+            'user_id' => $user->id,
+            'plan_id' => $plan->id,
+            'status' => 'active',
+            'gateway' => 'manual',
+            'starts_at' => now(),
+        ]);
+
+        $this->actingAs($user)
+            ->postJson(route('client.media.store'), [
+                'file' => UploadedFile::fake()->create('video.mp4', 1025, 'video/mp4'),
+                'collection' => 'social-video',
+            ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('file');
+    }
+
+    public function test_media_referenced_by_an_active_social_post_cannot_be_deleted(): void
+    {
+        Storage::fake('public');
+        ['user' => $user, 'workspace' => $workspace] = $this->createWorkspaceContext();
+        $media = Media::factory()->create([
+            'mediable_type' => User::class,
+            'mediable_id' => $user->id,
+            'disk' => 'public',
+            'path' => 'media/in-use.mp4',
+            'is_temporary' => true,
+        ]);
+        $post = SocialPost::create([
+            'workspace_id' => $workspace->id,
+            'body' => 'Scheduled',
+            'target_accounts' => [],
+            'status' => 'scheduled',
+        ]);
+        $post->media()->attach($media);
+
+        $this->actingAs($user)
+            ->deleteJson(route('client.media.destroy', $media))
+            ->assertUnprocessable();
+
+        $this->assertDatabaseHas('media', ['id' => $media->id]);
     }
 
     public function test_user_can_delete_own_media(): void

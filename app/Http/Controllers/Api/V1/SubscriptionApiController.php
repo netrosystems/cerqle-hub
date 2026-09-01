@@ -5,11 +5,14 @@ namespace App\Http\Controllers\Api\V1;
 use App\Http\Controllers\Controller;
 use App\Models\ClientSubscription;
 use App\Models\Subscription;
+use App\Services\MediaService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class SubscriptionApiController extends Controller
 {
+    public function __construct(private readonly MediaService $mediaService) {}
+
     public function show(Request $request): JsonResponse
     {
         $user = $request->user();
@@ -34,6 +37,7 @@ class SubscriptionApiController extends Controller
                 'ends_at' => $effective->ends_at?->toIso8601String(),
                 'gateway' => $effective instanceof Subscription ? $effective->gateway : null,
                 'managed_by_admin' => $effective instanceof ClientSubscription,
+                'storage' => $this->mediaService->usage($user),
             ],
         ]);
     }
@@ -48,8 +52,11 @@ class SubscriptionApiController extends Controller
                 'plan_name' => $plan?->name,
                 'limits' => $plan ? [
                     'users' => $plan->limitValue('users'),
+                    'storage_mb' => $plan->limitValue('storage'),
+                    // Preserve the legacy key for existing mobile clients.
                     'storage_gb' => $plan->limitValue('storage_gb'),
                 ] : null,
+                'storage' => $this->mediaService->usage($user),
             ],
         ]);
     }

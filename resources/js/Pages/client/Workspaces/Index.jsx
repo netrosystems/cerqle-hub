@@ -1,6 +1,7 @@
 import ClientLayout from '@/Layouts/ClientLayout';
-import { Button, Card, Input, Badge } from '@/Components/ui';
+import { Button, Card, Input, Badge, Modal } from '@/Components/ui';
 import { Head, router, usePage } from '@inertiajs/react';
+import { AlertTriangle, Pencil, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
@@ -26,6 +27,12 @@ export default function WorkspacesIndex({
     const [name, setName] = useState('');
     const [creating, setCreating] = useState(false);
     const [switching, setSwitching] = useState(null);
+    const [editTarget, setEditTarget] = useState(null);
+    const [editName, setEditName] = useState('');
+    const [deleteTarget, setDeleteTarget] = useState(null);
+    const [deleteConfirmation, setDeleteConfirmation] = useState('');
+    const [saving, setSaving] = useState(false);
+    const [deleting, setDeleting] = useState(false);
     const { currentWorkspace, errors = {} } = usePage().props;
 
     const handleSwitch = (workspaceId) => {
@@ -44,6 +51,41 @@ export default function WorkspacesIndex({
             preserveScroll: true,
             onSuccess: () => setName(''),
             onFinish: () => setCreating(false),
+        });
+    };
+
+    const openEdit = (workspace) => {
+        setEditTarget(workspace);
+        setEditName(workspace.name);
+    };
+
+    const handleUpdate = (e) => {
+        e.preventDefault();
+        if (!editTarget || !editName.trim()) return;
+        setSaving(true);
+        router.put(route('client.workspaces.update', editTarget.id), { name: editName.trim() }, {
+            preserveScroll: true,
+            onSuccess: () => setEditTarget(null),
+            onFinish: () => setSaving(false),
+        });
+    };
+
+    const openDelete = (workspace) => {
+        setDeleteTarget(workspace);
+        setDeleteConfirmation('');
+    };
+
+    const handleDelete = () => {
+        if (!deleteTarget || deleteConfirmation !== deleteTarget.name) return;
+        setDeleting(true);
+        router.delete(route('client.workspaces.destroy', deleteTarget.id), {
+            data: { confirmation: deleteConfirmation },
+            preserveScroll: true,
+            onSuccess: () => {
+                setDeleteTarget(null);
+                setDeleteConfirmation('');
+            },
+            onFinish: () => setDeleting(false),
         });
     };
 
@@ -113,6 +155,32 @@ export default function WorkspacesIndex({
                                                 >
                                                     {isSwitching ? t('workspaces.switching') : isCurrent ? t('workspaces.current') : t('workspaces.switch')}
                                                 </Button>
+                                                {w.can_update && (
+                                                    <Button
+                                                        variant="outline"
+                                                        size="sm"
+                                                        onClick={() => openEdit(w)}
+                                                        aria-label={t('workspaces.edit_workspace')}
+                                                        title={t('workspaces.edit_workspace')}
+                                                    >
+                                                        <Pencil className="h-3.5 w-3.5" />
+                                                    </Button>
+                                                )}
+                                                {w.can_delete && (
+                                                    <Button
+                                                        variant="outline"
+                                                        size="sm"
+                                                        onClick={() => openDelete(w)}
+                                                        disabled={workspaces.length <= 1}
+                                                        aria-label={t('workspaces.delete_workspace', { defaultValue: 'Permanently delete workspace' })}
+                                                        title={workspaces.length <= 1
+                                                            ? t('workspaces.cannot_delete_only', { defaultValue: 'Create another workspace before deleting this one' })
+                                                            : t('workspaces.delete_workspace', { defaultValue: 'Permanently delete workspace' })}
+                                                        className="text-coral-600 hover:border-coral-300 hover:bg-coral-50 dark:text-coral-400 dark:hover:border-coral-800 dark:hover:bg-coral-950/30"
+                                                    >
+                                                        <Trash2 className="h-3.5 w-3.5" />
+                                                    </Button>
+                                                )}
                                             </div>
                                         </div>
                                     </li>
@@ -194,6 +262,85 @@ export default function WorkspacesIndex({
                 </Card>
                 )}
             </div>
+
+            <Modal show={!!editTarget} onClose={() => !saving && setEditTarget(null)} maxWidth="sm">
+                <form onSubmit={handleUpdate}>
+                    <Modal.Header title={t('workspaces.edit_workspace')} onClose={() => setEditTarget(null)} />
+                    <Modal.Body>
+                        <Input
+                            label={t('workspaces.name_label')}
+                            value={editName}
+                            onChange={(e) => setEditName(e.target.value)}
+                            error={errors.name}
+                            autoFocus
+                            maxLength={255}
+                        />
+                    </Modal.Body>
+                    <Modal.Footer>
+                        <Button variant="secondary" onClick={() => setEditTarget(null)} disabled={saving}>
+                            {t('common.cancel')}
+                        </Button>
+                        <Button type="submit" disabled={saving || !editName.trim()}>
+                            {saving ? t('workspaces.saving') : t('workspaces.save_changes')}
+                        </Button>
+                    </Modal.Footer>
+                </form>
+            </Modal>
+
+            <Modal show={!!deleteTarget} onClose={() => !deleting && setDeleteTarget(null)} maxWidth="md">
+                <Modal.Header
+                    title={t('workspaces.delete_workspace', { defaultValue: 'Permanently delete workspace' })}
+                    onClose={() => setDeleteTarget(null)}
+                />
+                <Modal.Body className="space-y-4">
+                    <div className="rounded-xl border border-coral-200 bg-coral-50 p-4 dark:border-coral-900 dark:bg-coral-950/30">
+                        <div className="flex gap-3">
+                            <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-coral-600 dark:text-coral-400" />
+                            <div>
+                                <p className="font-semibold text-coral-800 dark:text-coral-200">
+                                    {t('workspaces.delete_warning_title', {
+                                        defaultValue: 'This action is permanent and cannot be undone',
+                                    })}
+                                </p>
+                                <p className="mt-1 text-sm leading-5 text-coral-700 dark:text-coral-300">
+                                    {t('workspaces.delete_warning_body', {
+                                        name: deleteTarget?.name,
+                                        defaultValue: 'Deleting “{{name}}” will permanently erase all contacts, conversations, emails, campaigns, integrations, automations, analytics, settings, and other related information. Deleted data cannot be retrieved or restored.',
+                                    })}
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                    <p className="text-sm text-neutral-600 dark:text-neutral-300">
+                        {t('workspaces.type_name_to_confirm', {
+                            name: deleteTarget?.name,
+                            defaultValue: 'To confirm permanent deletion, type the workspace name “{{name}}” below.',
+                        })}
+                    </p>
+                    <Input
+                        value={deleteConfirmation}
+                        onChange={(e) => setDeleteConfirmation(e.target.value)}
+                        placeholder={deleteTarget?.name}
+                        error={errors.confirmation || errors.workspace}
+                        autoFocus
+                        autoComplete="off"
+                    />
+                </Modal.Body>
+                <Modal.Footer>
+                    <Button variant="secondary" onClick={() => setDeleteTarget(null)} disabled={deleting}>
+                        {t('common.cancel')}
+                    </Button>
+                    <Button
+                        variant="danger"
+                        onClick={handleDelete}
+                        disabled={deleting || deleteConfirmation !== deleteTarget?.name}
+                    >
+                        {deleting
+                            ? t('workspaces.deleting', { defaultValue: 'Deleting permanently…' })
+                            : t('workspaces.delete_permanently', { defaultValue: 'Permanently delete workspace' })}
+                    </Button>
+                </Modal.Footer>
+            </Modal>
         </ClientLayout>
     );
 }

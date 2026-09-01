@@ -113,6 +113,16 @@ Primary Plum:    #3E2A49   Brand Lilac:    #8F5FA7   Cool Accent:  #45B6D6   Cor
 - **Drawers**: Right-side sliding panel (`w-screen max-w-md`) for quick contact editing, message template previews, and filter trays.
 - **Dismissal**: `Escape` key and backdrop clicks dismiss the dialog gracefully.
 
+### 5.4 Contextual Help & Tooltips (`Tooltip.jsx`)
+- Keep forms compact by placing optional guidance behind an adjacent information icon instead of repeating long instructional panels.
+- Tooltip triggers must be keyboard-focusable, include an `aria-label`, and expose the same content on hover and focus.
+- Long guidance uses the wrapped tooltip variant so it remains readable on narrow screens without extending beyond the viewport.
+
+### 5.5 Action Feedback & Toasts
+- When a form submits from below the viewport fold with preserved scrolling, show success feedback in the viewport-level Sonner toaster instead of relying on a page-top banner.
+- Use backend flash text as the toast message so scheduled, queued, and saved outcomes remain accurate.
+- Keep persistent inline banners for conditions that continue to affect the page, such as storage limits or validation problems.
+
 ---
 
 ## 6. Table & Pagination Standards

@@ -1,5 +1,7 @@
 import MediaUpload from '@/Components/MediaUpload';
+import Tooltip from '@/Components/ui/Tooltip';
 import { Info, Youtube } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 const CATEGORIES = [
@@ -20,9 +22,49 @@ export const DEFAULT_YOUTUBE_OPTIONS = {
     contains_synthetic_media: false,
     notify_subscribers: true,
     default_language: '',
+    thumbnail_media_id: null,
 };
 
-export default function YouTubeVideoSettings({ value, onChange, errors = {} }) {
+const parseTags = (value) => value
+    .split(',')
+    .map((tag) => tag.trim())
+    .filter(Boolean);
+
+export function YouTubeTagsInput({ tags = [], onChange, className = '', ...props }) {
+    const canonicalTags = Array.isArray(tags) ? tags.join(', ') : '';
+    const [draft, setDraft] = useState(canonicalTags);
+    const lastEmittedTags = useRef(canonicalTags);
+
+    useEffect(() => {
+        // Parent echoes from this input must not remove a trailing comma while
+        // the user is still typing. Genuine external changes still sync in.
+        if (canonicalTags !== lastEmittedTags.current) {
+            setDraft(canonicalTags);
+            lastEmittedTags.current = canonicalTags;
+        }
+    }, [canonicalTags]);
+
+    const handleChange = (event) => {
+        const nextDraft = event.target.value;
+        const nextTags = parseTags(nextDraft);
+
+        setDraft(nextDraft);
+        lastEmittedTags.current = nextTags.join(', ');
+        onChange?.(nextTags);
+    };
+
+    return (
+        <input
+            {...props}
+            value={draft}
+            onChange={handleChange}
+            maxLength={500}
+            className={className}
+        />
+    );
+}
+
+export default function YouTubeVideoSettings({ value, onChange, errors = {}, remainingBytes = null, onStorageChange }) {
     const { t } = useTranslation();
     const options = { ...DEFAULT_YOUTUBE_OPTIONS, ...(value ?? {}) };
     const update = (key, next) => onChange?.({ ...options, [key]: next });
@@ -56,9 +98,9 @@ export default function YouTubeVideoSettings({ value, onChange, errors = {} }) {
 
             <div>
                 <label className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-300">{t('social.youtube_tags')}</label>
-                <input
-                    value={(options.tags ?? []).join(', ')}
-                    onChange={e => update('tags', e.target.value.split(',').map(tag => tag.trim()).filter(Boolean))}
+                <YouTubeTagsInput
+                    tags={options.tags}
+                    onChange={(tags) => update('tags', tags)}
                     placeholder="travel, esim, tutorial"
                     className="w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm dark:border-neutral-600 dark:bg-neutral-800"
                 />
@@ -70,21 +112,40 @@ export default function YouTubeVideoSettings({ value, onChange, errors = {} }) {
                 <label className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-300">{t('social.youtube_thumbnail')}</label>
                 <MediaUpload
                     value={options.thumbnail_url}
-                    onChange={next => update('thumbnail_url', next)}
+                    onChange={next => onChange?.({
+                        ...options,
+                        thumbnail_url: next,
+                        thumbnail_media_id: next ? options.thumbnail_media_id : null,
+                    })}
+                    onUploaded={upload => {
+                        onChange?.({ ...options, thumbnail_url: upload.url, thumbnail_media_id: upload.media_id });
+                        onStorageChange?.(upload.storage);
+                    }}
                     accept="image/jpeg,image/png"
                     maxSizeMb={2}
                     collection="social-thumbnail"
                     placeholder="https://cdn.example.com/thumbnail.jpg"
                     urlHelp={t('social.youtube_thumbnail_help')}
+                    remainingBytes={remainingBytes}
                 />
                 {errors['youtube_options.thumbnail_url'] && <p className="mt-1 text-xs text-red-500">{errors['youtube_options.thumbnail_url']}</p>}
             </div>
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div>
-                    <label className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-300">{t('social.youtube_playlist')}</label>
+                    <div className="mb-1 flex items-center gap-1.5">
+                        <label className="text-xs font-medium text-neutral-600 dark:text-neutral-300">{t('social.youtube_playlist')}</label>
+                        <Tooltip content={t('social.youtube_playlist_help')} position="top" wrap>
+                            <button
+                                type="button"
+                                aria-label={`${t('social.youtube_playlist')} instructions`}
+                                className="rounded-full text-neutral-400 transition hover:text-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-500/30 dark:hover:text-brand-300"
+                            >
+                                <Info className="h-3.5 w-3.5" aria-hidden="true" />
+                            </button>
+                        </Tooltip>
+                    </div>
                     <input value={options.playlist_id} onChange={e => update('playlist_id', e.target.value.trim())} placeholder="PLxxxxxxxxxxxxxxxx" className="w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm dark:border-neutral-600 dark:bg-neutral-800" />
-                    <p className="mt-1 text-xs text-neutral-400">{t('social.youtube_playlist_help')}</p>
                 </div>
                 <div>
                     <label className="mb-1 block text-xs font-medium text-neutral-600 dark:text-neutral-300">{t('social.youtube_language')}</label>
@@ -98,10 +159,6 @@ export default function YouTubeVideoSettings({ value, onChange, errors = {} }) {
                 <label className="flex items-center gap-2"><input type="checkbox" checked={Boolean(options.notify_subscribers)} onChange={e => update('notify_subscribers', e.target.checked)} /> {t('social.youtube_notify_subscribers')}</label>
             </div>
 
-            <div className="flex gap-2 rounded-lg bg-white/80 p-3 text-xs leading-relaxed text-neutral-600 dark:bg-neutral-900/60 dark:text-neutral-300">
-                <Info className="mt-0.5 h-4 w-4 shrink-0 text-blue-500" />
-                <span>{t('social.youtube_reconnect_notice')}</span>
-            </div>
         </section>
     );
 }

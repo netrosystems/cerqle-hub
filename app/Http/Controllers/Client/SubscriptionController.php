@@ -10,6 +10,8 @@ use App\Models\Plan;
 use App\Models\Subscription;
 use App\Services\Billing\BillingGatewayRegistry;
 use App\Services\Billing\InvoiceService;
+use App\Services\MediaService;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response as HttpResponse;
@@ -21,7 +23,8 @@ class SubscriptionController extends Controller
 {
     public function __construct(
         protected BillingGatewayRegistry $gateways,
-        protected InvoiceService $invoiceService
+        protected InvoiceService $invoiceService,
+        protected MediaService $mediaService,
     ) {}
 
     public function show(Request $request): Response
@@ -97,6 +100,7 @@ class SubscriptionController extends Controller
             'canUpgrade' => $canUpgrade,
             'plans' => $plans,
             'transactions' => $transactions,
+            'storageUsage' => $this->mediaService->usage($user),
         ]);
     }
 
@@ -139,7 +143,7 @@ class SubscriptionController extends Controller
             ->with('success', __('Your plan has been updated.'));
     }
 
-    public function couponCheck(Request $request): \Illuminate\Http\JsonResponse
+    public function couponCheck(Request $request): JsonResponse
     {
         $validated = $request->validate([
             'code' => ['required', 'string', 'max:64'],
@@ -172,10 +176,10 @@ class SubscriptionController extends Controller
         $user = $request->user();
         $transaction = PaymentTransaction::where('user_id', $user->id)->findOrFail($transactionId);
 
-        if ($transaction->invoice_path && file_exists(storage_path('app/' . $transaction->invoice_path))) {
-            return response()->file(storage_path('app/' . $transaction->invoice_path), [
+        if ($transaction->invoice_path && file_exists(storage_path('app/'.$transaction->invoice_path))) {
+            return response()->file(storage_path('app/'.$transaction->invoice_path), [
                 'Content-Type' => 'application/pdf',
-                'Content-Disposition' => 'inline; filename="invoice-' . $transaction->id . '.pdf"',
+                'Content-Disposition' => 'inline; filename="invoice-'.$transaction->id.'.pdf"',
             ]);
         }
 
@@ -187,7 +191,7 @@ class SubscriptionController extends Controller
 
         return response($pdf, 200, [
             'Content-Type' => 'application/pdf',
-            'Content-Disposition' => 'inline; filename="invoice-' . $transaction->id . '.pdf"',
+            'Content-Disposition' => 'inline; filename="invoice-'.$transaction->id.'.pdf"',
         ]);
     }
 

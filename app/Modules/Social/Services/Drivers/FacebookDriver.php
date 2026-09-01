@@ -40,6 +40,19 @@ class FacebookDriver implements DeletesPublishedPosts, EditsPublishedPosts, Soci
         $token = $account->access_token;
         $message = $postData['body'] ?? '';
         $mediaUrls = array_values(array_filter($postData['media_urls'] ?? [], fn ($u) => $u !== null && $u !== ''));
+        $options = (array) ($postData['facebook_options'] ?? []);
+
+        // Page videos use the videos edge; sending them to /photos produces a
+        // misleading Graph API error and leaves the post unpublished.
+        if (count($mediaUrls) === 1 && $this->isVideoUrl($mediaUrls[0])) {
+            $res = Http::timeout(1200)->post("https://graph.facebook.com/v25.0/{$pageId}/videos", [
+                'file_url' => $mediaUrls[0],
+                'description' => $message,
+                'access_token' => $token,
+            ])->json();
+
+            return $res['id'] ?? throw new \RuntimeException('Facebook video publish failed: '.json_encode($res));
+        }
 
         // Single image → POST /{page}/photos
         if (count($mediaUrls) === 1) {
@@ -90,7 +103,7 @@ class FacebookDriver implements DeletesPublishedPosts, EditsPublishedPosts, Soci
         // Text-only post
         $res = Http::post("https://graph.facebook.com/v25.0/{$pageId}/feed", [
             'message' => $message,
-            'link' => $postData['link'] ?? null,
+            'link' => $options['link_url'] ?? ($postData['link'] ?? null),
             'access_token' => $token,
         ])->json();
 
@@ -99,6 +112,11 @@ class FacebookDriver implements DeletesPublishedPosts, EditsPublishedPosts, Soci
         }
 
         return $res['id'];
+    }
+
+    private function isVideoUrl(string $url): bool
+    {
+        return (bool) preg_match('/\.(mp4|mov|webm|m4v)(?:\?|$)/i', $url);
     }
 
     public function updatePublishedPost(SocialAccount $account, string $platformPostId, array $postData): void

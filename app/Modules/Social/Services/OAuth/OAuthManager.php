@@ -237,9 +237,10 @@ class OAuthManager
             'client_id' => $creds->clientId() ?? '',
             'redirect_uri' => $redirect,
             'response_type' => 'code',
-            // The full YouTube scope is required for optional playlist
-            // placement in addition to uploads, thumbnails, and channel reads.
-            'scope' => 'https://www.googleapis.com/auth/youtube',
+            // This is the narrowest single scope that supports Cerqle's upload,
+            // thumbnail, playlist placement, metadata edit, and user-requested
+            // deletion workflows. Avoid the broader account-management scope.
+            'scope' => 'https://www.googleapis.com/auth/youtube.force-ssl',
             'access_type' => 'offline',
             'include_granted_scopes' => 'true',
             'prompt' => 'consent',

@@ -25,11 +25,13 @@ use Illuminate\Auth\AuthenticationException;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
+use Illuminate\Http\Exceptions\PostTooLargeException;
 use Illuminate\Http\Middleware\AddLinkHeadersForPreloadedAssets;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Route;
 use Sentry\Laravel\Integration;
+
 spl_autoload_register(function ($class) {
     if (str_starts_with($class, 'App\\')) {
         $file = __DIR__.'/../app/'.str_replace('\\', '/', substr($class, 4)).'.php';
@@ -203,5 +205,14 @@ return Application::configure(basePath: dirname(__DIR__))
             return $request->expectsJson()
                 ? response()->json(['message' => 'Unauthenticated.'], 401)
                 : redirect()->route('login');
+        });
+
+        $exceptions->renderable(function (PostTooLargeException $e, $request) {
+            if ($request->expectsJson() || $request->is('app/media*')) {
+                return response()->json([
+                    'message' => 'The web server rejected this upload because the request is too large.',
+                    'error' => 'Server upload limit exceeded. Social videos can be up to 500 MB when PHP and Nginx are configured for 520 MB requests.',
+                ], 413);
+            }
         });
     })->create();

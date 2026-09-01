@@ -8,8 +8,8 @@ use App\Services\StorageManager;
 use Illuminate\Auth\Notifications\ResetPassword;
 use Illuminate\Auth\Notifications\VerifyEmail;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
-use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
@@ -17,6 +17,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\URL;
 use Laravel\Sanctum\HasApiTokens;
 
@@ -169,7 +170,7 @@ class User extends Authenticatable implements MustVerifyEmail
      * workspace and changes when they use the workspace switcher. Membership is
      * the source of truth for visibility, notifications and agent assignment.
      *
-     * @param Builder<User> $query
+     * @param  Builder<User>  $query
      * @return Builder<User>
      */
     public function scopeInWorkspace(Builder $query, int $workspaceId): Builder
@@ -308,12 +309,32 @@ class User extends Authenticatable implements MustVerifyEmail
             ['id' => $this->getKey(), 'hash' => sha1($this->getEmailForVerification())]
         );
         $appName = config('app.name');
-        $sent = $mailService->sendWithTemplate('email_verification', $this->getEmailForVerification(), [
-            'app_name' => $appName,
-            'verification_url' => $url,
-        ]);
+        try {
+            $sent = $mailService->sendWithTemplate('email_verification', $this->getEmailForVerification(), [
+                'app_name' => $appName,
+                'verification_url' => $url,
+            ]);
+        } catch (\Throwable $exception) {
+            $sent = false;
+            Log::warning('Email verification template delivery failed; trying the default notification.', [
+                'user_id' => $this->getKey(),
+                'email' => $this->getEmailForVerification(),
+                'error' => $exception->getMessage(),
+            ]);
+        }
+
         if (! $sent) {
-            $this->notify(new VerifyEmail);
+            try {
+                $this->notify(new VerifyEmail);
+            } catch (\Throwable $exception) {
+                // Account creation must never fail after the database commit just
+                // because a recipient mailbox or mail provider rejected delivery.
+                Log::error('Email verification fallback delivery failed.', [
+                    'user_id' => $this->getKey(),
+                    'email' => $this->getEmailForVerification(),
+                    'error' => $exception->getMessage(),
+                ]);
+            }
         }
     }
 

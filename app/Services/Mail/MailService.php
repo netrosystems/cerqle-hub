@@ -12,6 +12,8 @@ use Illuminate\Support\Facades\Mail;
 
 class MailService
 {
+    public function __construct(private readonly TransactionalEmailRenderer $transactionalRenderer) {}
+
     /**
      * Send an email using the active SMTP configuration and an email template by key.
      *
@@ -36,7 +38,7 @@ class MailService
         $subject = $this->replacePlaceholders($template->subject ?? $template->name, $replacements);
         $body = $this->replacePlaceholders($template->content ?? '', $replacements);
 
-        return $this->sendRaw($smtp, $to, $subject, $body);
+        return $this->sendRaw($smtp, $to, $subject, $body, transactional: true);
     }
 
     /**
@@ -44,9 +46,10 @@ class MailService
      *
      * @param  SmtpConfiguration|WorkspaceSmtpConfig  $smtp
      * @param  array<string, string>  $extraHeaders  Additional RFC headers (e.g. List-Unsubscribe)
-     * @param  string|null  $fromEmail   Override the SMTP default from address
-     * @param  string|null  $fromName    Override the SMTP default from name
-     * @param  string|null  $replyTo     Optional reply-to address
+     * @param  string|null  $fromEmail  Override the SMTP default from address
+     * @param  string|null  $fromName  Override the SMTP default from name
+     * @param  string|null  $replyTo  Optional reply-to address
+     * @param  bool  $transactional  Wrap system email content in Cerqle's email-safe layout
      */
     public function sendRaw(
         Model $smtp,
@@ -57,13 +60,25 @@ class MailService
         ?string $fromEmail = null,
         ?string $fromName = null,
         ?string $replyTo = null,
+        bool $transactional = false,
     ): bool {
         try {
             $this->configureMailer($smtp);
-            Mail::mailer('dynamic_smtp')->html($bodyHtml, function ($message) use ($to, $subject, $smtp, $extraHeaders, $fromEmail, $fromName, $replyTo) {
+
+            $bodyText = null;
+            if ($transactional) {
+                $bodyText = $this->transactionalRenderer->toPlainText($bodyHtml);
+                $bodyHtml = $this->transactionalRenderer->render($subject, $bodyHtml);
+            }
+
+            Mail::mailer('dynamic_smtp')->html($bodyHtml, function ($message) use ($to, $subject, $smtp, $extraHeaders, $fromEmail, $fromName, $replyTo, $bodyText) {
                 $message->to($to)
                     ->subject($subject)
                     ->from($fromEmail ?: $smtp->from_email, $fromName ?: $smtp->from_name);
+
+                if ($bodyText !== null) {
+                    $message->text($bodyText);
+                }
 
                 if ($replyTo) {
                     $message->replyTo($replyTo);
@@ -73,6 +88,7 @@ class MailService
                     $message->getHeaders()->addTextHeader($name, $value);
                 }
             });
+
             return true;
         } catch (\Throwable $e) {
             Log::error('MailService: Failed to send email.', [
@@ -87,7 +103,7 @@ class MailService
     /**
      * Configure Laravel mail to use the given SMTP configuration for the 'dynamic_smtp' mailer.
      *
-     * @param SmtpConfiguration|WorkspaceSmtpConfig $smtp
+     * @param  SmtpConfiguration|WorkspaceSmtpConfig  $smtp
      */
     public function configureMailer(Model $smtp): void
     {
@@ -119,8 +135,9 @@ class MailService
     private function replacePlaceholders(string $text, array $replacements): string
     {
         foreach ($replacements as $key => $value) {
-            $text = str_replace('{{' . $key . '}}', (string) $value, $text);
+            $text = str_replace('{{'.$key.'}}', (string) $value, $text);
         }
+
         return $text;
     }
 }

@@ -4,9 +4,10 @@ import { useTranslation } from 'react-i18next';
 import ClientLayout from '@/Layouts/ClientLayout';
 import EmptyState from '@/Components/EmptyState';
 import { SocialBrandIcon } from '@/Components/BrandIcons';
+import PostMediaPreview from '@/Components/Social/PostMediaPreview';
 import {
     Plus, Trash2, ExternalLink, Share2, Clock, CheckCircle2, XCircle,
-    Pencil, Send, Eye, Image, X, Calendar, Zap, Ban,
+    Pencil, Send, Eye, Image, X, Calendar, Zap, Ban, MoreHorizontal,
 } from 'lucide-react';
 import { browserTz, formatInTz } from '@/Utils/datetime';
 
@@ -219,6 +220,7 @@ function PostDetailModal({ post, accountMap, userTz, onClose, onDelete, onEditFa
     const dateField = post.published_at ?? post.scheduled_at;
     const tz = post.timezone || userTz;
     const mediaUrls = (post.media_urls ?? []).filter(Boolean);
+    const prefersVideo = targets.some((id) => ['youtube', 'tiktok'].includes(accountMap[id]?.network));
     const publishedTargets = [...new Set([
         ...targets.filter((id) => post.publish_results?.[id]?.status === 'published'),
         ...(post.published_account_ids ?? []),
@@ -251,8 +253,15 @@ function PostDetailModal({ post, accountMap, userTz, onClose, onDelete, onEditFa
 
                     {mediaUrls.length > 0 && (
                         <div className={`grid gap-2 ${mediaUrls.length === 1 ? 'grid-cols-1' : 'grid-cols-2'}`}>
-                            {mediaUrls.map((url, i) => (
-                                <img key={i} src={url} alt="" className="w-full rounded-lg object-cover max-h-48" />
+                            {mediaUrls.map((url) => (
+                                <PostMediaPreview
+                                    key={url}
+                                    url={url}
+                                    mimeType={post.media_mime_types?.[url]}
+                                    preferVideo={prefersVideo}
+                                    controls
+                                    className="max-h-48 w-full rounded-lg object-cover"
+                                />
                             ))}
                         </div>
                     )}
@@ -370,9 +379,10 @@ function PostDetailModal({ post, accountMap, userTz, onClose, onDelete, onEditFa
 }
 
 /* ── Post Card ────────────────────────────────────────────────── */
-function PostCard({ post, accountMap, userTz, onView, onDelete, onEditFacebook, onDeleteFacebook, onDeleteInstagram, onEditYoutube, onDeleteYoutube }) {
+function PostCard({ post, accountMap, userTz, onView, onDelete, onRemoveLocal, onEditFacebook, onDeleteFacebook, onDeleteInstagram, onEditYoutube, onDeleteYoutube }) {
     const { t } = useTranslation();
     const [actioning, setActioning] = useState(null);
+    const [menuOpen, setMenuOpen] = useState(false);
     const targets = post.target_accounts ?? [];
     const dateField = post.published_at ?? post.scheduled_at;
     const tz = post.timezone || userTz;
@@ -385,13 +395,16 @@ function PostCard({ post, accountMap, userTz, onView, onDelete, onEditFacebook, 
     const instagramTarget = publishedTargets.map((id) => accountMap[id]).find((account) => account?.network === 'instagram');
     const youtubeTarget = publishedTargets.map((id) => accountMap[id]).find((account) => account?.network === 'youtube');
     const canDelete = ['draft', 'scheduled', 'failed'].includes(post.status) && !hasPublishedTarget;
+    const canRemoveLocal = post.status !== 'publishing' && (post.status === 'published' || hasPublishedTarget);
     const canEdit   = ['draft', 'scheduled', 'failed'].includes(post.status) && !hasPublishedTarget;
     const canPublishNow = ['draft', 'scheduled', 'failed'].includes(post.status);
     const canCancel = post.status === 'scheduled';
     const mediaUrls = (post.media_urls ?? []).filter(Boolean);
+    const prefersVideo = targets.some((id) => ['youtube', 'tiktok'].includes(accountMap[id]?.network));
 
     const action = (type, confirmMsg, fn) => {
         if (!confirm(confirmMsg)) return;
+        setMenuOpen(false);
         setActioning(type);
         router.post(fn(), {}, {
             preserveScroll: true,
@@ -399,25 +412,125 @@ function PostCard({ post, accountMap, userTz, onView, onDelete, onEditFacebook, 
         });
     };
 
+    const runMenuAction = (callback) => {
+        setMenuOpen(false);
+        callback();
+    };
+
+    const menuItemClass = 'flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-medium text-neutral-700 transition hover:bg-neutral-50 dark:text-neutral-200 dark:hover:bg-neutral-800';
+    const destructiveMenuItemClass = 'flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-medium text-red-600 transition hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/30';
+
     return (
-        <div className="rounded-xl border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 flex flex-col overflow-hidden hover:shadow-md transition-shadow">
+        <div className="relative rounded-xl border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 flex flex-col hover:shadow-md transition-shadow">
+            {/* All card actions live in one predictable menu. */}
+            <div className="absolute right-2 top-2 z-20">
+                <button
+                    type="button"
+                    onClick={() => setMenuOpen((open) => !open)}
+                    aria-label={t('social.post_actions')}
+                    aria-haspopup="menu"
+                    aria-expanded={menuOpen}
+                    className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/70 bg-white/90 text-neutral-600 shadow-sm backdrop-blur transition hover:bg-white hover:text-neutral-900 dark:border-neutral-700 dark:bg-neutral-900/90 dark:text-neutral-300 dark:hover:bg-neutral-800"
+                >
+                    <MoreHorizontal className="h-4 w-4" />
+                </button>
+
+                {menuOpen && (
+                    <>
+                        <button type="button" aria-label={t('common.close')} onClick={() => setMenuOpen(false)} className="fixed inset-0 z-0 cursor-default" />
+                        <div role="menu" className="absolute right-0 z-10 mt-1 w-52 overflow-hidden rounded-xl border border-neutral-200 bg-white py-1 shadow-xl dark:border-neutral-700 dark:bg-neutral-900">
+                            <button type="button" role="menuitem" onClick={() => runMenuAction(() => onView(post))} className={menuItemClass}>
+                                <Eye className="h-3.5 w-3.5" /> {t('social.details')}
+                            </button>
+
+                            {canEdit && (
+                                <Link role="menuitem" href={route('client.social.posts.edit', post.id)} onClick={() => setMenuOpen(false)} className={menuItemClass}>
+                                    <Pencil className="h-3.5 w-3.5" /> {t('common.edit')}
+                                </Link>
+                            )}
+                            {facebookTarget && (
+                                <button type="button" role="menuitem" onClick={() => runMenuAction(() => onEditFacebook(post, facebookTarget, post.publish_results?.[facebookTarget.id]))} className={menuItemClass}>
+                                    <Pencil className="h-3.5 w-3.5" /> {t('social.edit_facebook_post')}
+                                </button>
+                            )}
+                            {youtubeTarget && (
+                                <button type="button" role="menuitem" onClick={() => runMenuAction(() => onEditYoutube(post, youtubeTarget, post.publish_results?.[youtubeTarget.id]))} className={menuItemClass}>
+                                    <Pencil className="h-3.5 w-3.5" /> {t('social.edit_youtube_video')}
+                                </button>
+                            )}
+                            {canPublishNow && (
+                                <button type="button" role="menuitem"
+                                    onClick={() => action('publish', t('social.confirm_publish_now'), () => route('client.social.posts.publish-now', post.id))}
+                                    disabled={actioning === 'publish'} className={`${menuItemClass} disabled:opacity-60`}>
+                                    <Zap className="h-3.5 w-3.5" /> {actioning === 'publish' ? t('social.publishing') : t('social.publish_now')}
+                                </button>
+                            )}
+                            {canCancel && (
+                                <button type="button" role="menuitem"
+                                    onClick={() => action('cancel', t('social.confirm_cancel_schedule'), () => route('client.social.posts.cancel', post.id))}
+                                    disabled={actioning === 'cancel'} className={`${menuItemClass} text-amber-600 disabled:opacity-60 dark:text-amber-400`}>
+                                    <Ban className="h-3.5 w-3.5" /> {actioning === 'cancel' ? t('social.cancelling') : t('social.cancel_schedule')}
+                                </button>
+                            )}
+                            {post.post_url && (
+                                <a role="menuitem" href={post.post_url} target="_blank" rel="noopener noreferrer" onClick={() => setMenuOpen(false)} className={menuItemClass}>
+                                    <ExternalLink className="h-3.5 w-3.5" /> {t('social.view_on_platform')}
+                                </a>
+                            )}
+
+                            {(facebookTarget || instagramTarget || youtubeTarget || canDelete || canRemoveLocal) && <div className="my-1 border-t border-neutral-100 dark:border-neutral-800" />}
+                            {facebookTarget && (
+                                <button type="button" role="menuitem" onClick={() => runMenuAction(() => onDeleteFacebook(post, facebookTarget))} className={destructiveMenuItemClass}>
+                                    <Trash2 className="h-3.5 w-3.5" /> {t('social.delete_facebook_post')}
+                                </button>
+                            )}
+                            {instagramTarget && (
+                                <button type="button" role="menuitem" onClick={() => runMenuAction(() => onDeleteInstagram(post, instagramTarget))} className={destructiveMenuItemClass}>
+                                    <Trash2 className="h-3.5 w-3.5" /> {t('social.delete_instagram_post')}
+                                </button>
+                            )}
+                            {youtubeTarget && (
+                                <button type="button" role="menuitem" onClick={() => runMenuAction(() => onDeleteYoutube(post, youtubeTarget))} className={destructiveMenuItemClass}>
+                                    <Trash2 className="h-3.5 w-3.5" /> {t('social.delete_youtube_video')}
+                                </button>
+                            )}
+                            {canDelete && (
+                                <button type="button" role="menuitem" onClick={() => runMenuAction(() => onDelete(post.id))} className={destructiveMenuItemClass}>
+                                    <Trash2 className="h-3.5 w-3.5" /> {post.status === 'scheduled' ? t('social.delete_schedule') : t('common.delete')}
+                                </button>
+                            )}
+                            {canRemoveLocal && (
+                                <button type="button" role="menuitem" onClick={() => runMenuAction(() => onRemoveLocal(post))} className={destructiveMenuItemClass}>
+                                    <Trash2 className="h-3.5 w-3.5" /> {t('social.remove_from_cerqle')}
+                                </button>
+                            )}
+                        </div>
+                    </>
+                )}
+            </div>
+
             {/* Media thumbnail / accent bar */}
             {mediaUrls.length > 0 ? (
-                <div className="relative h-40 bg-neutral-100 dark:bg-neutral-800 shrink-0">
-                    <img src={mediaUrls[0]} alt="" className="w-full h-full object-cover" />
+                <div className="relative h-40 overflow-hidden rounded-t-xl bg-neutral-100 dark:bg-neutral-800 shrink-0">
+                    <PostMediaPreview
+                        url={mediaUrls[0]}
+                        mimeType={post.media_mime_types?.[mediaUrls[0]]}
+                        preferVideo={prefersVideo}
+                        className="h-full w-full object-cover"
+                    />
                     {mediaUrls.length > 1 && (
-                        <span className="absolute top-2 right-2 flex items-center gap-1 rounded-full bg-black/60 px-2 py-0.5 text-[10px] text-white">
+                        <span className="absolute left-2 top-2 flex items-center gap-1 rounded-full bg-black/60 px-2 py-0.5 text-[10px] text-white">
                             <Image className="h-3 w-3" /> {mediaUrls.length}
                         </span>
                     )}
                 </div>
             ) : (
-                <div className="h-1.5 bg-gradient-to-r from-brand-500 to-brand-400 shrink-0" />
+                <div className="h-1.5 rounded-t-xl bg-gradient-to-r from-brand-500 to-brand-400 shrink-0" />
             )}
 
             <div className="flex flex-col flex-1 p-4 gap-3">
                 {/* Status + date */}
-                <div className="flex items-center justify-between gap-2 flex-wrap">
+                <div className="flex items-center justify-between gap-2 pr-8 flex-wrap">
                     <StatusBadge status={post.status} />
                     {dateField && (
                         <span className="flex items-center gap-1 text-[11px] text-neutral-400">
@@ -443,86 +556,6 @@ function PostCard({ post, accountMap, userTz, onView, onDelete, onEditFacebook, 
                     </div>
                 )}
 
-                {/* Primary actions */}
-                <div className="flex items-center gap-2 pt-2 border-t border-neutral-100 dark:border-neutral-800">
-                    <button onClick={() => onView(post)}
-                        className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-lg border border-neutral-200 dark:border-neutral-700 px-3 py-1.5 text-xs font-medium text-neutral-600 dark:text-neutral-300 hover:border-brand-400 hover:text-brand-600 transition">
-                        <Eye className="h-3.5 w-3.5" /> {t('social.details')}
-                    </button>
-                    {canEdit && (
-                        <Link href={route('client.social.posts.edit', post.id)}
-                            className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-lg border border-neutral-200 dark:border-neutral-700 px-3 py-1.5 text-xs font-medium text-neutral-600 dark:text-neutral-300 hover:border-brand-400 hover:text-brand-600 transition">
-                            <Pencil className="h-3.5 w-3.5" /> {t('common.edit')}
-                        </Link>
-                    )}
-                    {facebookTarget && (
-                        <button type="button" onClick={() => onEditFacebook(post, facebookTarget, post.publish_results?.[facebookTarget.id])}
-                            className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-lg border border-neutral-200 dark:border-neutral-700 px-3 py-1.5 text-xs font-medium text-neutral-600 dark:text-neutral-300 hover:border-brand-400 hover:text-brand-600 transition">
-                            <Pencil className="h-3.5 w-3.5" /> Facebook
-                        </button>
-                    )}
-                    {youtubeTarget && (
-                        <button type="button" onClick={() => onEditYoutube(post, youtubeTarget, post.publish_results?.[youtubeTarget.id])}
-                            className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-lg border border-neutral-200 dark:border-neutral-700 px-3 py-1.5 text-xs font-medium text-neutral-600 dark:text-neutral-300 hover:border-brand-400 hover:text-brand-600 transition">
-                            <Pencil className="h-3.5 w-3.5" /> YouTube
-                        </button>
-                    )}
-                </div>
-
-                {/* Secondary actions */}
-                <div className="flex items-center gap-1.5 flex-wrap">
-                    {canPublishNow && (
-                        <button
-                            onClick={() => action('publish', t('social.confirm_publish_now'), () => route('client.social.posts.publish-now', post.id))}
-                            disabled={actioning === 'publish'}
-                            className="inline-flex items-center gap-1 rounded-lg bg-brand-600 px-2.5 py-1 text-[11px] font-medium text-white hover:bg-brand-700 disabled:opacity-60 transition"
-                        >
-                            <Zap className="h-3 w-3" /> {actioning === 'publish' ? t('social.publishing') : t('social.publish_now')}
-                        </button>
-                    )}
-                    {canCancel && (
-                        <button
-                            onClick={() => action('cancel', t('social.confirm_cancel_schedule'), () => route('client.social.posts.cancel', post.id))}
-                            disabled={actioning === 'cancel'}
-                            className="inline-flex items-center gap-1 rounded-lg border border-amber-300 px-2.5 py-1 text-[11px] font-medium text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-900/20 disabled:opacity-60 transition"
-                        >
-                            <Ban className="h-3 w-3" /> {actioning === 'cancel' ? t('social.cancelling') : t('social.cancel_schedule')}
-                        </button>
-                    )}
-                    {post.post_url && (
-                        <a href={post.post_url} target="_blank" rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 rounded-lg border border-neutral-200 dark:border-neutral-700 px-2.5 py-1 text-[11px] font-medium text-neutral-500 hover:text-brand-600 transition">
-                            <ExternalLink className="h-3 w-3" /> {t('social.view')}
-                        </a>
-                    )}
-                    {facebookTarget && (
-                        <button type="button" onClick={() => onDeleteFacebook(post, facebookTarget)}
-                            className="ml-auto inline-flex items-center gap-1 rounded-lg border border-neutral-200 px-2 py-1 text-[11px] text-neutral-400 hover:border-red-300 hover:text-red-500 dark:border-neutral-700"
-                            title={t('social.delete_facebook_post')}>
-                            <Trash2 className="h-3 w-3" /> Facebook
-                        </button>
-                    )}
-                    {instagramTarget && (
-                        <button type="button" onClick={() => onDeleteInstagram(post, instagramTarget)}
-                            className="ml-auto inline-flex items-center gap-1 rounded-lg border border-neutral-200 px-2 py-1 text-[11px] text-neutral-400 hover:border-red-300 hover:text-red-500 dark:border-neutral-700"
-                            title={t('social.delete_instagram_post')}>
-                            <Trash2 className="h-3 w-3" /> Instagram
-                        </button>
-                    )}
-                    {youtubeTarget && (
-                        <button type="button" onClick={() => onDeleteYoutube(post, youtubeTarget)}
-                            className="ml-auto inline-flex items-center gap-1 rounded-lg border border-neutral-200 px-2 py-1 text-[11px] text-neutral-400 hover:border-red-300 hover:text-red-500 dark:border-neutral-700"
-                            title={t('social.delete_youtube_video')}>
-                            <Trash2 className="h-3 w-3" /> YouTube
-                        </button>
-                    )}
-                    {canDelete && (
-                        <button onClick={() => onDelete(post.id)}
-                            className="ml-auto inline-flex items-center gap-1 rounded-lg border border-neutral-200 dark:border-neutral-700 px-2 py-1 text-[11px] text-neutral-400 hover:text-red-500 hover:border-red-300 transition">
-                            <Trash2 className="h-3 w-3" /> {post.status === 'scheduled' ? t('social.delete_schedule') : t('common.delete')}
-                        </button>
-                    )}
-                </div>
             </div>
         </div>
     );
@@ -550,6 +583,15 @@ export default function PostsIndex({ posts, accounts, filters }) {
                 onSuccess: () => setDetailPost(null),
             });
         }
+    };
+
+    const handleRemoveLocal = (post) => {
+        if (!confirm(t('social.confirm_remove_from_cerqle'))) return;
+
+        router.delete(route('client.social.posts.remove-local', post.id), {
+            preserveScroll: true,
+            onSuccess: () => setDetailPost(null),
+        });
     };
 
     const handleFacebookDelete = (post, account) => {
@@ -667,6 +709,7 @@ export default function PostsIndex({ posts, accounts, filters }) {
                                 userTz={userTz}
                                 onView={setDetailPost}
                                 onDelete={handleDelete}
+                                onRemoveLocal={handleRemoveLocal}
                                 onEditFacebook={(post, account, result) => setFacebookEdit({ post, account, result })}
                                 onDeleteFacebook={handleFacebookDelete}
                                 onDeleteInstagram={handleInstagramDelete}

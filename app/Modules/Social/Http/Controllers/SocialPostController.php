@@ -3,12 +3,15 @@
 namespace App\Modules\Social\Http\Controllers;
 
 use App\Http\Controllers\Controller;
+use App\Models\Media;
 use App\Modules\AI\Services\LlmGateway;
 use App\Modules\Social\Jobs\PublishSocialPostJob;
 use App\Modules\Social\Models\SocialAccount;
 use App\Modules\Social\Models\SocialPost;
 use App\Modules\Social\Models\SocialPostAccount;
+use App\Modules\Social\Services\SocialMediaLifecycleService;
 use App\Modules\Social\Services\SocialPublisher;
+use App\Services\MediaService;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -22,6 +25,11 @@ use Inertia\Response;
 
 class SocialPostController extends Controller
 {
+    public function __construct(
+        private readonly SocialMediaLifecycleService $mediaLifecycle,
+        private readonly MediaService $mediaService,
+    ) {}
+
     private function workspaceId(Request $request): int
     {
         return (int) ($request->user()->current_workspace_id ?? $request->user()->workspace_id);
@@ -54,42 +62,78 @@ class SocialPostController extends Controller
         }
     }
 
-    private function validateYoutubeOptions(Collection $selectedNetworks, array $validated, array $mediaUrls): void
+    private function validatePlatformPayloads(Collection $selectedNetworks, array $validated, Collection $accounts): void
     {
-        if (! $selectedNetworks->contains('youtube')) {
-            return;
+        $payloads = (array) ($validated['platform_payloads'] ?? []);
+        $unexpected = array_diff(array_keys($payloads), $selectedNetworks->all());
+        if ($unexpected !== []) {
+            throw ValidationException::withMessages([
+                'platform_payloads' => ['Platform overrides may only be supplied for selected social networks.'],
+            ]);
         }
 
+        $limits = ['tiktok' => 2200, 'linkedin' => 3000, 'facebook' => 63206, 'instagram' => 2200, 'youtube' => 5000];
         $errors = [];
-        $title = trim((string) ($validated['title'] ?? ''));
 
-        if ($title === '') {
-            $errors['title'] = ['A YouTube video title is required.'];
-        } elseif (mb_strlen($title) > 100) {
-            $errors['title'] = ['YouTube video titles cannot exceed 100 characters.'];
-        }
+        foreach ($selectedNetworks as $network) {
+            $override = (array) ($payloads[$network] ?? []);
+            $hasOverride = array_key_exists($network, $payloads);
+            $customize = (bool) ($override['customize'] ?? false);
+            $title = trim((string) ($customize ? ($override['title'] ?? '') : ($validated['title'] ?? '')));
+            $body = trim((string) ($customize ? ($override['body'] ?? '') : ($validated['body'] ?? '')));
+            $media = array_values(array_filter($customize ? ($override['media_urls'] ?? []) : ($validated['media_urls'] ?? [])));
+            $options = array_merge(
+                $network === 'youtube' ? (array) ($validated['youtube_options'] ?? []) : [],
+                (array) ($override['options'] ?? [])
+            );
 
-        if (count($mediaUrls) !== 1) {
-            $errors['media_urls'] = ['YouTube requires exactly one video file. Remove extra media items.'];
-        }
-
-        $tags = array_map(fn ($tag) => trim((string) $tag), $validated['youtube_options']['tags'] ?? []);
-        if (mb_strlen(implode(',', $tags)) > 500) {
-            $errors['youtube_options.tags'] = ['YouTube tags cannot exceed 500 total characters.'];
+            if ($network !== 'youtube' && $body === '') {
+                $errors["platform_payloads.{$network}.body"] = [ucfirst($network).' content is required.'];
+            }
+            if (mb_strlen($body) > ($limits[$network] ?? 5000)) {
+                $errors["platform_payloads.{$network}.body"] = [ucfirst($network).' content exceeds its character limit.'];
+            }
+            if ($network === 'youtube') {
+                if ($title === '') {
+                    $errors[$hasOverride ? 'platform_payloads.youtube.title' : 'title'] = ['A YouTube video title is required.'];
+                }
+                if (count($media) !== 1) {
+                    $errors[$hasOverride ? 'platform_payloads.youtube.media_urls' : 'media_urls'] = ['YouTube requires exactly one video.'];
+                }
+                if ($title !== '' && mb_strlen($title) > 100) {
+                    $errors[$hasOverride ? 'platform_payloads.youtube.title' : 'title'] = ['YouTube video titles cannot exceed 100 characters.'];
+                }
+                $tags = array_map(fn ($tag) => trim((string) $tag), $options['tags'] ?? []);
+                if (mb_strlen(implode(',', $tags)) > 500) {
+                    $errors[$hasOverride ? 'platform_payloads.youtube.options.tags' : 'youtube_options.tags'] = ['YouTube tags cannot exceed 500 total characters.'];
+                }
+                if (! empty($options['playlist_id']) && $accounts->where('network', 'youtube')->count() !== 1) {
+                    $errors[$hasOverride ? 'platform_payloads.youtube.options.playlist_id' : 'youtube_options.playlist_id'] = ['Playlist placement requires exactly one YouTube channel.'];
+                }
+                $this->validateDirectVideoUrls(collect(['youtube']), $media);
+            }
+            if ($network === 'instagram' && $media === []) {
+                $errors["platform_payloads.{$network}.media_urls"] = ['Instagram requires compatible media.'];
+            }
+            if ($network === 'tiktok') {
+                if (count($media) !== 1) {
+                    $errors['platform_payloads.tiktok.media_urls'] = ['TikTok requires exactly one video.'];
+                }
+                foreach ($accounts->where('network', 'tiktok') as $account) {
+                    $accountOptions = array_merge($options, (array) data_get($override, 'account_options.'.$account->id, []));
+                    if (empty($accountOptions['privacy_level'])) {
+                        $errors['platform_payloads.tiktok.options.privacy_level'] = ['Choose a TikTok privacy level for every selected creator.'];
+                    }
+                    if (! ($accountOptions['consent'] ?? false)) {
+                        $errors['platform_payloads.tiktok.options.consent'] = ['Confirm publishing consent for every selected TikTok creator.'];
+                    }
+                }
+                $this->validateDirectVideoUrls(collect(['tiktok']), $media);
+            }
         }
 
         if ($errors !== []) {
             throw ValidationException::withMessages($errors);
-        }
-    }
-
-    private function validateContentRequirements(Collection $selectedNetworks, array $validated): void
-    {
-        $isYoutubeOnly = $selectedNetworks->count() === 1 && $selectedNetworks->contains('youtube');
-        if (! $isYoutubeOnly && trim((string) ($validated['body'] ?? '')) === '') {
-            throw ValidationException::withMessages([
-                'body' => ['Post content is required for the selected social networks.'],
-            ]);
         }
     }
 
@@ -98,6 +142,7 @@ class SocialPostController extends Controller
         return [
             'youtube_options' => ['nullable', 'array'],
             'youtube_options.thumbnail_url' => ['nullable', 'url', 'regex:/^https:\/\//i', 'max:2048'],
+            'youtube_options.thumbnail_media_id' => ['nullable', 'integer'],
             'youtube_options.privacy_status' => ['nullable', 'in:private,unlisted,public'],
             'youtube_options.tags' => ['nullable', 'array', 'max:50'],
             'youtube_options.tags.*' => ['string', 'max:60'],
@@ -110,6 +155,61 @@ class SocialPostController extends Controller
         ];
     }
 
+    private function validateUploadedMediaCompatibility(Collection $selectedNetworks, array $validated, Request $request): void
+    {
+        $payloads = (array) ($validated['platform_payloads'] ?? []);
+        $allIds = collect($validated['media_ids'] ?? [])
+            ->merge(collect($payloads)->flatMap(fn ($payload) => $payload['media_ids'] ?? []))
+            ->filter()->map(fn ($id) => (int) $id)->unique();
+
+        if ($allIds->isEmpty()) {
+            return;
+        }
+
+        $user = $request->user();
+        $mediaQuery = Media::query()
+            ->whereIn('id', $allIds)
+            ->where('mediable_type', $user::class)
+            ->where('is_temporary', true);
+        if ($user->client_id) {
+            $mediaQuery->whereIn('mediable_id', $user->client()->firstOrFail()->users()->select('id'));
+        } else {
+            $mediaQuery->where('mediable_id', $user->id);
+        }
+        $media = $mediaQuery->get()->keyBy('id');
+
+        foreach ($selectedNetworks as $network) {
+            $override = (array) ($payloads[$network] ?? []);
+            $ids = collect(($override['customize'] ?? false) ? ($override['media_ids'] ?? []) : ($validated['media_ids'] ?? []))
+                ->filter()->map(fn ($id) => (int) $id);
+            $items = $ids->map(fn ($id) => $media->get($id))->filter();
+
+            if ($items->count() !== $ids->count()) {
+                throw ValidationException::withMessages([
+                    "platform_payloads.{$network}.media_ids" => ['One or more uploaded files are invalid or belong to a different client.'],
+                ]);
+            }
+
+            $hasVideo = $items->contains(fn (Media $item) => str_starts_with($item->mime_type, 'video/'));
+            $hasNonVideo = $items->contains(fn (Media $item) => ! str_starts_with($item->mime_type, 'video/'));
+            if (in_array($network, ['youtube', 'tiktok'], true) && $hasNonVideo) {
+                throw ValidationException::withMessages([
+                    "platform_payloads.{$network}.media_ids" => [ucfirst($network).' requires a compatible video file.'],
+                ]);
+            }
+            if ($network === 'facebook' && $hasVideo && ($hasNonVideo || $items->count() > 1)) {
+                throw ValidationException::withMessages([
+                    'platform_payloads.facebook.media_ids' => ['Facebook video posts must use one video without mixed image attachments.'],
+                ]);
+            }
+            if ($network === 'linkedin' && $items->count() > 1) {
+                throw ValidationException::withMessages([
+                    'platform_payloads.linkedin.media_ids' => ['LinkedIn supports one uploaded media item per Cerqle post.'],
+                ]);
+            }
+        }
+    }
+
     public function index(Request $request): Response
     {
         $wid = $this->workspaceId($request);
@@ -118,7 +218,6 @@ class SocialPostController extends Controller
         $network = $request->query('network');
 
         $accounts = SocialAccount::where('workspace_id', $wid)
-            ->where('active', true)
             ->get(['id', 'network', 'name', 'picture_url']);
 
         // Collect account IDs for the requested network filter
@@ -127,7 +226,10 @@ class SocialPostController extends Controller
             : collect();
 
         $query = SocialPost::where('workspace_id', $wid)
-            ->with(['accountLinks:id,post_id,social_account_id,status'])
+            ->with([
+                'accountLinks:id,post_id,social_account_id,status,platform_post_id',
+                'media:id,disk,path,mime_type',
+            ])
             ->when($status, fn ($q) => $q->where('status', $status))
             ->when($network && $networkAccountIds->isNotEmpty(), function ($q) use ($networkAccountIds) {
                 $q->where(function ($inner) use ($networkAccountIds) {
@@ -140,7 +242,13 @@ class SocialPostController extends Controller
             ->orderByDesc('created_at');
 
         $posts = $query->paginate(20)->withQueryString();
-        $posts->getCollection()->each(function (SocialPost $post): void {
+        $posts->getCollection()->each(function (SocialPost $post) use ($accounts): void {
+            $mediaMimeTypes = $post->media
+                ->mapWithKeys(fn (Media $media) => [$media->url() => $media->mime_type])
+                ->all();
+
+            $post->setAttribute('media_mime_types', $mediaMimeTypes);
+
             // Older published posts may not have publish_results, but their
             // durable account link still identifies the remote post target.
             // Expose that authoritative state so the UI never hides the
@@ -154,7 +262,24 @@ class SocialPostController extends Controller
                     ->values()
                     ->all()
             );
-            $post->unsetRelation('accountLinks');
+
+            // Uploaded publishing files are deleted after the safety window.
+            // Never send their expiring local URLs to published-history cards.
+            // YouTube provides a durable thumbnail; other providers use the
+            // card's platform placeholder until a provider thumbnail exists.
+            if ($post->temporary_media_released_at) {
+                $youtubeAccountIds = $accounts->where('network', 'youtube')->pluck('id')->map(fn ($id) => (int) $id);
+                $youtubeLink = $post->accountLinks
+                    ->where('status', 'published')
+                    ->first(fn ($link) => $youtubeAccountIds->contains((int) $link->social_account_id));
+                $post->setAttribute('media_urls', $youtubeLink?->platform_post_id
+                    ? ['https://i.ytimg.com/vi/'.rawurlencode($youtubeLink->platform_post_id).'/hqdefault.jpg']
+                    : []);
+                $post->setAttribute('media_mime_types', $youtubeLink?->platform_post_id
+                    ? ['https://i.ytimg.com/vi/'.rawurlencode($youtubeLink->platform_post_id).'/hqdefault.jpg' => 'image/jpeg']
+                    : []);
+            }
+            $post->unsetRelation('accountLinks')->unsetRelation('media');
         });
 
         return Inertia::render('Social/Posts/Index', [
@@ -169,7 +294,10 @@ class SocialPostController extends Controller
         $wid = $this->workspaceId($request);
         $accounts = SocialAccount::where('workspace_id', $wid)->where('active', true)->get(['id', 'network', 'name', 'picture_url']);
 
-        return Inertia::render('Social/Composer', ['accounts' => $accounts]);
+        return Inertia::render('Social/Composer', [
+            'accounts' => $accounts,
+            'storageUsage' => $this->mediaService->usage($request->user()),
+        ]);
     }
 
     public function calendar(Request $request): Response
@@ -239,9 +367,30 @@ class SocialPostController extends Controller
         $wid = $this->workspaceId($request);
         $validated = $request->validate(array_merge([
             'title' => ['nullable', 'string', 'max:256'],
-            'body' => ['nullable', 'string', 'max:5000'],
+            'body' => ['nullable', 'string', 'max:63206'],
             'media_urls' => ['nullable', 'array'],
             'media_urls.*' => ['nullable', 'url', 'regex:/^https:\/\//i', 'max:2048'],
+            'media_ids' => ['nullable', 'array'],
+            'media_ids.*' => ['nullable', 'integer'],
+            'platform_payloads' => ['nullable', 'array'],
+            'platform_payloads.*.customize' => ['nullable', 'boolean'],
+            'platform_payloads.*.title' => ['nullable', 'string', 'max:256'],
+            'platform_payloads.*.body' => ['nullable', 'string', 'max:63206'],
+            'platform_payloads.*.media_urls' => ['nullable', 'array'],
+            'platform_payloads.*.media_urls.*' => ['nullable', 'url', 'regex:/^https:\/\//i', 'max:2048'],
+            'platform_payloads.*.media_ids' => ['nullable', 'array'],
+            'platform_payloads.*.media_ids.*' => ['nullable', 'integer'],
+            'platform_payloads.*.options' => ['nullable', 'array'],
+            'platform_payloads.*.options.link_url' => ['nullable', 'url', 'regex:/^https:\/\//i', 'max:2048'],
+            'platform_payloads.*.options.thumbnail_url' => ['nullable', 'url', 'regex:/^https:\/\//i', 'max:2048'],
+            'platform_payloads.*.options.thumbnail_media_id' => ['nullable', 'integer'],
+            'platform_payloads.*.options.tags' => ['nullable', 'array', 'max:50'],
+            'platform_payloads.*.options.tags.*' => ['string', 'max:60'],
+            'platform_payloads.*.options.privacy_status' => ['nullable', 'in:private,unlisted,public'],
+            'platform_payloads.*.options.privacy_level' => ['nullable', 'string', 'max:64'],
+            'platform_payloads.*.options.consent' => ['nullable', 'boolean'],
+            'platform_payloads.*.account_options' => ['nullable', 'array'],
+            'platform_payloads.*.account_options.*' => ['nullable', 'array'],
             'target_accounts' => ['required', 'array', 'min:1'],
             'target_accounts.*' => ['integer'],
             'scheduled_at' => ['nullable', 'date'],
@@ -260,26 +409,10 @@ class SocialPostController extends Controller
         }
 
         $selectedNetworks = $accounts->pluck('network')->unique();
-        $this->validateContentRequirements($selectedNetworks, $validated);
+        $this->validatePlatformPayloads($selectedNetworks, $validated, $accounts);
+        $this->validateUploadedMediaCompatibility($selectedNetworks, $validated, $request);
         $mediaUrls = array_values(array_filter($validated['media_urls'] ?? [], fn ($value) => $value !== null && $value !== ''));
         $validated['media_urls'] = $mediaUrls;
-        if ($selectedNetworks->contains('instagram') && count($mediaUrls) === 0) {
-            throw ValidationException::withMessages([
-                'media_urls' => ['Instagram publishing requires at least one publicly reachable image URL.'],
-            ]);
-        }
-        if ($selectedNetworks->intersect(['youtube', 'tiktok'])->isNotEmpty() && count($mediaUrls) === 0) {
-            throw ValidationException::withMessages([
-                'media_urls' => ['YouTube and TikTok publishing require a publicly reachable video URL.'],
-            ]);
-        }
-        $this->validateDirectVideoUrls($selectedNetworks, $mediaUrls);
-        $this->validateYoutubeOptions($selectedNetworks, $validated, $mediaUrls);
-        if (! empty($validated['youtube_options']['playlist_id']) && $accounts->where('network', 'youtube')->count() !== 1) {
-            throw ValidationException::withMessages([
-                'youtube_options.playlist_id' => ['Playlist placement requires exactly one selected YouTube channel.'],
-            ]);
-        }
 
         // scheduled_at arrives as UTC ISO from the frontend (already converted).
         // Allow a 30-second buffer to account for form submission latency.
@@ -289,12 +422,25 @@ class SocialPostController extends Controller
             ]);
         }
 
-        $post = SocialPost::create(array_merge($validated, [
-            'workspace_id' => $wid,
-            'status' => $validated['scheduled_at'] ? 'scheduled' : 'draft',
-        ]));
+        $allMediaIds = collect($validated['media_ids'] ?? [])
+            ->push(data_get($validated, 'youtube_options.thumbnail_media_id'))
+            ->merge(collect($validated['platform_payloads'] ?? [])->flatMap(fn ($payload) => $payload['media_ids'] ?? []))
+            ->merge(collect($validated['platform_payloads'] ?? [])->pluck('options.thumbnail_media_id'))
+            ->filter()->unique()->values()->all();
+        unset($validated['media_ids']);
 
-        if (! $validated['scheduled_at']) {
+        $scheduledAt = $validated['scheduled_at'] ?? null;
+        $post = DB::transaction(function () use ($validated, $wid, $scheduledAt, $request, $allMediaIds): SocialPost {
+            $post = SocialPost::create(array_merge($validated, [
+                'workspace_id' => $wid,
+                'status' => $scheduledAt ? 'scheduled' : 'draft',
+            ]));
+            $this->mediaLifecycle->syncPostMedia($post, $request->user(), $allMediaIds);
+
+            return $post;
+        });
+
+        if (! $scheduledAt) {
             PublishSocialPostJob::dispatch($post->id)->onQueue('social');
             $post->update(['status' => 'publishing']);
         }
@@ -303,7 +449,7 @@ class SocialPostController extends Controller
             return response()->json(['success' => true, 'post_id' => $post->id]);
         }
 
-        return back()->with('success', 'Post '.($validated['scheduled_at'] ? 'scheduled' : 'queued for publishing').'.');
+        return back()->with('success', 'Post '.($scheduledAt ? 'scheduled' : 'queued for publishing').'.');
     }
 
     public function edit(Request $request, SocialPost $post): Response
@@ -313,10 +459,12 @@ class SocialPostController extends Controller
 
         $wid = $this->workspaceId($request);
         $accounts = SocialAccount::where('workspace_id', $wid)->where('active', true)->get(['id', 'network', 'name', 'picture_url']);
+        $post->setAttribute('media_ids', $post->media()->pluck('media.id')->all());
 
         return Inertia::render('Social/Posts/Edit', [
             'post' => $post,
             'accounts' => $accounts,
+            'storageUsage' => $this->mediaService->usage($request->user()),
         ]);
     }
 
@@ -327,9 +475,30 @@ class SocialPostController extends Controller
 
         $validated = $request->validate(array_merge([
             'title' => ['nullable', 'string', 'max:256'],
-            'body' => ['nullable', 'string', 'max:5000'],
+            'body' => ['nullable', 'string', 'max:63206'],
             'media_urls' => ['nullable', 'array'],
             'media_urls.*' => ['nullable', 'url', 'regex:/^https:\/\//i', 'max:2048'],
+            'media_ids' => ['nullable', 'array'],
+            'media_ids.*' => ['nullable', 'integer'],
+            'platform_payloads' => ['nullable', 'array'],
+            'platform_payloads.*.customize' => ['nullable', 'boolean'],
+            'platform_payloads.*.title' => ['nullable', 'string', 'max:256'],
+            'platform_payloads.*.body' => ['nullable', 'string', 'max:63206'],
+            'platform_payloads.*.media_urls' => ['nullable', 'array'],
+            'platform_payloads.*.media_urls.*' => ['nullable', 'url', 'regex:/^https:\/\//i', 'max:2048'],
+            'platform_payloads.*.media_ids' => ['nullable', 'array'],
+            'platform_payloads.*.media_ids.*' => ['nullable', 'integer'],
+            'platform_payloads.*.options' => ['nullable', 'array'],
+            'platform_payloads.*.options.link_url' => ['nullable', 'url', 'regex:/^https:\/\//i', 'max:2048'],
+            'platform_payloads.*.options.thumbnail_url' => ['nullable', 'url', 'regex:/^https:\/\//i', 'max:2048'],
+            'platform_payloads.*.options.thumbnail_media_id' => ['nullable', 'integer'],
+            'platform_payloads.*.options.tags' => ['nullable', 'array', 'max:50'],
+            'platform_payloads.*.options.tags.*' => ['string', 'max:60'],
+            'platform_payloads.*.options.privacy_status' => ['nullable', 'in:private,unlisted,public'],
+            'platform_payloads.*.options.privacy_level' => ['nullable', 'string', 'max:64'],
+            'platform_payloads.*.options.consent' => ['nullable', 'boolean'],
+            'platform_payloads.*.account_options' => ['nullable', 'array'],
+            'platform_payloads.*.account_options.*' => ['nullable', 'array'],
             'target_accounts' => ['required', 'array', 'min:1'],
             'target_accounts.*' => ['integer'],
             'scheduled_at' => ['nullable', 'date'],
@@ -347,26 +516,10 @@ class SocialPostController extends Controller
         }
 
         $selectedNetworks = $accounts->pluck('network')->unique();
-        $this->validateContentRequirements($selectedNetworks, $validated);
+        $this->validatePlatformPayloads($selectedNetworks, $validated, $accounts);
+        $this->validateUploadedMediaCompatibility($selectedNetworks, $validated, $request);
         $mediaUrls = array_values(array_filter($validated['media_urls'] ?? [], fn ($value) => $value !== null && $value !== ''));
         $validated['media_urls'] = $mediaUrls;
-        if ($selectedNetworks->contains('instagram') && count($mediaUrls) === 0) {
-            throw ValidationException::withMessages([
-                'media_urls' => ['Instagram publishing requires at least one publicly reachable image URL.'],
-            ]);
-        }
-        if ($selectedNetworks->intersect(['youtube', 'tiktok'])->isNotEmpty() && count($mediaUrls) === 0) {
-            throw ValidationException::withMessages([
-                'media_urls' => ['YouTube and TikTok publishing require a publicly reachable video URL.'],
-            ]);
-        }
-        $this->validateDirectVideoUrls($selectedNetworks, $mediaUrls);
-        $this->validateYoutubeOptions($selectedNetworks, $validated, $mediaUrls);
-        if (! empty($validated['youtube_options']['playlist_id']) && $accounts->where('network', 'youtube')->count() !== 1) {
-            throw ValidationException::withMessages([
-                'youtube_options.playlist_id' => ['Playlist placement requires exactly one selected YouTube channel.'],
-            ]);
-        }
 
         if (! empty($validated['scheduled_at']) && now()->subSeconds(30)->gt($validated['scheduled_at'])) {
             throw ValidationException::withMessages([
@@ -374,9 +527,18 @@ class SocialPostController extends Controller
             ]);
         }
 
-        $validated['status'] = $validated['scheduled_at'] ? 'scheduled' : 'draft';
+        $validated['status'] = ($validated['scheduled_at'] ?? null) ? 'scheduled' : 'draft';
 
-        $post->update($validated);
+        $mediaIds = collect($validated['media_ids'] ?? [])
+            ->push(data_get($validated, 'youtube_options.thumbnail_media_id'))
+            ->merge(collect($validated['platform_payloads'] ?? [])->flatMap(fn ($payload) => $payload['media_ids'] ?? []))
+            ->merge(collect($validated['platform_payloads'] ?? [])->pluck('options.thumbnail_media_id'))
+            ->filter()->unique()->values()->all();
+        unset($validated['media_ids']);
+        DB::transaction(function () use ($post, $validated, $request, $mediaIds): void {
+            $post->update($validated);
+            $this->mediaLifecycle->syncPostMedia($post, $request->user(), $mediaIds);
+        });
 
         return redirect()->route('client.social.posts.index')->with('success', 'Post updated successfully.');
     }
@@ -413,11 +575,26 @@ class SocialPostController extends Controller
             'Published posts must be deleted from the connected platform.'
         );
         DB::transaction(function () use ($post): void {
+            $this->mediaLifecycle->detachDeletedPost($post);
             $post->accountLinks()->delete();
             $post->delete();
         });
 
         return back()->with('success', 'Post deleted.');
+    }
+
+    public function removeLocalRecord(Request $request, SocialPost $post): RedirectResponse
+    {
+        abort_unless((int) $post->workspace_id === $this->workspaceId($request), 403);
+        abort_if($post->status === 'publishing', 422, 'Cannot remove a post that is currently being published.');
+
+        DB::transaction(function () use ($post): void {
+            $this->mediaLifecycle->detachDeletedPost($post);
+            $post->accountLinks()->delete();
+            $post->delete();
+        });
+
+        return back()->with('success', 'Post removed from Cerqle. The post on the connected platform was not changed.');
     }
 
     public function updatePublishedFacebook(

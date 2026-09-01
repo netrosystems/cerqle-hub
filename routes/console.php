@@ -8,6 +8,7 @@ use App\Modules\Inbox\Jobs\SyncEmailAccountJob;
 use App\Modules\Inbox\Jobs\SyncMessengerAccountJob;
 use App\Modules\Shared\Models\ChannelAccount;
 use App\Modules\Social\Jobs\DispatchScheduledPostsJob;
+use App\Modules\Social\Jobs\PurgeTemporarySocialMediaJob;
 use App\Modules\Social\Jobs\RefreshSocialTokensJob;
 use App\Modules\Whatsapp\Jobs\TemplateSyncJob;
 use App\Modules\Whatsapp\Models\WhatsappBusinessAccount;
@@ -82,10 +83,18 @@ Schedule::job(new DispatchScheduledPostsJob, 'social')
     ->name('dispatch-social-posts')
     ->withoutOverlapping();
 
-// Refresh expiring social OAuth tokens daily
+// Refresh short-lived social OAuth access tokens before their expiry. Provider
+// refresh tokens remain persistent across application deployments.
 Schedule::job(new RefreshSocialTokensJob, 'social')
-    ->dailyAt('02:00')
-    ->name('refresh-social-tokens');
+    ->everyTenMinutes()
+    ->name('refresh-social-tokens')
+    ->withoutOverlapping()
+    ->onOneServer();
+
+Schedule::job(new PurgeTemporarySocialMediaJob, 'social')
+    ->hourly()
+    ->name('purge-temporary-social-media')
+    ->withoutOverlapping();
 
 // Reset monthly usage meters on the 1st of each month
 Schedule::call(function () {

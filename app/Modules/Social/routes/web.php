@@ -9,6 +9,7 @@ Route::middleware(['web', 'client-app'])->prefix('app/social')->name('client.soc
     Route::get('/accounts/connect/{network}', [SocialAccountController::class, 'connect'])->name('accounts.connect');
     Route::get('/accounts/callback/{network}', [SocialAccountController::class, 'callback'])->name('oauth.callback');
     Route::delete('/accounts/{account}', [SocialAccountController::class, 'disconnect'])->name('accounts.disconnect');
+    Route::get('/accounts/{account}/creator-options', [SocialAccountController::class, 'creatorOptions'])->name('accounts.creator-options');
 
     Route::get('/posts', [SocialPostController::class, 'index'])->name('posts.index');
     Route::get('/composer', [SocialPostController::class, 'composer'])->name('composer');
@@ -16,6 +17,7 @@ Route::middleware(['web', 'client-app'])->prefix('app/social')->name('client.soc
     Route::get('/posts/{post}/edit', [SocialPostController::class, 'edit'])->name('posts.edit');
     Route::put('/posts/{post}', [SocialPostController::class, 'update'])->name('posts.update');
     Route::delete('/posts/{post}', [SocialPostController::class, 'destroy'])->name('posts.destroy');
+    Route::delete('/posts/{post}/local-record', [SocialPostController::class, 'removeLocalRecord'])->name('posts.remove-local');
     Route::put('/posts/{post}/facebook/{account}', [SocialPostController::class, 'updatePublishedFacebook'])->name('posts.facebook.update');
     Route::delete('/posts/{post}/facebook/{account}', [SocialPostController::class, 'deletePublishedFacebook'])->name('posts.facebook.destroy');
     Route::delete('/posts/{post}/instagram/{account}', [SocialPostController::class, 'deletePublishedInstagram'])->name('posts.instagram.destroy');
