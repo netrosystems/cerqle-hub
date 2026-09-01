@@ -2,8 +2,11 @@
 
 namespace Tests\Feature;
 
+use App\Models\User;
 use App\Modules\Integrations\Models\IntegrationConfig;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Inertia\Testing\AssertableInertia as Assert;
 use Tests\TestCase;
 
@@ -58,6 +61,29 @@ class GoogleSignInIntegrationTest extends TestCase
             );
 
         $this->get(route('auth.social.redirect', 'google'))->assertStatus(503);
+    }
+
+    public function test_social_login_credentials_support_long_encrypted_values(): void
+    {
+        $user = User::factory()->create();
+        $accessToken = 'access-'.str_repeat('a', 1800);
+        $refreshToken = 'refresh-'.str_repeat('r', 1800);
+
+        $account = $user->socialAccounts()->create([
+            'provider' => 'google',
+            'provider_id' => 'google-user-123',
+            'email' => $user->email,
+            'access_token' => $accessToken,
+            'refresh_token' => $refreshToken,
+        ]);
+
+        $stored = DB::table('social_accounts')->find($account->id);
+
+        $this->assertSame('text', Schema::getColumnType('social_accounts', 'access_token'));
+        $this->assertNotSame($accessToken, $stored->access_token);
+        $this->assertNotSame($refreshToken, $stored->refresh_token);
+        $this->assertSame($accessToken, $account->fresh()->access_token);
+        $this->assertSame($refreshToken, $account->fresh()->refresh_token);
     }
 
     private function googleSignInIntegration(bool $enabled): IntegrationConfig
