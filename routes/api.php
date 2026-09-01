@@ -96,6 +96,7 @@ Route::prefix('v1/mobile')->middleware(['auth:sanctum', 'throttle:api', 'demo'])
     Route::get('/email/threads/{uuid}', [MobileEmailInboxController::class, 'show']);
     Route::get('/email/threads/{uuid}/messages', [MobileEmailInboxController::class, 'messages']);
     Route::post('/email/threads/{uuid}/reply', [MobileEmailInboxController::class, 'reply']);
+    Route::post('/email/compose', [MobileEmailInboxController::class, 'compose']);
     Route::patch('/email/threads/{uuid}/status', [MobileEmailInboxController::class, 'updateStatus']);
     Route::post('/email/accounts/{account}/sync', [MobileEmailInboxController::class, 'sync']);
 

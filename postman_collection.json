@@ -1,6 +1,6 @@
 {
   "info": {
-    "_postman_id": "bc93fb1a-b853-4675-b61b-1d2b5d20dda5",
+    "_postman_id": "04131175-9a04-4ea1-88ee-eea5412ac78c",
     "name": "Cerqle Hub API Collection",
     "description": "Complete Postman collection for Cerqle Hub REST API.\n\nIncludes Mobile Staff App API, Mobile Master Email Inbox, and Developer Tools API.\n\n### \ud83d\udd10 Authentication Flow\n1. Run the **01. Authentication & Profile -> Login (Saves Token)** request with your credentials.\n2. A Postman test script automatically extracts `token` and saves it to the `{bearer_token}` collection variable.\n3. All protected requests automatically inherit Bearer token authentication.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
@@ -1564,6 +1564,47 @@
             "body": {
               "mode": "raw",
               "raw": "{\n  \"body\": \"Hello,\\n\\nThank you for reaching out to us. We have received your inquiry and our team is looking into it.\\n\\nBest regards,\\nSupport Team\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Compose New Email Thread",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/mobile/email/compose",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "mobile",
+                "email",
+                "compose"
+              ]
+            },
+            "description": "Composes and sends a brand new email thread to a recipient with subject, body, CC, and BCC.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"account_id\": 1,\n  \"to\": \"client@example.com\",\n  \"subject\": \"Inquiry Response & Welcome\",\n  \"body\": \"Hello,\\n\\nThank you for choosing our platform. Please let us know if you have any questions.\\n\\nBest regards,\\nSupport Team\",\n  \"cc\": [\n    \"cc@example.com\"\n  ],\n  \"bcc\": []\n}",
               "options": {
                 "raw": {
                   "language": "json"
