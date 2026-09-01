@@ -12,6 +12,7 @@ use Illuminate\Support\Facades\Route;
 Route::middleware(['web', 'client-app'])->prefix('app/inbox')->name('client.inbox.')->group(function () {
     Route::get('/', [InboxController::class, 'index'])->name('index');
     Route::get('/email', [InboxController::class, 'emailIndex'])->name('email-inbox');
+    Route::post('/email/compose', [EmailAccountController::class, 'compose'])->name('email.compose');
     Route::get('/email/poll', [InboxController::class, 'pollEmailConversations'])->name('email.poll');
     Route::get('/poll', [InboxController::class, 'pollConversations'])->name('poll');
     Route::get('/contacts/search', [InboxController::class, 'contactSearch'])->name('contacts.search');

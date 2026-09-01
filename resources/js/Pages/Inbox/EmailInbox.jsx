@@ -1,11 +1,152 @@
-import { Head, Link, router, usePage } from '@inertiajs/react';
+import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
 import InboxLayout from '@/Layouts/InboxLayout';
 import {
     Archive, ArrowLeft, CheckCircle2, ChevronLeft, ChevronRight, Circle,
-    Inbox, Mail, MailOpen, RefreshCw, Search, Send, Settings2,
+    Inbox, Mail, MailOpen, PenLine, RefreshCw, Search, Send, Settings2, X,
 } from 'lucide-react';
 import axios from 'axios';
 import { useEffect, useMemo, useRef, useState } from 'react';
+
+function ComposeModal({ accounts, onClose }) {
+    const form = useForm({
+        channel_account_id: accounts[0]?.id ?? '',
+        to: '',
+        cc: '',
+        bcc: '',
+        subject: '',
+        body: '',
+    });
+    const [showCopies, setShowCopies] = useState(false);
+
+    const submit = event => {
+        event.preventDefault();
+        form.post(route('client.inbox.email.compose'), {
+            preserveScroll: true,
+            onSuccess: () => {
+                form.reset();
+                onClose();
+            },
+        });
+    };
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-0 backdrop-blur-sm sm:items-center sm:p-6" onMouseDown={event => event.target === event.currentTarget && onClose()}>
+            <form onSubmit={submit} className="w-full max-w-2xl overflow-hidden rounded-t-2xl bg-white shadow-2xl dark:bg-neutral-900 sm:rounded-2xl">
+                <div className="flex items-center justify-between border-b border-neutral-200 px-5 py-4 dark:border-neutral-800">
+                    <div>
+                        <h2 className="font-semibold text-neutral-900 dark:text-white">New email</h2>
+                        <p className="text-xs text-neutral-500">Send from any connected mailbox.</p>
+                    </div>
+                    <button type="button" onClick={onClose} className="rounded-lg p-2 text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-800">
+                        <X className="h-4 w-4" />
+                    </button>
+                </div>
+                <div className="space-y-3 p-5">
+                    <label className="block text-xs font-medium text-neutral-500">
+                        From
+                        <select
+                            value={form.data.channel_account_id}
+                            onChange={e => form.setData('channel_account_id', e.target.value)}
+                            className="mt-1 w-full rounded-xl border-neutral-300 text-sm focus:border-brand-500 focus:ring-brand-500 dark:border-neutral-700 dark:bg-neutral-800"
+                            required
+                        >
+                            <option value="">Select a mailbox</option>
+                            {accounts.map(account => (
+                                <option key={account.id} value={account.id}>
+                                    {account.display_name} &lt;{account.email || PROVIDER_LABELS[account.provider]}&gt;
+                                </option>
+                            ))}
+                        </select>
+                    </label>
+                    <div className="flex items-end gap-2">
+                        <label className="block flex-1 text-xs font-medium text-neutral-500">
+                            To
+                            <input
+                                type="email"
+                                value={form.data.to}
+                                onChange={e => form.setData('to', e.target.value)}
+                                placeholder="recipient@example.com"
+                                className="mt-1 w-full rounded-xl border-neutral-300 text-sm focus:border-brand-500 focus:ring-brand-500 dark:border-neutral-700 dark:bg-neutral-800"
+                                required
+                            />
+                        </label>
+                        <button
+                            type="button"
+                            onClick={() => setShowCopies(val => !val)}
+                            className="mb-0.5 rounded-lg px-2.5 py-2 text-xs font-medium text-brand-600 hover:bg-brand-50 dark:text-brand-400 dark:hover:bg-brand-950/40"
+                        >
+                            Cc / Bcc
+                        </button>
+                    </div>
+                    {showCopies && (
+                        <div className="grid gap-3 sm:grid-cols-2">
+                            <label className="block text-xs font-medium text-neutral-500">
+                                Cc
+                                <input
+                                    value={form.data.cc}
+                                    onChange={e => form.setData('cc', e.target.value)}
+                                    placeholder="Comma separated emails"
+                                    className="mt-1 w-full rounded-xl border-neutral-300 text-sm focus:border-brand-500 focus:ring-brand-500 dark:border-neutral-700 dark:bg-neutral-800"
+                                />
+                            </label>
+                            <label className="block text-xs font-medium text-neutral-500">
+                                Bcc
+                                <input
+                                    value={form.data.bcc}
+                                    onChange={e => form.setData('bcc', e.target.value)}
+                                    placeholder="Comma separated emails"
+                                    className="mt-1 w-full rounded-xl border-neutral-300 text-sm focus:border-brand-500 focus:ring-brand-500 dark:border-neutral-700 dark:bg-neutral-800"
+                                />
+                            </label>
+                        </div>
+                    )}
+                    <label className="block text-xs font-medium text-neutral-500">
+                        Subject
+                        <input
+                            value={form.data.subject}
+                            onChange={e => form.setData('subject', e.target.value)}
+                            placeholder="Email subject"
+                            className="mt-1 w-full rounded-xl border-neutral-300 text-sm focus:border-brand-500 focus:ring-brand-500 dark:border-neutral-700 dark:bg-neutral-800"
+                            required
+                        />
+                    </label>
+                    <label className="block text-xs font-medium text-neutral-500">
+                        Message
+                        <textarea
+                            value={form.data.body}
+                            onChange={e => form.setData('body', e.target.value)}
+                            rows={8}
+                            placeholder="Write your email message here…"
+                            className="mt-1 w-full resize-y rounded-xl border-neutral-300 text-sm focus:border-brand-500 focus:ring-brand-500 dark:border-neutral-700 dark:bg-neutral-800"
+                            required
+                        />
+                    </label>
+                    {(form.errors.compose || Object.keys(form.errors).length > 0) && (
+                        <p className="rounded-xl bg-red-50 px-3 py-2 text-xs text-red-700 dark:bg-red-950/40 dark:text-red-300">
+                            {form.errors.compose || Object.values(form.errors)[0]}
+                        </p>
+                    )}
+                </div>
+                <div className="flex justify-end gap-2 border-t border-neutral-200 px-5 py-4 dark:border-neutral-800">
+                    <button
+                        type="button"
+                        onClick={onClose}
+                        className="rounded-xl border border-neutral-300 px-4 py-2 text-sm font-semibold text-neutral-700 hover:bg-neutral-50 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800"
+                    >
+                        Cancel
+                    </button>
+                    <button
+                        disabled={form.processing || accounts.length === 0}
+                        className="inline-flex items-center gap-2 rounded-xl bg-brand-600 px-5 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-700 disabled:opacity-50"
+                    >
+                        <Send className="h-4 w-4" />
+                        {form.processing ? 'Sending…' : 'Send email'}
+                    </button>
+                </div>
+            </form>
+        </div>
+    );
+}
 
 const FOLDERS = [
     { key: 'inbox', label: 'Inbox', icon: Inbox },
@@ -138,6 +279,7 @@ export default function EmailInbox({
     const [counts, setCounts] = useState(initialCounts);
     const [messages, setMessages] = useState(initialMessages);
     const [search, setSearch] = useState(filters.search || '');
+    const [composeOpen, setComposeOpen] = useState(false);
     const [reply, setReply] = useState('');
     const [sending, setSending] = useState(false);
     const [sendError, setSendError] = useState('');
@@ -240,6 +382,15 @@ export default function EmailInbox({
                 <div className="border-b border-neutral-200 px-5 py-4 dark:border-neutral-800">
                     <div className="flex items-center gap-2 text-lg font-bold text-neutral-900 dark:text-white"><Mail className="h-5 w-5 text-brand-600" />Master Inbox</div>
                     <p className="mt-1 text-xs text-neutral-400">All connected email accounts</p>
+                    <button
+                        type="button"
+                        onClick={() => setComposeOpen(true)}
+                        disabled={accounts.length === 0}
+                        className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-700 disabled:opacity-50"
+                    >
+                        <PenLine className="h-4 w-4" />
+                        Compose
+                    </button>
                 </div>
                 <FolderNav filters={filters} counts={counts} onFolder={selectFolder} />
                 <div className="mt-auto border-t border-neutral-200 p-3 dark:border-neutral-800">
@@ -251,7 +402,10 @@ export default function EmailInbox({
                 <header className="space-y-3 border-b border-neutral-200 px-4 py-4 dark:border-neutral-800">
                     <div className="flex items-center justify-between gap-3">
                         <div><h1 className="font-bold text-neutral-900 dark:text-white">{FOLDERS.find(folder => folder.key === filters.folder)?.label || 'Inbox'}</h1><p className="text-xs text-neutral-400">{conversations.total} email threads</p></div>
-                        <button type="button" onClick={() => router.reload({ only: ['conversations', 'counts'] })} className="rounded-lg p-2 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700 dark:hover:bg-neutral-800"><RefreshCw className="h-4 w-4" /></button>
+                        <div className="flex items-center gap-1">
+                            <button type="button" onClick={() => setComposeOpen(true)} disabled={accounts.length === 0} title="Compose new email" className="rounded-lg p-2 text-brand-600 hover:bg-brand-50 disabled:opacity-40 dark:text-brand-400 dark:hover:bg-brand-950 xl:hidden"><PenLine className="h-4 w-4" /></button>
+                            <button type="button" onClick={() => router.reload({ only: ['conversations', 'counts'] })} className="rounded-lg p-2 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700 dark:hover:bg-neutral-800"><RefreshCw className="h-4 w-4" /></button>
+                        </div>
                     </div>
                     <div className="relative"><Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-400" /><input value={search} onChange={event => setSearch(event.target.value)} placeholder="Search sender, email or message" className="w-full rounded-xl border-0 bg-neutral-100 py-2.5 pl-10 pr-3 text-sm focus:ring-2 focus:ring-brand-500 dark:bg-neutral-800" /></div>
                     <select value={filters.account_id || ''} onChange={event => selectAccount(event.target.value)} className="w-full rounded-xl border-neutral-200 bg-white py-2 text-xs text-neutral-600 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-300"><option value="">All connected accounts</option>{accounts.map(account => <option key={account.id} value={account.id}>{account.display_name} · {account.email || PROVIDER_LABELS[account.provider]}</option>)}</select>
@@ -280,5 +434,6 @@ export default function EmailInbox({
                 </>}
             </main>
         </div>
+        {composeOpen && <ComposeModal accounts={accounts} onClose={() => setComposeOpen(false)} />}
     </InboxLayout>;
 }
