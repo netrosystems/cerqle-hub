@@ -315,6 +315,7 @@ class InboxController extends Controller
             }
 
             $attachmentPayload = [
+                'path' => $upload['path'],
                 'preview_url' => $upload['url'],
                 'caption' => $validated['body'] ?? null,
                 'filename' => $upload['filename'],

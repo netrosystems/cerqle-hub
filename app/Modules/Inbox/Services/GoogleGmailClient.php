@@ -75,6 +75,7 @@ class GoogleGmailClient
         string $body,
         ?string $inReplyTo = null,
         ?string $threadId = null,
+        array $attachments = []
     ): string {
         if (! filter_var($to, FILTER_VALIDATE_EMAIL)) {
             throw new RuntimeException('The Gmail reply recipient is invalid.');
@@ -88,14 +89,45 @@ class GoogleGmailClient
             'To: '.$to,
             'Subject: '.mb_encode_mimeheader($safeSubject, 'UTF-8', 'B', "\r\n"),
             'MIME-Version: 1.0',
-            'Content-Type: text/html; charset=UTF-8',
-            'Content-Transfer-Encoding: quoted-printable',
         ];
         if ($safeReference !== '') {
             $headers[] = 'In-Reply-To: <'.$safeReference.'>';
             $headers[] = 'References: <'.$safeReference.'>';
         }
-        $raw = implode("\r\n", $headers)."\r\n\r\n".quoted_printable_encode(nl2br(e($body)));
+
+        if (empty($attachments)) {
+            $headers[] = 'Content-Type: text/html; charset=UTF-8';
+            $headers[] = 'Content-Transfer-Encoding: quoted-printable';
+            $raw = implode("\r\n", $headers)."\r\n\r\n".quoted_printable_encode(nl2br(e($body)));
+        } else {
+            $boundary = '=_mail_'.md5(uniqid((string) mt_rand(), true));
+            $headers[] = 'Content-Type: multipart/mixed; boundary="'.$boundary.'"';
+
+            $bodyPart = "--{$boundary}\r\n"
+                ."Content-Type: text/html; charset=UTF-8\r\n"
+                ."Content-Transfer-Encoding: quoted-printable\r\n\r\n"
+                .quoted_printable_encode(nl2br(e($body)))."\r\n";
+
+            $attParts = '';
+            foreach ($attachments as $att) {
+                $rawBytes = $att['raw_bytes'] ?? (file_exists($att['path'] ?? '') ? file_get_contents($att['path']) : null);
+                if ($rawBytes === null) {
+                    continue;
+                }
+                $filename = $att['filename'] ?? 'attachment';
+                $mimeType = $att['mime_type'] ?? 'application/octet-stream';
+                $encodedFile = chunk_split(base64_encode($rawBytes), 76, "\r\n");
+
+                $attParts .= "--{$boundary}\r\n"
+                    ."Content-Type: {$mimeType}; name=\"".addslashes($filename)."\"\r\n"
+                    ."Content-Transfer-Encoding: base64\r\n"
+                    ."Content-Disposition: attachment; filename=\"".addslashes($filename)."\"\r\n\r\n"
+                    .$encodedFile;
+            }
+
+            $raw = implode("\r\n", $headers)."\r\n\r\n".$bodyPart.$attParts."--{$boundary}--\r\n";
+        }
+
         $payload = ['raw' => $this->base64UrlEncode($raw)];
         if ($threadId) {
             $payload['threadId'] = $threadId;
