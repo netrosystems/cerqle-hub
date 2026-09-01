@@ -1,4 +1,4 @@
-import { Head, useForm, usePage } from '@inertiajs/react';
+import { Head, router, useForm, usePage } from '@inertiajs/react';
 import ClientLayout from '@/Layouts/ClientLayout';
 import EmptyState from '@/Components/EmptyState';
 import { useState } from 'react';
@@ -37,6 +37,16 @@ const SETUP_GUIDES = {
         ],
         link: 'https://aistudio.google.com/app/apikey',
         linkLabelKey: 'ai.guide_gemini_link',
+    },
+    deepseek: {
+        steps: [
+            'ai.guide_deepseek_step1',
+            'ai.guide_deepseek_step2',
+            'ai.guide_deepseek_step3',
+            'ai.guide_deepseek_step4',
+        ],
+        link: 'https://platform.deepseek.com/api_keys',
+        linkLabelKey: 'ai.guide_deepseek_link',
     },
 };
 
@@ -100,6 +110,10 @@ const GeminiLogo = () => (
     </svg>
 );
 
+const DeepSeekLogo = () => (
+    <span className="flex h-6 w-6 items-center justify-center rounded-md bg-blue-600 text-xs font-bold text-white" aria-hidden="true">DS</span>
+);
+
 const PROVIDER_INFO = {
     openai:    {
         label: 'OpenAI',
@@ -109,6 +123,7 @@ const PROVIDER_INFO = {
     },
     anthropic: { label: 'Anthropic', Icon: AnthropicLogo, models: ['claude-haiku-4-5-20251001', 'claude-sonnet-4-6', 'claude-opus-4-8'] },
     gemini:    { label: 'Gemini',    Icon: GeminiLogo,    models: ['gemini-3.5-flash', 'gemini-3.1-flash-lite', 'gemini-3.1-pro-preview'], embedModels: ['gemini-embedding-2'] },
+    deepseek:  { label: 'DeepSeek',  Icon: DeepSeekLogo,  models: ['deepseek-v4-flash', 'deepseek-v4-pro'], ragGenerationOnly: true },
 };
 
 function ProviderCard({ provider, activeProvider }) {
@@ -193,6 +208,11 @@ function ProviderCard({ provider, activeProvider }) {
                         </button>
                     </div>
                 </div>
+                {info.ragGenerationOnly && (
+                    <p className="rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-xs text-blue-700 dark:border-blue-900/40 dark:bg-blue-900/20 dark:text-blue-300">
+                        {t('ai.deepseek_rag_note')}
+                    </p>
+                )}
                 {info.embedModels?.length > 0 && (
                     <div>
                         <label className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Default embedding model</label>
@@ -256,7 +276,7 @@ function ProviderCard({ provider, activeProvider }) {
     );
 }
 
-export default function AiProvidersIndex({ providers, activeProvider }) {
+export default function AiProvidersIndex({ providers, activeProvider, providerMode = 'managed', aiCredits }) {
     const { t } = useTranslation();
     const { props } = usePage();
     const flash = props.flash ?? {};
@@ -270,11 +290,36 @@ export default function AiProvidersIndex({ providers, activeProvider }) {
                     <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">{t('ai.provider_settings_subtitle')}</p>
                 </div>
                 {flash.success && <div className="rounded-lg bg-green-50 dark:bg-green-900/30 text-green-800 dark:text-green-200 px-4 py-2 text-sm">{flash.success}</div>}
+                <div className="rounded-xl border border-neutral-200 bg-white p-5 dark:border-neutral-700 dark:bg-neutral-900">
+                    <div className="flex flex-wrap items-start justify-between gap-4">
+                        <div>
+                            <h3 className="font-semibold text-neutral-900 dark:text-neutral-100">How should Cerqle run AI?</h3>
+                            <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">
+                                {aiCredits ? `${aiCredits.remaining.toLocaleString()} of ${aiCredits.allowance.toLocaleString()} Cerqle credits remaining` : 'Choose a provider mode for this workspace.'}
+                            </p>
+                        </div>
+                        {aiCredits && <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${aiCredits.exhausted ? 'bg-red-100 text-red-700' : aiCredits.warning ? 'bg-amber-100 text-amber-700' : 'bg-brand-50 text-brand-700'}`}>{aiCredits.percent_used}% used</span>}
+                    </div>
+                    <div className="mt-4 grid gap-2 lg:grid-cols-3">
+                        {[
+                            ['managed', 'Use Cerqle AI credits', 'Private managed models; no API key needed.'],
+                            ['byok', 'Use my API provider', 'Always use the active, tested provider below.'],
+                            ['auto_fallback', 'Cerqle credits, then my provider', 'Switch automatically when included credits finish.'],
+                        ].map(([value, label, description]) => (
+                            <button key={value} type="button" onClick={() => router.put(route('client.ai.providers.mode'), { mode: value }, { preserveScroll: true })} className={`rounded-lg border p-3 text-left transition ${providerMode === value ? 'border-brand-500 bg-brand-50 dark:bg-brand-950/30' : 'border-neutral-200 hover:border-brand-300 dark:border-neutral-700'}`}>
+                                <span className="block text-sm font-semibold text-neutral-900 dark:text-neutral-100">{label}</span>
+                                <span className="mt-1 block text-xs text-neutral-500 dark:text-neutral-400">{description}</span>
+                            </button>
+                        ))}
+                    </div>
+                    {flash.error && <p className="mt-3 text-sm text-red-600">{flash.error}</p>}
+                    <p className="mt-3 text-xs text-neutral-500 dark:text-neutral-400">Embeddings are platform infrastructure and cost 0 credits. DeepSeek is customer-key only and may process data in China; review its privacy terms before use.</p>
+                </div>
                 <div className="rounded-lg border border-brand-200 bg-brand-50 px-4 py-3 text-sm text-brand-800 dark:border-brand-900/60 dark:bg-brand-950/30 dark:text-brand-200">
                     <strong>One active provider at a time.</strong> Enabling a provider makes it the workspace default and automatically disables the others.
                     {activeProvider && <span className="ml-1">Current: <strong>{PROVIDER_INFO[activeProvider]?.label ?? activeProvider}</strong>.</span>}
                 </div>
-                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
                     {providers.length === 0 ? (
                         <div className="col-span-full">
                             <EmptyState

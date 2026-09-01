@@ -82,10 +82,17 @@ class ChatbotRunner
             $response = $this->llmGateway->chat(
                 $workspaceId,
                 $messages,
-                $this->chatOptions(),
+                array_merge($this->chatOptions(), [
+                    'feature_key' => 'rag_reply',
+                    'idempotency_key' => 'message:'.$inboundMessage->id,
+                ]),
                 $bot->id,
                 $conversation->id,
             );
+
+            if (blank($response->content)) {
+                $this->llmGateway->rejectMalformed($response);
+            }
 
             return $response->content;
         } catch (\Throwable $e) {
@@ -190,9 +197,16 @@ class ChatbotRunner
             $response = $this->llmGateway->chat(
                 $workspaceId,
                 $messages,
-                $this->chatOptions(),
+                array_merge($this->chatOptions(), [
+                    'feature_key' => 'rag_reply',
+                    'idempotency_key' => 'api:'.hash('sha256', $bot->id.'|'.$message.'|'.json_encode($history)),
+                ]),
                 $bot->id,
             );
+
+            if (blank($response->content)) {
+                $this->llmGateway->rejectMalformed($response);
+            }
 
             return [
                 'reply' => $response->content,

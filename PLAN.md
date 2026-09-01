@@ -119,7 +119,7 @@ journey
 #### Capabilities
 - **Multi-Source Knowledge Ingestion**: Ingest raw text, PDF/Word documents, website URL crawlers, and XML sitemaps into vectorized embeddings (`IndexKnowledgeDocumentJob`).
 - **Hybrid Vector Retrieval**: Built-in MySQL vector-like similarity fallback with high-performance Qdrant vector database support.
-- **LLM Provider Agnostic**: Native support for OpenAI (GPT-4o), Anthropic (Claude 3.5), Google (Gemini 1.5/2.0), and DeepSeek.
+- **LLM Provider Agnostic**: Native support for OpenAI, Anthropic, Google Gemini, and DeepSeek frontier chat models. DeepSeek can be selected for lower-cost RAG answer generation while OpenAI or Gemini supplies the embeddings required for indexing and retrieval.
 - **Smart Bot Configuration**: Define persona prompt instructions, confidence thresholds, temperature, and fallback behaviors.
 
 ---
@@ -180,3 +180,12 @@ journey
 | **Navigation & Layout** | Component | `resources/js/__tests__/useClientNav.test.jsx` | Sidebar permission filtering & route active states. |
 | **Contact Operations** | Unit | `resources/js/__tests__/contactListOperations.test.js` | Filtering, segment selection & bulk mutations. |
 | **Stripe / Billing** | Feature | `tests/Feature/BillingWebhookTest.php` | Subscription renewals, plan changes & cancellations. |
+# Managed AI credit lifecycle (implemented 2026-09-02)
+
+- Plan limit: required finite `ai_credits_per_month`; price-based rollout grants $0/$20/$40/$150 plans 100/1,000/3,000/15,000 credits and defaults every other existing plan to zero pending an admin decision.
+- Rates version `2026-09-01`: RAG, subject suggestions, short rewrites, and automation AI steps cost 1; complete emails and single social posts cost 2; workflows and multi-post plans cost 5. Provider tests, embeddings, failures, cancelled reservations, and internal retries cost zero.
+- Credits reset monthly on the subscription anniversary, never roll over, and remain pooled across all organization workspaces. Current-period upgrades may only increase the granted allowance; downgrades do not claw credits back.
+- At 80%, clients receive an amber warning. At exhaustion, managed actions return `402 / ai_credits_exhausted` when enforcement is enabled. `auto_fallback` uses an enabled, connection-tested workspace BYOK provider; otherwise the action pauses with reconnect guidance.
+- Failed chatbot generation preserves inbound data and uses the chatbot fallback reply. Automation errors remain retryable. Ledger reconciliation refunds abandoned reservations after ten minutes.
+- Free managed usage requires a verified email. Request velocity, model context limits, and organization-wide atomic reservations form the initial abuse boundary; raw prompts are not written to analytics logs.
+- Rollout order: shadow ledger, two-week measurement, configure allowances/privacy disclosures, warnings and mode controls, then `AI_CREDITS_ENFORCED=true`. Re-evaluate rates and allowances after 60–90 days.

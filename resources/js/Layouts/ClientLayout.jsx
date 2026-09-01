@@ -141,11 +141,10 @@ export default function ClientLayout({ header, children, title }) {
     const demoMode = usePage().props.demo_mode === true;
 
     const userNavItems = [
-        { label: t('nav.profile') || 'Profile',           href: safeRoute('client.profile.edit'),    as: 'link' },
-        { label: t('nav.twoFactor') || 'Two-Factor Auth', href: safeRoute('client.profile.2fa'),     as: 'link' },
-        { label: t('nav.sessions') || 'Sessions',         href: safeRoute('client.profile.sessions'),as: 'link' },
+        { label: t('nav.profile') || 'Profile',   href: safeRoute('client.profile.edit'),   as: 'link' },
+        { label: t('nav.settings') || 'Settings', href: safeRoute('client.settings.index'), as: 'link' },
         { type: 'divider' },
-        { label: t('nav.logout') || 'Log Out',            href: route('logout'), method: 'post', as: 'link' },
+        { label: t('nav.logout') || 'Log Out',    href: route('logout'), method: 'post', as: 'link' },
     ];
 
     return (

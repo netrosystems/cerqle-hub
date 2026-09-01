@@ -218,7 +218,7 @@ Cerqle Hub integrates with multiple third-party providers with resilient fallbac
 | **Google Sign-In** | OAuth 2.0 / OpenID Connect | Browser authentication | Login and signup have separate intent. Login never provisions an unknown account; an unknown Google identity is redirected to the terms-gated registration screen. Signup requires Terms acceptance, may preserve a selected plan, and trusts only Google's verified-email claim. Provider identifiers link the Cerqle user account. Callback validation failures return a prominent OAuth alert with retry and account-creation guidance, while unexpected provider exceptions are reported server-side. Returned access and refresh tokens use encrypted model casts and unbounded text columns so provider credential length cannot break the callback. |
 | **Telegram Business** | Bot API / Webhooks | Inbound updates & agent replies | Webhook secret token verified on arrival. |
 | **Email (Gmail/M365/IMAP)** | OAuth 2.0 / IMAP & SMTP | Master Email Inbox synchronization | Sync worker runs every minute; multi-mailbox support per workspace. |
-| **AI Providers** | REST / SSE Streaming | Knowledge retrieval, smart bot generation | Supports OpenAI, Anthropic, Gemini, DeepSeek. MySQL fallback for vectors; optional Qdrant. |
+| **AI Providers** | REST / SSE Streaming | Knowledge retrieval, smart bot generation | Supports OpenAI, Anthropic, Gemini, and DeepSeek. DeepSeek provides cost-efficient RAG answer generation through its OpenAI-compatible Chat Completions API; because it has no native embeddings API, document indexing and retrieval use configured OpenAI/Gemini workspace credentials (which need not be the active chat provider) or a system embedding provider. MySQL fallback for vectors; optional Qdrant. |
 | **SMS Gateways** | REST / HTTP Callbacks | Bulk SMS campaigns | Pluggable gateway adapters (Twilio, MessageBird, SMSBD, REVE, BulkSMS, ProSMS, SNS). |
 | **Payment Gateways** | Webhooks / SDKs | Subscriptions, add-ons, invoices | Stripe, PayPal, and Paddle supported with signature validation. |
 
@@ -309,3 +309,12 @@ Cerqle Hub includes health and readiness endpoints protected by `HEALTHZ_TOKEN`:
 - [ ] Implement backend execution logic in `app/Modules/Automation/Services/AutomationRunner.php`.
 - [ ] Add translation keys for node label and description in `resources/js/locales/`.
 - [ ] Verify node serialization and execution flow with a feature test.
+# Managed AI credits (2026-09-02)
+
+All production text generation passes through `App\Modules\AI\Services\LlmGateway`; direct provider calls are limited to the zero-credit provider connection test. The gateway requires a centrally configured `feature_key`, selects the workspace mode (`managed`, `byok`, or `auto_fallback`), and records `ai_runs` plus an immutable `ai_credit_usages` ledger entry. Unknown managed feature keys fail closed.
+
+Credits are pooled by organization (`client_id`) or, for a standalone subscription, by the subscription owner. `ai_credit_periods` uses the subscription anniversary as its monthly anchor, including annual subscriptions. Reservations are locked in a database transaction before inference, finalized once after a successful user-visible response, and refunded after provider failure. `reconcile-ai-credit-reservations` refunds reservations abandoned for more than ten minutes. Idempotency keys are workspace-prefixed and completed results are encrypted for safe retry replay.
+
+Managed inference uses the system OpenAI integration and internally routes routine features to `gpt-5-nano`, complex content/planning features to `gpt-5-mini`, and embeddings to `text-embedding-3-small`. Customer-owned keys never fall back to a system generation key in BYOK mode. DeepSeek is BYOK-only. Embeddings are zero-credit infrastructure: a configured customer OpenAI/Gemini embedding key takes precedence, followed by the managed embedding service.
+
+`AI_CREDITS_ENFORCED=false` is shadow mode and is the safe initial rollout value. It records demand without blocking. Production may set it to `true` only after ledger reconciliation confirms that there are no unmetered generation paths. Missing or null `ai_credits_per_month` always means zero managed credits, not unlimited.

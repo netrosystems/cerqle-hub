@@ -10,5 +10,6 @@ class LlmResponse
         public readonly int $completionTokens,
         public readonly string $model,
         public readonly int $latencyMs,
+        public readonly ?int $creditUsageId = null,
     ) {}
 }

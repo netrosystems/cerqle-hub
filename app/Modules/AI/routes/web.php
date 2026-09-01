@@ -10,6 +10,7 @@ Route::middleware(['web', 'client-app'])->prefix('app/ai')->name('client.ai.')->
     Route::get('/providers', [AiProviderController::class, 'index'])->name('providers.index');
     Route::put('/providers/{provider}', [AiProviderController::class, 'update'])->name('providers.update');
     Route::post('/providers/{provider}/test', [AiProviderController::class, 'test'])->name('providers.test');
+    Route::put('/provider-mode', [AiProviderController::class, 'updateMode'])->name('providers.mode');
 
     // Knowledge bases
     Route::get('/knowledge-bases', [AiKnowledgeBaseController::class, 'index'])->name('knowledge-bases.index');
@@ -26,5 +27,5 @@ Route::middleware(['web', 'client-app'])->prefix('app/ai')->name('client.ai.')->
     Route::post('/chatbots', [AiChatbotController::class, 'store'])->name('chatbots.store');
     Route::put('/chatbots/{chatbot}', [AiChatbotController::class, 'update'])->name('chatbots.update');
     Route::delete('/chatbots/{chatbot}', [AiChatbotController::class, 'destroy'])->name('chatbots.destroy');
-    Route::post('/chatbots/{chatbot}/playground', [AiChatbotController::class, 'playground'])->name('chatbots.playground')->middleware('limit:ai_tokens_per_month,ai_tokens');
+    Route::post('/chatbots/{chatbot}/playground', [AiChatbotController::class, 'playground'])->name('chatbots.playground');
 });

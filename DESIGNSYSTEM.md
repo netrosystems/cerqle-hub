@@ -74,6 +74,8 @@ Primary Plum:    #3E2A49   Brand Lilac:    #8F5FA7   Cool Accent:  #45B6D6   Cor
 ### 4.1 Standard Page Layout (`ClientLayout`)
 - **Used For**: Dashboard, Settings, Team Management, Contacts Directory, Billing, Reports.
 - **Structure**: Centered content container (`max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8`). Includes page header with breadcrumb navigation and right-aligned action buttons.
+- **Account navigation**: The profile dropdown stays concise with Profile, Settings, and Log Out. Security and session-management destinations live in the sidebar Account group, with `2FA Authentication` directly below Settings and Sessions immediately after it.
+- **Client sidebar ordering**: Setup appears immediately before Campaigns so clients configure channels before creating campaigns. Reports contains reporting destinations only; SMS Campaigns remains exclusively in the Campaigns group.
 
 ### 4.2 Viewport-Pinned Layout (`InboxLayout`)
 - **Used For**: Omni-Channel Inbox and Master Email Inbox.
@@ -146,3 +148,8 @@ Account-access states use persistent, accessible banners beneath the top bar: am
 2. **Focus Visibility**: Visible focus rings on all interactive elements (`focus:ring-2 focus:ring-brand-500/30 focus:ring-offset-1`).
 3. **Screen Reader Support**: All icon-only buttons require an `aria-label` attribute (e.g. `aria-label={t('common.close')}`).
 4. **Internationalization (i18n)**: All UI strings must be resolved via `useTranslation()` (`t('nav.inbox')`, `t('common.save')`) to support multi-language localizations.
+# AI credit surfaces (2026-09-02)
+
+The Subscription page places an “AI Credits” usage card alongside Storage Usage. It shows used/remaining/allowance, percentage, reset date, provider mode, plain-language action equivalents, and direct links to usage, provider setup, and plan upgrades. Normal usage uses Cerqle Lilac, 80–99% uses amber, and exhausted usage uses coral/red with persistent corrective guidance.
+
+AI Providers begins with three explicit, plain-language mode choices: managed Cerqle credits, customer API only, and managed credits with automatic BYOK fallback. BYOK and fallback cannot be selected until the enabled provider passes its connection test. Provider secrets remain masked and are never returned to the browser. DeepSeek carries a visible privacy/data-location notice and is never presented as part of the managed pool.

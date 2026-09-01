@@ -1,10 +1,8 @@
 <?php
 
 use App\Http\Controllers\Admin\AdminSearchController;
-use App\Http\Controllers\Admin\AiDashboardController;
-use App\Http\Controllers\Admin\LandingPageController;
-use App\Http\Controllers\Admin\LicenseController;
 use App\Http\Controllers\Admin\AdminUserController;
+use App\Http\Controllers\Admin\AiDashboardController;
 use App\Http\Controllers\Admin\AuditLogController;
 use App\Http\Controllers\Admin\ClientBrandingController;
 use App\Http\Controllers\Admin\ClientController;
@@ -14,11 +12,14 @@ use App\Http\Controllers\Admin\CronSetupController;
 use App\Http\Controllers\Admin\CurrencyController;
 use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\Admin\EmailSystemController;
+use App\Http\Controllers\Admin\LandingPageController;
+use App\Http\Controllers\Admin\LicenseController;
 use App\Http\Controllers\Admin\LocaleController;
 use App\Http\Controllers\Admin\PaymentController;
 use App\Http\Controllers\Admin\PaymentGatewayConfigController;
 use App\Http\Controllers\Admin\PermissionController;
 use App\Http\Controllers\Admin\PlanController;
+use App\Http\Controllers\Admin\PusherSettingsController;
 use App\Http\Controllers\Admin\QueueController;
 use App\Http\Controllers\Admin\RoleController;
 use App\Http\Controllers\Admin\RolesPermissionsController;
@@ -28,7 +29,6 @@ use App\Http\Controllers\Admin\SystemSettingsController;
 use App\Http\Controllers\Admin\TaxRateController;
 use App\Http\Controllers\Admin\TransactionController;
 use App\Http\Controllers\Admin\TranslationController;
-use App\Http\Controllers\Admin\PusherSettingsController;
 use App\Modules\Integrations\Http\Controllers\IntegrationConfigController;
 use Illuminate\Support\Facades\Route;
 
@@ -186,6 +186,7 @@ Route::post('/integrations/{provider}/set-default', [IntegrationConfigController
 
 // AI Dashboard
 Route::get('/ai', [AiDashboardController::class, 'index'])->name('ai.index')->middleware('permission:view_settings');
+Route::post('/ai/credit-periods/{period}/adjust', [AiDashboardController::class, 'adjustCredits'])->name('ai.credits.adjust')->middleware('permission:view_settings');
 
 // Admin users (Admin Management)
 Route::get('/admins', [AdminUserController::class, 'index'])->name('admins.index')->middleware('permission:view_admins');

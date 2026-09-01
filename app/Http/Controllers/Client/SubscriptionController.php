@@ -8,6 +8,7 @@ use App\Models\Coupon;
 use App\Models\PaymentTransaction;
 use App\Models\Plan;
 use App\Models\Subscription;
+use App\Modules\AI\Services\AiCreditService;
 use App\Services\Billing\BillingGatewayRegistry;
 use App\Services\Billing\InvoiceService;
 use App\Services\FreePlanActivationService;
@@ -27,6 +28,7 @@ class SubscriptionController extends Controller
         protected InvoiceService $invoiceService,
         protected MediaService $mediaService,
         protected FreePlanActivationService $freePlans,
+        protected AiCreditService $aiCredits,
     ) {}
 
     public function activateFree(Request $request): RedirectResponse
@@ -117,6 +119,9 @@ class SubscriptionController extends Controller
             'plans' => $plans,
             'transactions' => $transactions,
             'storageUsage' => $this->mediaService->usage($user),
+            'aiCredits' => ($user->current_workspace_id ?? $user->workspace_id)
+                ? $this->aiCredits->usageForWorkspace((int) ($user->current_workspace_id ?? $user->workspace_id))
+                : null,
         ]);
     }
 

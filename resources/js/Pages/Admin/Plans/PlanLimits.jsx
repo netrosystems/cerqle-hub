@@ -12,7 +12,7 @@ const LIMIT_KEYS = [
     'sms_per_month',
     'emails_per_month',
     'inbox_agents',
-    'ai_tokens_per_month',
+    'ai_credits_per_month',
     'knowledge_bases',
     'chatbots',
     'social_accounts',
@@ -31,7 +31,7 @@ const LABELS = {
     sms_per_month: 'SMS Messages / mo',
     emails_per_month: 'Emails / mo',
     inbox_agents: 'Inbox Agents',
-    ai_tokens_per_month: 'AI Tokens / mo',
+    ai_credits_per_month: 'Cerqle AI Credits / month',
     knowledge_bases: 'Knowledge Bases',
     chatbots: 'Chatbots',
     social_accounts: 'Social Accounts',
@@ -51,7 +51,7 @@ export default function PlanLimits({ limits = {}, onChange }) {
     };
 
     const setAllUnlimited = () => {
-        onChange(Object.fromEntries(LIMIT_KEYS.map((k) => [k, null])));
+        onChange(Object.fromEntries(LIMIT_KEYS.map((k) => [k, k === 'ai_credits_per_month' ? 0 : null])));
     };
 
     return (
@@ -69,9 +69,9 @@ export default function PlanLimits({ limits = {}, onChange }) {
                         type="number"
                         min={0}
                         label={LABELS[key]}
-                        value={value[key] ?? ''}
-                        onChange={(e) => update(key, e.target.value ? e.target.value : null)}
-                        placeholder={t('admin.unlimited_placeholder')}
+                        value={key === 'ai_credits_per_month' ? (value[key] ?? 0) : (value[key] ?? '')}
+                        onChange={(e) => update(key, e.target.value ? e.target.value : (key === 'ai_credits_per_month' ? 0 : null))}
+                        placeholder={key === 'ai_credits_per_month' ? '0 (no managed credits)' : t('admin.unlimited_placeholder')}
                     />
                 ))}
             </div>

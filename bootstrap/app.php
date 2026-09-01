@@ -22,6 +22,9 @@ use App\Http\Middleware\RequestIdMiddleware;
 use App\Http\Middleware\RequirePermission;
 use App\Http\Middleware\SecureHeaders;
 use App\Http\Middleware\SetLocale;
+use App\Modules\AI\Exceptions\AiCreditsExhaustedException;
+use App\Modules\AI\Exceptions\AiRateLimitException;
+use App\Modules\AI\Exceptions\AiRequestInProgressException;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -217,4 +220,20 @@ return Application::configure(basePath: dirname(__DIR__))
                 ], 413);
             }
         });
+
+        $exceptions->renderable(fn (AiCreditsExhaustedException $e, $request) => response()->json([
+            'message' => $e->getMessage(),
+            'error' => $e->getMessage(),
+            'code' => 'ai_credits_exhausted',
+        ], 402));
+        $exceptions->renderable(fn (AiRateLimitException $e, $request) => response()->json([
+            'message' => $e->getMessage(),
+            'error' => $e->getMessage(),
+            'code' => 'ai_rate_limited',
+        ], 429));
+        $exceptions->renderable(fn (AiRequestInProgressException $e, $request) => response()->json([
+            'message' => $e->getMessage(),
+            'error' => $e->getMessage(),
+            'code' => 'ai_request_in_progress',
+        ], 409));
     })->create();

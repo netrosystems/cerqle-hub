@@ -27,7 +27,7 @@ class PlanController extends Controller
             'sms_per_month' => null,
             'emails_per_month' => null,
             'inbox_agents' => null,
-            'ai_tokens_per_month' => null,
+            'ai_credits_per_month' => 0,
             'knowledge_bases' => null,
             'chatbots' => null,
             'social_accounts' => null,
@@ -179,7 +179,9 @@ class PlanController extends Controller
         ];
 
         foreach ($limitsKeys as $key) {
-            $rules['limits.'.$key] = ['nullable', 'integer', 'min:0'];
+            $rules['limits.'.$key] = $key === 'ai_credits_per_month'
+                ? ['required', 'integer', 'min:0']
+                : ['nullable', 'integer', 'min:0'];
         }
 
         return $request->validate($rules);

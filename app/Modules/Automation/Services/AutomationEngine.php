@@ -539,7 +539,11 @@ class AutomationEngine
             ];
 
             try {
-                $response = $this->llmGateway->chat($workspaceId, $messages, ['max_tokens' => 512]);
+                $response = $this->llmGateway->chat($workspaceId, $messages, [
+                    'max_tokens' => 512,
+                    'feature_key' => 'automation_ai_step',
+                    'idempotency_key' => 'automation:'.$run->id.':'.hash('sha256', json_encode($data)),
+                ]);
                 $reply = $response->content;
                 $tokens = $response->promptTokens + $response->completionTokens;
             } catch (\Throwable $e) {
