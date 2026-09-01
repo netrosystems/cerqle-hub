@@ -1,0 +1,2957 @@
+{
+  "info": {
+    "_postman_id": "bc93fb1a-b853-4675-b61b-1d2b5d20dda5",
+    "name": "Cerqle Hub API Collection",
+    "description": "Complete Postman collection for Cerqle Hub REST API.\n\nIncludes Mobile Staff App API, Mobile Master Email Inbox, and Developer Tools API.\n\n### \ud83d\udd10 Authentication Flow\n1. Run the **01. Authentication & Profile -> Login (Saves Token)** request with your credentials.\n2. A Postman test script automatically extracts `token` and saves it to the `{bearer_token}` collection variable.\n3. All protected requests automatically inherit Bearer token authentication.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{bearer_token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8000",
+      "type": "string"
+    },
+    {
+      "key": "bearer_token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "workspace_id",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "conversation_uuid",
+      "value": "demo-conversation-uuid",
+      "type": "string"
+    },
+    {
+      "key": "contact_id",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "email_thread_uuid",
+      "value": "demo-email-thread-uuid",
+      "type": "string"
+    },
+    {
+      "key": "email_account_id",
+      "value": "1",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "01. Authentication & Profile",
+      "description": "Mobile Authentication, Token management, and Agent Profile",
+      "item": [
+        {
+          "name": "Login (Saves Token)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/login",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Public login endpoint for staff. Exchanges email & password for Sanctum personal access token. Automatically saves the token to {{bearer_token}} in Collection Variables for all protected endpoints.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"agent@example.com\",\n  \"password\": \"password\",\n  \"device_name\": \"Cerqle Hub Mobile Staff App\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Automatically extract and store token upon successful login",
+                  "var jsonData = pm.response.json();",
+                  "if (jsonData && jsonData.token) {",
+                  "    pm.collectionVariables.set('bearer_token', jsonData.token);",
+                  "    console.log('\u2705 Bearer token successfully saved to collection variable: bearer_token');",
+                  "} else {",
+                  "    console.warn('\u26a0\ufe0f No token found in login response payload');",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Current User (Me)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/me",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "me"
+              ]
+            },
+            "description": "Returns profile and active workspaces for the authenticated staff user."
+          }
+        },
+        {
+          "name": "Update Profile",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/profile",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "profile"
+              ]
+            },
+            "description": "Update name, email, avatar or password for the current user.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Staff Agent\",\n  \"email\": \"agent@example.com\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/logout",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "logout"
+              ]
+            },
+            "description": "Revokes the active Sanctum bearer token."
+          }
+        }
+      ]
+    },
+    {
+      "name": "02. Broadcasting / WebSockets",
+      "description": "Authorize private & presence channels for real-time Laravel Reverb / Pusher WebSockets.",
+      "item": [
+        {
+          "name": "Authorize Private Channel",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/broadcasting/auth",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "broadcasting",
+                "auth"
+              ]
+            },
+            "description": "Authorizes WebSocket channels for native mobile clients using Sanctum Bearer token.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"socket_id\": \"12345.67890\",\n  \"channel_name\": \"private-workspace.1\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "03. Account & Workspaces",
+      "description": "Account details, workspace switching, subscription quotas, and audit logs.",
+      "item": [
+        {
+          "name": "Get Account Details",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/me",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "me"
+              ]
+            },
+            "description": "Returns full account and workspace profile info."
+          }
+        },
+        {
+          "name": "Update Account Details",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/me",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "me"
+              ]
+            },
+            "description": "Updates account settings.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Updated Account Name\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "List Workspaces",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/workspaces",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "workspaces"
+              ]
+            },
+            "description": "Returns all accessible workspaces for this user."
+          }
+        },
+        {
+          "name": "Select Active Workspace Context",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/mobile/workspaces/{{workspace_id}}/select",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "mobile",
+                "workspaces",
+                "{{workspace_id}}",
+                "select"
+              ]
+            },
+            "description": "Switches the active workspace context for subsequent mobile API requests."
+          }
+        },
+        {
+          "name": "Get Subscription Plan",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/subscription",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "subscription"
+              ]
+            },
+            "description": "Returns active workspace plan, billing cycle, and add-on status."
+          }
+        },
+        {
+          "name": "Get Plan Usage & Quotas",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/usage",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "usage"
+              ]
+            },
+            "description": "Returns current monthly usage against plan limits (messages, campaigns, AI tokens, etc.)."
+          }
+        },
+        {
+          "name": "Get Workspace Audit Log",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/audit-log",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "audit-log"
+              ]
+            },
+            "description": "List recent security and workspace audit log events."
+          }
+        },
+        {
+          "name": "List Notifications",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/notifications",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "notifications"
+              ]
+            },
+            "description": "Fetches in-app notifications for the user."
+          }
+        },
+        {
+          "name": "Mark Notification as Read",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/notifications/1/read",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "notifications",
+                "1",
+                "read"
+              ]
+            },
+            "description": "Marks a specific notification ID as read."
+          }
+        }
+      ]
+    },
+    {
+      "name": "04. Mobile Omni-Channel Inbox",
+      "description": "Agent-facing mobile endpoints for multi-channel messaging (WhatsApp, Messenger, Instagram, Live Webchat).",
+      "item": [
+        {
+          "name": "Inbox Setup & Metadata",
+          "item": [
+            {
+              "name": "Bootstrap Inbox Setup",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/mobile/inbox/setup",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "mobile",
+                    "inbox",
+                    "setup"
+                  ]
+                },
+                "description": "Single bootstrapping payload for mobile inbox: active channels, team members, labels, canned replies, and live visitors count."
+              }
+            },
+            {
+              "name": "Get Inbox Badge Counts",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/mobile/inbox/counts",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "mobile",
+                    "inbox",
+                    "counts"
+                  ]
+                },
+                "description": "Lightweight polling endpoint to update folder badge counters (all, mine, unassigned, live, unread)."
+              }
+            },
+            {
+              "name": "List WhatsApp Approved Templates",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/mobile/inbox/templates",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "mobile",
+                    "inbox",
+                    "templates"
+                  ]
+                },
+                "description": "Returns Meta-approved WhatsApp message templates for outbound messaging."
+              }
+            },
+            {
+              "name": "List Labels",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/mobile/inbox/labels",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "mobile",
+                    "inbox",
+                    "labels"
+                  ]
+                },
+                "description": "Returns list of tags/labels configured in the workspace."
+              }
+            },
+            {
+              "name": "List Canned Replies",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/mobile/inbox/canned-replies?search=",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "mobile",
+                    "inbox",
+                    "canned-replies"
+                  ],
+                  "query": [
+                    {
+                      "key": "search",
+                      "value": "",
+                      "description": "Filter shortcuts or reply content"
+                    }
+                  ]
+                },
+                "description": "List canned responses. Supports ?search= query parameter."
+              }
+            }
+          ]
+        },
+        {
+          "name": "Conversations",
+          "item": [
+            {
+              "name": "List Conversations",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/mobile/conversations?folder=all&channel=&account_id=&label_id=&search=",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "mobile",
+                    "conversations"
+                  ],
+                  "query": [
+                    {
+                      "key": "folder",
+                      "value": "all",
+                      "description": "Folder view: all, mine, unassigned, resolved, snoozed, live"
+                    },
+                    {
+                      "key": "channel",
+                      "value": "",
+                      "description": "Filter channel: whatsapp, messenger, instagram, webchat"
+                    },
+                    {
+                      "key": "account_id",
+                      "value": "",
+                      "description": "Filter by channel account ID"
+                    },
+                    {
+                      "key": "label_id",
+                      "value": "",
+                      "description": "Filter by label ID"
+                    },
+                    {
+                      "key": "search",
+                      "value": "",
+                      "description": "Search by contact name, phone, or email"
+                    }
+                  ]
+                },
+                "description": "List conversations with full filtering: folder (all, mine, unassigned, resolved, snoozed, live), channel, account_id, label_id, and search query."
+              }
+            },
+            {
+              "name": "Start New Conversation",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/mobile/conversations",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "mobile",
+                    "conversations"
+                  ]
+                },
+                "description": "Start a new conversation thread with a contact on WhatsApp, SMS, or Webchat.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"contact_id\": 1,\n  \"channel_account_id\": 1,\n  \"body\": \"Hello! How can we assist you today?\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "name": "Get Conversation Details",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/mobile/conversations/{{conversation_uuid}}",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "mobile",
+                    "conversations",
+                    "{{conversation_uuid}}"
+                  ]
+                },
+                "description": "Returns conversation details, message list, contact info, labels, and assignment."
+              }
+            },
+            {
+              "name": "Get Conversation Messages",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/mobile/conversations/{{conversation_uuid}}/messages",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "mobile",
+                    "conversations",
+                    "{{conversation_uuid}}",
+                    "messages"
+                  ]
+                },
+                "description": "Paginated message history for loading older messages or polling."
+              }
+            },
+            {
+              "name": "Reply to Conversation",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/mobile/conversations/{{conversation_uuid}}/reply",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "mobile",
+                    "conversations",
+                    "{{conversation_uuid}}",
+                    "reply"
+                  ]
+                },
+                "description": "Send a message reply to the customer (text, template, or media).",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"body\": \"Thank you for contacting us. We are looking into this right now.\",\n  \"type\": \"text\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "name": "Assign Conversation to Agent",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/mobile/conversations/{{conversation_uuid}}/assign",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "mobile",
+                    "conversations",
+                    "{{conversation_uuid}}",
+                    "assign"
+                  ]
+                },
+                "description": "Assign conversation to a team member (or null to unassign).",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"user_id\": 1\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "name": "Update Conversation Status",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/mobile/conversations/{{conversation_uuid}}/status",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "mobile",
+                    "conversations",
+                    "{{conversation_uuid}}",
+                    "status"
+                  ]
+                },
+                "description": "Update status: open, pending, resolved, snoozed.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"status\": \"resolved\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "name": "Send Typing Indicator",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/mobile/conversations/{{conversation_uuid}}/typing",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "mobile",
+                    "conversations",
+                    "{{conversation_uuid}}",
+                    "typing"
+                  ]
+                },
+                "description": "Broadcast agent typing presence to WebSockets.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"is_typing\": true\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "name": "Conversation Handover (Bot / Human)",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/mobile/conversations/{{conversation_uuid}}/handover",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "mobile",
+                    "conversations",
+                    "{{conversation_uuid}}",
+                    "handover"
+                  ]
+                },
+                "description": "Handover conversation between automated AI bot and human agent.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"mode\": \"human\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "name": "Prompt Live Website Visitor Widget Open",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/mobile/conversations/{{conversation_uuid}}/open-widget",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "mobile",
+                    "conversations",
+                    "{{conversation_uuid}}",
+                    "open-widget"
+                  ]
+                },
+                "description": "Pushes a command to a live website visitor's browser widget to pop open."
+              }
+            },
+            {
+              "name": "Mark Conversation as Read",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/mobile/conversations/{{conversation_uuid}}/read",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "mobile",
+                    "conversations",
+                    "{{conversation_uuid}}",
+                    "read"
+                  ]
+                },
+                "description": "Marks all unread incoming messages as read."
+              }
+            }
+          ]
+        },
+        {
+          "name": "Internal Notes",
+          "item": [
+            {
+              "name": "List Internal Notes",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/mobile/conversations/{{conversation_uuid}}/notes",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "mobile",
+                    "conversations",
+                    "{{conversation_uuid}}",
+                    "notes"
+                  ]
+                },
+                "description": "List private internal notes left by agents on this thread."
+              }
+            },
+            {
+              "name": "Create Internal Note",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/mobile/conversations/{{conversation_uuid}}/notes",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "mobile",
+                    "conversations",
+                    "{{conversation_uuid}}",
+                    "notes"
+                  ]
+                },
+                "description": "Post an internal note visible only to workspace staff.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"body\": \"Customer is asking for enterprise pricing. Follow up tomorrow.\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "Labels Management",
+          "item": [
+            {
+              "name": "Attach Label to Conversation",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/mobile/conversations/{{conversation_uuid}}/labels",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "mobile",
+                    "conversations",
+                    "{{conversation_uuid}}",
+                    "labels"
+                  ]
+                },
+                "description": "Attach an inbox label/tag to the conversation.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"label_id\": 1\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "name": "Detach Label from Conversation",
+              "request": {
+                "method": "DELETE",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/mobile/conversations/{{conversation_uuid}}/labels/1",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "mobile",
+                    "conversations",
+                    "{{conversation_uuid}}",
+                    "labels",
+                    "1"
+                  ]
+                },
+                "description": "Remove a label from the conversation."
+              }
+            }
+          ]
+        },
+        {
+          "name": "Mobile Contacts",
+          "item": [
+            {
+              "name": "Search Contacts",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/mobile/contacts/search?q=john",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "mobile",
+                    "contacts",
+                    "search"
+                  ],
+                  "query": [
+                    {
+                      "key": "q",
+                      "value": "john",
+                      "description": "Search keyword"
+                    }
+                  ]
+                },
+                "description": "Search contacts by query string (name, phone, email)."
+              }
+            },
+            {
+              "name": "Get Contact Details",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/mobile/contacts/{{contact_id}}",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "mobile",
+                    "contacts",
+                    "{{contact_id}}"
+                  ]
+                },
+                "description": "Returns contact info and recent 10 conversations across all channels."
+              }
+            },
+            {
+              "name": "Update Contact",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/mobile/contacts/{{contact_id}}",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "mobile",
+                    "contacts",
+                    "{{contact_id}}"
+                  ]
+                },
+                "description": "Update contact personal info, phone, email, and custom fields.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"first_name\": \"John\",\n  \"last_name\": \"Doe\",\n  \"email\": \"john.doe@example.com\",\n  \"phone_e164\": \"+15551234567\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "name": "Update Conversation Contact",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/mobile/conversations/{{conversation_uuid}}/contact",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "mobile",
+                    "conversations",
+                    "{{conversation_uuid}}",
+                    "contact"
+                  ]
+                },
+                "description": "Convenience shortcut to update the contact directly from conversation screen.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"first_name\": \"John\",\n  \"last_name\": \"Doe\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "05. Mobile Master Email Inbox",
+      "description": "Agent-facing endpoints for Master Email Inbox (Gmail, Microsoft 365, IMAP/SMTP). Kept isolated from omni-channel inbox.",
+      "item": [
+        {
+          "name": "List Connected Email Mailboxes",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/mobile/email/accounts",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "mobile",
+                "email",
+                "accounts"
+              ]
+            },
+            "description": "Returns list of active connected mailboxes (Gmail, M365, IMAP/SMTP) with sync status."
+          }
+        },
+        {
+          "name": "List Email Threads",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/mobile/email/threads?folder=inbox&account_id=&search=&per_page=30",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "mobile",
+                "email",
+                "threads"
+              ],
+              "query": [
+                {
+                  "key": "folder",
+                  "value": "inbox",
+                  "description": "Folder: inbox, unread, sent, resolved, all"
+                },
+                {
+                  "key": "account_id",
+                  "value": "",
+                  "description": "Filter by specific email channel account ID"
+                },
+                {
+                  "key": "search",
+                  "value": "",
+                  "description": "Search query across contact name, email, or message body"
+                },
+                {
+                  "key": "per_page",
+                  "value": "30",
+                  "description": "Items per page (max 100)"
+                }
+              ]
+            },
+            "description": "Returns paginated email threads with folder filter (inbox, unread, sent, resolved, all), search, account_id, and sync status."
+          }
+        },
+        {
+          "name": "Get Email Thread Details",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/mobile/email/threads/{{email_thread_uuid}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "mobile",
+                "email",
+                "threads",
+                "{{email_thread_uuid}}"
+              ]
+            },
+            "description": "Returns complete email thread and messages list. Automatically marks unread count as 0."
+          }
+        },
+        {
+          "name": "Poll Incremental Email Messages",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/mobile/email/threads/{{email_thread_uuid}}/messages?after_id=0&limit=100",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "mobile",
+                "email",
+                "threads",
+                "{{email_thread_uuid}}",
+                "messages"
+              ],
+              "query": [
+                {
+                  "key": "after_id",
+                  "value": "0",
+                  "description": "Last message ID already loaded in client"
+                },
+                {
+                  "key": "limit",
+                  "value": "100",
+                  "description": "Maximum messages to fetch"
+                }
+              ]
+            },
+            "description": "Polls new incoming/outgoing messages in the thread using after_id."
+          }
+        },
+        {
+          "name": "Reply to Email Thread",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/mobile/email/threads/{{email_thread_uuid}}/reply",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "mobile",
+                "email",
+                "threads",
+                "{{email_thread_uuid}}",
+                "reply"
+              ]
+            },
+            "description": "Sends an email reply to the customer via the mailbox provider.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"body\": \"Hello,\\n\\nThank you for reaching out to us. We have received your inquiry and our team is looking into it.\\n\\nBest regards,\\nSupport Team\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Update Email Thread Status",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/mobile/email/threads/{{email_thread_uuid}}/status",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "mobile",
+                "email",
+                "threads",
+                "{{email_thread_uuid}}",
+                "status"
+              ]
+            },
+            "description": "Updates email thread status to open or resolved.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"resolved\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Trigger Mailbox Sync",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/mobile/email/accounts/{{email_account_id}}/sync",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "mobile",
+                "email",
+                "accounts",
+                "{{email_account_id}}",
+                "sync"
+              ]
+            },
+            "description": "Manually queues an immediate sync job for this email mailbox."
+          }
+        }
+      ]
+    },
+    {
+      "name": "06. Developer Tools (External API)",
+      "description": "Public Developer REST API guarded by Sanctum abilities and the Developer Tools add-on.",
+      "item": [
+        {
+          "name": "API Tokens Management",
+          "item": [
+            {
+              "name": "List Tokens",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/tokens",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "tokens"
+                  ]
+                },
+                "description": "List all personal access tokens for user."
+              }
+            },
+            {
+              "name": "Create New Token (Saves Token)",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/tokens",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "tokens"
+                  ]
+                },
+                "description": "Generate a new personal access token with abilities. Automatically saves token to {{bearer_token}}.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"name\": \"Integration Key\",\n  \"abilities\": [\n    \"*\"\n  ],\n  \"expires_at\": \"2027-12-31\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "// Automatically save developer token if created",
+                      "var jsonData = pm.response.json();",
+                      "if (jsonData && jsonData.token) {",
+                      "    pm.collectionVariables.set('bearer_token', jsonData.token);",
+                      "    console.log('\u2705 Developer token successfully saved to collection variable: bearer_token');",
+                      "}"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Revoke Token",
+              "request": {
+                "method": "DELETE",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/tokens/1",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "tokens",
+                    "1"
+                  ]
+                },
+                "description": "Revoke an access token by ID."
+              }
+            },
+            {
+              "name": "List Available Token Scopes",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/token-scopes",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "token-scopes"
+                  ]
+                },
+                "description": "Returns available API scopes/abilities."
+              }
+            }
+          ]
+        },
+        {
+          "name": "Contacts API",
+          "item": [
+            {
+              "name": "List Contacts",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/contacts",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "contacts"
+                  ]
+                },
+                "description": "List contacts in workspace."
+              }
+            },
+            {
+              "name": "Create Contact",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/contacts",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "contacts"
+                  ]
+                },
+                "description": "Create a new contact.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"first_name\": \"Jane\",\n  \"last_name\": \"Smith\",\n  \"email\": \"jane.smith@example.com\",\n  \"phone_e164\": \"+15559876543\",\n  \"opt_in_whatsapp\": true,\n  \"opt_in_email\": true\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "name": "Get Contact",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/contacts/1",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "contacts",
+                    "1"
+                  ]
+                },
+                "description": "Get contact by ID."
+              }
+            },
+            {
+              "name": "Update Contact",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/contacts/1",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "contacts",
+                    "1"
+                  ]
+                },
+                "description": "Update contact fields.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"first_name\": \"Jane Updated\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "name": "Delete Contact",
+              "request": {
+                "method": "DELETE",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/contacts/1",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "contacts",
+                    "1"
+                  ]
+                },
+                "description": "Delete contact by ID."
+              }
+            }
+          ]
+        },
+        {
+          "name": "Segments API",
+          "item": [
+            {
+              "name": "List Segments",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/segments",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "segments"
+                  ]
+                },
+                "description": "List audience segments."
+              }
+            },
+            {
+              "name": "Create Segment",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/segments",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "segments"
+                  ]
+                },
+                "description": "Create audience segment.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"name\": \"VIP Customers\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "name": "List Segment Contacts",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/segments/1/contacts",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "segments",
+                    "1",
+                    "contacts"
+                  ]
+                },
+                "description": "Get contacts belonging to segment."
+              }
+            }
+          ]
+        },
+        {
+          "name": "Campaigns API",
+          "item": [
+            {
+              "name": "List Campaigns",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/campaigns",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "campaigns"
+                  ]
+                },
+                "description": "List broadcast campaigns."
+              }
+            },
+            {
+              "name": "Create Campaign",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/campaigns",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "campaigns"
+                  ]
+                },
+                "description": "Draft a new campaign.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"name\": \"Summer Special Promotion\",\n  \"channel\": \"whatsapp\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "name": "Get Campaign",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/campaigns/1",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "campaigns",
+                    "1"
+                  ]
+                },
+                "description": "Get campaign details."
+              }
+            },
+            {
+              "name": "Update Campaign",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/campaigns/1",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "campaigns",
+                    "1"
+                  ]
+                },
+                "description": "Update campaign details.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"name\": \"Summer Promotion Updated\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "name": "Launch Campaign",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/campaigns/1/launch",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "campaigns",
+                    "1",
+                    "launch"
+                  ]
+                },
+                "description": "Dispatch and launch campaign."
+              }
+            },
+            {
+              "name": "Pause Campaign",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/campaigns/1/pause",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "campaigns",
+                    "1",
+                    "pause"
+                  ]
+                },
+                "description": "Pause running campaign."
+              }
+            },
+            {
+              "name": "List Campaign Recipients",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/campaigns/1/recipients",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "campaigns",
+                    "1",
+                    "recipients"
+                  ]
+                },
+                "description": "List recipient delivery status."
+              }
+            }
+          ]
+        },
+        {
+          "name": "Messages API",
+          "item": [
+            {
+              "name": "Send Outbound Message",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/messages/send",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "messages",
+                    "send"
+                  ]
+                },
+                "description": "Send a direct WhatsApp or SMS message to a contact.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"contact_id\": 1,\n  \"channel\": \"whatsapp\",\n  \"template_name\": \"order_update\",\n  \"template_vars\": {\n    \"1\": \"ORD-12345\"\n  }\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "Conversations API",
+          "item": [
+            {
+              "name": "List Conversations",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/conversations",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "conversations"
+                  ]
+                },
+                "description": "List conversations."
+              }
+            },
+            {
+              "name": "List Conversation Messages",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/conversations/1/messages",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "conversations",
+                    "1",
+                    "messages"
+                  ]
+                },
+                "description": "List messages for conversation ID."
+              }
+            }
+          ]
+        },
+        {
+          "name": "Outbound Webhooks",
+          "item": [
+            {
+              "name": "List Webhooks",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/webhooks",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "webhooks"
+                  ]
+                },
+                "description": "List registered webhook endpoints."
+              }
+            },
+            {
+              "name": "Create Webhook Endpoint",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/webhooks",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "webhooks"
+                  ]
+                },
+                "description": "Subscribe an endpoint to workspace events.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"url\": \"https://api.yourdomain.com/webhooks/cerqle\",\n  \"events\": [\n    \"contact.created\",\n    \"message.received\"\n  ]\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "name": "Delete Webhook",
+              "request": {
+                "method": "DELETE",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/webhooks/1",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "webhooks",
+                    "1"
+                  ]
+                },
+                "description": "Delete webhook endpoint by ID."
+              }
+            }
+          ]
+        },
+        {
+          "name": "AI Chatbots",
+          "item": [
+            {
+              "name": "List AI Chatbots",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/ai/chatbots",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "ai",
+                    "chatbots"
+                  ]
+                },
+                "description": "List AI bots configured in workspace."
+              }
+            },
+            {
+              "name": "Chat with AI Bot",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/ai/chatbots/1/chat",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "ai",
+                    "chatbots",
+                    "1",
+                    "chat"
+                  ]
+                },
+                "description": "Send a message to an AI bot and receive reply.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"message\": \"What is your refund policy?\",\n  \"history\": []\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "AI Knowledge Bases",
+          "item": [
+            {
+              "name": "List Knowledge Bases",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/ai/knowledge-bases",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "ai",
+                    "knowledge-bases"
+                  ]
+                },
+                "description": "List knowledge bases."
+              }
+            },
+            {
+              "name": "Create Knowledge Base",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/ai/knowledge-bases",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "ai",
+                    "knowledge-bases"
+                  ]
+                },
+                "description": "Create a new knowledge base.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"name\": \"Customer Support Knowledge Base\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "name": "Get Knowledge Base",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/ai/knowledge-bases/1",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "ai",
+                    "knowledge-bases",
+                    "1"
+                  ]
+                },
+                "description": "Get knowledge base info."
+              }
+            },
+            {
+              "name": "Add Document to Knowledge Base",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/ai/knowledge-bases/1/documents",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "ai",
+                    "knowledge-bases",
+                    "1",
+                    "documents"
+                  ]
+                },
+                "description": "Index a URL or document into vectors.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"source_type\": \"url\",\n  \"source_ref\": \"https://example.com/terms\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "name": "Delete Document from KB",
+              "request": {
+                "method": "DELETE",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/ai/knowledge-bases/1/documents/1",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "ai",
+                    "knowledge-bases",
+                    "1",
+                    "documents",
+                    "1"
+                  ]
+                },
+                "description": "Remove document from knowledge base."
+              }
+            }
+          ]
+        },
+        {
+          "name": "Automations API",
+          "item": [
+            {
+              "name": "List Automations",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/automations",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "automations"
+                  ]
+                },
+                "description": "List automation workflows."
+              }
+            },
+            {
+              "name": "Trigger Automation Run",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/automations/1/trigger",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "automations",
+                    "1",
+                    "trigger"
+                  ]
+                },
+                "description": "Manually execute an automation flow for a contact.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"contact_id\": 1\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "Social Publishing",
+          "item": [
+            {
+              "name": "List Social Accounts",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/social/accounts",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "social",
+                    "accounts"
+                  ]
+                },
+                "description": "List connected social accounts."
+              }
+            },
+            {
+              "name": "Create & Publish Social Post",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/social/posts",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "social",
+                    "posts"
+                  ]
+                },
+                "description": "Create and publish or schedule a social media post.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"body\": \"Special announcement for all our followers! Check out our new features.\",\n  \"account_ids\": [\n    1\n  ]\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "Analytics API",
+          "item": [
+            {
+              "name": "Messages Volume Analytics",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/analytics/messages",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "analytics",
+                    "messages"
+                  ]
+                },
+                "description": "Inbound vs outbound volume analytics."
+              }
+            },
+            {
+              "name": "AI Token Usage Analytics",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/analytics/ai-usage",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "analytics",
+                    "ai-usage"
+                  ]
+                },
+                "description": "AI LLM token consumption breakdown."
+              }
+            },
+            {
+              "name": "Campaign Funnel Analytics",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/analytics/campaign/1/funnel",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "analytics",
+                    "campaign",
+                    "1",
+                    "funnel"
+                  ]
+                },
+                "description": "Delivered, read, and conversion rates."
+              }
+            },
+            {
+              "name": "Conversations Analytics",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/analytics/conversations",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "analytics",
+                    "conversations"
+                  ]
+                },
+                "description": "Agent response times and conversation resolution rates."
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
