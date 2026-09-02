@@ -160,11 +160,26 @@ class MobileInboxController extends WorkspaceScopedController
         $contacts = Contact::where('workspace_id', $wsId)
             ->customerDirectory()
             ->withCount([
-                'conversations as has_messenger_thread' => fn ($q) => $q->whereHas('channelAccount', fn ($ca) => $ca->where('channel', 'messenger')),
-                'conversations as has_instagram_thread' => fn ($q) => $q->whereHas('channelAccount', fn ($ca) => $ca->where('channel', 'instagram')),
-                'conversations as has_webchat_thread' => fn ($q) => $q->whereHas('channelAccount', fn ($ca) => $ca->where('channel', 'webchat')),
-                'conversations as has_email_thread' => fn ($q) => $q->whereHas('channelAccount', fn ($ca) => $ca->where('channel', 'email')),
-                'conversations as has_whatsapp_thread' => fn ($q) => $q->whereHas('channelAccount', fn ($ca) => $ca->where('channel', 'whatsapp')),
+                'conversations as has_messenger_thread' => fn ($q) => $q->where(function ($conv) {
+                    $conv->whereHas('channelAccount', fn ($ca) => $ca->where('channel', 'messenger'))
+                        ->orWhereHas('messages', fn ($m) => $m->where('channel', 'messenger'));
+                }),
+                'conversations as has_instagram_thread' => fn ($q) => $q->where(function ($conv) {
+                    $conv->whereHas('channelAccount', fn ($ca) => $ca->where('channel', 'instagram'))
+                        ->orWhereHas('messages', fn ($m) => $m->where('channel', 'instagram'));
+                }),
+                'conversations as has_webchat_thread' => fn ($q) => $q->where(function ($conv) {
+                    $conv->whereHas('channelAccount', fn ($ca) => $ca->where('channel', 'webchat'))
+                        ->orWhereHas('messages', fn ($m) => $m->where('channel', 'webchat'));
+                }),
+                'conversations as has_email_thread' => fn ($q) => $q->where(function ($conv) {
+                    $conv->whereHas('channelAccount', fn ($ca) => $ca->where('channel', 'email'))
+                        ->orWhereHas('messages', fn ($m) => $m->where('channel', 'email'));
+                }),
+                'conversations as has_whatsapp_thread' => fn ($q) => $q->where(function ($conv) {
+                    $conv->whereHas('channelAccount', fn ($ca) => $ca->where('channel', 'whatsapp'))
+                        ->orWhereHas('messages', fn ($m) => $m->where('channel', 'whatsapp'));
+                }),
             ])
             ->where(function ($query) use ($q) {
                 $query->where('first_name', 'like', "%{$q}%")
@@ -187,11 +202,14 @@ class MobileInboxController extends WorkspaceScopedController
                 'avatar' => Demo::active() ? null : $c->avatar_url,
                 'custom_fields' => $c->custom_fields,
                 'source' => $c->source,
-                'has_messenger_thread' => (int) ($c->has_messenger_thread ?? 0) > 0,
-                'has_instagram_thread' => (int) ($c->has_instagram_thread ?? 0) > 0,
-                'has_webchat_thread' => (int) ($c->has_webchat_thread ?? 0) > 0,
-                'has_email_thread' => (int) ($c->has_email_thread ?? 0) > 0,
-                'has_whatsapp_thread' => (int) ($c->has_whatsapp_thread ?? 0) > 0,
+                'can_whatsapp' => ! empty($c->phone_e164),
+                'can_sms' => ! empty($c->phone_e164),
+                'can_email' => ! empty($c->email),
+                'has_messenger_thread' => (int) ($c->has_messenger_thread ?? 0) > 0 || $c->source === 'messenger' || ! empty($c->custom_fields['messenger_psid']),
+                'has_instagram_thread' => (int) ($c->has_instagram_thread ?? 0) > 0 || $c->source === 'instagram' || ! empty($c->custom_fields['instagram_scoped_id']),
+                'has_webchat_thread' => (int) ($c->has_webchat_thread ?? 0) > 0 || $c->source === 'webchat' || ! empty($c->custom_fields['webchat_visitor_id']),
+                'has_email_thread' => (int) ($c->has_email_thread ?? 0) > 0 || $c->source === 'email',
+                'has_whatsapp_thread' => (int) ($c->has_whatsapp_thread ?? 0) > 0 || $c->source === 'whatsapp_inbound',
             ]),
         ]);
     }

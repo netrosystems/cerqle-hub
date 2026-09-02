@@ -165,4 +165,43 @@ class NewConversationReachabilityTest extends TestCase
 
         $this->assertEquals('+14155553333', $contact->fresh()->phone_e164);
     }
+
+    public function test_contact_search_detects_whatsapp_inbound_source_and_can_reach_flags(): void
+    {
+        ['user' => $user, 'workspace' => $workspace] = $this->createWorkspaceContext();
+
+        // Contact 1: Imported contact with phone only (no conversations yet)
+        $imported = Contact::create([
+            'workspace_id' => $workspace->id,
+            'first_name' => 'Imported',
+            'phone_e164' => '+96170106293',
+            'source' => 'import',
+        ]);
+
+        // Contact 2: WhatsApp inbound contact (has WhatsApp interaction)
+        $waContact = Contact::create([
+            'workspace_id' => $workspace->id,
+            'first_name' => 'WA Inbound',
+            'phone_e164' => '+96171568399',
+            'source' => 'whatsapp_inbound',
+        ]);
+
+        $res = $this->actingAs($user)->getJson(route('client.inbox.contacts.search'));
+        $res->assertOk();
+
+        $data = collect($res->json());
+        $importedData = $data->firstWhere('id', $imported->id);
+        $waData = $data->firstWhere('id', $waContact->id);
+
+        // Imported contact can be messaged via WhatsApp/SMS because phone exists, but has no prior threads
+        $this->assertTrue($importedData['can_whatsapp']);
+        $this->assertTrue($importedData['can_sms']);
+        $this->assertFalse($importedData['can_email']);
+        $this->assertFalse($importedData['has_whatsapp_thread']);
+        $this->assertFalse($importedData['has_messenger_thread']);
+
+        // WA Inbound contact has whatsapp thread recognized and can be messaged
+        $this->assertTrue($waData['can_whatsapp']);
+        $this->assertTrue($waData['has_whatsapp_thread']);
+    }
 }
