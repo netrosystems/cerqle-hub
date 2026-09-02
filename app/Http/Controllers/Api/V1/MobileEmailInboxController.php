@@ -12,6 +12,8 @@ use App\Modules\Shared\Models\Message;
 use App\Modules\Shared\Services\ChannelManager;
 use App\Support\Demo;
 use Illuminate\Http\JsonResponse;
+use App\Services\Media\AttachmentService;
+use App\Services\StorageManager;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
@@ -21,6 +23,8 @@ class MobileEmailInboxController extends WorkspaceScopedController
     public function __construct(
         private readonly ChannelManager $channelManager,
         private readonly EmailInboxSyncDispatcher $syncDispatcher,
+        private readonly AttachmentService $attachmentService,
+        private readonly StorageManager $storageManager,
     ) {}
 
     /** GET /api/v1/mobile/email/accounts */
@@ -173,15 +177,54 @@ class MobileEmailInboxController extends WorkspaceScopedController
     public function reply(Request $request, string $uuid): JsonResponse
     {
         $validated = $request->validate([
-            'body' => ['required', 'string', 'max:20000'],
+            'body' => ['nullable', 'string', 'max:20000'],
+            'attachment' => [
+                'nullable', 'file', 'max:'.AttachmentService::MAX_FILE_KILOBYTES,
+                'mimes:'.AttachmentService::ALLOWED_MIMES,
+            ],
         ]);
+
+        if (empty($validated['body']) && ! $request->hasFile('attachment')) {
+            return response()->json(['error' => 'Message body or attachment is required.'], 422);
+        }
+
         $conversation = $this->emailConversation($request, $uuid, ['channelAccount', 'contact']);
+
+        $payload = [];
+        $msgType = 'text';
+
+        if ($request->hasFile('attachment')) {
+            $file = $request->file('attachment');
+            $upload = $this->attachmentService->processUpload($file, 'message-media');
+            $msgType = $upload['type'];
+            $payload = [
+                'path' => $upload['path'],
+                'preview_url' => $upload['url'],
+                'filename' => $upload['filename'],
+                'mime_type' => $upload['mime_type'],
+                'file_size' => $upload['size_bytes'],
+                'has_attachments' => true,
+                'attachments' => [
+                    [
+                        'name' => $upload['filename'],
+                        'url' => $upload['url'],
+                        'size' => $upload['size_bytes'],
+                        'mime_type' => $upload['mime_type'],
+                        'type' => $upload['type'],
+                    ],
+                ],
+            ];
+        }
+
+        $bodyText = $validated['body'] ?? ($request->hasFile('attachment') ? $upload['filename'] : '');
+
         $message = Message::create([
             'conversation_id' => $conversation->id,
             'direction' => 'out',
             'channel' => 'email',
-            'type' => 'text',
-            'body' => $validated['body'],
+            'type' => $msgType,
+            'body' => $bodyText,
+            'payload' => $payload,
             'status' => 'queued',
             'sent_by' => 'human',
             'user_id' => $request->user()->id,
@@ -221,10 +264,18 @@ class MobileEmailInboxController extends WorkspaceScopedController
             'account_id' => ['required', 'integer'],
             'to' => ['required', 'email', 'max:255'],
             'subject' => ['required', 'string', 'max:998'],
-            'body' => ['required', 'string', 'max:100000'],
+            'body' => ['nullable', 'string', 'max:100000'],
             'cc' => ['nullable'],
             'bcc' => ['nullable'],
+            'attachment' => [
+                'nullable', 'file', 'max:'.AttachmentService::MAX_FILE_KILOBYTES,
+                'mimes:'.AttachmentService::ALLOWED_MIMES,
+            ],
         ]);
+
+        if (empty($validated['body']) && ! $request->hasFile('attachment')) {
+            return response()->json(['error' => 'Message body or attachment is required.'], 422);
+        }
 
         $workspaceId = $this->workspaceId($request);
         $account = $this->emailAccount($request, (int) $validated['account_id']);
@@ -253,18 +304,44 @@ class MobileEmailInboxController extends WorkspaceScopedController
             'last_message_at' => now(),
         ]);
 
+        $payload = [
+            'subject' => $validated['subject'],
+            'to' => $recipient,
+            'cc' => $cc,
+            'bcc' => $bcc,
+        ];
+        $msgType = 'text';
+
+        if ($request->hasFile('attachment')) {
+            $file = $request->file('attachment');
+            $upload = $this->attachmentService->processUpload($file, 'message-media');
+            $msgType = $upload['type'];
+            $payload['path'] = $upload['path'];
+            $payload['preview_url'] = $upload['url'];
+            $payload['filename'] = $upload['filename'];
+            $payload['mime_type'] = $upload['mime_type'];
+            $payload['file_size'] = $upload['size_bytes'];
+            $payload['has_attachments'] = true;
+            $payload['attachments'] = [
+                [
+                    'name' => $upload['filename'],
+                    'url' => $upload['url'],
+                    'size' => $upload['size_bytes'],
+                    'mime_type' => $upload['mime_type'],
+                    'type' => $upload['type'],
+                ],
+            ];
+        }
+
+        $bodyText = $validated['body'] ?? ($request->hasFile('attachment') ? $upload['filename'] : '');
+
         $message = Message::create([
             'conversation_id' => $conversation->id,
             'direction' => 'out',
             'channel' => 'email',
-            'type' => 'text',
-            'body' => $validated['body'],
-            'payload' => [
-                'subject' => $validated['subject'],
-                'to' => $recipient,
-                'cc' => $cc,
-                'bcc' => $bcc,
-            ],
+            'type' => $msgType,
+            'body' => $bodyText,
+            'payload' => $payload,
             'status' => 'queued',
             'sent_by' => 'human',
             'user_id' => $request->user()->id,
