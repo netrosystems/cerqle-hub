@@ -5,7 +5,7 @@ import {
     ExternalLink, Image as ImageIcon, Inbox, Mail, MailOpen, Paperclip, PenLine, RefreshCw, Search, Send, Settings2, X,
 } from 'lucide-react';
 import axios from 'axios';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 
 function ComposeModal({ accounts, onClose }) {
     const form = useForm({
@@ -418,6 +418,9 @@ export default function EmailInbox({
     const [sendError, setSendError] = useState('');
     const initialSearch = useRef(true);
     const bottomRef = useRef(null);
+    const threadScrollRef = useRef(null);
+    const prevConversationId = useRef(null);
+    const prevMessagesCount = useRef(0);
 
     const [prevInitialConversations, setPrevInitialConversations] = useState(initialConversations);
     const [prevInitialCounts, setPrevInitialCounts] = useState(initialCounts);
@@ -437,11 +440,31 @@ export default function EmailInbox({
         setPrevSelectedId(selectedConversation?.id);
         setMessages(initialMessages);
     }
-    useEffect(() => {
-        // Never return scrollIntoView's implementation-specific return value:
-        // React treats any returned value as an effect cleanup function.
-        bottomRef.current?.scrollIntoView({ block: 'end' });
-    }, [selectedConversation?.id, messages.length]);
+
+    useLayoutEffect(() => {
+        if (!selectedConversation) return;
+
+        const isNewConv = prevConversationId.current !== selectedConversation.id;
+        prevConversationId.current = selectedConversation.id;
+
+        if (isNewConv) {
+            if (threadScrollRef.current) {
+                threadScrollRef.current.scrollTop = threadScrollRef.current.scrollHeight;
+            }
+            bottomRef.current?.scrollIntoView({ behavior: 'instant', block: 'end' });
+            prevMessagesCount.current = messages.length;
+            requestAnimationFrame(() => {
+                if (threadScrollRef.current) {
+                    threadScrollRef.current.scrollTop = threadScrollRef.current.scrollHeight;
+                }
+            });
+        } else if (messages.length > prevMessagesCount.current) {
+            bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+            prevMessagesCount.current = messages.length;
+        } else {
+            prevMessagesCount.current = messages.length;
+        }
+    }, [selectedConversation?.id, messages]);
 
     const params = useMemo(() => ({
         folder: filters.folder,
@@ -606,7 +629,7 @@ export default function EmailInbox({
                             </div>
                         </div>
                     </header>
-                    <div className="min-h-0 flex-1 overflow-y-auto bg-neutral-100/70 p-4 space-y-4 dark:bg-neutral-950 sm:p-6">
+                    <div ref={threadScrollRef} className="min-h-0 flex-1 overflow-y-auto bg-neutral-100/70 p-4 space-y-4 dark:bg-neutral-950 sm:p-6">
                         {messages.map(message => <MessageBlock key={message.id} message={message} contact={selectedConversation.contact} mailbox={selectedMailbox} timezone={timezone} />)}
                         <div ref={bottomRef} />
                     </div>
