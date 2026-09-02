@@ -4,14 +4,13 @@ use App\Http\Controllers\Auth\AuthenticatedSessionController;
 use App\Http\Controllers\Auth\ConfirmablePasswordController;
 use App\Http\Controllers\Auth\EmailVerificationNotificationController;
 use App\Http\Controllers\Auth\EmailVerificationPromptController;
+use App\Http\Controllers\Auth\FirebaseLoginController;
 use App\Http\Controllers\Auth\InvitationController;
 use App\Http\Controllers\Auth\MagicLinkController;
 use App\Http\Controllers\Auth\NewPasswordController;
 use App\Http\Controllers\Auth\PasswordController;
 use App\Http\Controllers\Auth\PasswordResetLinkController;
 use App\Http\Controllers\Auth\RegisteredUserController;
-use App\Http\Controllers\Auth\SessionController;
-use App\Http\Controllers\Auth\FirebaseLoginController;
 use App\Http\Controllers\Auth\SocialLoginController;
 use App\Http\Controllers\Auth\TwoFactorController;
 use App\Http\Controllers\Auth\VerifyEmailController;
@@ -43,6 +42,8 @@ Route::middleware('guest')->group(function () {
     // 2FA challenge (shown after login when 2FA is enabled)
     Route::get('two-factor-challenge', [TwoFactorController::class, 'challenge'])->name('auth.two-factor.challenge');
     Route::post('two-factor-challenge', [TwoFactorController::class, 'verify'])->name('auth.two-factor.verify');
+
+    Route::post('auth/google/signup', [SocialLoginController::class, 'signup'])->name('auth.google.signup');
 });
 
 // A signed verification link is valid proof of email ownership and must work

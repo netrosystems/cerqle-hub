@@ -11,6 +11,14 @@ use Illuminate\Validation\ValidationException;
 /** Permanently removes a workspace and every record scoped to it. */
 class WorkspaceDeletionService
 {
+    /** Permanently purge a workspace as part of deleting its owning client. */
+    public function purgeForClient(Workspace $workspace): void
+    {
+        $this->deleteDependentRecords($workspace->id);
+        $this->deleteWorkspaceScopedRecords($workspace->id);
+        $workspace->delete();
+    }
+
     /**
      * Delete the workspace atomically and return the deleting user's next workspace ID.
      */

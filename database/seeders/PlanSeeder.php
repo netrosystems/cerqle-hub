@@ -35,7 +35,7 @@ class PlanSeeder extends Seeder
                     // Inbox
                     'inbox_agents' => 2,
                     // AI
-                    'ai_tokens_per_month' => 100000,
+                    'ai_credits_per_month' => 100,
                     'knowledge_bases' => 1,
                     'chatbots' => 1,
                     // Social
@@ -71,7 +71,7 @@ class PlanSeeder extends Seeder
                     'sms_per_month' => 10000,
                     'emails_per_month' => 25000,
                     'inbox_agents' => 10,
-                    'ai_tokens_per_month' => 2000000,
+                    'ai_credits_per_month' => 0,
                     'knowledge_bases' => 5,
                     'chatbots' => 5,
                     'social_accounts' => 10,
@@ -105,7 +105,7 @@ class PlanSeeder extends Seeder
                     'sms_per_month' => null,
                     'emails_per_month' => null,
                     'inbox_agents' => null,
-                    'ai_tokens_per_month' => null,
+                    'ai_credits_per_month' => 0,
                     'knowledge_bases' => null,
                     'chatbots' => null,
                     'social_accounts' => null,

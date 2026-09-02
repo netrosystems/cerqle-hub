@@ -141,7 +141,7 @@ class IndexDocumentJob implements ShouldQueue
             }
         }
 
-        foreach (['openai', 'anthropic', 'gemini', 'embedding', 'ai provider'] as $providerMarker) {
+        foreach (['openai', 'anthropic', 'gemini', 'deepseek', 'embedding', 'ai provider'] as $providerMarker) {
             if (str_contains($message, $providerMarker)) {
                 return $presented['message'];
             }

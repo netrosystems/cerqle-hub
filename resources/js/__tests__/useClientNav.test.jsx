@@ -15,11 +15,11 @@ describe('client navigation organization', () => {
             'nav.home',
             'nav.group_inbox',
             'nav.group_contacts',
+            'nav.group_setup',
             'nav.group_campaigns',
             'nav.group_social_media',
             'nav.group_automations',
             'nav.group_reports',
-            'nav.group_setup',
             'Assets',
             'nav.group_support',
             'nav.group_billing',
@@ -34,6 +34,7 @@ describe('client navigation organization', () => {
         const inbox = result.current.find((group) => group.label === 'nav.group_inbox');
         const setup = result.current.find((group) => group.label === 'nav.group_setup');
         const campaigns = result.current.find((group) => group.label === 'nav.group_campaigns');
+        const reports = result.current.find((group) => group.label === 'nav.group_reports');
         const support = result.current.find((group) => group.label === 'nav.group_support');
 
         expect(landing.items.map((item) => item.label)).toEqual([
@@ -58,10 +59,30 @@ describe('client navigation organization', () => {
             'nav.templates',
             'nav.auto_replies',
         ]);
+        expect(reports.items.map((item) => item.label)).toEqual([
+            'nav.reports_inbox',
+            'nav.automations',
+            'nav.ai_usage',
+            'nav.social',
+        ]);
         expect(inbox.defaultOpen).toBe(true);
         expect(setup.defaultOpen).toBe(false);
         expect(support.items.map((item) => item.label)).toEqual([
             'nav.support_tickets',
         ]);
+    });
+
+    it('keeps security and session management in the Account group', () => {
+        const { result } = renderHook(() => useClientNav());
+        const account = result.current.find((group) => group.label === 'nav.group_account');
+
+        expect(account.items.slice(0, 4).map((item) => item.label)).toEqual([
+            'nav.settings',
+            'nav.twoFactor',
+            'nav.sessions',
+            'nav.workspaces',
+        ]);
+        expect(account.items.find((item) => item.label === 'nav.twoFactor').activePattern).toBe('client.profile.2fa*');
+        expect(account.items.find((item) => item.label === 'nav.sessions').activePattern).toBe('client.profile.sessions*');
     });
 });

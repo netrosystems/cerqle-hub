@@ -10,6 +10,8 @@ use App\Modules\AI\Models\AiKbChunk;
 use App\Modules\AI\Models\AiKbDocument;
 use App\Modules\AI\Models\AiKnowledgeBase;
 use App\Modules\AI\Models\AiProviderConfig;
+use App\Modules\AI\Models\AiWorkspaceSetting;
+use App\Modules\AI\Services\LlmGateway;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
@@ -230,6 +232,7 @@ class AiModuleTest extends TestCase
             'default_model_embed' => 'text-embedding-3-small',
             'enabled' => true,
         ]);
+        AiWorkspaceSetting::create(['workspace_id' => $workspace->id, 'provider_mode' => 'byok']);
 
         Http::fake([
             'api.openai.com/v1/chat/completions' => Http::response([
@@ -251,6 +254,55 @@ class AiModuleTest extends TestCase
     }
 
     #[Test]
+    public function client_can_activate_and_test_deepseek_for_rag_generation(): void
+    {
+        [$user, $workspace] = $this->createUserWithWorkspace();
+        AiProviderConfig::create([
+            'workspace_id' => $workspace->id,
+            'provider' => 'openai',
+            'credentials' => ['api_key' => 'embedding-key'],
+            'default_model_chat' => 'gpt-4o-mini',
+            'default_model_embed' => 'text-embedding-3-small',
+            'enabled' => true,
+        ]);
+
+        $this->actingAs($user)->put('/app/ai/providers/deepseek', [
+            'api_key' => 'deepseek-key',
+            'default_model_chat' => 'deepseek-v4-flash',
+            'enabled' => true,
+        ])->assertRedirect();
+
+        $deepSeek = AiProviderConfig::where('workspace_id', $workspace->id)
+            ->where('provider', 'deepseek')
+            ->firstOrFail();
+        $this->assertTrue($deepSeek->enabled);
+        $this->assertSame('deepseek-key', $deepSeek->credentials['api_key']);
+        $this->assertFalse(AiProviderConfig::where('workspace_id', $workspace->id)
+            ->where('provider', 'openai')->firstOrFail()->enabled);
+
+        Http::fake(['api.deepseek.com/chat/completions' => Http::response([
+            'choices' => [['message' => ['content' => 'OK']]],
+            'usage' => ['prompt_tokens' => 2, 'completion_tokens' => 1],
+            'model' => 'deepseek-v4-flash',
+        ])]);
+
+        $this->actingAs($user)
+            ->postJson('/app/ai/providers/deepseek/test')
+            ->assertOk()
+            ->assertJsonPath('ok', true)
+            ->assertJsonPath('capabilities.chat', true)
+            ->assertJsonPath('capabilities.embeddings', false);
+
+        Http::fake(['api.openai.com/v1/embeddings' => Http::response([
+            'data' => [['embedding' => [0.1, 0.2, 0.3]]],
+        ])]);
+
+        $vectors = app(LlmGateway::class)
+            ->embed($workspace->id, ['RAG context']);
+        $this->assertSame([[0.1, 0.2, 0.3]], $vectors);
+    }
+
+    #[Test]
     public function playground_shows_safe_provider_error_without_exposing_upstream_body(): void
     {
         [$user, $workspace] = $this->createUserWithWorkspace();
@@ -267,6 +319,7 @@ class AiModuleTest extends TestCase
             'default_model_embed' => 'text-embedding-3-small',
             'enabled' => true,
         ]);
+        AiWorkspaceSetting::create(['workspace_id' => $workspace->id, 'provider_mode' => 'byok']);
 
         Http::fake([
             'api.openai.com/v1/chat/completions' => Http::response([

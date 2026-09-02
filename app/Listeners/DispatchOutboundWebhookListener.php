@@ -6,6 +6,7 @@ use App\Events\CampaignCompleted;
 use App\Events\ContactCreated;
 use App\Events\MessageReceived;
 use App\Models\User;
+use App\Services\ClientAccessService;
 use App\Services\WebhookDispatchService;
 
 /**
@@ -13,13 +14,16 @@ use App\Services\WebhookDispatchService;
  */
 class DispatchOutboundWebhookListener
 {
-    public function __construct(private readonly WebhookDispatchService $webhookService) {}
+    public function __construct(
+        private readonly WebhookDispatchService $webhookService,
+        private readonly ClientAccessService $access,
+    ) {}
 
     public function handleContactCreated(ContactCreated $event): void
     {
         $contact = $event->contact;
         $user = User::inWorkspace($contact->workspace_id)->first();
-        if (! $user) {
+        if (! $user || ! $this->access->allowsWorkspaceWrite($contact->workspace_id)) {
             return;
         }
 
@@ -44,7 +48,7 @@ class DispatchOutboundWebhookListener
         }
 
         $user = User::inWorkspace($conversation->workspace_id)->first();
-        if (! $user) {
+        if (! $user || ! $this->access->allowsWorkspaceWrite($conversation->workspace_id)) {
             return;
         }
 
@@ -65,7 +69,7 @@ class DispatchOutboundWebhookListener
     {
         $campaign = $event->campaign;
         $user = User::inWorkspace($campaign->workspace_id)->first();
-        if (! $user) {
+        if (! $user || ! $this->access->allowsWorkspaceWrite($campaign->workspace_id)) {
             return;
         }
 

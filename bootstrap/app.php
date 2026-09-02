@@ -9,6 +9,7 @@ use App\Http\Middleware\CheckApiAbility;
 use App\Http\Middleware\EnforceLimit;
 use App\Http\Middleware\EnsureAddonEntitled;
 use App\Http\Middleware\EnsureAdminRole;
+use App\Http\Middleware\EnsureClientAccess;
 use App\Http\Middleware\EnsureClientScope;
 use App\Http\Middleware\EnsureInstalled;
 use App\Http\Middleware\EnsureLicensed;
@@ -21,6 +22,9 @@ use App\Http\Middleware\RequestIdMiddleware;
 use App\Http\Middleware\RequirePermission;
 use App\Http\Middleware\SecureHeaders;
 use App\Http\Middleware\SetLocale;
+use App\Modules\AI\Exceptions\AiCreditsExhaustedException;
+use App\Modules\AI\Exceptions\AiRateLimitException;
+use App\Modules\AI\Exceptions\AiRequestInProgressException;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -140,14 +144,15 @@ return Application::configure(basePath: dirname(__DIR__))
             'limit' => EnforceLimit::class,
             'api.ability' => CheckApiAbility::class,
             'addon' => EnsureAddonEntitled::class,
+            'client.access' => EnsureClientAccess::class,
         ]);
         // Shared middleware stack for all client module routes (mirrors routes/client.php).
         $middleware->appendToGroup('client-app', [
             'auth',
-            'verified',
             'role:client',
             EnsureClientScope::class,
             EnsureNotDemoMode::class,
+            EnsureClientAccess::class,
         ]);
         // Trust all proxies so X-Forwarded-For is used for real client IPs.
         // In production, restrict to your actual load balancer IPs via TRUSTED_PROXIES env var.
@@ -215,4 +220,20 @@ return Application::configure(basePath: dirname(__DIR__))
                 ], 413);
             }
         });
+
+        $exceptions->renderable(fn (AiCreditsExhaustedException $e, $request) => response()->json([
+            'message' => $e->getMessage(),
+            'error' => $e->getMessage(),
+            'code' => 'ai_credits_exhausted',
+        ], 402));
+        $exceptions->renderable(fn (AiRateLimitException $e, $request) => response()->json([
+            'message' => $e->getMessage(),
+            'error' => $e->getMessage(),
+            'code' => 'ai_rate_limited',
+        ], 429));
+        $exceptions->renderable(fn (AiRequestInProgressException $e, $request) => response()->json([
+            'message' => $e->getMessage(),
+            'error' => $e->getMessage(),
+            'code' => 'ai_request_in_progress',
+        ], 409));
     })->create();

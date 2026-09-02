@@ -2,6 +2,7 @@
 
 namespace App\Modules\AI\Services;
 
+use App\Modules\AI\Exceptions\AiCreditsExhaustedException;
 use Throwable;
 
 class ProviderErrorPresenter
@@ -14,17 +15,29 @@ class ProviderErrorPresenter
      */
     public static function present(Throwable $exception): array
     {
+        if ($exception instanceof AiCreditsExhaustedException) {
+            return [
+                'code' => 'ai_credits_exhausted',
+                'message' => $exception->getMessage(),
+            ];
+        }
         $message = strtolower($exception->getMessage());
 
         return match (true) {
+            str_contains($message, 'reconnect your ai provider'),
+            str_contains($message, 'reconnect your fallback provider') => [
+                'code' => 'provider_reconnect_required',
+                'message' => 'Reconnect and test your API provider before continuing.',
+            ],
             str_contains($message, 'no ai provider configured') => [
                 'code' => 'provider_not_configured',
                 'message' => 'No enabled AI provider is configured. Save an API key and enable a provider first.',
             ],
             str_contains($message, 'no embedding-capable ai provider'),
-            str_contains($message, 'does not support embeddings') => [
+            str_contains($message, 'does not support embeddings'),
+            str_contains($message, 'does not provide embeddings') => [
                 'code' => 'embeddings_not_supported',
-                'message' => 'Knowledge bases require an enabled OpenAI or Gemini provider because Anthropic does not create embeddings.',
+                'message' => 'Knowledge bases require OpenAI or Gemini embeddings. Anthropic and DeepSeek can generate RAG answers but do not create embeddings.',
             ],
             self::containsAny($message, ['429', 'quota', 'rate limit', 'rate_limit', 'insufficient_quota', 'billing']) => [
                 'code' => 'provider_quota_exceeded',

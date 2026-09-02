@@ -44,10 +44,15 @@ class WorkflowGenerator
             ['role' => 'user', 'content' => 'Build an automation for this request:'."\n\n".trim($prompt)],
         ];
 
-        $response = $this->llmGateway->chat($workspaceId, $messages, ['max_tokens' => 3000]);
+        $response = $this->llmGateway->chat($workspaceId, $messages, [
+            'max_tokens' => 3000,
+            'feature_key' => 'automation_workflow_generate',
+            'idempotency_key' => request()->header('Idempotency-Key'),
+        ]);
 
         $spec = $this->decode($response->content);
         if (! is_array($spec)) {
+            $this->llmGateway->rejectMalformed($response);
             throw new \RuntimeException('The AI did not return a valid workflow. Try rephrasing your request.');
         }
 

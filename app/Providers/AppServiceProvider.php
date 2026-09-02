@@ -2,6 +2,26 @@
 
 namespace App\Providers;
 
+use App\Console\Commands\BackfillContactOptinCommand;
+use App\Console\Commands\BillingSyncCommand;
+use App\Console\Commands\ChargeRecurringMyFatoorahCommand;
+use App\Console\Commands\ChargeRecurringPaymobCommand;
+use App\Console\Commands\ChargeRecurringTapCommand;
+use App\Console\Commands\DbBackupCommand;
+use App\Console\Commands\ExpireTrialsCommand;
+use App\Console\Commands\I18nScanCommand;
+use App\Console\Commands\I18nSeedDefaultsCommand;
+use App\Console\Commands\InboxDuplicateReportCommand;
+use App\Console\Commands\MessengerProfileTestCommand;
+use App\Console\Commands\NotifyTrialEndingCommand;
+use App\Console\Commands\NotifyUnansweredConversationsCommand;
+use App\Console\Commands\PurgeOrphanedClientDataCommand;
+use App\Console\Commands\RecordReleaseCommand;
+use App\Console\Commands\SaasInstallCommand;
+use App\Console\Commands\SaasMakeModuleCommand;
+use App\Console\Commands\SendWeeklyDigestCommand;
+use App\Console\Commands\WebpushVapidCommand;
+use App\Console\Commands\WhatsappWebhookRegisterCommand;
 use App\Events\AutomationFailed;
 use App\Events\AutomationWebhookReceived;
 use App\Events\CampaignCompleted;
@@ -33,14 +53,15 @@ use App\Listeners\SendSubscriptionRenewedNotification;
 use App\Listeners\SendSubscriptionStartedNotification;
 use App\Listeners\SendTrialEndingNotification;
 use App\Listeners\SendWelcomeNotification;
-use Illuminate\Auth\Events\Registered;
 use App\Models\Workspace;
 use App\Modules\Shared\Services\ChannelManager;
 use App\Services\Billing\BillingGatewayRegistry;
+use App\Services\StorageManager;
 use Dedoc\Scramble\Scramble;
 use Dedoc\Scramble\Support\Generator\OpenApi;
 use Dedoc\Scramble\Support\Generator\SecurityScheme;
 use Illuminate\Auth\Events\Login;
+use Illuminate\Auth\Events\Registered;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Route;
@@ -69,7 +90,7 @@ class AppServiceProvider extends ServiceProvider
         }
 
         $this->app->singleton(BillingGatewayRegistry::class, fn () => new BillingGatewayRegistry);
-        $this->app->singleton(\App\Services\StorageManager::class);
+        $this->app->singleton(StorageManager::class);
         $this->app->singleton(ChannelManager::class, fn () => new ChannelManager);
     }
 
@@ -170,25 +191,26 @@ class AppServiceProvider extends ServiceProvider
     {
         if ($this->app->runningInConsole()) {
             $this->commands([
-                \App\Console\Commands\RecordReleaseCommand::class,
-                \App\Console\Commands\SaasInstallCommand::class,
-                \App\Console\Commands\SaasMakeModuleCommand::class,
-                \App\Console\Commands\BackfillContactOptinCommand::class,
-                \App\Console\Commands\BillingSyncCommand::class,
-                \App\Console\Commands\ChargeRecurringMyFatoorahCommand::class,
-                \App\Console\Commands\ChargeRecurringPaymobCommand::class,
-                \App\Console\Commands\ChargeRecurringTapCommand::class,
-                \App\Console\Commands\DbBackupCommand::class,
-                \App\Console\Commands\ExpireTrialsCommand::class,
-                \App\Console\Commands\I18nScanCommand::class,
-                \App\Console\Commands\I18nSeedDefaultsCommand::class,
-                \App\Console\Commands\InboxDuplicateReportCommand::class,
-                \App\Console\Commands\MessengerProfileTestCommand::class,
-                \App\Console\Commands\NotifyTrialEndingCommand::class,
-                \App\Console\Commands\NotifyUnansweredConversationsCommand::class,
-                \App\Console\Commands\SendWeeklyDigestCommand::class,
-                \App\Console\Commands\WebpushVapidCommand::class,
-                \App\Console\Commands\WhatsappWebhookRegisterCommand::class,
+                RecordReleaseCommand::class,
+                SaasInstallCommand::class,
+                SaasMakeModuleCommand::class,
+                BackfillContactOptinCommand::class,
+                BillingSyncCommand::class,
+                ChargeRecurringMyFatoorahCommand::class,
+                ChargeRecurringPaymobCommand::class,
+                ChargeRecurringTapCommand::class,
+                DbBackupCommand::class,
+                ExpireTrialsCommand::class,
+                I18nScanCommand::class,
+                I18nSeedDefaultsCommand::class,
+                InboxDuplicateReportCommand::class,
+                MessengerProfileTestCommand::class,
+                NotifyTrialEndingCommand::class,
+                NotifyUnansweredConversationsCommand::class,
+                PurgeOrphanedClientDataCommand::class,
+                SendWeeklyDigestCommand::class,
+                WebpushVapidCommand::class,
+                WhatsappWebhookRegisterCommand::class,
             ]);
         }
     }

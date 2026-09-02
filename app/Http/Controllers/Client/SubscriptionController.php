@@ -8,8 +8,10 @@ use App\Models\Coupon;
 use App\Models\PaymentTransaction;
 use App\Models\Plan;
 use App\Models\Subscription;
+use App\Modules\AI\Services\AiCreditService;
 use App\Services\Billing\BillingGatewayRegistry;
 use App\Services\Billing\InvoiceService;
+use App\Services\FreePlanActivationService;
 use App\Services\MediaService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -25,7 +27,23 @@ class SubscriptionController extends Controller
         protected BillingGatewayRegistry $gateways,
         protected InvoiceService $invoiceService,
         protected MediaService $mediaService,
+        protected FreePlanActivationService $freePlans,
+        protected AiCreditService $aiCredits,
     ) {}
+
+    public function activateFree(Request $request): RedirectResponse
+    {
+        $validated = $request->validate([
+            'plan_id' => ['required', 'integer', Rule::exists('plans', 'id')],
+            'billing_cycle' => ['nullable', Rule::in(['month', 'year'])],
+        ]);
+
+        $plan = Plan::where('enabled', true)->findOrFail($validated['plan_id']);
+        $this->freePlans->activate($request->user(), $plan, $validated['billing_cycle'] ?? 'month');
+
+        return redirect()->route('client.dashboard')
+            ->with('success', __('Your free plan is now active.'));
+    }
 
     public function show(Request $request): Response
     {
@@ -101,6 +119,9 @@ class SubscriptionController extends Controller
             'plans' => $plans,
             'transactions' => $transactions,
             'storageUsage' => $this->mediaService->usage($user),
+            'aiCredits' => ($user->current_workspace_id ?? $user->workspace_id)
+                ? $this->aiCredits->usageForWorkspace((int) ($user->current_workspace_id ?? $user->workspace_id))
+                : null,
         ]);
     }
 

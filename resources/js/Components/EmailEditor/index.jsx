@@ -308,7 +308,7 @@ function AiGeneratePanel({ campaignName, onGenerated }) {
                 prompt,
                 tone,
                 campaign_name: campaignName,
-            });
+            }, { headers: { 'Idempotency-Key': globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}` } });
             onGenerated(data);
         } catch (e) {
             setError(e.response?.data?.error ?? t('email_editor.generation_failed'));
@@ -365,7 +365,7 @@ function AiGeneratePanel({ campaignName, onGenerated }) {
                 className={`${btnBase} ai-glow w-full justify-center bg-brand-600 text-white hover:bg-brand-700`}
             >
                 {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-                {loading ? t('email_editor.generating') : t('email_editor.generate_email')}
+                {loading ? t('email_editor.generating') : `${t('email_editor.generate_email')} · 2 credits`}
             </button>
 
             <p className="text-center text-xs text-neutral-400">
@@ -391,7 +391,7 @@ function SubjectImprover({ subject, body, onPick }) {
         setSuggestions([]);
         setOpen(true);
         try {
-            const { data } = await axios.post(route('client.campaigns.improve-subject'), { subject, body });
+            const { data } = await axios.post(route('client.campaigns.improve-subject'), { subject, body }, { headers: { 'Idempotency-Key': globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}` } });
             setSuggestions(data.suggestions ?? []);
         } catch (e) {
             setError(e.response?.data?.error ?? t('email_editor.suggestions_failed'));
@@ -416,7 +416,7 @@ function SubjectImprover({ subject, body, onPick }) {
                 className="ai-glow inline-flex items-center gap-1 rounded-md border border-brand-300 bg-brand-50 px-2 py-1 text-xs font-medium text-brand-700 transition hover:bg-brand-100 disabled:opacity-40 dark:border-brand-700 dark:bg-brand-950/40 dark:text-brand-300 dark:hover:bg-brand-900/50"
             >
                 {loading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />}
-                {t('email_editor.improve')}
+                {t('email_editor.improve')} · 1 credit
             </button>
 
             {open && (

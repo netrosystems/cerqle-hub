@@ -5,7 +5,7 @@ import {
     LayoutDashboard, CreditCard, Package, FileText, Users, Settings,
     Layers, Webhook, Key, BookOpen, Image, Radio, Inbox, Bot, Database,
     Zap, Share2, Tag, LifeBuoy, MessageSquare,
-    MessageCircle, Mail,
+    MessageCircle, Mail, Monitor, ShieldCheck,
 } from 'lucide-react';
 
 const iconClass = 'h-4 w-4';
@@ -42,7 +42,9 @@ export default function useClientNav() {
     ];
 
     const accountSettingsItems = [
-        { label: t('nav.settings'),   href: safeRoute('client.settings.index'),   icon: <Settings className={iconClass} />, activePattern: 'client.settings.*' },
+        { label: t('nav.settings'),  href: safeRoute('client.settings.index'),    icon: <Settings className={iconClass} />,    activePattern: 'client.settings.*' },
+        { label: t('nav.twoFactor'), href: safeRoute('client.profile.2fa'),       icon: <ShieldCheck className={iconClass} />, activePattern: 'client.profile.2fa*' },
+        { label: t('nav.sessions'),  href: safeRoute('client.profile.sessions'),  icon: <Monitor className={iconClass} />,     activePattern: 'client.profile.sessions*' },
         { label: t('nav.workspaces'), href: safeRoute('client.workspaces.index'), icon: <Layers className={iconClass} />,   activePattern: 'client.workspaces.*' },
     ];
 
@@ -126,7 +128,6 @@ export default function useClientNav() {
 
     const reportsItems = [
         { label: t('nav.reports_inbox'),       href: safeRoute('client.reports.inbox.index'),       icon: <Inbox className={iconClass} />,  activePattern: 'client.reports.inbox.*' },
-        { label: t('nav.campaigns'),           href: safeRoute('client.reports.campaigns.index'),   icon: <Radio className={iconClass} />,  activePattern: 'client.reports.campaigns.*' },
         { label: t('nav.automations'),         href: safeRoute('client.reports.automations.index'), icon: <Zap className={iconClass} />,    activePattern: 'client.reports.automations.*' },
         { label: t('nav.ai_usage'),            href: safeRoute('client.reports.ai.index'),          icon: <Bot className={iconClass} />,    activePattern: 'client.reports.ai.*' },
         { label: t('nav.social'),              href: safeRoute('client.reports.social.index'),      icon: <Share2 className={iconClass} />, activePattern: 'client.reports.social.*' },
@@ -138,11 +139,11 @@ export default function useClientNav() {
         { type: 'group', label: t('nav.home'), items: landingItems, defaultOpen: true },
         { type: 'group', label: t('nav.group_inbox'), items: inboxItems, defaultOpen: true },
         { type: 'group', label: t('nav.group_contacts'), items: contactsItems, defaultOpen: true },
+        { type: 'group', label: t('nav.group_setup', { defaultValue: 'Setup' }), items: setupItems, defaultOpen: false },
         { type: 'group', label: t('nav.group_campaigns', { defaultValue: 'Campaigns' }), items: campaignItems, defaultOpen: false },
         { type: 'group', label: t('nav.group_social_media'), items: socialPublishingItems, defaultOpen: false },
         { type: 'group', label: t('nav.group_automations'), items: automationToolsItems, defaultOpen: false },
         { type: 'group', label: t('nav.group_reports'), items: reportsItems, defaultOpen: false },
-        { type: 'group', label: t('nav.group_setup', { defaultValue: 'Setup' }), items: setupItems, defaultOpen: false },
         { type: 'group', label: 'Assets', items: assetItems, defaultOpen: false },
         { type: 'group', label: t('nav.group_support'), items: supportItems, defaultOpen: false },
         { type: 'group', label: t('nav.group_billing'), items: billingItems, defaultOpen: false },

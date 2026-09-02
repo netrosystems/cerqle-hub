@@ -1,11 +1,11 @@
 import AdminLayout from '@/Layouts/AdminLayout';
 import { Card } from '@/Components/ui';
-import { Head } from '@inertiajs/react';
+import { Head, router } from '@inertiajs/react';
 import { Brain, Database, Zap, AlertTriangle, CheckCircle, XCircle, Activity, Bot, BookOpen } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
-const PROVIDER_LABELS = { openai: 'OpenAI', anthropic: 'Anthropic', gemini: 'Google Gemini' };
-const PROVIDER_COLORS = { openai: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400', anthropic: 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400', gemini: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400' };
+const PROVIDER_LABELS = { openai: 'OpenAI', anthropic: 'Anthropic', gemini: 'Google Gemini', deepseek: 'DeepSeek' };
+const PROVIDER_COLORS = { openai: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400', anthropic: 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400', gemini: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400', deepseek: 'bg-sky-100 text-sky-800 dark:bg-sky-900/30 dark:text-sky-400' };
 
 function StatCard({ icon: Icon, label, value, sub, color = 'brand' }) {
     const colors = { brand: 'text-brand-600', green: 'text-green-600', red: 'text-red-600', yellow: 'text-yellow-600', blue: 'text-blue-600' };
@@ -35,7 +35,7 @@ function StatusBadge({ ok, label, sublabel }) {
     );
 }
 
-export default function AiDashboard({ providerStats = {}, configuredWorkspaces = 0, qdrant, usage, topModels = [], dailyUsage = [], kbCount = 0, documentStats = {}, chatbotCount = 0, activeChatbotCount = 0 }) {
+export default function AiDashboard({ providerStats = {}, configuredWorkspaces = 0, qdrant, usage, topModels = [], dailyUsage = [], kbCount = 0, documentStats = {}, chatbotCount = 0, activeChatbotCount = 0, creditStats = {}, creditsByFeature = [], creditPeriods = [], adjustments = [] }) {
     const { t } = useTranslation();
 
     const totalTokensFormatted = usage.total_tokens >= 1_000_000
@@ -66,12 +66,21 @@ export default function AiDashboard({ providerStats = {}, configuredWorkspaces =
                     <StatCard icon={BookOpen} label={t('ai_dashboard.knowledge_bases')} value={kbCount} sub={`${docIndexed}/${docTotal} ${t('ai_dashboard.docs_indexed')}`} color={docError > 0 ? 'yellow' : 'green'} />
                 </div>
 
+                <Card className="p-5">
+                    <div className="flex flex-wrap items-start justify-between gap-4">
+                        <div><h3 className="font-semibold text-neutral-900 dark:text-neutral-100">Managed AI credit economics · last 30 days</h3><p className="mt-1 text-xs text-neutral-500">Provider cost is recorded in micro-USD; prompts are not stored in this report.</p></div>
+                        <div className="flex flex-wrap gap-5 text-sm"><span><strong>{(creditStats.consumed ?? 0).toLocaleString()}</strong> credits</span><span><strong>${((creditStats.cost_microusd ?? 0) / 1_000_000).toFixed(4)}</strong> cost</span><span><strong>{creditStats.byok_actions ?? 0}</strong> BYOK actions</span><span><strong>{creditStats.refunds ?? 0}</strong> refunds</span></div>
+                    </div>
+                    {creditsByFeature.length > 0 && <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">{creditsByFeature.map(row => <div key={row.feature_key} className="rounded-lg border border-neutral-200 p-3 dark:border-neutral-700"><p className="text-xs text-neutral-500">{row.feature_key.replaceAll('_', ' ')}</p><p className="mt-1 font-semibold">{Number(row.credits).toLocaleString()} credits <span className="font-normal text-neutral-400">· {row.actions} actions</span></p></div>)}</div>}
+                </Card>
+                {creditPeriods.length > 0 && <Card className="overflow-hidden"><div className="border-b border-neutral-200 px-5 py-4 dark:border-neutral-700"><h3 className="font-semibold">Organization credit pools</h3><p className="text-xs text-neutral-500">Grant with a positive number or revoke with a negative number. Revokes cannot reduce available credits below zero.</p></div><div className="overflow-x-auto"><table className="w-full text-sm"><thead className="bg-neutral-50 text-xs text-neutral-500 dark:bg-neutral-800"><tr><th className="px-4 py-2 text-left">Account</th><th className="px-4 py-2 text-left">Used / allowance</th><th className="px-4 py-2 text-left">Period ends</th><th className="px-4 py-2 text-right">Adjustment</th></tr></thead><tbody className="divide-y divide-neutral-100 dark:divide-neutral-800">{creditPeriods.map(period => <tr key={period.id}><td className="px-4 py-3">{period.account_type} #{period.account_id}</td><td className="px-4 py-3">{period.used_credits} / {period.allowance} <span className="text-neutral-400">({period.reserved_credits} reserved)</span></td><td className="px-4 py-3">{new Date(period.period_end).toLocaleDateString()}</td><td className="px-4 py-3 text-right"><button type="button" className="text-brand-600 hover:underline" onClick={() => { const amount = window.prompt('Credits to grant (positive) or revoke (negative)'); if (!amount) return; const reason = window.prompt('Required audit reason'); if (!reason) return; router.post(route('admin.ai.credits.adjust', period.id), { credits: Number(amount), reason }, { preserveScroll: true }); }}>Grant / revoke</button></td></tr>)}</tbody></table></div>{adjustments.length > 0 && <div className="border-t border-neutral-200 px-5 py-3 text-xs text-neutral-500 dark:border-neutral-700">Latest adjustment: {adjustments[0].credits > 0 ? '+' : ''}{adjustments[0].credits} credits · {adjustments[0].reason}</div>}</Card>}
+
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                     {/* Provider health */}
                     <Card className="p-5 space-y-4">
                         <h3 className="font-semibold text-neutral-900 dark:text-neutral-100 flex items-center gap-2"><Brain className="h-4 w-4" /> {t('ai_dashboard.ai_providers')}</h3>
                         <div className="space-y-3">
-                            {['openai', 'anthropic', 'gemini'].map((p) => {
+                            {['openai', 'anthropic', 'gemini', 'deepseek'].map((p) => {
                                 const count = providerStats[p] ?? 0;
                                 const configured = count > 0;
                                 return (

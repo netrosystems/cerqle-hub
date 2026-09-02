@@ -1,13 +1,15 @@
 import AuthLayout from '@/Layouts/AuthLayout';
+import GoogleOAuthButton from '@/Components/Auth/GoogleOAuthButton';
+import OAuthErrorAlert from '@/Components/Auth/OAuthErrorAlert';
 import { Button, Input, Checkbox } from '@/Components/ui';
 import { Head, Link, useForm } from '@inertiajs/react';
 import { useTranslation } from 'react-i18next';
 import { UserPlus } from 'lucide-react';
 import { browserTz } from '@/Utils/datetime';
 
-export default function Register({ plan_id = null, cycle = 'month' }) {
+export default function Register({ plan_id = null, cycle = 'month', googleSignupEnabled = false, oauthRequiresRegistration = false }) {
     const { t } = useTranslation();
-    const { data, setData, post, processing, errors, reset } = useForm({
+    const { data, setData, post, processing, errors, reset, setError, clearErrors } = useForm({
         name:                  '',
         email:                 '',
         password:              '',
@@ -25,12 +27,56 @@ export default function Register({ plan_id = null, cycle = 'month' }) {
         });
     };
 
+    const googleSignup = () => {
+        if (!data.agree_terms) {
+            setError(
+                'agree_terms',
+                t('auth.google_terms_required', {
+                    defaultValue: 'Accept the Terms & Conditions and Privacy Policy to continue with Google.',
+                }),
+            );
+            document.getElementById('agree_terms')?.focus();
+            return;
+        }
+
+        // Use the same Inertia form instance as the email registration flow so
+        // server-side validation errors remain attached to the visible form.
+        post(route('auth.google.signup'), { preserveScroll: true });
+    };
+
     return (
         <AuthLayout
             title={t('auth.register') || 'Create an account'}
             subtitle={t('auth.register_subtitle') || 'Get started for free today'}
         >
             <Head title={t('auth.register') || 'Register'} />
+
+            <OAuthErrorAlert message={errors.oauth}>
+                {!oauthRequiresRegistration && (
+                    <Link
+                        href={route('login')}
+                        className="underline decoration-coral-300 underline-offset-2 hover:text-coral-950 dark:hover:text-coral-100"
+                    >
+                        {t('auth.sign_in_instead', { defaultValue: 'Sign in instead' })}
+                    </Link>
+                )}
+            </OAuthErrorAlert>
+
+            {googleSignupEnabled && (
+                <>
+                    <GoogleOAuthButton
+                        onClick={googleSignup}
+                        disabled={processing}
+                        loading={processing}
+                        label={processing ? t('auth.signing_in') : t('auth.continue_with_google')}
+                    />
+                    <div className="flex items-center gap-3 text-xs text-neutral-400">
+                        <span className="h-px flex-1 bg-neutral-200 dark:bg-neutral-700" />
+                        <span>{t('auth.or_continue_with_email', { defaultValue: 'or continue with email' })}</span>
+                        <span className="h-px flex-1 bg-neutral-200 dark:bg-neutral-700" />
+                    </div>
+                </>
+            )}
 
             <form onSubmit={submit} className="space-y-4">
                 <Input
@@ -85,7 +131,10 @@ export default function Register({ plan_id = null, cycle = 'month' }) {
                     id="agree_terms"
                     name="agree_terms"
                     checked={data.agree_terms}
-                    onChange={(e) => setData('agree_terms', e.target.checked)}
+                    onChange={(e) => {
+                        setData('agree_terms', e.target.checked);
+                        if (e.target.checked) clearErrors('agree_terms');
+                    }}
                     error={errors.agree_terms}
                     label={
                         <span>

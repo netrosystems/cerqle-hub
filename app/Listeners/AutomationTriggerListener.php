@@ -11,16 +11,24 @@ use App\Modules\Automation\Jobs\ExecuteAutomationRunJob;
 use App\Modules\Automation\Models\Automation;
 use App\Modules\Automation\Models\AutomationRun;
 use App\Modules\Automation\Services\AutomationEngine;
+use App\Services\ClientAccessService;
 
 class AutomationTriggerListener
 {
-    public function __construct(private readonly AutomationEngine $engine) {}
+    public function __construct(
+        private readonly AutomationEngine $engine,
+        private readonly ClientAccessService $access,
+    ) {}
 
     public function handleMessageReceived(MessageReceived $event): void
     {
         $contactId = $event->message->conversation?->contact_id;
         $workspaceId = $event->message->conversation?->workspace_id;
         if (! $contactId || ! $workspaceId) {
+            return;
+        }
+
+        if (! $this->access->allowsWorkspaceWrite($workspaceId)) {
             return;
         }
 
@@ -44,6 +52,9 @@ class AutomationTriggerListener
     public function handleCampaignCompleted(CampaignCompleted $event): void
     {
         $campaign = $event->campaign;
+        if (! $this->access->allowsWorkspaceWrite($campaign->workspace_id)) {
+            return;
+        }
         $context = [
             'campaign_id' => $campaign->id,
             'campaign_name' => $campaign->name,
@@ -75,6 +86,10 @@ class AutomationTriggerListener
             return;
         }
 
+        if (! $this->access->allowsWorkspaceWrite($automation->workspace_id)) {
+            return;
+        }
+
         $context = ['payload' => $event->payload];
 
         if ($event->contactId) {
@@ -87,6 +102,9 @@ class AutomationTriggerListener
 
     private function triggerWithoutContact(Automation $automation, array $context = []): void
     {
+        if (! $this->access->allowsWorkspaceWrite($automation->workspace_id)) {
+            return;
+        }
         $run = AutomationRun::create([
             'automation_id' => $automation->id,
             'contact_id' => null,
@@ -100,6 +118,9 @@ class AutomationTriggerListener
 
     private function fire(string $triggerType, int $workspaceId, int $contactId, array $context = []): void
     {
+        if (! $this->access->allowsWorkspaceWrite($workspaceId)) {
+            return;
+        }
         Automation::where('workspace_id', $workspaceId)
             ->where('status', 'active')
             ->where('trigger_type', $triggerType)
@@ -112,6 +133,9 @@ class AutomationTriggerListener
      */
     private function fireWithConfig(string $triggerType, int $workspaceId, int $contactId, array $context, string $messageBody = ''): void
     {
+        if (! $this->access->allowsWorkspaceWrite($workspaceId)) {
+            return;
+        }
         $automations = Automation::where('workspace_id', $workspaceId)
             ->where('status', 'active')
             ->where('trigger_type', $triggerType)
