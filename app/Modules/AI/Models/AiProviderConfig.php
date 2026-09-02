@@ -8,12 +8,12 @@ class AiProviderConfig extends Model
 {
     protected $table = 'ai_provider_configs';
 
-    protected $fillable = ['workspace_id', 'provider', 'credentials', 'default_model_chat', 'default_model_embed', 'enabled'];
+    protected $fillable = ['workspace_id', 'provider', 'credentials', 'default_model_chat', 'default_model_embed', 'enabled', 'test_status', 'tested_at'];
 
     protected $hidden = ['credentials'];
 
     protected function casts(): array
     {
-        return ['credentials' => 'encrypted:array', 'enabled' => 'boolean'];
+        return ['credentials' => 'encrypted:array', 'enabled' => 'boolean', 'tested_at' => 'datetime'];
     }
 }

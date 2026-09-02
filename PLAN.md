@@ -36,9 +36,10 @@ journey
 ### Feature 1: Multi-Tenancy, Auth & Team Management (`app/Http/Controllers/Client/*`)
 
 #### Capabilities
-- **Authentication & Security**: Email/password authentication, Magic Link login, Google/Socialite OAuth, and Google Authenticator 2FA (`TwoFactorController`).
+- **Authentication & Security**: Email/password authentication, Magic Link login, Google/Socialite OAuth, and Google Authenticator 2FA (`TwoFactorController`). Google signup is available separately from Google login, requires Terms acceptance, and can create an account; Google login only admits an existing identity. Email/password registrations enter the dashboard immediately but operational features remain locked until email verification.
 - **Workspace Switching**: Seamless switching between client-owned workspaces (`WorkspaceController`) with strict scoped sessions.
 - **Workspace Management**: Authorized owners and client administrators can rename a workspace or permanently delete it after typing its exact name. Deletion is atomic, removes workspace-scoped records, selects a safe fallback workspace, and cannot remove the client's only workspace.
+- **Client lifecycle**: Super Admin client deletion requires exact-name confirmation, permanently purges identity and operational records, anonymizes retained finance/audit rows, and releases user emails for reuse.
 - **Role-Based Team Access**: Client administrators can invite team members, assign granular roles (Admin, Agent, Viewer), and inspect audit logs (`TeamController`, `ClientAuditLogController`).
 - **Session Management**: View and revoke active browser sessions remotely (`SessionController`).
 - **Resilient Verification Email**: Account creation succeeds even when SMTP or fallback notification delivery is rejected; failures are logged for follow-up and transactional messages include branded HTML plus a readable plain-text part.
@@ -107,6 +108,7 @@ journey
 - **Reliable Post Previews**: Scheduled and retryable post cards use stored MIME metadata to render uploaded videos as video-frame previews and images as images. Unavailable media uses a neutral placeholder instead of a broken browser image.
 - **Social Upload Limits**: Social images accept up to 25 MB, social videos accept up to 500 MB, and YouTube thumbnails retain their 2 MB provider limit. These application limits are identical across environments; deployment templates align PHP-FPM and Nginx with a 520 MB multipart request ceiling for video.
 - **Storage Visibility**: The Subscription page and subscription APIs report organization-wide used, remaining, percentage, unlimited, and full storage states.
+- **Plan activation and enforcement**: Even a zero-cost plan must be explicitly activated. No-plan users can access only dashboard, billing/subscription, pricing, profile/settings, verification, and logout. Expired plans are read-only: inbound data continues, while outbound actions, mutations, scheduled social publishing, campaigns, and automations pause until renewal.
 - **Interactive Visual Calendar (`/app/social/calendar`)**: Month/Week/Day calendar view for managing scheduled and past social media campaigns.
 - **Capability-Driven Deletion**: Safely distinguishes remote platform deletion capabilities between Facebook (supported) and Instagram (API limited).
 
@@ -117,7 +119,7 @@ journey
 #### Capabilities
 - **Multi-Source Knowledge Ingestion**: Ingest raw text, PDF/Word documents, website URL crawlers, and XML sitemaps into vectorized embeddings (`IndexKnowledgeDocumentJob`).
 - **Hybrid Vector Retrieval**: Built-in MySQL vector-like similarity fallback with high-performance Qdrant vector database support.
-- **LLM Provider Agnostic**: Native support for OpenAI (GPT-4o), Anthropic (Claude 3.5), Google (Gemini 1.5/2.0), and DeepSeek.
+- **LLM Provider Agnostic**: Native support for OpenAI, Anthropic, Google Gemini, and DeepSeek frontier chat models. DeepSeek can be selected for lower-cost RAG answer generation while OpenAI or Gemini supplies the embeddings required for indexing and retrieval.
 - **Smart Bot Configuration**: Define persona prompt instructions, confidence thresholds, temperature, and fallback behaviors.
 
 ---
@@ -178,3 +180,12 @@ journey
 | **Navigation & Layout** | Component | `resources/js/__tests__/useClientNav.test.jsx` | Sidebar permission filtering & route active states. |
 | **Contact Operations** | Unit | `resources/js/__tests__/contactListOperations.test.js` | Filtering, segment selection & bulk mutations. |
 | **Stripe / Billing** | Feature | `tests/Feature/BillingWebhookTest.php` | Subscription renewals, plan changes & cancellations. |
+# Managed AI credit lifecycle (implemented 2026-09-02)
+
+- Plan limit: required finite `ai_credits_per_month`; price-based rollout grants $0/$20/$40/$150 plans 100/1,000/3,000/15,000 credits and defaults every other existing plan to zero pending an admin decision.
+- Rates version `2026-09-01`: RAG, subject suggestions, short rewrites, and automation AI steps cost 1; complete emails and single social posts cost 2; workflows and multi-post plans cost 5. Provider tests, embeddings, failures, cancelled reservations, and internal retries cost zero.
+- Credits reset monthly on the subscription anniversary, never roll over, and remain pooled across all organization workspaces. Current-period upgrades may only increase the granted allowance; downgrades do not claw credits back.
+- At 80%, clients receive an amber warning. At exhaustion, managed actions return `402 / ai_credits_exhausted` when enforcement is enabled. `auto_fallback` uses an enabled, connection-tested workspace BYOK provider; otherwise the action pauses with reconnect guidance.
+- Failed chatbot generation preserves inbound data and uses the chatbot fallback reply. Automation errors remain retryable. Ledger reconciliation refunds abandoned reservations after ten minutes.
+- Free managed usage requires a verified email. Request velocity, model context limits, and organization-wide atomic reservations form the initial abuse boundary; raw prompts are not written to analytics logs.
+- Rollout order: shadow ledger, two-week measurement, configure allowances/privacy disclosures, warnings and mode controls, then `AI_CREDITS_ENFORCED=true`. Re-evaluate rates and allowances after 60–90 days.

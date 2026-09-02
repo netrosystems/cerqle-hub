@@ -5,13 +5,14 @@ namespace App\Http\Controllers\Api\V1;
 use App\Http\Controllers\Controller;
 use App\Models\ClientSubscription;
 use App\Models\Subscription;
+use App\Modules\AI\Services\AiCreditService;
 use App\Services\MediaService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class SubscriptionApiController extends Controller
 {
-    public function __construct(private readonly MediaService $mediaService) {}
+    public function __construct(private readonly MediaService $mediaService, private readonly AiCreditService $aiCredits) {}
 
     public function show(Request $request): JsonResponse
     {
@@ -38,6 +39,7 @@ class SubscriptionApiController extends Controller
                 'gateway' => $effective instanceof Subscription ? $effective->gateway : null,
                 'managed_by_admin' => $effective instanceof ClientSubscription,
                 'storage' => $this->mediaService->usage($user),
+                'ai_credits' => $this->aiUsage($user),
             ],
         ]);
     }
@@ -57,7 +59,15 @@ class SubscriptionApiController extends Controller
                     'storage_gb' => $plan->limitValue('storage_gb'),
                 ] : null,
                 'storage' => $this->mediaService->usage($user),
+                'ai_credits' => $this->aiUsage($user),
             ],
         ]);
+    }
+
+    private function aiUsage($user): ?array
+    {
+        $workspaceId = $user->current_workspace_id ?? $user->workspace_id;
+
+        return $workspaceId ? $this->aiCredits->usageForWorkspace((int) $workspaceId) : null;
     }
 }

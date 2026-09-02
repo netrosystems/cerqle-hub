@@ -26,13 +26,14 @@ use App\Http\Controllers\WorkspaceController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
-Route::middleware(['verified'])->group(function () {
+Route::middleware(['client.access'])->group(function () {
     // Dashboard
     Route::get('/dashboard', ClientDashboardController::class)->name('dashboard');
 
     // Subscription
     Route::get('/subscription', [ClientSubscriptionController::class, 'show'])->name('subscription.show');
     Route::post('/subscription/change-plan', [ClientSubscriptionController::class, 'changePlan'])->name('subscription.change-plan');
+    Route::post('/subscription/activate-free', [ClientSubscriptionController::class, 'activateFree'])->name('subscription.activate-free');
     Route::get('/subscription/invoice/{transaction}', [ClientSubscriptionController::class, 'invoiceDownload'])->name('subscription.invoice');
     Route::delete('/subscription', [ClientSubscriptionController::class, 'destroy'])->name('subscription.destroy');
 

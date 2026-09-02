@@ -12,6 +12,7 @@ use App\Modules\Broadcasting\Services\Sms\SmsDriverManager;
 use App\Modules\Broadcasting\Services\Sms\SmsFailureClassifier;
 use App\Modules\Broadcasting\Services\Sms\SmsSendResult;
 use App\Modules\Broadcasting\Services\SmsCampaignCapacityService;
+use App\Services\ClientAccessService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -39,6 +40,7 @@ class SendSmsCampaignMessageJob implements ShouldQueue
         SmsFailureClassifier $classifier,
         SmsCampaignCapacityService $capacity,
         CampaignStepService $steps,
+        ClientAccessService $access,
     ): void {
         $recipient = CampaignRecipient::with(['campaign', 'contact', 'step'])->find($this->recipientId);
         if (! $recipient || ! $recipient->campaign || ! $recipient->contact) {
@@ -46,6 +48,15 @@ class SendSmsCampaignMessageJob implements ShouldQueue
         }
 
         $campaign = $recipient->campaign;
+        if (! $access->allowsWorkspaceWrite($campaign->workspace_id)) {
+            $campaign->update([
+                'status' => 'safety_paused',
+                'pause_reason' => 'Campaign paused because the subscription is inactive.',
+            ]);
+            $this->returnToQueue($recipient, 'Subscription is inactive.');
+
+            return;
+        }
         if (! in_array($campaign->status, ['sending', 'retrying'], true)) {
             $this->returnToQueue($recipient, 'Campaign is not currently sending.');
 

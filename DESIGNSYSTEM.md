@@ -74,6 +74,8 @@ Primary Plum:    #3E2A49   Brand Lilac:    #8F5FA7   Cool Accent:  #45B6D6   Cor
 ### 4.1 Standard Page Layout (`ClientLayout`)
 - **Used For**: Dashboard, Settings, Team Management, Contacts Directory, Billing, Reports.
 - **Structure**: Centered content container (`max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8`). Includes page header with breadcrumb navigation and right-aligned action buttons.
+- **Account navigation**: The profile dropdown stays concise with Profile, Settings, and Log Out. Security and session-management destinations live in the sidebar Account group, with `2FA Authentication` directly below Settings and Sessions immediately after it.
+- **Client sidebar ordering**: Setup appears immediately before Campaigns so clients configure channels before creating campaigns. Reports contains reporting destinations only; SMS Campaigns remains exclusively in the Campaigns group.
 
 ### 4.2 Viewport-Pinned Layout (`InboxLayout`)
 - **Used For**: Omni-Channel Inbox and Master Email Inbox.
@@ -97,6 +99,7 @@ Primary Plum:    #3E2A49   Brand Lilac:    #8F5FA7   Cool Accent:  #45B6D6   Cor
 - **`ghost`**: `bg-transparent text-neutral-700 hover:bg-neutral-100` — Used for inline toolbars and list actions.
 - **`danger`**: `bg-coral-500 text-white hover:bg-coral-600` — Used for irreversible delete actions.
 - **`outline`**: `border-neutral-300 text-neutral-700 hover:bg-neutral-50` — Used for filter triggers and downloads.
+- Google authentication on Sign In and Register uses the shared `GoogleOAuthButton` component so provider branding, shape, spacing, focus treatment, and disabled state remain identical across both entry points.
 
 ### 5.2 Status Badges & Semantic Pills (`Badge.jsx`)
 
@@ -105,6 +108,8 @@ Primary Plum:    #3E2A49   Brand Lilac:    #8F5FA7   Cool Accent:  #45B6D6   Cor
 | **Brand / Active** | `bg-brand-50 text-brand-700 border-brand-200` | `dark:bg-brand-900/30 dark:text-brand-300 dark:border-brand-700` | Active channels, Pro plan, Verified |
 | **Success / Synced** | `bg-emerald-50 text-emerald-700 border-emerald-200` | `dark:bg-emerald-900/30 dark:text-emerald-300 dark:border-emerald-700` | Delivered, Resolved, Connected, Paid |
 | **Warning / Pending** | `bg-amber-50 text-amber-700 border-amber-200` | `dark:bg-amber-900/30 dark:text-amber-300 dark:border-amber-700` | Snoozed, Quota Warning, Pending OAuth |
+
+Account-access states use persistent, accessible banners beneath the top bar: amber for pending email verification, brand lilac for plan selection, and red for an expired/read-only subscription. Destructive client deletion uses a red warning panel, states that recovery is impossible, requires the exact client name, and keeps the permanent-delete action disabled until it matches.
 | **Danger / Failed** | `bg-coral-50 text-coral-800 border-coral-200` | `dark:bg-coral-950/40 dark:text-coral-300 dark:border-coral-800` | Failed delivery, Expired token, Canceled |
 | **Neutral / Default** | `bg-neutral-100 text-neutral-700 border-neutral-200` | `dark:bg-neutral-800 dark:text-neutral-300 dark:border-neutral-700` | Draft, Archived, Unassigned |
 
@@ -143,3 +148,8 @@ Primary Plum:    #3E2A49   Brand Lilac:    #8F5FA7   Cool Accent:  #45B6D6   Cor
 2. **Focus Visibility**: Visible focus rings on all interactive elements (`focus:ring-2 focus:ring-brand-500/30 focus:ring-offset-1`).
 3. **Screen Reader Support**: All icon-only buttons require an `aria-label` attribute (e.g. `aria-label={t('common.close')}`).
 4. **Internationalization (i18n)**: All UI strings must be resolved via `useTranslation()` (`t('nav.inbox')`, `t('common.save')`) to support multi-language localizations.
+# AI credit surfaces (2026-09-02)
+
+The Subscription page places an “AI Credits” usage card alongside Storage Usage. It shows used/remaining/allowance, percentage, reset date, provider mode, plain-language action equivalents, and direct links to usage, provider setup, and plan upgrades. Normal usage uses Cerqle Lilac, 80–99% uses amber, and exhausted usage uses coral/red with persistent corrective guidance.
+
+AI Providers begins with three explicit, plain-language mode choices: managed Cerqle credits, customer API only, and managed credits with automatic BYOK fallback. BYOK and fallback cannot be selected until the enabled provider passes its connection test. Provider secrets remain masked and are never returned to the browser. DeepSeek carries a visible privacy/data-location notice and is never presented as part of the managed pool.

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import ClientLayout from '@/Layouts/ClientLayout';
 import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
 import { useTranslation } from 'react-i18next';
-import { Package, ArrowRightCircle, CreditCard, FileText, RefreshCw, HardDrive, AlertTriangle } from 'lucide-react';
+import { Package, ArrowRightCircle, CreditCard, FileText, RefreshCw, HardDrive, AlertTriangle, Sparkles } from 'lucide-react';
 import { formatDateTz } from '@/Utils/datetime';
 
 function formatCurrency(cents, currency = 'USD') {
@@ -113,7 +113,7 @@ function ChangePlanModal({ subscription, plans, onClose }) {
     );
 }
 
-export default function SubscriptionShow({ subscription, canCancel, canUpgrade, plans = [], transactions = [], storageUsage }) {
+export default function SubscriptionShow({ subscription, canCancel, canUpgrade, plans = [], transactions = [], storageUsage, aiCredits }) {
     const { t } = useTranslation();
     const { flash, timezone } = usePage().props;
     const userTz = timezone || 'Asia/Dhaka';
@@ -274,6 +274,32 @@ export default function SubscriptionShow({ subscription, canCancel, canUpgrade, 
                                 <span>Storage is full. Delete unused media, wait for published-media cleanup, or upgrade your plan before uploading again.</span>
                             </div>
                         )}
+                    </div>
+                )}
+
+                {aiCredits && (
+                    <div className={`rounded-soft-lg border bg-white p-6 dark:bg-neutral-800/50 ${aiCredits.exhausted ? 'border-coral-300 dark:border-coral-800' : aiCredits.warning ? 'border-amber-300 dark:border-amber-800' : 'border-neutral-200 dark:border-neutral-700'}`}>
+                        <div className="flex flex-wrap items-start justify-between gap-4">
+                            <div className="flex items-center gap-3">
+                                <span className="flex h-10 w-10 items-center justify-center rounded-soft-lg bg-brand-50 text-brand-600 dark:bg-brand-900/30 dark:text-brand-300"><Sparkles className="h-5 w-5" /></span>
+                                <div>
+                                    <h3 className="text-base font-semibold text-neutral-900 dark:text-neutral-100">AI Credits</h3>
+                                    <p className="text-sm text-neutral-500 dark:text-neutral-400">{aiCredits.used.toLocaleString()} used · {aiCredits.remaining.toLocaleString()} remaining · {aiCredits.allowance.toLocaleString()} total</p>
+                                </div>
+                            </div>
+                            <span className="text-sm font-semibold text-neutral-700 dark:text-neutral-200">{aiCredits.percent_used}%</span>
+                        </div>
+                        <div className="mt-4 h-2.5 overflow-hidden rounded-full bg-neutral-100 dark:bg-neutral-700"><div className={`h-full rounded-full ${aiCredits.exhausted ? 'bg-coral-500' : aiCredits.warning ? 'bg-amber-500' : 'bg-brand-500'}`} style={{ width: `${Math.min(100, aiCredits.percent_used)}%` }} /></div>
+                        <div className="mt-3 flex flex-wrap items-center justify-between gap-3 text-xs text-neutral-500 dark:text-neutral-400">
+                            <span>Resets {formatDate(aiCredits.resets_at)} · Mode: {aiCredits.mode.replace('_', ' ')}</span>
+                            <span>≈ {aiCredits.remaining} short actions, {Math.floor(aiCredits.remaining / 2)} full emails, or {Math.floor(aiCredits.remaining / 5)} workflow plans</span>
+                        </div>
+                        <div className="mt-4 flex flex-wrap gap-2">
+                            <Link href={route('client.reports.ai.index')} className="rounded-lg border border-neutral-300 px-3 py-2 text-xs font-semibold text-neutral-700 hover:bg-neutral-50 dark:border-neutral-600 dark:text-neutral-200">View usage</Link>
+                            <Link href={route('client.ai.providers.index')} className="rounded-lg border border-neutral-300 px-3 py-2 text-xs font-semibold text-neutral-700 hover:bg-neutral-50 dark:border-neutral-600 dark:text-neutral-200">Add your API provider</Link>
+                            {canUpgrade && <Link href={route('client.pricing')} className="rounded-lg bg-brand-600 px-3 py-2 text-xs font-semibold text-white hover:bg-brand-700">Upgrade plan</Link>}
+                        </div>
+                        {aiCredits.warning && <div className={`mt-4 flex gap-2 rounded-soft border p-3 text-sm ${aiCredits.exhausted ? 'border-coral-200 bg-coral-50 text-coral-800' : 'border-amber-200 bg-amber-50 text-amber-800'}`}><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" /><span>{aiCredits.exhausted ? 'AI credits are exhausted. Add your provider or upgrade to resume managed AI actions.' : 'You have used at least 80% of this month’s AI credits.'}</span></div>}
                     </div>
                 )}
 

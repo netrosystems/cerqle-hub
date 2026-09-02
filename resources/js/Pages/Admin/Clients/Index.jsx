@@ -53,6 +53,7 @@ export default function AdminClientsIndex({ clients, plans = [], filters = {}, c
     const [assignPlanOpen, setAssignPlanOpen] = useState(false);
     const [assignPlanClient, setAssignPlanClient] = useState(null);
     const [deleteClientConfirm, setDeleteClientConfirm] = useState(null);
+    const [deleteClientName, setDeleteClientName] = useState('');
     const [addUserOpen, setAddUserOpen] = useState(false);
     const [editUserOpen, setEditUserOpen] = useState(false);
     const [editUser, setEditUser] = useState(null);
@@ -223,8 +224,12 @@ export default function AdminClientsIndex({ clients, plans = [], filters = {}, c
 
     const doDeleteClient = (client) => {
         router.delete(route('admin.clients.destroy', { client: client.id }), {
+            data: { confirmation: deleteClientName },
             preserveScroll: true,
-            onSuccess: () => setDeleteClientConfirm(null),
+            onSuccess: () => {
+                setDeleteClientConfirm(null);
+                setDeleteClientName('');
+            },
         });
     };
 
@@ -317,7 +322,7 @@ export default function AdminClientsIndex({ clients, plans = [], filters = {}, c
                                                         title={t('admin.delete_client_title')}
                                                         icon={Trash2}
                                                         className="text-amber-500 hover:text-amber-600"
-                                                        onClick={() => setDeleteClientConfirm(c)}
+                                                        onClick={() => { setDeleteClientName(''); setDeleteClientConfirm(c); }}
                                                     />
                                                 )}
                                             </div>
@@ -740,16 +745,24 @@ export default function AdminClientsIndex({ clients, plans = [], filters = {}, c
             </Modal>
 
             {/* Delete Client Confirm */}
-            <Modal show={!!deleteClientConfirm} onClose={() => setDeleteClientConfirm(null)}>
-                <Modal.Header title={t('admin.delete_client')} onClose={() => setDeleteClientConfirm(null)} />
+            <Modal show={!!deleteClientConfirm} onClose={() => { setDeleteClientConfirm(null); setDeleteClientName(''); }}>
+                <Modal.Header title={t('admin.delete_client')} onClose={() => { setDeleteClientConfirm(null); setDeleteClientName(''); }} />
                 {deleteClientConfirm && (
                     <>
                         <Modal.Body>
-                            <p className="text-sm text-neutral-600 dark:text-neutral-400">{t('admin.delete_client_confirm', { name: deleteClientConfirm.name })}</p>
+                            <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-900 dark:border-red-800 dark:bg-red-900/20 dark:text-red-200">
+                                <p className="font-semibold">Permanently delete this client?</p>
+                                <p className="mt-1">This erases all users, workspaces, messages, contacts, connected channels, campaigns, automations, social posts, and files. This action cannot be undone and the data cannot be retrieved.</p>
+                            </div>
+                            <label className="mt-4 block text-sm font-medium text-neutral-700 dark:text-neutral-300">
+                                Type <span className="font-semibold">{deleteClientConfirm.name}</span> to confirm
+                            </label>
+                            <input value={deleteClientName} onChange={(e) => setDeleteClientName(e.target.value)} className="mt-2 w-full rounded-soft border border-neutral-300 bg-white px-3 py-2 text-sm dark:border-neutral-600 dark:bg-neutral-800" />
+                            {pageErrors.confirmation && <p className="mt-1 text-xs text-red-600">{pageErrors.confirmation}</p>}
                         </Modal.Body>
                         <Modal.Footer>
-                            <Button variant="outline" onClick={() => setDeleteClientConfirm(null)}>{t('common.cancel')}</Button>
-                            <Button variant="danger" onClick={() => doDeleteClient(deleteClientConfirm)}>{t('common.delete')}</Button>
+                            <Button variant="outline" onClick={() => { setDeleteClientConfirm(null); setDeleteClientName(''); }}>{t('common.cancel')}</Button>
+                            <Button variant="danger" disabled={deleteClientName !== deleteClientConfirm.name} onClick={() => doDeleteClient(deleteClientConfirm)}>Delete permanently</Button>
                         </Modal.Footer>
                     </>
                 )}

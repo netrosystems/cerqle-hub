@@ -5,7 +5,7 @@ import {
     ExternalLink, Image as ImageIcon, Inbox, Mail, MailOpen, Paperclip, PenLine, RefreshCw, Search, Send, Settings2, X,
 } from 'lucide-react';
 import axios from 'axios';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 
 function ComposeModal({ accounts, onClose }) {
     const form = useForm({
@@ -298,53 +298,104 @@ function MailRow({ conversation, active, timezone, onOpen }) {
     </button>;
 }
 
-function MessageBlock({ message, contact, mailbox }) {
+function MessageBlock({ message, contact, mailbox, timezone = 'Asia/Dhaka' }) {
     const outbound = message.direction === 'out';
-    const sender = safeText(outbound ? (message.user?.name || mailbox?.display_name) : contactName({ contact }), outbound ? 'Your team' : 'Unknown sender');
-    const senderEmail = safeText(outbound ? mailbox?.meta_json?.email : contact?.email, 'unknown');
+    const sender = safeText(outbound ? (message.user?.name || mailbox?.display_name) : contactName({ contact }), outbound ? 'Your team' : 'Customer');
+    const senderEmail = safeText(outbound ? (mailbox?.meta_json?.email || mailbox?.display_name) : contact?.email, 'unknown');
+    const recipient = outbound ? (contact?.email || 'Customer') : (mailbox?.meta_json?.email || mailbox?.display_name || 'Your team');
     const body = safeText(message.body, '');
     const previewUrl = message.payload?.preview_url;
     const isImage = message.type === 'image' || (previewUrl && /\.(jpe?g|png|gif|webp|bmp|svg)$/i.test(previewUrl));
     const filename = message.payload?.filename || 'attachment';
 
-    return <article className={`border-b border-neutral-100 px-5 py-5 dark:border-neutral-800 sm:px-7 ${outbound ? 'bg-brand-50/30 dark:bg-brand-950/10' : 'bg-white dark:bg-neutral-900'}`}>
-        <div className="mb-4 flex items-start gap-3">
-            <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-bold ${outbound ? 'bg-brand-600 text-white' : 'bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-200'}`}>{sender?.[0]?.toUpperCase() || '?'}</div>
-            <div className="min-w-0 flex-1">
-                <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                    <p className="truncate text-sm font-semibold text-neutral-900 dark:text-white">{sender}</p>
-                    <span className="truncate text-xs text-neutral-400">&lt;{senderEmail || 'unknown'}&gt;</span>
+    return (
+        <article className={`overflow-hidden rounded-2xl border shadow-xs transition ${
+            outbound
+                ? 'border-brand-200/80 bg-white border-l-4 border-l-brand-600 dark:border-neutral-800 dark:border-l-brand-500 dark:bg-neutral-900'
+                : 'border-neutral-200/90 bg-white border-l-4 border-l-blue-500 dark:border-neutral-800 dark:border-l-blue-500 dark:bg-neutral-900'
+        }`}>
+            {/* Envelope Card Header */}
+            <div className={`flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3 sm:px-5 ${
+                outbound ? 'border-brand-100 bg-brand-50/40 dark:border-neutral-800/80 dark:bg-brand-950/20' : 'border-neutral-100 bg-neutral-50/60 dark:border-neutral-800/80 dark:bg-neutral-900/60'
+            }`}>
+                <div className="flex items-center gap-3 min-w-0">
+                    <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-xs font-bold shadow-xs ${
+                        outbound ? 'bg-brand-600 text-white shadow-brand-200' : 'bg-blue-600 text-white shadow-blue-200'
+                    }`}>
+                        {sender?.[0]?.toUpperCase() || (outbound ? 'Y' : 'C')}
+                    </div>
+                    <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                            <span className="truncate text-xs font-bold text-neutral-900 dark:text-white">{sender}</span>
+                            <span className={`rounded-md px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${
+                                outbound ? 'bg-brand-100 text-brand-700 dark:bg-brand-900/60 dark:text-brand-300' : 'bg-blue-100 text-blue-700 dark:bg-blue-900/60 dark:text-blue-300'
+                            }`}>
+                                {outbound ? 'Outbound' : 'Inbound'}
+                            </span>
+                        </div>
+                        <p className="truncate text-[11px] text-neutral-400">
+                            &lt;{senderEmail}&gt; <span className="text-neutral-300 dark:text-neutral-600">→</span> to {recipient}
+                        </p>
+                    </div>
                 </div>
-                <p className="text-xs text-neutral-400">{outbound ? `to ${contact?.email || 'recipient'}` : `to ${mailbox?.display_name || 'your team'}`}</p>
+
+                <div className="flex items-center gap-2 shrink-0">
+                    <time className="rounded-md bg-white/80 px-2 py-1 text-[11px] font-medium text-neutral-500 shadow-xs dark:bg-neutral-800 dark:text-neutral-400">
+                        {message.sent_at ? formatMailTime(message.sent_at, timezone) : ''}
+                    </time>
+                    {outbound && (
+                        <span className={`rounded-md px-1.5 py-0.5 text-[10px] font-medium capitalize ${
+                            message.status === 'failed' ? 'bg-red-100 text-red-700' : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300'
+                        }`}>
+                            {message.status || 'sent'}
+                        </span>
+                    )}
+                </div>
             </div>
-            <div className="shrink-0 text-right">
-                <time className="text-xs text-neutral-400">{formatMessageTime(message.sent_at)}</time>
-                {outbound && <p className={`mt-1 text-[10px] font-medium ${message.status === 'failed' ? 'text-red-500' : 'text-neutral-400'}`}>{message.status}</p>}
-            </div>
-        </div>
-        {body && <div className="whitespace-pre-wrap break-words text-sm leading-7 text-neutral-700 dark:text-neutral-200">{body}</div>}
-        {previewUrl && (
-            <div className="mt-3">
-                {isImage ? (
-                    <a href={previewUrl} target="_blank" rel="noopener noreferrer" className="inline-block max-w-sm overflow-hidden rounded-xl border border-neutral-200 shadow-sm transition hover:opacity-90 dark:border-neutral-700">
-                        <img src={previewUrl} alt={filename} className="max-h-64 object-cover" />
-                    </a>
-                ) : (
-                    <a href={previewUrl} target="_blank" rel="noopener noreferrer" download={filename} className="inline-flex items-center gap-3 rounded-xl border border-neutral-200 bg-neutral-50 px-4 py-2.5 text-xs font-semibold text-neutral-700 transition hover:bg-neutral-100 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-200 dark:hover:bg-neutral-700">
-                        <Paperclip className="h-4 w-4 text-brand-600 dark:text-brand-400" />
-                        <span className="max-w-xs truncate">{filename}</span>
-                        {message.payload?.file_size && <span className="text-[11px] font-normal text-neutral-400">({(message.payload.file_size / 1024).toFixed(1)} KB)</span>}
-                    </a>
+
+            {/* Email Body Content */}
+            <div className="p-4 sm:p-6">
+                {body && (
+                    <div className="whitespace-pre-wrap break-words text-sm leading-relaxed text-neutral-800 dark:text-neutral-200">
+                        {body}
+                    </div>
+                )}
+
+                {/* Attachments */}
+                {previewUrl && (
+                    <div className="mt-4 pt-3 border-t border-neutral-100 dark:border-neutral-800">
+                        <p className="mb-2 text-[11px] font-bold uppercase tracking-wider text-neutral-400">Attachment</p>
+                        {isImage ? (
+                            <a href={previewUrl} target="_blank" rel="noopener noreferrer" className="group inline-block max-w-sm overflow-hidden rounded-xl border border-neutral-200 bg-neutral-50 shadow-xs transition hover:opacity-95 dark:border-neutral-700 dark:bg-neutral-800">
+                                <img src={previewUrl} alt={filename} className="max-h-64 object-cover" />
+                                <div className="flex items-center justify-between px-3 py-1.5 text-[11px] text-neutral-500 dark:text-neutral-400">
+                                    <span className="truncate max-w-xs">{filename}</span>
+                                    <span className="text-brand-600 font-semibold group-hover:underline">View ↗</span>
+                                </div>
+                            </a>
+                        ) : (
+                            <a href={previewUrl} target="_blank" rel="noopener noreferrer" download={filename} className="inline-flex items-center gap-3 rounded-xl border border-neutral-200 bg-neutral-50 px-4 py-2.5 text-xs font-semibold text-neutral-700 shadow-xs transition hover:bg-neutral-100 hover:border-brand-300 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-200 dark:hover:bg-neutral-700">
+                                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-50 text-brand-600 dark:bg-brand-950/40 dark:text-brand-300">
+                                    <Paperclip className="h-4 w-4" />
+                                </div>
+                                <div className="min-w-0">
+                                    <p className="max-w-xs truncate font-medium">{filename}</p>
+                                    {message.payload?.file_size && <p className="text-[10px] text-neutral-400">{(message.payload.file_size / 1024).toFixed(1)} KB</p>}
+                                </div>
+                            </a>
+                        )}
+                    </div>
+                )}
+
+                {message.payload?.has_attachments && !previewUrl && (
+                    <div className="mt-3 flex items-center gap-2 rounded-xl bg-neutral-50 p-2.5 text-xs text-neutral-500 dark:bg-neutral-800/60 dark:text-neutral-400">
+                        <Paperclip className="h-4 w-4 text-neutral-400" />
+                        <span>Source attachment included in connected mailbox</span>
+                    </div>
                 )}
             </div>
-        )}
-        {message.payload?.has_attachments && !previewUrl && (
-            <span className="mt-4 inline-flex items-center gap-1.5 rounded-lg bg-neutral-100 px-2.5 py-1 text-xs text-neutral-500 dark:bg-neutral-800">
-                <Paperclip className="h-3.5 w-3.5" />
-                Attachment included in source mailbox
-            </span>
-        )}
-    </article>;
+        </article>
+    );
 }
 
 export default function EmailInbox({
@@ -367,6 +418,9 @@ export default function EmailInbox({
     const [sendError, setSendError] = useState('');
     const initialSearch = useRef(true);
     const bottomRef = useRef(null);
+    const threadScrollRef = useRef(null);
+    const prevConversationId = useRef(null);
+    const prevMessagesCount = useRef(0);
 
     const [prevInitialConversations, setPrevInitialConversations] = useState(initialConversations);
     const [prevInitialCounts, setPrevInitialCounts] = useState(initialCounts);
@@ -386,11 +440,31 @@ export default function EmailInbox({
         setPrevSelectedId(selectedConversation?.id);
         setMessages(initialMessages);
     }
-    useEffect(() => {
-        // Never return scrollIntoView's implementation-specific return value:
-        // React treats any returned value as an effect cleanup function.
-        bottomRef.current?.scrollIntoView({ block: 'end' });
-    }, [selectedConversation?.id, messages.length]);
+
+    useLayoutEffect(() => {
+        if (!selectedConversation) return;
+
+        const isNewConv = prevConversationId.current !== selectedConversation.id;
+        prevConversationId.current = selectedConversation.id;
+
+        if (isNewConv) {
+            if (threadScrollRef.current) {
+                threadScrollRef.current.scrollTop = threadScrollRef.current.scrollHeight;
+            }
+            bottomRef.current?.scrollIntoView({ behavior: 'instant', block: 'end' });
+            prevMessagesCount.current = messages.length;
+            requestAnimationFrame(() => {
+                if (threadScrollRef.current) {
+                    threadScrollRef.current.scrollTop = threadScrollRef.current.scrollHeight;
+                }
+            });
+        } else if (messages.length > prevMessagesCount.current) {
+            bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+            prevMessagesCount.current = messages.length;
+        } else {
+            prevMessagesCount.current = messages.length;
+        }
+    }, [selectedConversation?.id, messages]);
 
     const params = useMemo(() => ({
         folder: filters.folder,
@@ -555,7 +629,10 @@ export default function EmailInbox({
                             </div>
                         </div>
                     </header>
-                    <div className="min-h-0 flex-1 overflow-y-auto">{messages.map(message => <MessageBlock key={message.id} message={message} contact={selectedConversation.contact} mailbox={selectedMailbox} />)}<div ref={bottomRef} /></div>
+                    <div ref={threadScrollRef} className="min-h-0 flex-1 overflow-y-auto bg-neutral-100/70 p-4 space-y-4 dark:bg-neutral-950 sm:p-6">
+                        {messages.map(message => <MessageBlock key={message.id} message={message} contact={selectedConversation.contact} mailbox={selectedMailbox} timezone={timezone} />)}
+                        <div ref={bottomRef} />
+                    </div>
                     <form onSubmit={submitReply} className="border-t border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900 sm:p-5">
                         {/* Attachment preview if selected */}
                         {replyAttachment && (

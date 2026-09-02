@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Admin\CronSetupController;
+use App\Modules\AI\Services\AiCreditService;
 use App\Modules\Broadcasting\Jobs\LaunchScheduledCampaignsJob;
 use App\Modules\Broadcasting\Jobs\RecoverSmsCampaignsJob;
 use App\Modules\Broadcasting\Models\UsageMeter;
@@ -95,6 +96,12 @@ Schedule::job(new PurgeTemporarySocialMediaJob, 'social')
     ->hourly()
     ->name('purge-temporary-social-media')
     ->withoutOverlapping();
+
+Schedule::call(fn () => app(AiCreditService::class)->reconcileStale())
+    ->everyTenMinutes()
+    ->name('reconcile-ai-credit-reservations')
+    ->withoutOverlapping()
+    ->onOneServer();
 
 // Reset monthly usage meters on the 1st of each month
 Schedule::call(function () {

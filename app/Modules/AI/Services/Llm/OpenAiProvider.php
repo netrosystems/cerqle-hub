@@ -23,12 +23,19 @@ class OpenAiProvider implements LlmProviderInterface
             $headers['OpenAI-Organization'] = $this->organization;
         }
 
-        $resp = Http::withHeaders($headers)->retry(2, 500)->timeout(60)->post(self::BASE.'/chat/completions', [
-            'model' => $opts['model'] ?? $this->chatModel,
+        $model = $opts['model'] ?? $this->chatModel;
+        $payload = [
+            'model' => $model,
             'messages' => $messages,
-            'max_tokens' => $opts['max_tokens'] ?? 1024,
-            'temperature' => $opts['temperature'] ?? 0.7,
-        ]);
+        ];
+        if (str_starts_with($model, 'gpt-5')) {
+            $payload['max_completion_tokens'] = $opts['max_tokens'] ?? 1024;
+        } else {
+            $payload['max_tokens'] = $opts['max_tokens'] ?? 1024;
+            $payload['temperature'] = $opts['temperature'] ?? 0.7;
+        }
+
+        $resp = Http::withHeaders($headers)->retry(2, 500)->timeout(60)->post(self::BASE.'/chat/completions', $payload);
 
         if (! $resp->successful()) {
             throw new \RuntimeException('OpenAI chat failed: '.$resp->body());

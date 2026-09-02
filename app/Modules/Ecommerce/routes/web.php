@@ -16,9 +16,9 @@ Route::middleware(['web', 'client-app'])->prefix('app/ecommerce')->name('client.
     Route::delete('/stores/{store}', [StoreController::class, 'destroy'])->name('stores.destroy');
 
     // OAuth onboarding (browser-driven; tokens are obtained automatically).
-    Route::get('/oauth/{platform}/connect', [EcommerceOAuthController::class, 'connect'])->name('oauth.connect');
-    Route::get('/oauth/shopify/callback', [EcommerceOAuthController::class, 'shopifyCallback'])->name('oauth.shopify.callback');
-    Route::get('/oauth/bigcommerce/callback', [EcommerceOAuthController::class, 'bigcommerceCallback'])->name('oauth.bigcommerce.callback');
+    Route::get('/oauth/{platform}/connect', [EcommerceOAuthController::class, 'connect'])->middleware('client.access:write')->name('oauth.connect');
+    Route::get('/oauth/shopify/callback', [EcommerceOAuthController::class, 'shopifyCallback'])->middleware('client.access:write')->name('oauth.shopify.callback');
+    Route::get('/oauth/bigcommerce/callback', [EcommerceOAuthController::class, 'bigcommerceCallback'])->middleware('client.access:write')->name('oauth.bigcommerce.callback');
     Route::get('/oauth/woocommerce/return', [EcommerceOAuthController::class, 'woocommerceReturn'])->name('oauth.woocommerce.return');
 
     // Products + inventory

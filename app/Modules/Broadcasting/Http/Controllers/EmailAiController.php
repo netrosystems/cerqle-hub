@@ -3,12 +3,16 @@
 namespace App\Modules\Broadcasting\Http\Controllers;
 
 use App\Http\Controllers\Controller;
-use App\Modules\AI\Services\Llm\LlmManager;
+use App\Modules\AI\Exceptions\AiCreditsExhaustedException;
+use App\Modules\AI\Services\LlmGateway;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 
 class EmailAiController extends Controller
 {
+    public function __construct(private readonly LlmGateway $llm) {}
+
     public function improveSubject(Request $request): JsonResponse
     {
         $validated = $request->validate([
@@ -17,12 +21,6 @@ class EmailAiController extends Controller
         ]);
 
         $workspaceId = (int) ($request->user()->current_workspace_id ?? $request->user()->workspace_id);
-
-        try {
-            $llm = LlmManager::forWorkspace($workspaceId);
-        } catch (\RuntimeException $e) {
-            return response()->json(['error' => 'No AI provider configured. Set one up in AI → Providers.'], 422);
-        }
 
         $bodySnippet = '';
         if (! empty($validated['body'])) {
@@ -67,21 +65,28 @@ PROMPT;
         $userMessage = "Current subject: {$validated['subject']}{$bodySnippet}";
 
         try {
-            $response = $llm->chat(
-                [['role' => 'user', 'content' => $userMessage]],
-                ['system' => $systemPrompt, 'max_tokens' => 200],
+            $response = $this->llm->chat(
+                $workspaceId,
+                [['role' => 'system', 'content' => $systemPrompt], ['role' => 'user', 'content' => $userMessage]],
+                [
+                    'max_tokens' => 200,
+                    'feature_key' => 'email_subject',
+                    'idempotency_key' => $request->header('Idempotency-Key'),
+                ],
             );
 
             $content = trim($response->content);
             $suggestions = $this->parseSubjectSuggestions($content);
 
             if (count($suggestions) === 0) {
+                $this->llm->rejectMalformed($response);
+
                 return response()->json(['error' => 'Could not generate subject lines. Please try again.'], 422);
             }
 
             return response()->json(['suggestions' => array_slice($suggestions, 0, 3)]);
         } catch (\Throwable $e) {
-            return response()->json(['error' => 'AI suggestion failed: '.$e->getMessage()], 500);
+            return $this->errorResponse($e, 'AI suggestion failed');
         }
     }
 
@@ -94,12 +99,6 @@ PROMPT;
         ]);
 
         $workspaceId = (int) ($request->user()->current_workspace_id ?? $request->user()->workspace_id);
-
-        try {
-            $llm = LlmManager::forWorkspace($workspaceId);
-        } catch (\RuntimeException $e) {
-            return response()->json(['error' => 'No AI provider configured. Set one up in AI → Providers.'], 422);
-        }
 
         $tone = $validated['tone'] ?? 'professional';
         $campaignCtx = $validated['campaign_name'] ? "Campaign name: \"{$validated['campaign_name']}\"." : '';
@@ -144,24 +143,39 @@ Rules you MUST follow:
 PROMPT;
 
         $messages = [
+            ['role' => 'system', 'content' => $systemPrompt],
             ['role' => 'user', 'content' => trim("{$campaignCtx} {$validated['prompt']}")],
         ];
 
         try {
-            $response = $llm->chat($messages, ['system' => $systemPrompt, 'max_tokens' => 2000]);
+            $operationKey = $request->header('Idempotency-Key') ?: (string) Str::uuid();
+            $response = $this->llm->chat($workspaceId, $messages, [
+                'max_tokens' => 2000,
+                'feature_key' => 'email_compose',
+                'idempotency_key' => $operationKey,
+            ]);
             $parsed = $this->parseEmailResponse($response->content);
 
             // If the body looks like strategy/plan content rather than an email, retry once
             // with an even more explicit instruction prepended to the user message.
             if ($parsed && $this->looksLikeStrategy($parsed['body'])) {
                 $retryMessages = [
+                    ['role' => 'system', 'content' => $systemPrompt],
                     [
                         'role' => 'user',
                         'content' => 'Write the actual email (not a strategy or plan). '
                             .trim("{$campaignCtx} {$validated['prompt']}"),
                     ],
                 ];
-                $retryResponse = $llm->chat($retryMessages, ['system' => $systemPrompt, 'max_tokens' => 2000]);
+                // Internal quality retries reuse the first completed charge. A
+                // distinct provider request is made, but no second user credit
+                // is reserved.
+                $retryResponse = $this->llm->chat($workspaceId, $retryMessages, [
+                    'max_tokens' => 2000,
+                    'feature_key' => 'email_compose',
+                    'idempotency_key' => $operationKey,
+                    'internal_retry' => true,
+                ]);
                 $retryParsed = $this->parseEmailResponse($retryResponse->content);
                 if ($retryParsed && ! $this->looksLikeStrategy($retryParsed['body'])) {
                     $parsed = $retryParsed;
@@ -169,13 +183,27 @@ PROMPT;
             }
 
             if (! $parsed) {
+                $this->llm->rejectMalformed($response);
+
                 return response()->json(['error' => 'AI returned an unexpected format. Try rephrasing your prompt.'], 422);
             }
 
             return response()->json($parsed);
         } catch (\Throwable $e) {
-            return response()->json(['error' => 'AI generation failed: '.$e->getMessage()], 500);
+            return $this->errorResponse($e, 'AI generation failed');
         }
+    }
+
+    private function errorResponse(\Throwable $exception, string $prefix): JsonResponse
+    {
+        if ($exception instanceof AiCreditsExhaustedException) {
+            return response()->json([
+                'error' => $exception->getMessage(),
+                'code' => 'ai_credits_exhausted',
+            ], 402);
+        }
+
+        return response()->json(['error' => $prefix.': '.$exception->getMessage()], 422);
     }
 
     /**

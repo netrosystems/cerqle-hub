@@ -11,9 +11,11 @@ use App\Models\Workspace;
 use App\Modules\Broadcasting\Models\UsageMeter;
 use App\Modules\Integrations\Services\CredentialResolver;
 use App\Services\AddonEntitlementService;
+use App\Services\ClientAccessService;
 use App\Services\I18n\I18nFileService;
 use App\Services\OnboardingService;
 use App\Services\OneSignalService;
+use App\Services\PusherPublicConfig;
 use App\Services\ReleaseVersionService;
 use App\Services\StorageManager;
 use App\Services\UploadLimitService;
@@ -65,6 +67,7 @@ class HandleInertiaRequests extends Middleware
                     'adminUser' => null,
                     'permissions' => [],
                 ],
+                'clientAccess' => null,
                 'currentWorkspace' => null,
                 'workspaces' => [],
                 'locale' => $locale,
@@ -128,7 +131,7 @@ class HandleInertiaRequests extends Middleware
 
     private function pusherPublicConfig(): array
     {
-        return app(\App\Services\PusherPublicConfig::class)->app();
+        return app(PusherPublicConfig::class)->app();
     }
 
     private function brandingShare(): array
@@ -250,7 +253,7 @@ class HandleInertiaRequests extends Middleware
                 $workspace = Workspace::with('client')->find($workspaceId);
                 if ($workspace && $workspace->isAccessibleBy($user)) {
                     $currentWorkspace = ['id' => $workspace->id, 'name' => $workspace->name];
-                    $plan = $workspace->client?->activePlan();
+                    $plan = $user->effectiveSubscription()?->plan;
                 }
             }
             try {
@@ -268,7 +271,7 @@ class HandleInertiaRequests extends Middleware
                         }
                         $workspaceId = $fallback->id;
                         $currentWorkspace = ['id' => $fallback->id, 'name' => $fallback->name];
-                        $plan = $fallback->client?->activePlan();
+                        $plan = $user->effectiveSubscription()?->plan;
                     }
                 }
             } catch (\Throwable $e) {
@@ -343,6 +346,9 @@ class HandleInertiaRequests extends Middleware
                 'upgrade_reason' => $request->session()->get('upgrade_reason'),
             ],
             'auth' => $auth,
+            'clientAccess' => $user instanceof User
+                ? app(ClientAccessService::class)->payload($user)
+                : null,
             'unreadNotificationsCount' => $unreadNotificationsCount,
             'impersonation' => $impersonation,
             'theme' => $user?->theme ?? 'light',

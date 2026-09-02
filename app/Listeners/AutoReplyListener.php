@@ -11,6 +11,7 @@ use App\Modules\Shared\Models\Conversation;
 use App\Modules\Shared\Models\Message;
 use App\Modules\Shared\Services\ChannelManager;
 use App\Modules\Whatsapp\Models\WhatsappAutoReply;
+use App\Services\ClientAccessService;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
@@ -31,6 +32,7 @@ class AutoReplyListener
         private readonly ChatbotRunner $runner,
         private readonly ChannelManager $channelManager,
         private readonly ConversationHandoverService $handoverService,
+        private readonly ClientAccessService $access,
     ) {}
 
     public function handle(MessageReceived $event): void
@@ -64,6 +66,9 @@ class AutoReplyListener
         }
 
         $conversation = $message->conversation;
+        if (! $conversation || ! $this->access->allowsWorkspaceWrite($conversation->workspace_id)) {
+            return;
+        }
         $channelAccount = $conversation?->channelAccount;
 
         if (! $channelAccount) {

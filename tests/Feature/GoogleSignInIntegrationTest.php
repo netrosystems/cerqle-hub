@@ -8,6 +8,9 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Inertia\Testing\AssertableInertia as Assert;
+use Laravel\Socialite\Facades\Socialite;
+use Laravel\Socialite\Two\User as SocialiteUser;
+use Mockery;
 use Tests\TestCase;
 
 class GoogleSignInIntegrationTest extends TestCase
@@ -27,6 +30,36 @@ class GoogleSignInIntegrationTest extends TestCase
                 ->component('Auth/Login')
                 ->where('socialProviders', fn ($providers) => $providers->contains('google'))
             );
+    }
+
+    public function test_enabled_google_credentials_expose_terms_gated_signup(): void
+    {
+        config()->set('services.google.client_id', null);
+        config()->set('services.google.client_secret', null);
+        $this->googleSignInIntegration(enabled: true);
+
+        $this->get(route('register'))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Auth/Register')
+                ->where('googleSignupEnabled', true)
+            );
+
+        $this->post(route('auth.google.signup'), ['agree_terms' => false])
+            ->assertSessionHasErrors('agree_terms');
+
+        $this->post(route('auth.google.signup'), [
+            'agree_terms' => true,
+            'timezone' => 'Asia/Dhaka',
+        ])->assertRedirect();
+        $this->assertSame('signup', session('social_auth_context.intent'));
+
+        $this->post(route('auth.google.signup'), [
+            'agree_terms' => true,
+            'timezone' => 'Asia/Dhaka',
+        ], ['X-Inertia' => 'true'])
+            ->assertStatus(409)
+            ->assertHeader('X-Inertia-Location');
     }
 
     public function test_google_redirect_uses_super_admin_client_and_exact_callback(): void
@@ -86,6 +119,74 @@ class GoogleSignInIntegrationTest extends TestCase
         $this->assertSame($refreshToken, $account->fresh()->refresh_token);
     }
 
+    public function test_google_login_redirects_an_unknown_account_to_terms_gated_registration(): void
+    {
+        $this->googleSignInIntegration(enabled: true);
+        $this->mockGoogleCallbackUser('new-google-user', 'new-user@example.test');
+
+        $this->withSession([
+            'social_auth_context' => [
+                'intent' => 'login',
+                'provider' => 'google',
+            ],
+        ])->get(route('auth.social.callback', 'google'))
+            ->assertRedirect(route('register'))
+            ->assertSessionHas('oauth_provider', 'google')
+            ->assertSessionHas('oauth_requires_registration', true)
+            ->assertSessionHasErrors('oauth');
+
+        $this->get(route('register'))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Auth/Register')
+                ->where('oauthRequiresRegistration', true)
+                ->where('errors.oauth', 'This Google account is not registered with Cerqle. Accept the Terms below, then select Continue with Google to create your account.')
+            );
+
+        $this->assertGuest();
+    }
+
+    public function test_google_login_links_a_verified_matching_email_and_signs_in(): void
+    {
+        $this->googleSignInIntegration(enabled: true);
+        $user = User::factory()->create(['email' => 'existing-user@example.test']);
+        $this->mockGoogleCallbackUser('existing-google-user', $user->email);
+
+        $this->withSession([
+            'social_auth_context' => [
+                'intent' => 'login',
+                'provider' => 'google',
+            ],
+        ])->get(route('auth.social.callback', 'google'))
+            ->assertRedirect(route('client.dashboard'));
+
+        $this->assertAuthenticatedAs($user);
+        $this->assertDatabaseHas('social_accounts', [
+            'user_id' => $user->id,
+            'provider' => 'google',
+            'provider_id' => 'existing-google-user',
+        ]);
+    }
+
+    public function test_unknown_google_login_stays_on_login_when_registration_is_disabled(): void
+    {
+        config()->set('auth.allow_registration', false);
+        $this->googleSignInIntegration(enabled: true);
+        $this->mockGoogleCallbackUser('blocked-google-user', 'blocked-user@example.test');
+
+        $this->withSession([
+            'social_auth_context' => [
+                'intent' => 'login',
+                'provider' => 'google',
+            ],
+        ])->get(route('auth.social.callback', 'google'))
+            ->assertRedirect(route('login'))
+            ->assertSessionMissing('oauth_requires_registration')
+            ->assertSessionHasErrors('oauth');
+
+        $this->assertGuest();
+    }
+
     private function googleSignInIntegration(bool $enabled): IntegrationConfig
     {
         return IntegrationConfig::create([
@@ -98,5 +199,23 @@ class GoogleSignInIntegrationTest extends TestCase
                 'client_secret' => 'admin-google-secret',
             ],
         ]);
+    }
+
+    private function mockGoogleCallbackUser(string $providerId, string $email): void
+    {
+        $socialUser = (new SocialiteUser)
+            ->map([
+                'id' => $providerId,
+                'name' => 'Google User',
+                'email' => $email,
+                'avatar' => 'https://example.test/avatar.png',
+            ])
+            ->setRaw(['email_verified' => true])
+            ->setToken('google-access-token')
+            ->setRefreshToken('google-refresh-token');
+
+        $driver = Mockery::mock();
+        $driver->shouldReceive('user')->once()->andReturn($socialUser);
+        Socialite::shouldReceive('driver')->once()->with('google')->andReturn($driver);
     }
 }

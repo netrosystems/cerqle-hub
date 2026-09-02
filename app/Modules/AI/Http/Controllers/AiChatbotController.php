@@ -120,7 +120,7 @@ class AiChatbotController extends Controller
             return response()->json([
                 'error' => $error['message'],
                 'error_code' => $error['code'],
-            ], 422);
+            ], $error['code'] === 'ai_credits_exhausted' ? 402 : 422);
         }
     }
 

@@ -1,4 +1,6 @@
 import AuthLayout from '@/Layouts/AuthLayout';
+import GoogleOAuthButton from '@/Components/Auth/GoogleOAuthButton';
+import OAuthErrorAlert from '@/Components/Auth/OAuthErrorAlert';
 import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
 import { useTranslation } from 'react-i18next';
 import { LogIn, Sparkles, ArrowUpRight, Eye, EyeOff } from 'lucide-react';
@@ -12,17 +14,6 @@ const PROVIDERS = [
 
 export function shouldUseFirebaseGoogle(firebase = {}, socialProviders = []) {
     return Boolean(firebase.enabled && firebase.apiKey && !socialProviders.includes('google'));
-}
-
-function GoogleIcon() {
-    return (
-        <svg className="h-4 w-4" viewBox="0 0 24 24" aria-hidden="true">
-            <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-            <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-            <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
-            <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
-        </svg>
-    );
 }
 
 // ── Firebase Google sign-in ─────────────────────────────────────────────────
@@ -112,18 +103,12 @@ function FirebaseGoogleButton() {
 
     return (
         <div className="space-y-1">
-            <button
-                type="button"
+            <GoogleOAuthButton
                 onClick={handleClick}
                 disabled={loading}
-                className="group flex w-full items-center justify-center gap-3 rounded-full border border-black/[0.08] bg-white px-4 py-2.5 text-sm font-semibold text-[#241f1a] hover:border-brand-500/40 hover:bg-[#fffdf9] transition disabled:opacity-60 shadow-sm"
-            >
-                <GoogleIcon />
-                {loading ? t('auth.signing_in') : t('auth.continue_with_google')}
-                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-black/[0.04] text-[#57504a] transition-transform duration-200 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 group-hover:bg-brand-500 group-hover:text-white">
-                    <ArrowUpRight className="h-3.5 w-3.5" />
-                </span>
-            </button>
+                loading={loading}
+                label={loading ? t('auth.signing_in') : t('auth.continue_with_google')}
+            />
             {error && <p className="text-xs text-coral-600 text-center">{error}</p>}
         </div>
     );
@@ -288,7 +273,7 @@ function CreamDivider({ label }) {
 
 // ── Page ────────────────────────────────────────────────────────────────────
 
-export default function Login({ status, canResetPassword, socialProviders = [], demo = null }) {
+export default function Login({ status, canResetPassword, socialProviders = [], oauthProvider = null, demo = null }) {
     const { t } = useTranslation();
     const { props } = usePage();
     const firebase = props.firebase ?? {};
@@ -304,11 +289,14 @@ export default function Login({ status, canResetPassword, socialProviders = [], 
     };
 
     const enabledProviders = PROVIDERS.filter(p => socialProviders.includes(p.id));
+    const googleOAuthEnabled = enabledProviders.some(({ id }) => id === 'google');
+    const nonGoogleProviders = enabledProviders.filter(({ id }) => id !== 'google');
     // The dedicated Google OAuth client is the canonical sign-in flow. Keep
     // Firebase only as a backwards-compatible fallback for installations that
     // have not configured Google Sign-In in Super Admin yet.
     const useFirebaseGoogle = shouldUseFirebaseGoogle(firebase, socialProviders);
     const hasSocialButtons = enabledProviders.length > 0 || useFirebaseGoogle;
+    const retryProvider = oauthProvider && socialProviders.includes(oauthProvider) ? oauthProvider : null;
 
     return (
         <AuthLayout
@@ -317,6 +305,26 @@ export default function Login({ status, canResetPassword, socialProviders = [], 
             status={status}
         >
             <Head title={t('auth.log_in') || 'Log in'} />
+
+            <OAuthErrorAlert message={errors.oauth}>
+                {retryProvider && (
+                    <a
+                        href={route('auth.social.redirect', { provider: retryProvider })}
+                        className="underline decoration-coral-300 underline-offset-2 hover:text-coral-950 dark:hover:text-coral-100"
+                    >
+                        {t('auth.try_provider_again', {
+                            provider: PROVIDERS.find(({ id }) => id === retryProvider)?.label ?? retryProvider,
+                            defaultValue: 'Try {{provider}} again',
+                        })}
+                    </a>
+                )}
+                <Link
+                    href={route('register')}
+                    className="underline decoration-coral-300 underline-offset-2 hover:text-coral-950 dark:hover:text-coral-100"
+                >
+                    {t('auth.create_account', { defaultValue: 'Create an account' })}
+                </Link>
+            </OAuthErrorAlert>
 
             {/* Demo mode: one-click sign-in with the seeded demo accounts */}
             {demo && demo.length > 0 && (
@@ -331,7 +339,13 @@ export default function Login({ status, canResetPassword, socialProviders = [], 
                 <>
                     <div className="space-y-2 mb-2">
                         {useFirebaseGoogle && <FirebaseGoogleButton />}
-                        {enabledProviders.map((provider) => (
+                        {googleOAuthEnabled && (
+                            <GoogleOAuthButton
+                                href={route('auth.social.redirect', { provider: 'google' })}
+                                label={t('auth.continue_with_google')}
+                            />
+                        )}
+                        {nonGoogleProviders.map((provider) => (
                             <a
                                 key={provider.id}
                                 href={route('auth.social.redirect', { provider: provider.id })}

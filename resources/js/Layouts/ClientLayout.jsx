@@ -88,7 +88,7 @@ function ClientLayoutFooter() {
 export default function ClientLayout({ header, children, title }) {
     const { t } = useTranslation();
     const [sidebarOpen, setSidebarOpen] = useState(false);
-    const { auth, impersonation, current_workspace_usage, unreadNotificationsCount, branding, onesignal } = usePage().props;
+    const { auth, clientAccess, impersonation, current_workspace_usage, unreadNotificationsCount, branding, onesignal } = usePage().props;
     const logoUrl = branding?.logo_url;
     const [unreadCount, setUnreadCount] = useState(unreadNotificationsCount ?? 0);
     const clientNavGroups = useClientNav();
@@ -141,11 +141,10 @@ export default function ClientLayout({ header, children, title }) {
     const demoMode = usePage().props.demo_mode === true;
 
     const userNavItems = [
-        { label: t('nav.profile') || 'Profile',           href: safeRoute('client.profile.edit'),    as: 'link' },
-        { label: t('nav.twoFactor') || 'Two-Factor Auth', href: safeRoute('client.profile.2fa'),     as: 'link' },
-        { label: t('nav.sessions') || 'Sessions',         href: safeRoute('client.profile.sessions'),as: 'link' },
+        { label: t('nav.profile') || 'Profile',   href: safeRoute('client.profile.edit'),   as: 'link' },
+        { label: t('nav.settings') || 'Settings', href: safeRoute('client.settings.index'), as: 'link' },
         { type: 'divider' },
-        { label: t('nav.logout') || 'Log Out',            href: route('logout'), method: 'post', as: 'link' },
+        { label: t('nav.logout') || 'Log Out',    href: route('logout'), method: 'post', as: 'link' },
     ];
 
     return (
@@ -188,6 +187,24 @@ footer={<ClientLayoutFooter />}
                     showWorkspace={false}
                 />
                 <UsageBanner usage={current_workspace_usage} />
+                {clientAccess?.state === 'unverified' && (
+                    <div className="flex flex-wrap items-center justify-between gap-3 border-b border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-200">
+                        <span>Verify your email address before using Cerqle features.</span>
+                        <Link as="button" method="post" href={safeRoute('verification.send')} className="font-semibold underline">Resend verification email</Link>
+                    </div>
+                )}
+                {clientAccess?.state === 'no_plan' && (
+                    <div className="flex flex-wrap items-center justify-between gap-3 border-b border-brand-200 bg-brand-50 px-4 py-3 text-sm text-brand-900 dark:border-brand-800 dark:bg-brand-900/20 dark:text-brand-200">
+                        <span>Select and activate a plan before using Cerqle features.</span>
+                        <Link href={safeRoute('client.pricing')} className="font-semibold underline">View plans</Link>
+                    </div>
+                )}
+                {clientAccess?.state === 'expired' && (
+                    <div className="flex flex-wrap items-center justify-between gap-3 border-b border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900 dark:border-red-800 dark:bg-red-900/20 dark:text-red-200">
+                        <span>Your subscription is inactive. Existing data is available read-only; outbound actions are paused.</span>
+                        <Link href={safeRoute('client.pricing')} className="font-semibold underline">Renew plan</Link>
+                    </div>
+                )}
 
                 <main className={`p-4 sm:p-6 lg:p-8 ${demoMode ? 'pb-16' : ''}`}>
                     {header && typeof header === 'object' && (

@@ -3,6 +3,7 @@
 namespace App\Modules\Broadcasting\Jobs;
 
 use App\Modules\Broadcasting\Models\Campaign;
+use App\Services\ClientAccessService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -22,8 +23,15 @@ class DispatchCampaignChunkJob implements ShouldQueue
 
     public function handle(): void
     {
+        $access = app(ClientAccessService::class);
         $campaign = Campaign::find($this->campaignId);
         if (! $campaign || $campaign->status === 'failed') {
+            return;
+        }
+
+        if (! $access->allowsWorkspaceWrite($campaign->workspace_id)) {
+            $campaign->update(['status' => 'safety_paused', 'pause_reason' => 'Campaign paused because the subscription is inactive.']);
+
             return;
         }
 

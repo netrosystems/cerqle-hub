@@ -4,6 +4,7 @@ namespace App\Modules\Social\Http\Controllers;
 
 use App\Http\Controllers\Controller;
 use App\Models\Media;
+use App\Modules\AI\Exceptions\AiCreditsExhaustedException;
 use App\Modules\AI\Services\LlmGateway;
 use App\Modules\Social\Jobs\PublishSocialPostJob;
 use App\Modules\Social\Models\SocialAccount;
@@ -936,12 +937,25 @@ class SocialPostController extends Controller
                 $validated['topic'], $networks, $postCount, $tone, $goal,
                 $validated['start_date'], $validated['end_date'], $validated['timezone'] ?? 'UTC'
             );
-            $response = $gateway->chat($wid, $messages, ['temperature' => 0.7, 'max_tokens' => 4096]);
-            $posts = $this->parsePlanResponse($response->content, $postCount);
+            $response = $gateway->chat($wid, $messages, [
+                'temperature' => 0.7,
+                'max_tokens' => 4096,
+                'feature_key' => 'social_plan_generate',
+                'idempotency_key' => $request->header('Idempotency-Key'),
+            ]);
+            try {
+                $posts = $this->parsePlanResponse($response->content, $postCount);
+            } catch (\Throwable $exception) {
+                $gateway->rejectMalformed($response);
+                throw $exception;
+            }
 
             return response()->json(['posts' => $posts, 'accounts' => $accounts]);
         } catch (\Throwable $e) {
-            return response()->json(['error' => $e->getMessage()], 422);
+            return response()->json([
+                'error' => $e->getMessage(),
+                'code' => $e instanceof AiCreditsExhaustedException ? 'ai_credits_exhausted' : 'ai_generation_failed',
+            ], $e instanceof AiCreditsExhaustedException ? 402 : 422);
         }
     }
 
@@ -1095,11 +1109,22 @@ SYSTEM;
                 ['role' => 'system', 'content' => "You are a social media copywriter. Write engaging, concise posts optimized for {$network}. Return ONLY the post text, no explanations."],
                 ['role' => 'user',   'content' => $request->prompt],
             ];
-            $response = $gateway->chat($wid, $messages, []);
+            $response = $gateway->chat($wid, $messages, [
+                'feature_key' => 'social_single_generate',
+                'idempotency_key' => $request->header('Idempotency-Key'),
+            ]);
+
+            if (blank($response->content)) {
+                $gateway->rejectMalformed($response);
+                throw new \RuntimeException('AI returned an empty post. Please try again.');
+            }
 
             return response()->json(['body' => $response->content]);
         } catch (\Throwable $e) {
-            return response()->json(['error' => $e->getMessage()], 422);
+            return response()->json([
+                'error' => $e->getMessage(),
+                'code' => $e instanceof AiCreditsExhaustedException ? 'ai_credits_exhausted' : 'ai_generation_failed',
+            ], $e instanceof AiCreditsExhaustedException ? 402 : 422);
         }
     }
 }

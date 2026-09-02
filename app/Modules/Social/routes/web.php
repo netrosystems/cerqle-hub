@@ -6,8 +6,8 @@ use Illuminate\Support\Facades\Route;
 
 Route::middleware(['web', 'client-app'])->prefix('app/social')->name('client.social.')->group(function () {
     Route::get('/accounts', [SocialAccountController::class, 'index'])->name('accounts.index');
-    Route::get('/accounts/connect/{network}', [SocialAccountController::class, 'connect'])->name('accounts.connect');
-    Route::get('/accounts/callback/{network}', [SocialAccountController::class, 'callback'])->name('oauth.callback');
+    Route::get('/accounts/connect/{network}', [SocialAccountController::class, 'connect'])->middleware('client.access:write')->name('accounts.connect');
+    Route::get('/accounts/callback/{network}', [SocialAccountController::class, 'callback'])->middleware('client.access:write')->name('oauth.callback');
     Route::delete('/accounts/{account}', [SocialAccountController::class, 'disconnect'])->name('accounts.disconnect');
     Route::get('/accounts/{account}/creator-options', [SocialAccountController::class, 'creatorOptions'])->name('accounts.creator-options');
 

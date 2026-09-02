@@ -70,7 +70,7 @@ class CredentialResolver
         return $this->resolve('oauth_'.$network, OAuthClientCredentials::class);
     }
 
-    /** @param string $provider  openai|anthropic|gemini */
+    /** @param string $provider  openai|anthropic|gemini|deepseek */
     public function llm(string $provider): ?LlmCredentials
     {
         // Check workspace override table first (ai_provider_configs loaded via model)

@@ -4,13 +4,19 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Modules\AI\Models\AiChatbot;
+use App\Modules\AI\Models\AiCreditAdjustment;
+use App\Modules\AI\Models\AiCreditPeriod;
+use App\Modules\AI\Models\AiCreditUsage;
 use App\Modules\AI\Models\AiKbDocument;
 use App\Modules\AI\Models\AiKnowledgeBase;
 use App\Modules\AI\Models\AiProviderConfig;
 use App\Modules\AI\Models\AiRun;
+use App\Modules\AI\Services\AiCreditService;
 use App\Modules\Integrations\Services\CredentialResolver;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -37,7 +43,7 @@ class AiDashboardController extends Controller
         $qdrantHealthy = false;
         if ($qdrantConfigured) {
             try {
-                $request = \Illuminate\Support\Facades\Http::timeout(3);
+                $request = Http::timeout(3);
                 if (filled($qdrantCredentials['api_key'] ?? null)) {
                     $request = $request->withHeaders(['api-key' => $qdrantCredentials['api_key']]);
                 }
@@ -88,6 +94,16 @@ class AiDashboardController extends Controller
         $chatbotCount = AiChatbot::count();
         $activeChatbotCount = AiChatbot::where('enabled', true)->count();
 
+        $creditStats = AiCreditUsage::where('created_at', '>=', now()->subDays(30))
+            ->selectRaw('COALESCE(SUM(charged_credits), 0) as consumed')
+            ->selectRaw('COALESCE(SUM(cost_microusd), 0) as cost_microusd')
+            ->selectRaw("SUM(CASE WHEN status = 'refunded' THEN 1 ELSE 0 END) as refunds")
+            ->selectRaw("SUM(CASE WHEN provider_source = 'byok' THEN 1 ELSE 0 END) as byok_actions")
+            ->first();
+        $creditsByFeature = AiCreditUsage::where('created_at', '>=', now()->subDays(30))
+            ->select('feature_key', DB::raw('SUM(charged_credits) as credits'), DB::raw('COUNT(*) as actions'))
+            ->groupBy('feature_key')->orderByDesc('credits')->get();
+
         return Inertia::render('Admin/AI/Dashboard', [
             'providerStats' => $providerStats,
             'configuredWorkspaces' => $configuredWorkspaces,
@@ -108,6 +124,26 @@ class AiDashboardController extends Controller
             'documentStats' => $documentStats,
             'chatbotCount' => $chatbotCount,
             'activeChatbotCount' => $activeChatbotCount,
+            'creditStats' => [
+                'consumed' => (int) $creditStats->consumed,
+                'cost_microusd' => (int) $creditStats->cost_microusd,
+                'refunds' => (int) $creditStats->refunds,
+                'byok_actions' => (int) $creditStats->byok_actions,
+            ],
+            'creditsByFeature' => $creditsByFeature,
+            'creditPeriods' => AiCreditPeriod::where('period_end', '>', now())->latest('used_credits')->limit(20)->get(),
+            'adjustments' => AiCreditAdjustment::latest()->limit(20)->get(),
         ]);
+    }
+
+    public function adjustCredits(Request $request, AiCreditPeriod $period, AiCreditService $credits): RedirectResponse
+    {
+        $validated = $request->validate([
+            'credits' => ['required', 'integer', 'not_in:0'],
+            'reason' => ['required', 'string', 'max:500'],
+        ]);
+        $credits->adjust($period, (int) $validated['credits'], $validated['reason'], auth('admin')->id());
+
+        return back()->with('success', 'AI credits adjusted and audit event recorded.');
     }
 }
