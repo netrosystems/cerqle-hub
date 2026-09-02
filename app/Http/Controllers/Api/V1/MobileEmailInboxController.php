@@ -386,14 +386,33 @@ class MobileEmailInboxController extends WorkspaceScopedController
 
     private function formatMessage(Message $message): array
     {
+        $payload = $message->payload ?? [];
+        $previewUrl = $payload['preview_url'] ?? $payload['url'] ?? $payload['file_url'] ?? null;
+        $hasAttachments = (bool) ($payload['has_attachments'] ?? false) || ! empty($previewUrl) || ! empty($payload['attachments']);
+
+        $attachments = $payload['attachments'] ?? [];
+        if (empty($attachments) && ! empty($previewUrl)) {
+            $attachments = [
+                [
+                    'name' => $payload['filename'] ?? ($message->body ?: 'attachment'),
+                    'url' => $previewUrl,
+                    'size' => $payload['file_size'] ?? null,
+                    'mime_type' => $payload['mime_type'] ?? null,
+                    'type' => $message->type,
+                ],
+            ];
+        }
+
         return [
             'id' => $message->id,
             'direction' => $message->direction,
             'type' => $message->type,
             'body' => Demo::text($message->body),
-            'subject' => $message->payload['subject'] ?? null,
-            'has_attachments' => (bool) ($message->payload['has_attachments'] ?? false),
-            'attachments' => $message->payload['attachments'] ?? [],
+            'subject' => $payload['subject'] ?? null,
+            'attachment_url' => $previewUrl,
+            'has_attachments' => $hasAttachments,
+            'attachments' => $attachments,
+            'payload' => $payload,
             'status' => $message->status,
             'sent_by' => $message->sent_by,
             'user' => $message->user ? [
