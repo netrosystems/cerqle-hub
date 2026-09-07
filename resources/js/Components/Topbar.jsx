@@ -6,6 +6,8 @@ import { useTheme } from '@/context/ThemeContext';
 import { Bell, X, CheckCheck, ExternalLink } from 'lucide-react';
 import GlobalSearch from '@/Components/GlobalSearch';
 import axios from 'axios';
+import HeaderAiCredits from '@/Components/HeaderAiCredits';
+import { belongsToWorkspace } from '@/lib/workspaceNotifications';
 
 /**
  * Application topbar with workspace and account controls.
@@ -28,6 +30,13 @@ export default function Topbar({
     const [notifOpen, setNotifOpen] = useState(false);
     const [recentNotifs, setRecentNotifs] = useState([]);
     const notifRef = useRef(null);
+    const workspaceId = page.props.currentWorkspace?.id;
+    const activeWorkspaceRef = useRef(workspaceId);
+    activeWorkspaceRef.current = workspaceId;
+    useEffect(() => {
+        setNotifOpen(false);
+        setRecentNotifs([]);
+    }, [workspaceId]);
     const unreadCount = externalUnreadCount ?? (page.props.unreadNotificationsCount ?? 0);
 
     const handleThemeToggle = () => {
@@ -40,8 +49,11 @@ export default function Topbar({
 
     const openNotifDropdown = () => {
         setNotifOpen(true);
+        setRecentNotifs([]);
+        const requestedWorkspace = workspaceId;
         axios.get(route('client.notifications.recent')).then(r => {
-            setRecentNotifs(r.data ?? []);
+            if (requestedWorkspace !== activeWorkspaceRef.current) return;
+            setRecentNotifs((r.data ?? []).filter(n => belongsToWorkspace(n.data, requestedWorkspace)));
         }).catch(() => {});
     };
 
@@ -137,6 +149,7 @@ export default function Topbar({
             </div>
 
             <div className="flex shrink-0 items-center gap-1">
+                <HeaderAiCredits />
                 {/* Notification bell (client users only) */}
                 {user && !page.props.auth?.adminUser && (
                     <div className="relative" ref={notifRef}>

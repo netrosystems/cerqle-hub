@@ -8,11 +8,13 @@ use App\Models\Locale;
 use App\Models\SystemSetting;
 use App\Models\User;
 use App\Models\Workspace;
+use App\Modules\AI\Services\AiCreditService;
 use App\Modules\Broadcasting\Models\UsageMeter;
 use App\Modules\Integrations\Services\CredentialResolver;
 use App\Services\AddonEntitlementService;
 use App\Services\ChannelPlanLimitService;
 use App\Services\ClientAccessService;
+use App\Services\EmailAccountLimitService;
 use App\Services\I18n\I18nFileService;
 use App\Services\MessagingMessageLimitService;
 use App\Services\OnboardingService;
@@ -21,6 +23,7 @@ use App\Services\PusherPublicConfig;
 use App\Services\ReleaseVersionService;
 use App\Services\StorageManager;
 use App\Services\UploadLimitService;
+use App\Services\WorkspaceNotifications;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
@@ -319,7 +322,9 @@ class HandleInertiaRequests extends Middleware
             $supportedLocalesMap = ['en' => 'English'];
         }
 
-        $unreadNotificationsCount = $user ? $user->unreadNotifications()->count() : 0;
+        $unreadNotificationsCount = $user instanceof User
+            ? WorkspaceNotifications::forUser($user, $currentWorkspace['id'] ?? null)->whereNull('read_at')->count()
+            : 0;
 
         $onboardingSummary = null;
         if ($user && ! $isAdminRoute && ($request->routeIs('client.*') || $request->routeIs('reports.exports.*'))) {
@@ -356,6 +361,13 @@ class HandleInertiaRequests extends Middleware
                 ? app(ClientAccessService::class)->payload($user)
                 : null,
             'unreadNotificationsCount' => $unreadNotificationsCount,
+            'headerAiCredits' => function () use ($currentWorkspace, $isAdminRoute) {
+                if ($isAdminRoute || ! $currentWorkspace) {
+                    return null;
+                }
+
+                return app(AiCreditService::class)->usageForWorkspace((int) $currentWorkspace['id']);
+            },
             'impersonation' => $impersonation,
             'theme' => $user?->theme ?? 'light',
             'timezone' => $user?->timezone ?? 'UTC',
@@ -386,6 +398,8 @@ class HandleInertiaRequests extends Middleware
                     $usage[$key] = $limits->usage($workspace, $key);
                 }
                 $usage['messaging_messages_per_month'] = app(MessagingMessageLimitService::class)->usage($workspace);
+                $mailboxes = app(EmailAccountLimitService::class)->usage($workspace);
+                $usage['email_accounts'] = array_merge($mailboxes, ['key' => 'email_accounts', 'label' => 'Email accounts', 'is_full' => ! $mailboxes['can_connect']]);
 
                 return $usage;
             },

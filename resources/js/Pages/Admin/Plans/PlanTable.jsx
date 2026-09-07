@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { router } from '@inertiajs/react';
-import { Dropdown } from '@/Components/ui';
+import { Menu, MenuButton, MenuItems, MenuItem } from '@headlessui/react';
 import { ChevronUp, ChevronDown, MoreVertical, Pencil, Copy, Power, PowerOff, Trash2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
@@ -123,26 +123,24 @@ function PlanRow({ plan, index, total, onEdit, onDuplicate, onToggleEnabled, onD
                 <StatusCell plan={plan} />
             </td>
             <td className="py-3 px-4 text-right">
-                <Dropdown>
-                    <Dropdown.Trigger>
-                        <button
+                <Menu>
+                        <MenuButton
                             type="button"
                             className="p-2 rounded-lg text-neutral-500 hover:bg-neutral-100 hover:text-neutral-700 dark:hover:bg-neutral-700 dark:hover:text-neutral-300 transition"
                             aria-label={t('admin.plan_actions')}
                         >
                             <MoreVertical className="h-4 w-4" />
-                        </button>
-                    </Dropdown.Trigger>
-                    <Dropdown.Content align="right" width="56">
-                        <Dropdown.Item onClick={() => onEdit(plan)}>
+                        </MenuButton>
+                    <MenuItems anchor="bottom end" portal className="z-50 w-56 max-w-[calc(100vw-1rem)] [--anchor-gap:0.5rem] [--anchor-padding:0.5rem] rounded-xl border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 py-1 shadow-lg focus:outline-none">
+                        <PlanAction onClick={() => onEdit(plan)}>
                             <Pencil className="h-4 w-4 mr-2 inline" />
                             {t('admin.edit_plan')}
-                        </Dropdown.Item>
-                        <Dropdown.Item onClick={() => onDuplicate(plan)}>
+                        </PlanAction>
+                        <PlanAction onClick={() => onDuplicate(plan)}>
                             <Copy className="h-4 w-4 mr-2 inline" />
                             {t('admin.duplicate_plan')}
-                        </Dropdown.Item>
-                        <Dropdown.Item onClick={() => onToggleEnabled(plan)}>
+                        </PlanAction>
+                        <PlanAction onClick={() => onToggleEnabled(plan)}>
                             {plan.enabled ? (
                                 <>
                                     <PowerOff className="h-4 w-4 mr-2 inline" />
@@ -154,20 +152,28 @@ function PlanRow({ plan, index, total, onEdit, onDuplicate, onToggleEnabled, onD
                                     {t('admin.enable_plan')}
                                 </>
                             )}
-                        </Dropdown.Item>
-                        <Dropdown.Divider />
-                        <Dropdown.Item
+                        </PlanAction>
+                        <div className="my-1 border-t border-neutral-200 dark:border-neutral-700" />
+                        <PlanAction
                             onClick={() => onDelete(plan)}
                             className="text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20"
                         >
                             <Trash2 className="h-4 w-4 mr-2 inline" />
                             {t('admin.delete_plan')}
-                        </Dropdown.Item>
-                    </Dropdown.Content>
-                </Dropdown>
+                        </PlanAction>
+                    </MenuItems>
+                </Menu>
             </td>
         </tr>
     );
+}
+
+function PlanAction({ children, className = '', ...props }) {
+    return <MenuItem>
+        <button type="button" {...props} className={`block w-full px-4 py-2.5 text-left text-sm text-neutral-700 dark:text-neutral-300 data-[focus]:bg-neutral-100 dark:data-[focus]:bg-neutral-800 ${className}`}>
+            {children}
+        </button>
+    </MenuItem>;
 }
 
 export default function PlanTable({

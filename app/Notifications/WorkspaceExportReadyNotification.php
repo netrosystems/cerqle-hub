@@ -11,7 +11,7 @@ class WorkspaceExportReadyNotification extends Notification
 {
     use Queueable;
 
-    public function __construct(private string $downloadUrl) {}
+    public function __construct(private string $downloadUrl, private ?int $workspaceId = null) {}
 
     public function via(object $notifiable): array
     {
@@ -41,6 +41,7 @@ class WorkspaceExportReadyNotification extends Notification
     {
         return [
             'type' => 'workspace_export_ready',
+            'workspace_id' => $this->workspaceId,
             'download_url' => $this->downloadUrl,
             'message' => 'Your workspace data export is ready to download.',
         ];

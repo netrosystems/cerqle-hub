@@ -28,6 +28,7 @@ class ConversationAssignedNotification extends Notification implements ShouldQue
     {
         return [
             'type' => 'conversation_assigned',
+            'workspace_id' => $this->conversation->workspace_id,
             'conversation_id' => $this->conversation->id,
             'assigned_by' => $this->assignedBy?->name,
             'contact_name' => $this->conversation->contact?->name ?? 'Unknown',

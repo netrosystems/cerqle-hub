@@ -43,6 +43,8 @@ class AiProviderController extends Controller
             'activeProvider' => $list->firstWhere('enabled', true)['provider'] ?? null,
             'providerMode' => $this->credits->mode((int) $workspaceId),
             'aiCredits' => $this->credits->usageForWorkspace((int) $workspaceId),
+            'creditRates' => config('ai.credits.rates'),
+            'creditsEnforced' => (bool) config('ai.credits.enforced'),
         ]);
     }
 

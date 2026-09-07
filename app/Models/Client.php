@@ -92,6 +92,7 @@ class Client extends Model
 
         $sub = Subscription::whereIn('user_id', $this->users()->select('id'))
             ->whereIn('status', ['active', 'trialing'])
+            ->where(fn ($query) => $query->whereNull('ends_at')->orWhere('ends_at', '>', now()))
             ->with('plan')
             ->orderByDesc('id')
             ->first();

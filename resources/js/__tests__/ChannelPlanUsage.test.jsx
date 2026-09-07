@@ -16,6 +16,10 @@ function show(routeName, key, overrides = {}, extraProps = {}) {
 }
 
 describe('channel plan usage', () => {
+    it('hides usage in conversation inbox', () => {
+        show('client.inbox.show', 'messaging_channels');
+        expect(screen.queryByRole('status')).not.toBeInTheDocument();
+    });
     it('shows used, total, remaining and organization scope', () => {
         show('client.inbox.setup', 'messaging_channels');
         expect(screen.getByRole('status')).toHaveTextContent('4/5');
@@ -27,12 +31,12 @@ describe('channel plan usage', () => {
         expect(screen.getByRole('status')).toHaveTextContent('4/∞');
         expect(screen.getByRole('status')).toHaveTextContent('Unlimited');
     });
-    it('keeps widget limits on create and edit routes', () => {
+    it('hides widget limits on create forms', () => {
         show('client.inbox.chat-widgets.create', 'website_widgets');
-        expect(screen.getByRole('status')).toHaveTextContent('4/5');
+        expect(screen.queryByRole('status')).not.toBeInTheDocument();
     });
     it('shows a full zero-allowance plan accurately', () => {
-        show('client.whatsapp.widget.edit', 'whatsapp_chatbots', { used: 0, limit: 0, remaining: 0, is_full: true });
+        show('client.whatsapp.widget.index', 'whatsapp_chatbots', { used: 0, limit: 0, remaining: 0, is_full: true });
         expect(screen.getByRole('status')).toHaveTextContent('0/0');
         expect(screen.getByRole('status')).toHaveTextContent('0 left');
     });

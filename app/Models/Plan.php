@@ -77,6 +77,7 @@ class Plan extends Model
     public function hasFeature(string $feature): bool
     {
         return match ($feature) {
+            'custom_launcher_icon' => ! $this->isFree(),
             'white_label' => $this->white_label_enabled,
             default => false,
         };

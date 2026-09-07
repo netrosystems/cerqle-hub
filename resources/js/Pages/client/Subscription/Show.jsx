@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import ClientLayout from '@/Layouts/ClientLayout';
+import BillingUsageOverview from '@/Components/BillingUsageOverview';
 import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
 import { useTranslation } from 'react-i18next';
 import { Package, ArrowRightCircle, CreditCard, FileText, RefreshCw, HardDrive, AlertTriangle, Sparkles } from 'lucide-react';
@@ -242,6 +243,8 @@ export default function SubscriptionShow({ subscription, canCancel, canUpgrade, 
                         </Link>
                     </div>
                 )}
+
+                <BillingUsageOverview />
 
                 {storageUsage && (
                     <div className={`rounded-soft-lg border bg-white p-6 dark:bg-neutral-800/50 ${storageUsage.is_full ? 'border-coral-300 dark:border-coral-800' : storageUsage.percent_used >= 80 ? 'border-amber-300 dark:border-amber-800' : 'border-neutral-200 dark:border-neutral-700'}`}>

@@ -544,7 +544,7 @@ function WabaCard({ waba, webhookGlobalUrl, channelAccounts, chatbots }) {
     );
 }
 
-function WhatsAppSection({ wabas, webhookGlobalUrl, channelAccountsByWaba, chatbots, showForm, setShowForm, metaConfigIdWhatsapp, metaAppId }) {
+export function ConnectWhatsAppForm({ onClose, metaConfigIdWhatsapp, metaAppId }) {
     const { t } = useTranslation();
     const [waApiError, setWaApiError] = useState(null);
     const [waSubmitting, setWaSubmitting] = useState(false);
@@ -569,14 +569,49 @@ function WhatsAppSection({ wabas, webhookGlobalUrl, channelAccountsByWaba, chatb
                 toast.success(json.message ?? 'WhatsApp account connected successfully.');
                 if (json.webhook_warning) toast.warning(json.webhook_warning);
                 router.reload({ preserveScroll: true });
-                setShowForm(false);
+                onClose();
             }
         } catch {
             setWaApiError(t('inbox.network_error_retry'));
         } finally {
             setWaSubmitting(false);
         }
-    }, [setShowForm, t]);
+    }, [onClose, t]);
+
+    return (
+        <div className="space-y-3">
+            {metaConfigIdWhatsapp ? (
+                <>
+                    <p className="text-xs text-neutral-500 dark:text-neutral-400 leading-relaxed">
+                        {t('inbox.authorize_whatsapp_help')}
+                    </p>
+                    <EmbeddedSignupButton
+                        configId={metaConfigIdWhatsapp}
+                        appId={metaAppId}
+                        channel="whatsapp"
+                        label={t('inbox.continue_meta_whatsapp')}
+                        color="green"
+                        onCode={handleWaEmbeddedCode}
+                        disabled={waSubmitting}
+                    />
+                    {waSubmitting && <p role="status" className="text-xs text-neutral-400">{t('inbox.connecting_whatsapp')}</p>}
+                    {waApiError && <p role="alert" className="text-xs text-red-500">{waApiError}</p>}
+                </>
+            ) : (
+                <div className="rounded-lg border border-amber-200 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 px-3 py-2.5 text-xs text-amber-700 dark:text-amber-300">
+                    {t('inbox.meta_app_not_configured')}
+                </div>
+            )}
+            <button type="button" onClick={onClose}
+                className="w-full rounded-lg border border-neutral-300 dark:border-neutral-600 px-4 py-2 text-xs text-neutral-700 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-800 transition">
+                {t('common.cancel')}
+            </button>
+        </div>
+    );
+}
+
+function WhatsAppSection({ wabas, webhookGlobalUrl, channelAccountsByWaba, chatbots }) {
+    const { t } = useTranslation();
 
     return (
         <ChannelCard
@@ -599,7 +634,7 @@ function WhatsAppSection({ wabas, webhookGlobalUrl, channelAccountsByWaba, chatb
                 </div>
             )}
 
-            {!showForm && wabas.length === 0 && (
+            {wabas.length === 0 && (
                 <div className="text-center py-8">
                     <div className="mx-auto mb-3 rounded-2xl w-12 h-12 flex items-center justify-center bg-green-100 dark:bg-green-900/30 opacity-60">
                         <WhatsAppLogo className="h-6 w-6" />
@@ -608,40 +643,6 @@ function WhatsAppSection({ wabas, webhookGlobalUrl, channelAccountsByWaba, chatb
                 </div>
             )}
 
-            {showForm && (
-                <div className={`${wabas.length > 0 ? 'mt-4 pt-4 border-t border-neutral-100 dark:border-neutral-800' : ''} space-y-3`}>
-                    {metaConfigIdWhatsapp ? (
-                        <>
-                            <p className="text-xs text-neutral-500 dark:text-neutral-400 leading-relaxed">
-                                {t('inbox.authorize_whatsapp_help')}
-                            </p>
-                            <EmbeddedSignupButton
-                                configId={metaConfigIdWhatsapp}
-                                appId={metaAppId}
-                                channel="whatsapp"
-                                label={t('inbox.continue_meta_whatsapp')}
-                                color="green"
-                                onCode={handleWaEmbeddedCode}
-                            />
-                            {waSubmitting && <p className="text-xs text-neutral-400">{t('inbox.connecting_whatsapp')}</p>}
-                            {waApiError && (
-                                <p className="text-xs text-red-500 flex items-start gap-1.5">
-                                    <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" /> {waApiError}
-                                </p>
-                            )}
-                        </>
-                    ) : (
-                        <div className="rounded-lg border border-amber-200 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 px-3 py-2.5 text-xs text-amber-700 dark:text-amber-300 flex items-start gap-2">
-                            <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
-                            <span>{t('inbox.meta_app_not_configured')}</span>
-                        </div>
-                    )}
-                    <button type="button" onClick={() => setShowForm(false)}
-                        className="w-full rounded-lg border border-neutral-300 dark:border-neutral-600 px-4 py-2 text-xs text-neutral-700 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-800 transition">
-                        {t('common.cancel')}
-                    </button>
-                </div>
-            )}
         </ChannelCard>
     );
 }
@@ -860,7 +861,7 @@ function loadFbSdk(appId) {
     return window.__fbSdkPromise;
 }
 
-function EmbeddedSignupButton({ configId, appId, channel, label, color, onCode, children }) {
+function EmbeddedSignupButton({ configId, appId, channel, label, color, onCode, children, disabled = false }) {
     const { t } = useTranslation();
     const { props } = usePage();
     const resolvedAppId = appId || props.metaAppId;
@@ -935,7 +936,7 @@ function EmbeddedSignupButton({ configId, appId, channel, label, color, onCode, 
             <button
                 type="button"
                 onClick={launch}
-                disabled={loading}
+                disabled={loading || disabled}
                 className={`w-full flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold shadow-sm transition disabled:opacity-60 ${colors[color] ?? colors.blue}`}
             >
                 {loading ? (
@@ -1220,15 +1221,12 @@ export default function ChannelSetup({
     const flash = props.flash ?? {};
 
     const [drawer, setDrawer] = useState(null);
-    const [showWabaForm, setShowWabaForm] = useState(false);
 
     const openDrawer = (key) => {
         setDrawer(key);
-        if (key === 'whatsapp') setShowWabaForm(true);
     };
     const closeDrawer = () => {
         setDrawer(null);
-        setShowWabaForm(false);
     };
 
     return (
@@ -1286,10 +1284,6 @@ export default function ChannelSetup({
                     webhookGlobalUrl={whatsappWebhookGlobalUrl}
                     channelAccountsByWaba={channelAccountsByWaba ?? {}}
                     chatbots={chatbots}
-                    showForm={false}
-                    setShowForm={() => {}}
-                    metaConfigIdWhatsapp={metaConfigIdWhatsapp}
-                    metaAppId={metaAppId}
                 />
 
                 {/* Instagram */}
@@ -1406,13 +1400,8 @@ export default function ChannelSetup({
                 title={t('inbox.connect_whatsapp')}
                 icon={WhatsAppLogo}
                 iconBg="bg-white dark:bg-neutral-800 shadow-sm border border-neutral-100 dark:border-neutral-700">
-                <WhatsAppSection
-                    wabas={wabas}
-                    webhookGlobalUrl={whatsappWebhookGlobalUrl}
-                    channelAccountsByWaba={channelAccountsByWaba ?? {}}
-                    chatbots={chatbots}
-                    showForm={showWabaForm}
-                    setShowForm={setShowWabaForm}
+                <ConnectWhatsAppForm
+                    onClose={closeDrawer}
                     metaConfigIdWhatsapp={metaConfigIdWhatsapp}
                     metaAppId={metaAppId}
                 />

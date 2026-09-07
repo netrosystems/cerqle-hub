@@ -48,6 +48,7 @@ class MentionedInNoteNotification extends Notification implements ShouldQueue
     {
         return [
             'type' => 'mention',
+            'workspace_id' => $this->conversation->workspace_id,
             'conversation_id' => $this->conversation->id,
             'mentioned_by' => $this->mentionedBy->name,
             'snippet' => mb_substr($this->noteBody, 0, 120),

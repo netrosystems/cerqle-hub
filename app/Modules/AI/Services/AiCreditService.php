@@ -76,7 +76,7 @@ class AiCreditService
             ->where('enabled', true)->exists();
         $mode = AiWorkspaceSetting::firstOrCreate(
             ['workspace_id' => $workspace->id],
-            ['provider_mode' => $legacyByok ? 'byok' : 'managed'],
+            ['provider_mode' => $legacyByok ? 'byok' : 'auto_fallback'],
         )->provider_mode;
 
         $isFree = (bool) ($subscription?->plan?->isFree() ?? false);

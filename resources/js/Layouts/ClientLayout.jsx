@@ -9,6 +9,7 @@ import UpgradeModal from '@/Components/UpgradeModal';
 import ReleaseBadge from '@/Components/ReleaseBadge';
 import ChannelPlanUsage from '@/Components/ChannelPlanUsage';
 import useClientNav from '@/Layouts/useClientNav';
+import { belongsToWorkspace } from '@/lib/workspaceNotifications';
 import { ChannelBrandIcon } from '@/Components/BrandIcons';
 import {
     LayoutDashboard,
@@ -91,6 +92,7 @@ export default function ClientLayout({ header, children, title }) {
     const [sidebarOpen, setSidebarOpen] = useState(false);
     const { auth, clientAccess, impersonation, current_workspace_usage, unreadNotificationsCount, branding, onesignal } = usePage().props;
     const logoUrl = branding?.logo_url;
+    const workspaceId = usePage().props.currentWorkspace?.id;
     const [unreadCount, setUnreadCount] = useState(unreadNotificationsCount ?? 0);
     const clientNavGroups = useClientNav();
 
@@ -100,7 +102,7 @@ export default function ClientLayout({ header, children, title }) {
     // Sync unread count from server on page changes
     useEffect(() => {
         setUnreadCount(unreadNotificationsCount ?? 0);
-    }, [unreadNotificationsCount]);
+    }, [unreadNotificationsCount, workspaceId]);
 
     // Subscribe to broadcast notifications for this user
     useEffect(() => {
@@ -108,6 +110,7 @@ export default function ClientLayout({ header, children, title }) {
 
         window.Echo.private(`App.Models.User.${auth.user.id}`)
             .notification((notification) => {
+                if (!belongsToWorkspace(notification, workspaceId)) return;
                 setUnreadCount(prev => prev + 1);
                 const msg = notification.snippet ?? notification.name ?? notification.automation ?? notification.error ?? t('ui.notif_new');
                 const title = {
@@ -133,7 +136,7 @@ export default function ClientLayout({ header, children, title }) {
         return () => {
             window.Echo.leave(`App.Models.User.${auth.user.id}`);
         };
-    }, [auth?.user?.id]);
+    }, [auth?.user?.id, workspaceId]);
 
     const returnToAdmin = () => {
         router.post(impersonation?.returnUrl ?? route('admin.impersonation.stop'));
