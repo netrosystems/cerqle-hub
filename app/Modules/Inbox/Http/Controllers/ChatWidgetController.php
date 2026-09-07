@@ -140,7 +140,7 @@ class ChatWidgetController extends Controller
             'position' => ['required', 'in:bottom_right,bottom_left'],
             'launcher_text' => ['nullable', 'string', 'max:64'],
             'footer_company_name' => ['nullable', 'string', 'max:128'],
-            'launcher_logo' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp,gif', 'max:2048'],
+            'launcher_logo' => ['nullable', 'image', 'mimes:png', 'extensions:png', 'max:2048'],
             'remove_launcher_logo' => ['nullable', 'boolean'],
             'ai_chatbot_id' => ['nullable', 'integer'],
             'prechat_fields' => ['nullable', 'array'],
@@ -173,7 +173,7 @@ class ChatWidgetController extends Controller
 
         if ($hasUpload && ! $canUseCustomLogo) {
             throw ValidationException::withMessages([
-                'launcher_logo' => 'Upgrade to Pro to upload a custom launcher icon.',
+                'launcher_logo' => 'Choose a paid plan to upload a custom launcher icon.',
             ]);
         }
 
@@ -190,7 +190,7 @@ class ChatWidgetController extends Controller
 
         $this->deleteLauncherLogo($widget);
         $file = $request->file('launcher_logo');
-        $path = $this->storageManager->prefixedPath('widget-launchers/'.Str::uuid().'.'.$file->getClientOriginalExtension());
+        $path = $this->storageManager->prefixedPath('widget-launchers/'.Str::uuid().'.png');
         $disk = $this->storageManager->disk();
         if ($disk->putFileAs(dirname($path), $file, basename($path)) === false) {
             throw ValidationException::withMessages([
@@ -263,7 +263,7 @@ class ChatWidgetController extends Controller
 
     private function canUseCustomLauncherLogo(Request $request): bool
     {
-        return (bool) $this->workspacePlan($request)?->hasFeature('white_label');
+        return (bool) $this->workspacePlan($request)?->hasFeature('custom_launcher_icon');
     }
 
     private function workspacePlan(Request $request)

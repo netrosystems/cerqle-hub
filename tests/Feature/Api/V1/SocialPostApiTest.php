@@ -17,7 +17,7 @@ class SocialPostApiTest extends TestCase
     public function test_api_can_queue_a_complete_youtube_upload(): void
     {
         Queue::fake();
-        ['user' => $user, 'workspace' => $workspace] = $this->createWorkspaceContext();
+        ['user' => $user, 'workspace' => $workspace] = $this->createSubscribedWorkspaceContext();
         $this->grantDeveloperToolsAddon($user);
         $token = $user->createToken('youtube-test', [ApiAbilities::SOCIAL_WRITE])->plainTextToken;
         $account = $this->youtubeAccount($workspace->id);
@@ -43,7 +43,7 @@ class SocialPostApiTest extends TestCase
     public function test_api_rejects_a_youtube_watch_page_before_queueing(): void
     {
         Queue::fake();
-        ['user' => $user, 'workspace' => $workspace] = $this->createWorkspaceContext();
+        ['user' => $user, 'workspace' => $workspace] = $this->createSubscribedWorkspaceContext();
         $this->grantDeveloperToolsAddon($user);
         $token = $user->createToken('youtube-test', [ApiAbilities::SOCIAL_WRITE])->plainTextToken;
         $account = $this->youtubeAccount($workspace->id);

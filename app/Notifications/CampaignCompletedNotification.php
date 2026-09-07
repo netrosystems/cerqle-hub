@@ -36,6 +36,7 @@ class CampaignCompletedNotification extends Notification implements ShouldQueue
     {
         return [
             'type' => 'campaign_completed',
+            'workspace_id' => $this->campaign->workspace_id,
             'campaign_id' => $this->campaign->id,
             'name' => $this->campaign->name,
             'sent' => $this->campaign->sent_count ?? 0,

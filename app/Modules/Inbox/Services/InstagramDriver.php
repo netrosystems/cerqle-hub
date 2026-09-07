@@ -20,6 +20,17 @@ class InstagramDriver implements ChannelDriverInterface
 {
     private const BASE = 'https://graph.facebook.com/v25.0';
 
+    public static function attachmentType(array $event): string
+    {
+        return match ($event['message']['attachments'][0]['type'] ?? null) {
+            'image', 'animated_image' => 'image',
+            'video' => 'video',
+            'audio' => 'audio',
+            'file' => 'document',
+            default => 'text',
+        };
+    }
+
     public function __construct(private ContactService $contactService) {}
 
     public function send(Message $message): string
@@ -262,7 +273,7 @@ class InstagramDriver implements ChannelDriverInterface
             'conversation_id' => $conversation->id,
             'direction' => 'in',
             'channel' => 'instagram',
-            'type' => 'text',
+            'type' => self::attachmentType($event),
             'payload' => $event,
             'body' => $msgBody,
             'status' => 'delivered',
@@ -347,7 +358,7 @@ class InstagramDriver implements ChannelDriverInterface
             'conversation_id' => $conversation->id,
             'direction' => 'out',
             'channel' => 'instagram',
-            'type' => 'text',
+            'type' => self::attachmentType($event),
             'payload' => $event,
             'body' => $msgBody,
             'status' => 'sent',

@@ -198,6 +198,7 @@ class AutomationEngine
      *
      * @param  array<int, array<string, mixed>>  $nodes  builder node objects ({id, type, data})
      * @param  array<int, array<string, mixed>>  $edges  builder edge objects ({source, target, sourceHandle})
+     * @param  array<string, mixed>  $context
      * @return array{ok: bool, error?: string, steps: array<int, array<string, mixed>>, context?: array<string, mixed>, contact?: array<string, mixed>}
      */
     public function testRun(Automation $automation, array $nodes, array $edges, array $context = []): array
@@ -288,6 +289,8 @@ class AutomationEngine
      * The persisted workflow type is `trigger`; `triggerNode` is retained as a
      * compatibility alias for workflows saved by the visual builder before the
      * renderer/persistence boundary was corrected.
+     *
+     * @param  array<string, mixed>  $node
      */
     private function isTriggerNode(array $node): bool
     {
@@ -310,7 +313,9 @@ class AutomationEngine
         return $c;
     }
 
-    /** Seed run-context values so {{context.*}} tokens render during a test. */
+    /** Seed run-context values so {{context.*}} tokens render during a test.
+     * @return array<string, mixed>
+     */
     private function defaultTestContext(): array
     {
         return [
@@ -329,6 +334,10 @@ class AutomationEngine
     /**
      * Describe what a node *would* do — without performing any side effect. Used by testRun()
      * only; mirrors the validation each real executor performs so the trace flags mis-config.
+     *
+     * @param  array<string, mixed>  $context
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
      */
     private function previewNode(string $type, array $data, Contact $contact, array $context): array
     {
@@ -783,7 +792,10 @@ class AutomationEngine
         ];
     }
 
-    /** Decode a JSON-string (or already-array) config field into an array, token-rendered. */
+    /** Decode a JSON-string (or already-array) config field into an array, token-rendered.
+     * @param  array<string, mixed>  $context
+     * @return array<array-key, mixed>
+     */
     private function decodeJsonField(mixed $v, ?Contact $contact, array $context): array
     {
         if (is_array($v)) {
@@ -809,6 +821,9 @@ class AutomationEngine
     /**
      * Pure boolean evaluation of a condition node against a contact + run context.
      * Read-only: shared by live execution and the builder's test simulation.
+     *
+     * @param  array<string, mixed>  $context
+     * @param  array<string, mixed>  $data
      */
     public function evaluateCondition(array $data, ?Contact $contact, array $context): bool
     {
@@ -845,6 +860,9 @@ class AutomationEngine
         };
     }
 
+    /**
+     * @return array<string, mixed>
+     */
     private function conditionResult(bool $passed, ?string $field, string $operator, mixed $value): array
     {
         return [
@@ -856,6 +874,11 @@ class AutomationEngine
 
     // ─── SEND nodes ───────────────────────────────────────────────────────────
 
+    /**
+     * @param  array<string, mixed>  $context
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
     private function executeSendTemplate(array $data, AutomationRun $run, array $context): array
     {
         $name = $data['template_name'] ?? ($data['template_ref'] ?? null);
@@ -885,6 +908,11 @@ class AutomationEngine
         ]]);
     }
 
+    /**
+     * @param  array<string, mixed>  $context
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
     private function executeSendMedia(array $data, AutomationRun $run, array $context): array
     {
         $contact = Contact::find($run->contact_id);
@@ -915,6 +943,11 @@ class AutomationEngine
         return $this->dispatchMessage($run, $channel, $type, $caption, $payload);
     }
 
+    /**
+     * @param  array<string, mixed>  $context
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
     private function executeSendSequence(array $data, AutomationRun $run, array $context): array
     {
         $contact = Contact::find($run->contact_id);
@@ -948,6 +981,11 @@ class AutomationEngine
         return ['status' => 'ok', 'message' => "Sent {$sent} sequence step(s)."];
     }
 
+    /**
+     * @param  array<string, mixed>  $context
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
     private function executeQuickReplies(array $data, AutomationRun $run, array $context): array
     {
         $contact = Contact::find($run->contact_id);
@@ -963,6 +1001,11 @@ class AutomationEngine
         return $this->sendWhatsappPayload($run, 'interactive', $body, ['interactive' => $this->buttonInteractive($body, $buttons)]);
     }
 
+    /**
+     * @param  array<string, mixed>  $context
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
     private function executeListMessage(array $data, AutomationRun $run, array $context): array
     {
         $contact = Contact::find($run->contact_id);
@@ -982,6 +1025,11 @@ class AutomationEngine
 
     // ─── LISTEN nodes ─────────────────────────────────────────────────────────
 
+    /**
+     * @param  array<string, mixed>  $context
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
     private function executeAskQuestion(array $data, AutomationRun $run, array $context): array
     {
         $contact = Contact::find($run->contact_id);
@@ -1014,6 +1062,11 @@ class AutomationEngine
 
     // ─── LOGIC nodes ──────────────────────────────────────────────────────────
 
+    /**
+     * @param  array<string, mixed>  $context
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
     private function executeRunSubflow(array $data, AutomationRun $run, array $context): array
     {
         $ref = $data['automation_uuid'] ?? ($data['automation_id'] ?? null);
@@ -1045,6 +1098,10 @@ class AutomationEngine
 
     // ─── CONTACT nodes ────────────────────────────────────────────────────────
 
+    /**
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
     private function executeAssignAgent(array $data, AutomationRun $run): array
     {
         if (! $run->contact_id) {
@@ -1080,6 +1137,11 @@ class AutomationEngine
 
     // ─── ENGAGE nodes ─────────────────────────────────────────────────────────
 
+    /**
+     * @param  array<string, mixed>  $context
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
     private function executeCtaButton(array $data, AutomationRun $run, array $context): array
     {
         $contact = Contact::find($run->contact_id);
@@ -1107,6 +1169,11 @@ class AutomationEngine
         return $this->sendWhatsappPayload($run, 'interactive', $body, ['interactive' => $interactive]);
     }
 
+    /**
+     * @param  array<string, mixed>  $context
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
     private function executeSendLocation(array $data, AutomationRun $run, array $context): array
     {
         $contact = Contact::find($run->contact_id);
@@ -1129,6 +1196,11 @@ class AutomationEngine
         return $this->sendWhatsappPayload($run, 'location', $data['name'] ?? null, $payload);
     }
 
+    /**
+     * @param  array<string, mixed>  $context
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
     private function executeSendPoll(array $data, AutomationRun $run, array $context): array
     {
         $contact = Contact::find($run->contact_id);
@@ -1149,6 +1221,11 @@ class AutomationEngine
         return $this->sendWhatsappPayload($run, 'interactive', $question, ['interactive' => $interactive]);
     }
 
+    /**
+     * @param  array<string, mixed>  $context
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
     private function executeRunChatbot(array $data, AutomationRun $run, array $context): array
     {
         $contact = Contact::find($run->contact_id);
@@ -1188,6 +1265,11 @@ class AutomationEngine
         ];
     }
 
+    /**
+     * @param  array<string, mixed>  $context
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
     private function executeBookAppointment(array $data, AutomationRun $run, array $context): array
     {
         $contact = Contact::find($run->contact_id);
@@ -1235,6 +1317,11 @@ class AutomationEngine
         return ['status' => 'ok', 'message' => 'Appointment booked for '.$start->toDateTimeString().'.', 'output' => $ctx, 'context_update' => $ctx];
     }
 
+    /**
+     * @param  array<string, mixed>  $context
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
     private function executeGoogleMeet(array $data, AutomationRun $run, array $context): array
     {
         $contact = Contact::find($run->contact_id);
@@ -1283,6 +1370,11 @@ class AutomationEngine
         return ['status' => 'ok', 'message' => 'Google Meet created.', 'output' => $ctx, 'context_update' => $ctx];
     }
 
+    /**
+     * @param  array<string, mixed>  $context
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
     private function executeWhatsappForm(array $data, AutomationRun $run, array $context): array
     {
         $contact = Contact::find($run->contact_id);
@@ -1318,6 +1410,11 @@ class AutomationEngine
 
     // ─── COMMERCE nodes ───────────────────────────────────────────────────────
 
+    /**
+     * @param  array<string, mixed>  $context
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
     private function executeWhatsappCatalog(array $data, AutomationRun $run, array $context): array
     {
         $contact = Contact::find($run->contact_id);
@@ -1336,6 +1433,11 @@ class AutomationEngine
         return $this->sendWhatsappPayload($run, 'interactive', $body, ['interactive' => $interactive]);
     }
 
+    /**
+     * @param  array<string, mixed>  $context
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
     private function executeSendProduct(array $data, AutomationRun $run, array $context, string $platform): array
     {
         $contact = Contact::find($run->contact_id);
@@ -1382,6 +1484,11 @@ class AutomationEngine
 
     // ─── INTEGRATIONS nodes ───────────────────────────────────────────────────
 
+    /**
+     * @param  array<string, mixed>  $context
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
     private function executeGoogleSheets(array $data, AutomationRun $run, array $context): array
     {
         $google = GoogleClient::resolve();
@@ -1420,6 +1527,11 @@ class AutomationEngine
         }
     }
 
+    /**
+     * @param  array<string, mixed>  $context
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
     private function executeGoogleDocs(array $data, AutomationRun $run, array $context): array
     {
         $google = GoogleClient::resolve();
@@ -1452,6 +1564,10 @@ class AutomationEngine
      * Google Forms node. Two modes:
      *   - send_link (default) → share the form's responder URL with the contact.
      *   - read_response       → pull the latest submission's answers into the run context.
+     *
+     * @param  array<string, mixed>  $context
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
      */
     private function executeGoogleForms(array $data, AutomationRun $run, array $context): array
     {
@@ -1515,7 +1631,9 @@ class AutomationEngine
 
     // ─── Shared send helpers ──────────────────────────────────────────────────
 
-    /** Normalise a node's channel choice; defaults to WhatsApp. */
+    /** Normalise a node's channel choice; defaults to WhatsApp.
+     * @param  array<string, mixed>  $data
+     */
     private function pickChannel(array $data): string
     {
         $channel = $data['channel'] ?? 'whatsapp';
@@ -1568,6 +1686,9 @@ class AutomationEngine
     /**
      * Create + send an outbound message on any supported channel
      * (whatsapp / messenger / instagram / sms), routed to the correct account.
+     *
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
      */
     private function dispatchMessage(AutomationRun $run, string $channel, string $type, ?string $body, ?array $payload, string $sentBy = 'automation'): array
     {
@@ -1617,7 +1738,9 @@ class AutomationEngine
         return ['status' => 'ok', 'message' => ucfirst($channel).' message sent.', 'output' => ['message_id' => $message->id]];
     }
 
-    /** Send an SMS via the workspace's configured SMS provider (Broadcasting drivers). */
+    /** Send an SMS via the workspace's configured SMS provider (Broadcasting drivers).
+     * @return array<string, mixed>
+     */
     private function dispatchSms(AutomationRun $run, Contact $contact, string $text, string $sentBy): array
     {
         if (! $contact->phone_e164) {
@@ -1672,19 +1795,27 @@ class AutomationEngine
         return ['status' => 'ok', 'message' => 'SMS sent.', 'output' => ['message_id' => $message->id]];
     }
 
-    /** WhatsApp-only send (templates, interactive, media, location) — routed to the right account. */
+    /** WhatsApp-only send (templates, interactive, media, location) — routed to the right account.
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
+     */
     private function sendWhatsappPayload(AutomationRun $run, string $type, ?string $body, ?array $payload, string $sentBy = 'automation'): array
     {
         return $this->dispatchMessage($run, 'whatsapp', $type, $body, $payload, $sentBy);
     }
 
-    /** Send a plain text message on the given channel (whatsapp / messenger / instagram / sms). */
+    /** Send a plain text message on the given channel (whatsapp / messenger / instagram / sms).
+     * @return array<string, mixed>
+     */
     private function sendTextViaChannel(AutomationRun $run, string $channel, string $text, string $sentBy): array
     {
         return $this->dispatchMessage($run, $channel, 'text', $text, null, $sentBy);
     }
 
-    /** WhatsApp interactive reply-buttons payload (max 3). */
+    /** WhatsApp interactive reply-buttons payload (max 3).
+     * @param  array<array-key, string>  $titles
+     * @return array<string, mixed>
+     */
     private function buttonInteractive(string $body, array $titles): array
     {
         $buttons = [];
@@ -1695,7 +1826,10 @@ class AutomationEngine
         return ['type' => 'button', 'body' => ['text' => mb_substr($body, 0, 1024)], 'action' => ['buttons' => $buttons]];
     }
 
-    /** WhatsApp interactive list payload (max 10 rows). */
+    /** WhatsApp interactive list payload (max 10 rows).
+     * @param  list<array{title: string, description: string}>  $rows
+     * @return array<string, mixed>
+     */
     private function listInteractive(string $body, string $buttonLabel, string $sectionTitle, array $rows): array
     {
         $items = [];
@@ -1719,7 +1853,9 @@ class AutomationEngine
 
     // ─── Parsing helpers ──────────────────────────────────────────────────────
 
-    /** Normalise a value to a trimmed list (accepts an array, or a comma/newline string). */
+    /** Normalise a value to a trimmed list (accepts an array, or a comma/newline string).
+     * @return array<array-key, string>
+     */
     private function toList(mixed $v): array
     {
         if (is_array($v)) {
@@ -1732,7 +1868,9 @@ class AutomationEngine
         return [];
     }
 
-    /** Split a value into lines, preserving empty cells for column alignment. */
+    /** Split a value into lines, preserving empty cells for column alignment.
+     * @return array<array-key, string>
+     */
     private function toLines(mixed $v): array
     {
         if (is_array($v)) {
@@ -1843,6 +1981,7 @@ class AutomationEngine
      * Parse Doc placeholder replacements. Accepts an array of {key, value}, an assoc
      * array, a JSON object string, or "key=value" lines. Values are token-rendered.
      *
+     * @param  array<string, mixed>  $context
      * @return array<string, string>
      */
     private function parseReplacements(mixed $v, ?Contact $contact, array $context): array

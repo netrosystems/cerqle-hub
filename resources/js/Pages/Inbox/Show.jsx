@@ -1,5 +1,6 @@
 import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
 import InboxLayout from '@/Layouts/InboxLayout';
+import InstagramAttachments, { instagramAttachments } from '@/Components/Inbox/InstagramAttachments';
 import EmptyState from '@/Components/EmptyState';
 import NewConversationModal from '@/Components/Inbox/NewConversationModal';
 import ConversationStatusBadge from '@/Components/Inbox/ConversationStatusBadge';
@@ -204,7 +205,7 @@ function groupMessagesForRender(messages) {
     let i = 0;
     while (i < messages.length) {
         const msg = messages[i];
-        if (msg.type === 'image') {
+        if (msg.type === 'image' && !instagramAttachments(msg).length) {
             const group = [msg];
             let j = i + 1;
             while (j < messages.length) {
@@ -212,6 +213,7 @@ function groupMessagesForRender(messages) {
                 const prev = group[group.length - 1];
                 if (
                     next.type !== 'image' ||
+                    instagramAttachments(next).length > 0 ||
                     next.direction !== msg.direction ||
                     Math.abs(new Date(next.sent_at) - new Date(prev.sent_at)) > ALBUM_WINDOW_MS
                 ) break;
@@ -657,9 +659,10 @@ function MessageBubble({ msg, conversationId }) {
     const bubbleTz = pageProps.timezone || 'Asia/Dhaka';
     const isOut = msg.direction === 'out';
     const p     = msg.payload ?? {};
+    const igAttachments = instagramAttachments(msg);
 
     // Resolve media source: outbound has preview_url directly; inbound raw webhook nests under type key
-    const mediaType   = msg.type ?? 'text';
+    const mediaType   = igAttachments.length ? 'instagram_attachments' : (msg.type ?? 'text');
     const previewUrl  = p.preview_url ?? p[mediaType]?.preview_url ?? null;
     const rawMediaId  = p[mediaType]?.id ?? p.media_id ?? null;
     // Use proxy if no previewUrl for inbound media
@@ -727,6 +730,7 @@ function MessageBubble({ msg, conversationId }) {
                 )}
 
                 <div className="px-3 py-2.5">
+                    {igAttachments.length > 0 && <InstagramAttachments attachments={igAttachments} />}
                     {/* IMAGE */}
                     {mediaType === 'image' && (
                         <MediaImage src={mediaSrc} alt={caption} conversationId={conversationId} messageId={msg.id} isOut={isOut} />
@@ -794,12 +798,12 @@ function MessageBubble({ msg, conversationId }) {
                     )}
 
                     {/* TEXT / fallback */}
-                    {!templateComponents && (mediaType === 'text' || (!['image','video','audio','document','location','contacts','interactive','template','poll','event','unsupported'].includes(mediaType))) && (
+                    {!igAttachments.length && !templateComponents && (mediaType === 'text' || (!['image','video','audio','document','location','contacts','interactive','template','poll','event','unsupported'].includes(mediaType))) && (
                         <WaText text={msg.body || '(media)'} />
                     )}
 
                     {/* Caption below media */}
-                    {['image','video','document','audio'].includes(mediaType) && caption && (
+                    {(['image','video','document','audio'].includes(mediaType) || igAttachments.length > 0) && caption && (
                         <p className="text-xs mt-1 opacity-90"><WaText text={caption} /></p>
                     )}
 

@@ -15,7 +15,7 @@ class SocialPostMediaValidationTest extends TestCase
 
     public function test_youtube_watch_page_is_rejected_with_direct_video_guidance(): void
     {
-        ['user' => $user, 'workspace' => $workspace] = $this->createWorkspaceContext();
+        ['user' => $user, 'workspace' => $workspace] = $this->createSubscribedWorkspaceContext();
         $account = $this->youtubeAccount($workspace->id);
 
         $response = $this->actingAs($user)->post(route('client.social.posts.store'), [
@@ -37,7 +37,7 @@ class SocialPostMediaValidationTest extends TestCase
     {
         Queue::fake();
 
-        ['user' => $user, 'workspace' => $workspace] = $this->createWorkspaceContext();
+        ['user' => $user, 'workspace' => $workspace] = $this->createSubscribedWorkspaceContext();
         $account = $this->youtubeAccount($workspace->id);
 
         $response = $this->actingAs($user)->post(route('client.social.posts.store'), [
@@ -68,7 +68,7 @@ class SocialPostMediaValidationTest extends TestCase
 
     public function test_youtube_requires_a_title_and_exactly_one_video(): void
     {
-        ['user' => $user, 'workspace' => $workspace] = $this->createWorkspaceContext();
+        ['user' => $user, 'workspace' => $workspace] = $this->createSubscribedWorkspaceContext();
         $account = $this->youtubeAccount($workspace->id);
 
         $response = $this->actingAs($user)->post(route('client.social.posts.store'), [
@@ -89,7 +89,7 @@ class SocialPostMediaValidationTest extends TestCase
 
     public function test_playlist_requires_exactly_one_youtube_channel(): void
     {
-        ['user' => $user, 'workspace' => $workspace] = $this->createWorkspaceContext();
+        ['user' => $user, 'workspace' => $workspace] = $this->createSubscribedWorkspaceContext();
         $first = $this->youtubeAccount($workspace->id);
         $second = $this->youtubeAccount($workspace->id, 'channel-456');
 
@@ -108,7 +108,7 @@ class SocialPostMediaValidationTest extends TestCase
 
     public function test_youtube_tag_limit_counts_commas_between_tags(): void
     {
-        ['user' => $user, 'workspace' => $workspace] = $this->createWorkspaceContext();
+        ['user' => $user, 'workspace' => $workspace] = $this->createSubscribedWorkspaceContext();
         $account = $this->youtubeAccount($workspace->id);
 
         $response = $this->actingAs($user)->post(route('client.social.posts.store'), [
@@ -127,7 +127,7 @@ class SocialPostMediaValidationTest extends TestCase
     public function test_multi_platform_post_stores_network_specific_override(): void
     {
         Queue::fake();
-        ['user' => $user, 'workspace' => $workspace] = $this->createWorkspaceContext();
+        ['user' => $user, 'workspace' => $workspace] = $this->createSubscribedWorkspaceContext();
         $youtube = $this->youtubeAccount($workspace->id);
         $facebook = $this->account($workspace->id, 'facebook');
 
@@ -156,7 +156,7 @@ class SocialPostMediaValidationTest extends TestCase
 
     public function test_tiktok_requires_privacy_and_explicit_consent(): void
     {
-        ['user' => $user, 'workspace' => $workspace] = $this->createWorkspaceContext();
+        ['user' => $user, 'workspace' => $workspace] = $this->createSubscribedWorkspaceContext();
         $tiktok = $this->account($workspace->id, 'tiktok');
 
         $response = $this->actingAs($user)->post(route('client.social.posts.store'), [

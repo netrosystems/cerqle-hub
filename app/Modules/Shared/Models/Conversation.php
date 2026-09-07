@@ -52,31 +52,37 @@ class Conversation extends Model
         ];
     }
 
+    /** @return BelongsTo<Contact, $this> */
     public function contact(): BelongsTo
     {
         return $this->belongsTo(Contact::class);
     }
 
+    /** @return BelongsTo<Workspace, $this> */
     public function workspace(): BelongsTo
     {
         return $this->belongsTo(Workspace::class);
     }
 
+    /** @return BelongsTo<ChannelAccount, $this> */
     public function channelAccount(): BelongsTo
     {
         return $this->belongsTo(ChannelAccount::class);
     }
 
+    /** @return HasMany<Message, $this> */
     public function messages(): HasMany
     {
         return $this->hasMany(Message::class);
     }
 
+    /** @return HasOne<Message, $this> */
     public function lastMessage(): HasOne
     {
         return $this->hasOne(Message::class)->latestOfMany('sent_at');
     }
 
+    /** @return HasOne<Message, $this> */
     public function latestInboundMessage(): HasOne
     {
         return $this->hasOne(Message::class)
@@ -85,7 +91,8 @@ class Conversation extends Model
                 ->where('channel', 'email'));
     }
 
-    public function lastHumanReply()
+    /** @return HasOne<Message, $this> */
+    public function lastHumanReply(): HasOne
     {
         return $this->hasOne(Message::class)
             ->ofMany(['id' => 'max'], fn ($query) => $query
@@ -94,11 +101,13 @@ class Conversation extends Model
                 ->whereNotNull('user_id'));
     }
 
+    /** @return HasMany<InternalNote, $this> */
     public function internalNotes(): HasMany
     {
         return $this->hasMany(InternalNote::class);
     }
 
+    /** @return BelongsToMany<InboxLabel, $this> */
     public function labels(): BelongsToMany
     {
         return $this->belongsToMany(
@@ -109,6 +118,7 @@ class Conversation extends Model
         );
     }
 
+    /** @return BelongsTo<User, $this> */
     public function assignedUser(): BelongsTo
     {
         return $this->belongsTo(User::class, 'assigned_user_id');

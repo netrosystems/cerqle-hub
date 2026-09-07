@@ -8,6 +8,7 @@ use App\Support\ApiAbilities;
 use App\Support\Demo;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Request;
+use Illuminate\Routing\Route;
 use Tests\TestCase;
 
 class DemoModeTest extends TestCase
@@ -130,6 +131,7 @@ class DemoModeTest extends TestCase
         config(['app.demo_mode' => true]);
 
         ['user' => $user, 'workspace' => $workspace] = $this->createWorkspaceContext();
+        $this->grantDeveloperToolsAddon($user);
         $token = $user->createToken('t', [ApiAbilities::CONTACTS_READ])->plainTextToken;
 
         Contact::factory()->create([
@@ -152,6 +154,7 @@ class DemoModeTest extends TestCase
         config(['app.demo_mode' => true]);
 
         ['user' => $user] = $this->createWorkspaceContext();
+        $this->grantDeveloperToolsAddon($user);
         $token = $user->createToken('t', [ApiAbilities::CONTACTS_WRITE])->plainTextToken;
 
         $this->withToken($token)
@@ -171,6 +174,7 @@ class DemoModeTest extends TestCase
         config(['app.demo_mode' => true]);
 
         ['user' => $user] = $this->createWorkspaceContext();
+        $this->grantDeveloperToolsAddon($user);
         $token = $user->createToken('t', [ApiAbilities::CONTACTS_READ])->plainTextToken;
 
         $this->withToken($token)->getJson('/api/v1/contacts')->assertOk();
@@ -227,7 +231,7 @@ class DemoModeTest extends TestCase
     private function postRequestNamed(string $name): Request
     {
         $request = Request::create('/x', 'POST');
-        $route = (new \Illuminate\Routing\Route(['POST'], '/x', []))->name($name);
+        $route = (new Route(['POST'], '/x', []))->name($name);
         $request->setRouteResolver(fn () => $route);
 
         return $request;

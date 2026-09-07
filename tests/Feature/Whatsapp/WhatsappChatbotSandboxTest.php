@@ -23,7 +23,7 @@ class WhatsappChatbotSandboxTest extends TestCase
     #[Test]
     public function an_inbound_whatsapp_message_receives_a_chatbot_reply_through_the_cloud_api(): void
     {
-        ['workspace' => $workspace] = $this->createWorkspaceContext();
+        ['workspace' => $workspace] = $this->createSubscribedWorkspaceContext();
 
         $waba = WhatsappBusinessAccount::create([
             'workspace_id' => $workspace->id,

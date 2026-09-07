@@ -20,7 +20,7 @@ class ChatWidgetCrudTest extends TestCase
     {
         parent::setUp();
         $this->ctx = $this->createWorkspaceContext();
-        $this->attachPlanToClient($this->ctx['client'], Plan::factory()->create(['white_label_enabled' => false, 'limits' => ['website_widgets' => 10]]));
+        $this->attachPlanToClient($this->ctx['client'], Plan::factory()->create(['price_cents' => 0, 'white_label_enabled' => false, 'limits' => ['website_widgets' => 10]]));
     }
 
     public function test_can_delete_owned_chat_widget(): void
@@ -105,16 +105,16 @@ class ChatWidgetCrudTest extends TestCase
         $this->assertSame('Netro Systems', $widget->fresh()->publicConfig()['footer_company_name']);
     }
 
-    public function test_custom_launcher_logo_requires_a_pro_entitlement_and_is_served_to_eligible_widgets(): void
+    public function test_enterprise_launcher_logo_works_without_white_label_flag(): void
     {
         Storage::fake('public');
         $workspace = $this->ctx['workspace'];
         $plan = Plan::create([
-            'name' => 'Pro',
+            'name' => 'Enterprise',
             'slug' => 'pro-'.uniqid(),
             'price_cents' => 4900,
             'currency_code' => 'USD',
-            'white_label_enabled' => true,
+            'white_label_enabled' => false,
         ]);
         $this->attachPlanToClient($this->ctx['client'], $plan);
 
@@ -132,6 +132,20 @@ class ChatWidgetCrudTest extends TestCase
         $this->assertStringContainsString('/storage/', $widget->publicConfig()['launcher_logo_url']);
     }
 
+    public function test_launcher_rejects_non_png_even_on_paid_plans(): void
+    {
+        Storage::fake('public');
+        $this->attachPlanToClient($this->ctx['client'], Plan::factory()->create(['price_cents' => 2000, 'limits' => ['website_widgets' => 10]]));
+        foreach (['jpg', 'gif', 'webp'] as $extension) {
+            $this->actingAs($this->ctx['user'])->post(route('client.inbox.chat-widgets.store'), [
+                'name' => 'Invalid logo',
+                'position' => 'bottom_right',
+                'launcher_logo' => UploadedFile::fake()->image('logo.'.$extension),
+            ])->assertSessionHasErrors('launcher_logo');
+        }
+        $this->assertDatabaseMissing('chat_widgets', ['name' => 'Invalid logo']);
+    }
+
     public function test_non_pro_workspace_cannot_upload_a_custom_launcher_logo(): void
     {
         Storage::fake('public');
@@ -143,7 +157,7 @@ class ChatWidgetCrudTest extends TestCase
                 'launcher_logo' => UploadedFile::fake()->image('logo.png', 96, 96),
             ])
             ->assertSessionHasErrors([
-                'launcher_logo' => 'Upgrade to Pro to upload a custom launcher icon.',
+                'launcher_logo' => 'Choose a paid plan to upload a custom launcher icon.',
             ]);
 
         $this->assertDatabaseMissing('chat_widgets', [

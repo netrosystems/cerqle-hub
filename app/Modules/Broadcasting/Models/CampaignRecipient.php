@@ -38,16 +38,19 @@ class CampaignRecipient extends Model
         ];
     }
 
+    /** @return BelongsTo<Campaign, $this> */
     public function campaign(): BelongsTo
     {
         return $this->belongsTo(Campaign::class);
     }
 
+    /** @return BelongsTo<Contact, $this> */
     public function contact(): BelongsTo
     {
         return $this->belongsTo(Contact::class);
     }
 
+    /** @return BelongsTo<CampaignStep, $this> */
     public function step(): BelongsTo
     {
         return $this->belongsTo(CampaignStep::class, 'campaign_step_id');

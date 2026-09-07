@@ -85,6 +85,7 @@ journey
 - **Visitor Session Isolation**: Each visitor is assigned a secure cryptographic session token. Unauthenticated visitors stay anonymous; authenticated user profiles are verified via server-side HMAC validation.
 - **AI-to-Human Handoff**: Auto-engages visitors with knowledge base answers, offering a smooth handoff to live agents after 2 failed turns or explicit user request.
 - **Custom Branding**: Configurable colors, greeting messages, avatar launcher icon, and pre-chat capture forms.
+  - Custom launcher icons are included in every active paid plan, regardless of plan name or the separate white-label flag (2026-09-07). Free/no-plan/expired clients retain the default launcher. Paid classification uses the plan's configured monthly/yearly prices, including legacy monthly price fallback; quota and other explicit feature limits are unchanged.
 
 ---
 

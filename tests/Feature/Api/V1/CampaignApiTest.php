@@ -42,6 +42,7 @@ class CampaignApiTest extends TestCase
     public function test_create_campaign_returns_201(): void
     {
         ['user' => $user, 'workspace' => $workspace] = $this->createWorkspaceContext();
+        $this->configureTestSmsProvider($workspace->id);
         $this->grantDeveloperToolsAddon($user);
         $token = $user->createToken('t', [ApiAbilities::CAMPAIGNS_WRITE])->plainTextToken;
 
@@ -49,6 +50,7 @@ class CampaignApiTest extends TestCase
             ->postJson('/api/v1/campaigns', [
                 'name' => 'API Campaign',
                 'channel' => 'sms',
+                'sms_provider' => 'twilio',
             ])
             ->assertStatus(201)
             ->assertJsonPath('data.name', 'API Campaign')
@@ -85,7 +87,11 @@ class CampaignApiTest extends TestCase
         ['user' => $user, 'workspace' => $workspace] = $this->createWorkspaceContext();
         $this->grantDeveloperToolsAddon($user);
         $token = $user->createToken('t', [ApiAbilities::CAMPAIGNS_WRITE])->plainTextToken;
-        $campaign = Campaign::factory()->create(['workspace_id' => $workspace->id, 'status' => 'draft']);
+        $campaign = Campaign::factory()->create([
+            'workspace_id' => $workspace->id,
+            'status' => 'draft',
+            'channel' => 'sms',
+        ]);
 
         $this->withToken($token)
             ->postJson("/api/v1/campaigns/{$campaign->id}/launch")

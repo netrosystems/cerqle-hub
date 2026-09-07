@@ -211,6 +211,8 @@ YouTube OAuth requests `https://www.googleapis.com/auth/youtube.force-ssl`, the 
 
 Cerqle Hub integrates with multiple third-party providers with resilient fallback mechanisms:
 
+Instagram DM inbound/echo attachment types are derived from `message.attachments`, while the original webhook payload remains intact. The web inbox reads every nested attachment, including legacy rows saved as text: image/video/audio previews use HTTPS provider URLs; shares and unknown attachment types use safe links. Expired/missing URLs show an unavailable state. No server-side fetch of arbitrary attachment URLs is introduced, and Instagram attachments do not use the WhatsApp media proxy or album grouping. Provider-hosted URLs are not guaranteed to remain available indefinitely.
+
 | Integration | Protocol / Transport | Purpose | Architectural Rules |
 | :--- | :--- | :--- | :--- |
 | **WhatsApp Cloud API** | Graph API / Webhooks | WABA messaging, template syncing | Webhooks verified via `hub.verify_token`. Inbound payloads processed on `whatsapp` queue. |
@@ -252,6 +254,7 @@ sequenceDiagram
 ```
 
 ### Channel Authorization Schemes
+- **Workspace notification bell (2026-09-07)**: `WorkspaceNotifications` scopes browser/API notification lists, counts, read/delete actions, and read-all to the recipient and an accessible active workspace using `data.workspace_id`. Browser scope uses the session selection; token API scope uses `users.workspace_id`. Inertia counts use its validated workspace selection. Workspace notification producers persist the source entity's workspace, never the recipient's currently selected workspace. Both client layouts filter user-channel broadcasts before showing toasts or incrementing counts; the bell clears cached items on workspace switches and discards stale responses. Unscoped legacy/account-wide notifications are retained but excluded from this workspace-only surface; email and external push delivery/preferences are unchanged.
 - **`workspace.{workspaceId}`**: Accessible by active workspace members. Carries unread count updates, new conversation alerts, and presence status.
 - **`conversation.{conversationId}`**: Accessible only if the user belongs to the owning workspace. Carries live message bubbles and typing indicators.
 - **`widget.session.{sessionToken}`**: Public visitor channel scoped by secure session token for website chat.
@@ -319,7 +322,21 @@ Cerqle Hub includes health and readiness endpoints protected by `HEALTHZ_TOKEN`:
 - [ ] Implement backend execution logic in `app/Modules/Automation/Services/AutomationRunner.php`.
 - [ ] Add translation keys for node label and description in `resources/js/locales/`.
 - [ ] Verify node serialization and execution flow with a feature test.
+### Local analytics compatibility (2026-09-07)
+
+`AnalyticsService::campaignDeliveryOverTime` groups recipient timestamps by hour using SQLite `strftime` locally and MySQL `DATE_FORMAT` in production. Both return the same `YYYY-MM-DD HH:00` buckets; authorization and campaign scoping remain in the callers.
+
+### Static analysis contracts (2026-09-07)
+
+PHPStan remains at level 6. `phpstan.neon` scans both `database/migrations` and `app/Modules/*/database/migrations`, and enables `parseModelCastsMethod` for Laravel's `casts()` declarations. Relationship return types identify both related and declaring models. Remove baseline entries only when their errors are confirmed absent; do not generate new suppressions to obtain a passing check. See `PHPSTAN_CLEANUP.md` for the current audit checkpoint.
+
+Messenger's pending Page-selection session retains its user authorization token server-side until the selection is consumed. It is used only to fetch a missing Page token; the user token is never returned in the selection response or substituted for a Page credential. Legacy pending selections without either token skip the Page without making an unauthenticated Graph request.
+
+The `ai-runs` rate limiter loads `client.activeSubscription.plan` and invokes `Client::activePlan()` as a method, not an Eloquent relationship.
+
 # Managed AI credits (2026-09-02)
+
+New workspace provider settings default to `auto_fallback` (2026-09-07). Explicitly saved preferences and legacy enabled BYOK configurations remain unchanged. The header credit indicator links to `client.ai.providers.index`. Fallback requires usable client credentials; the default does not enable hard credit enforcement.
 
 All production text generation passes through `App\Modules\AI\Services\LlmGateway`; direct provider calls are limited to the zero-credit provider connection test. The gateway requires a centrally configured `feature_key`, selects the workspace mode (`managed`, `byok`, or `auto_fallback`), and records `ai_runs` plus an immutable `ai_credit_usages` ledger entry. Unknown managed feature keys fail closed.
 
@@ -328,3 +345,5 @@ Credits are pooled by organization (`client_id`) or, for a standalone subscripti
 Managed inference uses the system OpenAI integration and internally routes routine features to `gpt-5-nano`, complex content/planning features to `gpt-5-mini`, and embeddings to `text-embedding-3-small`. Customer-owned keys never fall back to a system generation key in BYOK mode. DeepSeek is BYOK-only. Embeddings are zero-credit infrastructure: a configured customer OpenAI/Gemini embedding key takes precedence, followed by the managed embedding service.
 
 `AI_CREDITS_ENFORCED=false` is shadow mode and is the safe initial rollout value. It records demand without blocking. Production may set it to `true` only after ledger reconciliation confirms that there are no unmetered generation paths. Missing or null `ai_credits_per_month` always means zero managed credits, not unlimited.
+
+Stored successful AI responses are reconstructed through `LlmResponse::fromStoredResult`, which validates content/model strings and integer usage/latency fields. The credit-usage ID comes from the ledger row, never from the saved payload. Malformed results fail explicitly rather than being replayed as a successful completion.

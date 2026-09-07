@@ -48,7 +48,7 @@ class LlmGateway
                 $provider = LlmManager::forWorkspaceByok($workspaceId);
                 $usage = $this->credits->beginByok($workspaceId, $featureKey, $idempotencyKey, (string) $providerName);
                 if ($usage->status === 'succeeded' && is_array($usage->result_payload)) {
-                    return new LlmResponse(...$usage->result_payload, creditUsageId: $usage->id);
+                    return LlmResponse::fromStoredResult($usage->result_payload, $usage->id);
                 }
                 if ($usage->status === 'reserved' && ! $usage->wasRecentlyCreated) {
                     throw new AiRequestInProgressException;
@@ -57,7 +57,7 @@ class LlmGateway
                 try {
                     $usage = $this->credits->reserve($workspaceId, $featureKey, $idempotencyKey);
                     if ($usage->status === 'succeeded' && is_array($usage->result_payload)) {
-                        return new LlmResponse(...$usage->result_payload, creditUsageId: $usage->id);
+                        return LlmResponse::fromStoredResult($usage->result_payload, $usage->id);
                     }
                     if ($usage->status === 'reserved' && ! $usage->wasRecentlyCreated) {
                         throw new AiRequestInProgressException;
@@ -77,7 +77,7 @@ class LlmGateway
                     $source = 'byok';
                     $usage = $this->credits->beginByok($workspaceId, $featureKey, $idempotencyKey, $providerName);
                     if ($usage->status === 'succeeded' && is_array($usage->result_payload)) {
-                        return new LlmResponse(...$usage->result_payload, creditUsageId: $usage->id);
+                        return LlmResponse::fromStoredResult($usage->result_payload, $usage->id);
                     }
                     if ($usage->status === 'reserved' && ! $usage->wasRecentlyCreated) {
                         throw new AiRequestInProgressException;

@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Whatsapp;
 
+use App\Models\Plan;
 use App\Modules\Whatsapp\Models\WhatsappWidget;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use PHPUnit\Framework\Attributes\Test;
@@ -15,7 +16,7 @@ class WhatsappWidgetEmbedTest extends TestCase
     public function launcher_remains_clickable_and_opens_the_whatsapp_prompt(): void
     {
         ['workspace' => $workspace, 'client' => $client] = $this->createWorkspaceContext();
-        $this->attachPlanToClient($client, \App\Models\Plan::factory()->create(['limits' => ['whatsapp_chatbots' => 5]]));
+        $this->attachPlanToClient($client, Plan::factory()->create(['limits' => ['whatsapp_chatbots' => 5]]));
 
         $widget = WhatsappWidget::create([
             'workspace_id' => $workspace->id,
@@ -34,6 +35,9 @@ class WhatsappWidgetEmbedTest extends TestCase
             ->assertHeader('Content-Type', 'application/javascript; charset=utf-8');
 
         $script = $response->getContent();
+        $this->assertStringContainsString('width:43.2px;height:43.2px', $script);
+        $this->assertStringNotContainsString('width:56px;height:56px', $script);
+        $this->assertStringContainsString('#_wacw_btn svg{width:24px;height:24px}', $script);
 
         $this->assertStringContainsString('#_wacw_root{position:fixed;', $script);
         $this->assertStringContainsString('pointer-events:none;isolation:isolate', $script);

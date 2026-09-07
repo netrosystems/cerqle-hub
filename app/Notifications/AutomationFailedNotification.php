@@ -39,6 +39,7 @@ class AutomationFailedNotification extends Notification implements ShouldQueue
     {
         return [
             'type' => 'automation_failed',
+            'workspace_id' => $this->run->automation?->workspace_id,
             'run_id' => $this->run->id,
             'automation' => $this->run->automation?->name,
             'error' => $this->errorMessage,

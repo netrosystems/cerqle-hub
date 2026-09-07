@@ -69,11 +69,13 @@ class ChatWidget extends Model
         });
     }
 
+    /** @return BelongsTo<ChannelAccount, $this> */
     public function channelAccount(): BelongsTo
     {
         return $this->belongsTo(ChannelAccount::class);
     }
 
+    /** @return BelongsTo<Workspace, $this> */
     public function workspace(): BelongsTo
     {
         return $this->belongsTo(Workspace::class);
@@ -112,7 +114,7 @@ class ChatWidget extends Model
         $plan = $workspace?->client?->effectivePlan()
             ?: $workspace?->owner?->effectiveSubscription()?->plan;
 
-        return (bool) $plan?->hasFeature('white_label');
+        return (bool) $plan?->hasFeature('custom_launcher_icon');
     }
 
     public function hasEnabledAiChatbot(): bool
@@ -188,7 +190,7 @@ class ChatWidget extends Model
             // widgets retain the familiar Cerqle fallback until edited.
             'footer_company_name' => $this->footer_company_name ?: 'Cerqle',
             // The product icon remains the default for every free widget.
-            // A custom launcher mark is only exposed for white-label plans.
+            // A custom launcher mark is exposed for any active paid plan.
             'launcher_logo_url' => $launcherLogoUrl,
             'ai_enabled' => $this->hasEnabledAiChatbot(),
             'available_team' => $this->availableTeam(),

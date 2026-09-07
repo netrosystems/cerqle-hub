@@ -121,13 +121,21 @@ Messaging Setup, the inbox, Website Widgets, WA Chatbot, and Social pages use th
 - **Modals**: Powered by `@headlessui/react` `Dialog` with backdrop blur (`backdrop-blur-[2px] bg-neutral-900/40`), smooth scale transitions, and trapped focus.
 - **Drawers**: Right-side sliding panel (`w-screen max-w-md`) for quick contact editing, message template previews, and filter trays.
 - **Dismissal**: `Escape` key and backdrop clicks dismiss the dialog gracefully.
+- **Table action menus**: Use a portaled, viewport-aware anchored menu inside overflow-clipped tables. Admin Plans uses Headless UI Menu with keyboard navigation so bottom-row actions remain accessible without removing horizontal scrolling.
+- **Channel connection drawers (2026-09-07)**: Show only the new connection form. Existing WhatsApp accounts, phone numbers, webhook tools, and chatbot assignments remain in the page body, never duplicated in the Connect WhatsApp drawer. Cancel and successful connection close the drawer; failed connection remains visible for retry.
 
 ### 5.4 Contextual Help & Tooltips (`Tooltip.jsx`)
+- WhatsApp and website chatbot launchers use a 43.2px circular button with a centered 24px icon. WhatsApp setup previews use the same dimensions; its pulse follows the button size.
+- New custom launcher icon uploads must be PNG (maximum 2 MB), preferably square with transparency. Keep the centered launcher placement; existing assets remain until replaced or removed.
 - Keep forms compact by placing optional guidance behind an adjacent information icon instead of repeating long instructional panels.
 - Tooltip triggers must be keyboard-focusable, include an `aria-label`, and expose the same content on hover and focus.
 - Long guidance uses the wrapped tooltip variant so it remains readable on narrow screens without extending beyond the viewport.
 
 ### 5.5 Action Feedback & Toasts
+- AI Provider Settings groups balance/reset date and selectable provider modes into one compact card. A native expandable “Credit costs” guide groups actions by server-configured rates, keeping pricing guidance consistent with enforcement. Shadow mode is explicitly disclosed; API provider cards remain below the overview.
+- The client header shows a compact AI-credit link to AI Provider Settings: available organization credits, amber at 80% and red at exhaustion. BYOK shows “Own API” rather than implying Cerqle credits are being charged. Hover/focus-accessible label details include used/reserved/total; server navigation refreshes the displayed balance.
+- Channel quota strips appear only on main connection/widget setup lists, never in the conversation inbox, composer, or editing forms. Billing → Subscription presents organization-wide channel/widget/message usage in a compact responsive grid alongside storage and AI credits, with finite progress bars and explicit unlimited/not-included states. The separate Billing history page does not show this overview.
+- Instagram DM attachments render bounded image/video/audio previews, preserve captions and multiple attachments, and show a readable unavailable state on media failure. Shares use links rather than guessing a media type from the URL.
 - When a form submits from below the viewport fold with preserved scrolling, show success feedback in the viewport-level Sonner toaster instead of relying on a page-top banner.
 - Use backend flash text as the toast message so scheduled, queued, and saved outcomes remain accurate.
 - Keep persistent inline banners for conditions that continue to affect the page, such as storage limits or validation problems.

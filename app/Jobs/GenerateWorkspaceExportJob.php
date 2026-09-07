@@ -29,6 +29,6 @@ class GenerateWorkspaceExportJob implements ShouldQueue
         // Create a 72-hour signed URL so only the requester can download it
         $signedUrl = Storage::temporaryUrl($storagePath, now()->addHours(72));
 
-        $user->notify(new WorkspaceExportReadyNotification($signedUrl));
+        $user->notify(new WorkspaceExportReadyNotification($signedUrl, $user->current_workspace_id ?? $user->workspace_id));
     }
 }

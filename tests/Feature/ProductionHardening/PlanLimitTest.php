@@ -34,7 +34,7 @@ class PlanLimitTest extends TestCase
         ]);
 
         $response = $this->actingAs($user)
-            ->post("/app/broadcasts/campaigns/{$campaign->id}/launch");
+            ->post(route('client.campaigns.launch', $campaign));
 
         $response->assertRedirect('/billing');
         $response->assertSessionHas('upgrade_required');

@@ -1,7 +1,9 @@
 import { Head, router, useForm, usePage } from '@inertiajs/react';
 import ClientLayout from '@/Layouts/ClientLayout';
+import AiProviderOverview from '@/Components/AiProviderOverview';
 import EmptyState from '@/Components/EmptyState';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { toast } from 'sonner';
 import { useTranslation } from 'react-i18next';
 import { Eye, EyeOff, CheckCircle, AlertCircle, LoaderCircle, Bot, BookOpen, ChevronDown, ChevronUp } from 'lucide-react';
 
@@ -276,10 +278,11 @@ function ProviderCard({ provider, activeProvider }) {
     );
 }
 
-export default function AiProvidersIndex({ providers, activeProvider, providerMode = 'managed', aiCredits }) {
+export default function AiProvidersIndex({ providers, activeProvider, providerMode = 'auto_fallback', aiCredits, creditRates = {}, creditsEnforced = false }) {
     const { t } = useTranslation();
     const { props } = usePage();
     const flash = props.flash ?? {};
+    useEffect(() => { if (flash.success) toast.success(flash.success); }, [flash.success]);
 
     return (
         <ClientLayout title={t('ai.providers_title')}>
@@ -287,37 +290,11 @@ export default function AiProvidersIndex({ providers, activeProvider, providerMo
             <div className="space-y-5">
                 <div>
                     <h2 className="text-xl font-semibold text-neutral-900 dark:text-neutral-100">{t('ai.provider_settings')}</h2>
-                    <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">{t('ai.provider_settings_subtitle')}</p>
                 </div>
-                {flash.success && <div className="rounded-lg bg-green-50 dark:bg-green-900/30 text-green-800 dark:text-green-200 px-4 py-2 text-sm">{flash.success}</div>}
-                <div className="rounded-xl border border-neutral-200 bg-white p-5 dark:border-neutral-700 dark:bg-neutral-900">
-                    <div className="flex flex-wrap items-start justify-between gap-4">
-                        <div>
-                            <h3 className="font-semibold text-neutral-900 dark:text-neutral-100">How should Cerqle run AI?</h3>
-                            <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">
-                                {aiCredits ? `${aiCredits.remaining.toLocaleString()} of ${aiCredits.allowance.toLocaleString()} Cerqle credits remaining` : 'Choose a provider mode for this workspace.'}
-                            </p>
-                        </div>
-                        {aiCredits && <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${aiCredits.exhausted ? 'bg-red-100 text-red-700' : aiCredits.warning ? 'bg-amber-100 text-amber-700' : 'bg-brand-50 text-brand-700'}`}>{aiCredits.percent_used}% used</span>}
-                    </div>
-                    <div className="mt-4 grid gap-2 lg:grid-cols-3">
-                        {[
-                            ['managed', 'Use Cerqle AI credits', 'Private managed models; no API key needed.'],
-                            ['byok', 'Use my API provider', 'Always use the active, tested provider below.'],
-                            ['auto_fallback', 'Cerqle credits, then my provider', 'Switch automatically when included credits finish.'],
-                        ].map(([value, label, description]) => (
-                            <button key={value} type="button" onClick={() => router.put(route('client.ai.providers.mode'), { mode: value }, { preserveScroll: true })} className={`rounded-lg border p-3 text-left transition ${providerMode === value ? 'border-brand-500 bg-brand-50 dark:bg-brand-950/30' : 'border-neutral-200 hover:border-brand-300 dark:border-neutral-700'}`}>
-                                <span className="block text-sm font-semibold text-neutral-900 dark:text-neutral-100">{label}</span>
-                                <span className="mt-1 block text-xs text-neutral-500 dark:text-neutral-400">{description}</span>
-                            </button>
-                        ))}
-                    </div>
-                    {flash.error && <p className="mt-3 text-sm text-red-600">{flash.error}</p>}
-                    <p className="mt-3 text-xs text-neutral-500 dark:text-neutral-400">Embeddings are platform infrastructure and cost 0 credits. DeepSeek is customer-key only and may process data in China; review its privacy terms before use.</p>
-                </div>
-                <div className="rounded-lg border border-brand-200 bg-brand-50 px-4 py-3 text-sm text-brand-800 dark:border-brand-900/60 dark:bg-brand-950/30 dark:text-brand-200">
-                    <strong>One active provider at a time.</strong> Enabling a provider makes it the workspace default and automatically disables the others.
-                    {activeProvider && <span className="ml-1">Current: <strong>{PROVIDER_INFO[activeProvider]?.label ?? activeProvider}</strong>.</span>}
+                <AiProviderOverview mode={providerMode} credits={aiCredits} rates={creditRates} enforced={creditsEnforced} error={flash.error} />
+                <div className="text-xs text-neutral-500 dark:text-neutral-400">
+                    <strong>API keys</strong>
+                    {activeProvider && <span className="ml-2">Active: <strong>{PROVIDER_INFO[activeProvider]?.label ?? activeProvider}</strong></span>}
                 </div>
                 <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
                     {providers.length === 0 ? (

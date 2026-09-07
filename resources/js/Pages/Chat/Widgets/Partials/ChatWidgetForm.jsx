@@ -175,16 +175,16 @@ export default function ChatWidgetForm({ widget = null, chatbots = [], canUseCus
                             <input className={inputCls} value={data.footer_company_name} onChange={(e) => setData('footer_company_name', e.target.value)} placeholder="Your company name" />
                         </Field>
                         <Field
-                            label="Custom launcher icon — Pro feature"
+                            label="Custom launcher icon — Paid feature"
                             hint={canUseCustomLauncherLogo
-                                ? 'Optional. Upload a square PNG, JPG, WebP or GIF (max 2 MB).'
-                                : 'Free workspaces use the default Cerqle icon. Upgrade to Pro to use your own launcher icon.'}
+                                ? 'Upload a square PNG (max 2 MB). A transparent background works best. The icon stays centered.'
+                                : 'Free workspaces use the default Cerqle icon. Choose any paid plan to use your own launcher icon.'}
                         >
                             {canUseCustomLauncherLogo ? (
                                 <>
                                 <input
                                     type="file"
-                                    accept="image/png,image/jpeg,image/webp,image/gif"
+                                    accept="image/png,.png"
                                     className={inputCls}
                                     onChange={(e) => {
                                         const file = e.target.files?.[0] ?? null;
@@ -195,7 +195,7 @@ export default function ChatWidgetForm({ widget = null, chatbots = [], canUseCus
                                 />
                                 {launcherLogoPreview && !data.remove_launcher_logo && (
                                     <div className="mt-2 flex items-center gap-2 rounded-lg border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800/60 px-3 py-2">
-                                        <img src={launcherLogoPreview} alt="Launcher icon preview" className="h-9 w-9 rounded-full object-cover" />
+                                        <img src={launcherLogoPreview} alt="Launcher icon preview" className="h-9 w-9 rounded-full object-contain object-center" />
                                         <span className="text-xs text-neutral-500">Launcher icon preview</span>
                                     </div>
                                 )}
@@ -218,7 +218,7 @@ export default function ChatWidgetForm({ widget = null, chatbots = [], canUseCus
                             ) : (
                                 <div className="flex min-h-10 items-center gap-2 rounded-lg border border-dashed border-neutral-300 bg-neutral-50 px-3 text-sm text-neutral-500 dark:border-neutral-700 dark:bg-neutral-800/50 dark:text-neutral-400">
                                     <Lock className="h-4 w-4 shrink-0" />
-                                    Upgrade to Pro to replace the default Cerqle icon
+                                    Choose a paid plan to replace the default Cerqle icon
                                 </div>
                             )}
                         </Field>

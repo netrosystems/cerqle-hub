@@ -1,16 +1,17 @@
 import { usePage } from '@inertiajs/react';
 import { useTranslation } from 'react-i18next';
 
-/** A compact, persistent allowance display shared by setup, creation and inbox pages. */
+/** Allowance strip for main setup pages only; Billing owns the full overview. */
 export default function ChannelPlanUsage() {
     const { t } = useTranslation();
     const { channel_plan_usage: usage = {}, mailboxUsage, errors = {} } = usePage().props;
     const current = route().current() || '';
     let keys = [];
-    if (current.startsWith('client.inbox.chat-widgets.')) keys = ['website_widgets'];
-    else if (current.startsWith('client.whatsapp.widget.')) keys = ['whatsapp_chatbots'];
-    else if (current.startsWith('client.social.')) keys = ['social_accounts'];
-    else if (['client.inbox.index', 'client.inbox.show'].includes(current) || current.startsWith('client.inbox.setup') || current.startsWith('client.whatsapp.')) keys = ['messaging_channels', 'messaging_messages_per_month'];
+    if (current === 'client.inbox.chat-widgets.index') keys = ['website_widgets'];
+    else if (current === 'client.whatsapp.widget.index') keys = ['whatsapp_chatbots'];
+    else if (current === 'client.social.accounts.index') keys = ['social_accounts'];
+    else if (['client.inbox.setup', 'client.whatsapp.setup'].includes(current)) keys = ['messaging_channels', 'messaging_messages_per_month'];
+    else if (current !== 'client.inbox.email.index') return null;
     const items = keys.map(key => usage[key]).filter(Boolean);
     if (current === 'client.inbox.email.index' && mailboxUsage) {
         items.push({

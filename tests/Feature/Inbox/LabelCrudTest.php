@@ -18,7 +18,7 @@ class LabelCrudTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        $this->ctx = $this->createWorkspaceContext();
+        $this->ctx = $this->createSubscribedWorkspaceContext();
     }
 
     public function test_can_create_label(): void
@@ -82,7 +82,7 @@ class LabelCrudTest extends TestCase
             'status' => 'open',
         ]);
 
-        $response = $this->actingAs($user)->postJson(route('client.inbox.labels.attach', $conv->id), [
+        $response = $this->actingAs($user)->postJson(route('client.inbox.labels.attach', $conv), [
             'label_id' => $label->id,
         ]);
 
@@ -114,7 +114,7 @@ class LabelCrudTest extends TestCase
         // First attach
         $conv->labels()->attach($label->id);
 
-        $response = $this->actingAs($user)->deleteJson(route('client.inbox.labels.detach', [$conv->id, $label->id]));
+        $response = $this->actingAs($user)->deleteJson(route('client.inbox.labels.detach', [$conv, $label->id]));
         $response->assertOk();
         $this->assertDatabaseMissing('inbox_label_conversation', [
             'conversation_id' => $conv->id,
@@ -125,7 +125,7 @@ class LabelCrudTest extends TestCase
     public function test_cross_workspace_attach_forbidden(): void
     {
         $user = $this->ctx['user'];
-        $other = $this->createWorkspaceContext();
+        $other = $this->createSubscribedWorkspaceContext();
 
         $label = InboxLabel::create(['workspace_id' => $other['workspace']->id, 'name' => 'Secret', 'color' => '#000']);
         $contact = Contact::factory()->create(['workspace_id' => $other['workspace']->id]);
@@ -140,7 +140,7 @@ class LabelCrudTest extends TestCase
             'status' => 'open',
         ]);
 
-        $response = $this->actingAs($user)->postJson(route('client.inbox.labels.attach', $conv->id), [
+        $response = $this->actingAs($user)->postJson(route('client.inbox.labels.attach', $conv), [
             'label_id' => $label->id,
         ]);
 

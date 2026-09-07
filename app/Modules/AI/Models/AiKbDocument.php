@@ -33,11 +33,13 @@ class AiKbDocument extends Model
         return ['last_indexed_at' => 'datetime', 'tokens' => 'integer'];
     }
 
+    /** @return BelongsTo<AiKnowledgeBase, $this> */
     public function knowledgeBase(): BelongsTo
     {
         return $this->belongsTo(AiKnowledgeBase::class, 'kb_id');
     }
 
+    /** @return HasMany<AiKbChunk, $this> */
     public function chunks(): HasMany
     {
         return $this->hasMany(AiKbChunk::class, 'document_id');

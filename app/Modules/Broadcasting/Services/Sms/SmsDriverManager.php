@@ -91,7 +91,7 @@ class SmsDriverManager
      */
     public static function providerKey(string $provider, array $credentials): string
     {
-        $normalised = static::sortRecursive($credentials);
+        $normalised = self::sortRecursive($credentials);
 
         return hash('sha256', $provider.'|'.json_encode($normalised, JSON_UNESCAPED_SLASHES));
     }
@@ -100,7 +100,7 @@ class SmsDriverManager
     {
         foreach ($value as $key => $item) {
             if (is_array($item)) {
-                $value[$key] = static::sortRecursive($item);
+                $value[$key] = self::sortRecursive($item);
             }
         }
         ksort($value);

@@ -66,7 +66,7 @@ class MultiTenantScopingTest extends TestCase
             'phone_e164' => '+8801888888888',
         ]);
 
-        $response = $this->actingAs($userA)->delete("/app/contacts/{$contactB->id}");
+        $response = $this->actingAs($userA)->delete("/app/contacts/{$contactB->uuid}");
         $response->assertStatus(403);
         $this->assertDatabaseHas('contacts', ['id' => $contactB->id]);
     }

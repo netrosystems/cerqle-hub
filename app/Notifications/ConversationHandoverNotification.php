@@ -29,6 +29,7 @@ class ConversationHandoverNotification extends Notification
 
         return [
             'type' => 'handover',
+            'workspace_id' => $this->conversation->workspace_id,
             'conversation_id' => $this->conversation->id,
             'contact_name' => $name ?: ($contact?->phone_e164 ?? 'Unknown'),
             'reason' => $this->reason,

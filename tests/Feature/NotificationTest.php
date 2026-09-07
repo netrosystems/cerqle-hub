@@ -4,7 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Notifications\DatabaseNotification;
+use Illuminate\Support\Str;
 use Tests\TestCase;
 
 class NotificationTest extends TestCase
@@ -13,10 +13,7 @@ class NotificationTest extends TestCase
 
     private function clientUser(): User
     {
-        return User::factory()->create([
-            'role'              => 'client',
-            'email_verified_at' => now(),
-        ]);
+        return $this->createWorkspaceContext()['user'];
     }
 
     public function test_user_can_list_notifications(): void
@@ -24,9 +21,9 @@ class NotificationTest extends TestCase
         $user = $this->clientUser();
 
         $user->notifications()->create([
-            'id'   => \Illuminate\Support\Str::uuid(),
+            'id' => Str::uuid(),
             'type' => 'App\Notifications\TestNotification',
-            'data' => json_encode(['message' => 'Hello!']),
+            'data' => ['message' => 'Hello!', 'workspace_id' => $user->workspace_id],
         ]);
 
         $this->actingAs($user)
@@ -39,9 +36,9 @@ class NotificationTest extends TestCase
         $user = $this->clientUser();
 
         $notification = $user->notifications()->create([
-            'id'   => \Illuminate\Support\Str::uuid(),
+            'id' => Str::uuid(),
             'type' => 'App\Notifications\TestNotification',
-            'data' => json_encode(['message' => 'Hello!']),
+            'data' => ['message' => 'Hello!', 'workspace_id' => $user->workspace_id],
         ]);
 
         $this->actingAs($user)
@@ -57,9 +54,9 @@ class NotificationTest extends TestCase
 
         for ($i = 0; $i < 3; $i++) {
             $user->notifications()->create([
-                'id'   => \Illuminate\Support\Str::uuid(),
+                'id' => Str::uuid(),
                 'type' => 'App\Notifications\TestNotification',
-                'data' => json_encode(['message' => "Notification {$i}"]),
+                'data' => ['message' => "Notification {$i}", 'workspace_id' => $user->workspace_id],
             ]);
         }
 

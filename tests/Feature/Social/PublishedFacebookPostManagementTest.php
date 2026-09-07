@@ -18,7 +18,7 @@ class PublishedFacebookPostManagementTest extends TestCase
     public function test_published_facebook_post_can_be_updated_on_facebook(): void
     {
         Http::fake(['graph.facebook.com/*' => Http::response(['success' => true])]);
-        ['user' => $user, 'workspace' => $workspace] = $this->createWorkspaceContext();
+        ['user' => $user, 'workspace' => $workspace] = $this->createSubscribedWorkspaceContext();
         [$post, $account] = $this->publishedPost($workspace->id, 'facebook');
 
         $response = $this->actingAs($user)->put(
@@ -42,7 +42,7 @@ class PublishedFacebookPostManagementTest extends TestCase
     public function test_published_facebook_post_can_be_deleted_from_facebook(): void
     {
         Http::fake(['graph.facebook.com/*' => Http::response(['success' => true])]);
-        ['user' => $user, 'workspace' => $workspace] = $this->createWorkspaceContext();
+        ['user' => $user, 'workspace' => $workspace] = $this->createSubscribedWorkspaceContext();
         [$post, $account] = $this->publishedPost($workspace->id, 'facebook');
 
         $response = $this->actingAs($user)->delete(
@@ -61,7 +61,7 @@ class PublishedFacebookPostManagementTest extends TestCase
         Http::fake(['graph.facebook.com/*' => Http::response([
             'error' => ['message' => 'Deletion rejected'],
         ], 400)]);
-        ['user' => $user, 'workspace' => $workspace] = $this->createWorkspaceContext();
+        ['user' => $user, 'workspace' => $workspace] = $this->createSubscribedWorkspaceContext();
         [$post, $account] = $this->publishedPost($workspace->id, 'facebook');
 
         $response = $this->actingAs($user)->delete(
@@ -80,7 +80,7 @@ class PublishedFacebookPostManagementTest extends TestCase
     public function test_instagram_cannot_use_facebook_post_management_endpoints(): void
     {
         Http::fake();
-        ['user' => $user, 'workspace' => $workspace] = $this->createWorkspaceContext();
+        ['user' => $user, 'workspace' => $workspace] = $this->createSubscribedWorkspaceContext();
         [$post, $account] = $this->publishedPost($workspace->id, 'instagram');
 
         $this->actingAs($user)
@@ -94,7 +94,7 @@ class PublishedFacebookPostManagementTest extends TestCase
     public function test_published_instagram_post_is_deleted_remotely_before_it_is_removed_from_cerqle(): void
     {
         Http::fake(['graph.facebook.com/*' => Http::response(['success' => true])]);
-        ['user' => $user, 'workspace' => $workspace] = $this->createWorkspaceContext();
+        ['user' => $user, 'workspace' => $workspace] = $this->createSubscribedWorkspaceContext();
         [$post, $account] = $this->publishedPost($workspace->id, 'instagram');
 
         $response = $this->actingAs($user)->delete(
@@ -115,7 +115,7 @@ class PublishedFacebookPostManagementTest extends TestCase
 
     public function test_posts_index_exposes_published_account_links_when_legacy_publish_results_are_missing(): void
     {
-        ['user' => $user, 'workspace' => $workspace] = $this->createWorkspaceContext();
+        ['user' => $user, 'workspace' => $workspace] = $this->createSubscribedWorkspaceContext();
         [$post, $account] = $this->publishedPost($workspace->id, 'instagram');
         $post->update(['publish_results' => null]);
 
@@ -131,7 +131,7 @@ class PublishedFacebookPostManagementTest extends TestCase
 
     public function test_posts_index_keeps_inactive_accounts_available_for_published_post_management(): void
     {
-        ['user' => $user, 'workspace' => $workspace] = $this->createWorkspaceContext();
+        ['user' => $user, 'workspace' => $workspace] = $this->createSubscribedWorkspaceContext();
         [$post, $account] = $this->publishedPost($workspace->id, 'youtube');
         $account->update(['active' => false]);
 
@@ -151,7 +151,7 @@ class PublishedFacebookPostManagementTest extends TestCase
         Http::fake(['graph.facebook.com/*' => Http::response([
             'error' => ['message' => '(#10) Insufficient permissions to access this data', 'code' => 10],
         ], 400)]);
-        ['user' => $user, 'workspace' => $workspace] = $this->createWorkspaceContext();
+        ['user' => $user, 'workspace' => $workspace] = $this->createSubscribedWorkspaceContext();
         [$post, $account] = $this->publishedPost($workspace->id, 'instagram');
 
         $response = $this->actingAs($user)->delete(
@@ -170,7 +170,7 @@ class PublishedFacebookPostManagementTest extends TestCase
     public function test_facebook_cannot_use_instagram_post_management_endpoint(): void
     {
         Http::fake();
-        ['user' => $user, 'workspace' => $workspace] = $this->createWorkspaceContext();
+        ['user' => $user, 'workspace' => $workspace] = $this->createSubscribedWorkspaceContext();
         [$post, $account] = $this->publishedPost($workspace->id, 'facebook');
 
         $this->actingAs($user)
@@ -193,7 +193,7 @@ class PublishedFacebookPostManagementTest extends TestCase
                 ])
                 ->push(['id' => 'page_123']),
         ]);
-        ['user' => $user, 'workspace' => $workspace] = $this->createWorkspaceContext();
+        ['user' => $user, 'workspace' => $workspace] = $this->createSubscribedWorkspaceContext();
         [$post, $account] = $this->publishedPost($workspace->id, 'youtube');
 
         $response = $this->actingAs($user)->put(
@@ -222,7 +222,7 @@ class PublishedFacebookPostManagementTest extends TestCase
     public function test_published_youtube_video_is_deleted_remotely_before_cerqle(): void
     {
         Http::fake(['www.googleapis.com/youtube/v3/videos*' => Http::response('', 204)]);
-        ['user' => $user, 'workspace' => $workspace] = $this->createWorkspaceContext();
+        ['user' => $user, 'workspace' => $workspace] = $this->createSubscribedWorkspaceContext();
         [$post, $account] = $this->publishedPost($workspace->id, 'youtube');
 
         $this->actingAs($user)
@@ -240,7 +240,7 @@ class PublishedFacebookPostManagementTest extends TestCase
         Http::fake(['www.googleapis.com/youtube/v3/videos*' => Http::response([
             'error' => ['message' => 'Insufficient permissions'],
         ], 403)]);
-        ['user' => $user, 'workspace' => $workspace] = $this->createWorkspaceContext();
+        ['user' => $user, 'workspace' => $workspace] = $this->createSubscribedWorkspaceContext();
         [$post, $account] = $this->publishedPost($workspace->id, 'youtube');
 
         $this->actingAs($user)
@@ -258,7 +258,7 @@ class PublishedFacebookPostManagementTest extends TestCase
 
     public function test_local_delete_does_not_orphan_a_live_published_post(): void
     {
-        ['user' => $user, 'workspace' => $workspace] = $this->createWorkspaceContext();
+        ['user' => $user, 'workspace' => $workspace] = $this->createSubscribedWorkspaceContext();
         [$post] = $this->publishedPost($workspace->id, 'facebook');
 
         $this->actingAs($user)
@@ -271,7 +271,7 @@ class PublishedFacebookPostManagementTest extends TestCase
     public function test_published_post_can_be_explicitly_removed_from_cerqle_without_a_remote_request(): void
     {
         Http::fake();
-        ['user' => $user, 'workspace' => $workspace] = $this->createWorkspaceContext();
+        ['user' => $user, 'workspace' => $workspace] = $this->createSubscribedWorkspaceContext();
         [$post] = $this->publishedPost($workspace->id, 'youtube');
 
         $this->actingAs($user)
@@ -286,7 +286,7 @@ class PublishedFacebookPostManagementTest extends TestCase
 
     public function test_partially_failed_post_with_a_published_target_cannot_be_deleted_locally(): void
     {
-        ['user' => $user, 'workspace' => $workspace] = $this->createWorkspaceContext();
+        ['user' => $user, 'workspace' => $workspace] = $this->createSubscribedWorkspaceContext();
         [$post] = $this->publishedPost($workspace->id, 'facebook');
         $post->update(['status' => 'failed']);
 
@@ -300,7 +300,7 @@ class PublishedFacebookPostManagementTest extends TestCase
     public function test_scheduled_instagram_post_and_its_pending_target_can_be_deleted_locally(): void
     {
         Http::fake();
-        ['user' => $user, 'workspace' => $workspace] = $this->createWorkspaceContext();
+        ['user' => $user, 'workspace' => $workspace] = $this->createSubscribedWorkspaceContext();
 
         $account = SocialAccount::create([
             'workspace_id' => $workspace->id,

@@ -11,6 +11,7 @@ class ContactTag extends Model
 
     protected $fillable = ['workspace_id', 'name', 'color'];
 
+    /** @return BelongsToMany<Contact, $this> */
     public function contacts(): BelongsToMany
     {
         return $this->belongsToMany(Contact::class, 'contact_tag_pivot', 'tag_id', 'contact_id');

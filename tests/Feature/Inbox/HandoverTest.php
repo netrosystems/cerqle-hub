@@ -29,7 +29,7 @@ class HandoverTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        $this->ctx = $this->createWorkspaceContext();
+        $this->ctx = $this->createSubscribedWorkspaceContext();
 
         $workspace = $this->ctx['workspace'];
         $this->contact = Contact::factory()->create(['workspace_id' => $workspace->id]);

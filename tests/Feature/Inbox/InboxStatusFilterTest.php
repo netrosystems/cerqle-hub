@@ -16,7 +16,7 @@ class InboxStatusFilterTest extends TestCase
 
     public function test_all_view_includes_open_resolved_and_snoozed_conversations(): void
     {
-        ['user' => $user, 'workspace' => $workspace] = $this->createWorkspaceContext();
+        ['user' => $user, 'workspace' => $workspace] = $this->createSubscribedWorkspaceContext();
         $account = ChannelAccount::create([
             'workspace_id' => $workspace->id,
             'channel' => 'webchat',
@@ -67,7 +67,7 @@ class InboxStatusFilterTest extends TestCase
 
     public function test_omni_channel_inbox_excludes_email_and_sms_everywhere(): void
     {
-        ['user' => $user, 'workspace' => $workspace] = $this->createWorkspaceContext();
+        ['user' => $user, 'workspace' => $workspace] = $this->createSubscribedWorkspaceContext();
 
         foreach (['webchat', 'whatsapp', 'email', 'sms'] as $channel) {
             $account = ChannelAccount::create([

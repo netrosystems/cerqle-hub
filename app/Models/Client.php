@@ -41,26 +41,31 @@ class Client extends Model
         return Storage::disk($disk)->url($this->logo_path);
     }
 
+    /** @return HasMany<User, $this> */
     public function users(): HasMany
     {
         return $this->hasMany(User::class);
     }
 
+    /** @return HasMany<Workspace, $this> */
     public function workspaces(): HasMany
     {
         return $this->hasMany(Workspace::class);
     }
 
+    /** @return HasMany<ClientSubscription, $this> */
     public function clientSubscriptions(): HasMany
     {
         return $this->hasMany(ClientSubscription::class);
     }
 
+    /** @return HasMany<ClientAddonSubscription, $this> */
     public function addonSubscriptions(): HasMany
     {
         return $this->hasMany(ClientAddonSubscription::class);
     }
 
+    /** @return HasOne<ClientSubscription, $this> */
     public function activeSubscription(): HasOne
     {
         return $this->hasOne(ClientSubscription::class)
@@ -92,6 +97,7 @@ class Client extends Model
 
         $sub = Subscription::whereIn('user_id', $this->users()->select('id'))
             ->whereIn('status', ['active', 'trialing'])
+            ->where(fn ($query) => $query->whereNull('ends_at')->orWhere('ends_at', '>', now()))
             ->with('plan')
             ->orderByDesc('id')
             ->first();

@@ -41,11 +41,13 @@ class EcommerceOrder extends Model
         ];
     }
 
+    /** @return BelongsTo<Contact, $this> */
     public function contact(): BelongsTo
     {
         return $this->belongsTo(Contact::class);
     }
 
+    /** @return BelongsTo<EcommerceStore, $this> */
     public function store(): BelongsTo
     {
         return $this->belongsTo(EcommerceStore::class, 'store_id');

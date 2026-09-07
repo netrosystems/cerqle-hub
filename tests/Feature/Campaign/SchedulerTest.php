@@ -24,6 +24,7 @@ class SchedulerTest extends TestCase
         $workspace = Workspace::factory()->create(['owner_id' => $user->id]);
         $user->update(['workspace_id' => $workspace->id]);
         $user->refresh();
+        $this->configureTestSmsProvider($workspace->id);
 
         return [$user, $workspace];
     }
@@ -38,6 +39,7 @@ class SchedulerTest extends TestCase
         $campaign = Campaign::factory()->create([
             'workspace_id' => $workspace->id,
             'channel' => 'sms',
+            'sms_provider' => 'twilio',
             'status' => 'draft',
             'schedule_at' => now()->addHours(3),
         ]);
@@ -65,6 +67,7 @@ class SchedulerTest extends TestCase
         $campaign = Campaign::factory()->create([
             'workspace_id' => $workspace->id,
             'channel' => 'sms',
+            'sms_provider' => 'twilio',
             'status' => 'draft',
             'schedule_at' => $future,
         ]);
@@ -94,6 +97,7 @@ class SchedulerTest extends TestCase
         $due = Campaign::factory()->create([
             'workspace_id' => $workspace->id,
             'channel' => 'sms',
+            'sms_provider' => 'twilio',
             'status' => 'queued',
             'schedule_at' => now()->subMinute(),
         ]);
@@ -101,6 +105,7 @@ class SchedulerTest extends TestCase
         $notDue = Campaign::factory()->create([
             'workspace_id' => $workspace->id,
             'channel' => 'sms',
+            'sms_provider' => 'twilio',
             'status' => 'queued',
             'schedule_at' => now()->addHour(),
         ]);
@@ -128,6 +133,7 @@ class SchedulerTest extends TestCase
         $campaign = Campaign::factory()->create([
             'workspace_id' => $workspace->id,
             'channel' => 'sms',
+            'sms_provider' => 'twilio',
             'status' => 'draft',
             'schedule_at' => now()->addHour(),
         ]);
@@ -155,6 +161,7 @@ class SchedulerTest extends TestCase
             ->post(route('client.campaigns.store'), [
                 'name' => 'TZ Check',
                 'channel' => 'sms',
+                'sms_provider' => 'twilio',
                 'audience_type' => 'contact_list',
                 'audience_ref' => null,
                 'template_ref' => null,
@@ -204,6 +211,7 @@ class SchedulerTest extends TestCase
         $campaign = Campaign::factory()->create([
             'workspace_id' => $workspace->id,
             'channel' => 'sms',
+            'sms_provider' => 'twilio',
             'audience_type' => 'contact_list',
             'status' => 'draft',
             'schedule_at' => now()->addDay(),
@@ -216,6 +224,7 @@ class SchedulerTest extends TestCase
             ->patch(route('client.campaigns.update', $campaign), [
                 'name' => $campaign->name,
                 'channel' => $campaign->channel,
+                'sms_provider' => $campaign->sms_provider,
                 'audience_type' => $campaign->audience_type,
                 'audience_ref' => $campaign->audience_ref,
                 'template_ref' => $campaign->template_ref,
@@ -240,6 +249,7 @@ class SchedulerTest extends TestCase
         $campaign = Campaign::factory()->create([
             'workspace_id' => $workspace->id,
             'channel' => 'sms',
+            'sms_provider' => 'twilio',
             'audience_type' => 'contact_list',
             'status' => 'queued',
             'schedule_at' => now()->addHour(),
@@ -249,6 +259,7 @@ class SchedulerTest extends TestCase
             ->patch(route('client.campaigns.update', $campaign), [
                 'name' => 'Updated queued campaign',
                 'channel' => 'sms',
+                'sms_provider' => 'twilio',
                 'audience_type' => 'contact_list',
                 'audience_ref' => null,
                 'template_ref' => $campaign->template_ref,
@@ -275,6 +286,7 @@ class SchedulerTest extends TestCase
             $campaign = Campaign::factory()->create([
                 'workspace_id' => $workspace->id,
                 'channel' => 'sms',
+                'sms_provider' => 'twilio',
                 'status' => $status,
             ]);
             $contact = Contact::factory()->create(['workspace_id' => $workspace->id]);

@@ -5,25 +5,27 @@ import { Toaster, toast } from 'sonner';
 import Sidebar from '@/Components/Sidebar';
 import UpgradeModal from '@/Components/UpgradeModal';
 import ReleaseBadge from '@/Components/ReleaseBadge';
-import ChannelPlanUsage from '@/Components/ChannelPlanUsage';
 import useClientNav from '@/Layouts/useClientNav';
+import { belongsToWorkspace } from '@/lib/workspaceNotifications';
 
 export default function InboxLayout({ children }) {
     const { t } = useTranslation();
     const [sidebarOpen, setSidebarOpen] = useState(false);
     const { auth, impersonation, current_workspace_usage, unreadNotificationsCount, branding, demo_mode } = usePage().props;
     const logoUrl = branding?.logo_url;
+    const workspaceId = usePage().props.currentWorkspace?.id;
     const [unreadCount, setUnreadCount] = useState(unreadNotificationsCount ?? 0);
     const clientNavGroups = useClientNav();
 
     useEffect(() => {
         setUnreadCount(unreadNotificationsCount ?? 0);
-    }, [unreadNotificationsCount]);
+    }, [unreadNotificationsCount, workspaceId]);
 
     useEffect(() => {
         if (!window.Echo || !auth?.user?.id) return;
         window.Echo.private(`App.Models.User.${auth.user.id}`)
             .notification((notification) => {
+                if (!belongsToWorkspace(notification, workspaceId)) return;
                 setUnreadCount(prev => prev + 1);
                 const msg = notification.snippet ?? notification.name ?? notification.automation ?? notification.error ?? 'New notification';
                 const title = {
@@ -40,7 +42,7 @@ export default function InboxLayout({ children }) {
                 });
             });
         return () => { window.Echo.leave(`App.Models.User.${auth.user.id}`); };
-    }, [auth?.user?.id]);
+    }, [auth?.user?.id, workspaceId]);
 
     const returnToAdmin = () => {
         router.post(impersonation?.returnUrl ?? route('admin.impersonation.stop'));
@@ -77,7 +79,6 @@ export default function InboxLayout({ children }) {
                 />
 
                 <div className="lg:pl-64 rtl:lg:pl-0 rtl:lg:pr-64 flex-1 overflow-hidden flex flex-col">
-                    <ChannelPlanUsage />
                     {children}
                 </div>
             </div>

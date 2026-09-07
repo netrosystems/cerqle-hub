@@ -25,8 +25,10 @@ class AdminUser extends Authenticatable
     }
 
     public const STATUS_ACTIVE = 'ACTIVE';
+
     public const STATUS_INACTIVE = 'INACTIVE';
 
+    /** @return BelongsToMany<Role, $this> */
     public function roles(): BelongsToMany
     {
         return $this->belongsToMany(Role::class, 'admin_role');
@@ -59,6 +61,7 @@ class AdminUser extends Authenticatable
                 return true;
             }
         }
+
         return false;
     }
 

@@ -19,11 +19,13 @@ class SupportReply extends Model
         'is_staff' => 'boolean',
     ];
 
+    /** @return BelongsTo<SupportTicket, $this> */
     public function ticket(): BelongsTo
     {
         return $this->belongsTo(SupportTicket::class);
     }
 
+    /** @return BelongsTo<User, $this> */
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);

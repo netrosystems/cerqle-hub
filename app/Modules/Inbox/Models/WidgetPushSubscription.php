@@ -27,16 +27,19 @@ class WidgetPushSubscription extends Model
         ];
     }
 
+    /** @return BelongsTo<Workspace, $this> */
     public function workspace(): BelongsTo
     {
         return $this->belongsTo(Workspace::class);
     }
 
+    /** @return BelongsTo<ChatWidget, $this> */
     public function widget(): BelongsTo
     {
         return $this->belongsTo(ChatWidget::class, 'chat_widget_id');
     }
 
+    /** @return BelongsTo<Conversation, $this> */
     public function conversation(): BelongsTo
     {
         return $this->belongsTo(Conversation::class);

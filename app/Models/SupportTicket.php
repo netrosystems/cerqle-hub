@@ -21,11 +21,13 @@ class SupportTicket extends Model
         'priority',
     ];
 
+    /** @return BelongsTo<User, $this> */
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
     }
 
+    /** @return HasMany<SupportReply, $this> */
     public function replies(): HasMany
     {
         return $this->hasMany(SupportReply::class, 'ticket_id');

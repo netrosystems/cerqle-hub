@@ -38,6 +38,7 @@ class EcommerceProduct extends Model
         ];
     }
 
+    /** @return BelongsTo<EcommerceStore, $this> */
     public function store(): BelongsTo
     {
         return $this->belongsTo(EcommerceStore::class, 'store_id');

@@ -4,6 +4,8 @@ namespace App\Modules\Social\Models;
 
 use App\Models\Media;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class SocialPost extends Model
 {
@@ -26,17 +28,20 @@ class SocialPost extends Model
         ];
     }
 
-    public function accountLinks()
+    /** @return HasMany<SocialPostAccount, $this> */
+    public function accountLinks(): HasMany
     {
         return $this->hasMany(SocialPostAccount::class, 'post_id');
     }
 
-    public function accounts()
+    /** @return BelongsToMany<SocialAccount, $this> */
+    public function accounts(): BelongsToMany
     {
         return $this->belongsToMany(SocialAccount::class, 'social_media_post_accounts', 'post_id', 'social_account_id');
     }
 
-    public function media()
+    /** @return BelongsToMany<Media, $this> */
+    public function media(): BelongsToMany
     {
         return $this->belongsToMany(Media::class, 'media_social_post', 'social_post_id', 'media_id')
             ->withTimestamps();

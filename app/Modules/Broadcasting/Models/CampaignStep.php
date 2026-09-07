@@ -27,11 +27,13 @@ class CampaignStep extends Model
         ];
     }
 
+    /** @return BelongsTo<Campaign, $this> */
     public function campaign(): BelongsTo
     {
         return $this->belongsTo(Campaign::class);
     }
 
+    /** @return HasMany<CampaignRecipient, $this> */
     public function recipients(): HasMany
     {
         return $this->hasMany(CampaignRecipient::class);

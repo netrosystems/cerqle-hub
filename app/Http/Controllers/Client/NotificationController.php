@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Client;
 
 use App\Http\Controllers\Controller;
 use App\Models\NotificationPreference;
+use App\Services\WorkspaceNotifications;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -19,7 +20,7 @@ class NotificationController extends Controller
     {
         $user = $request->user();
 
-        $notifications = $user->notifications()->latest()->limit(50)->get()->map(fn ($n) => [
+        $notifications = WorkspaceNotifications::forRequest($request)->latest()->limit(50)->get()->map(fn ($n) => [
             'id' => $n->id,
             'type' => class_basename($n->type),
             'data' => $n->data,
@@ -40,7 +41,7 @@ class NotificationController extends Controller
      */
     public function recent(Request $request): JsonResponse
     {
-        $notifications = $request->user()->notifications()->latest()->limit(10)->get()->map(fn ($n) => [
+        $notifications = WorkspaceNotifications::forRequest($request)->latest()->limit(10)->get()->map(fn ($n) => [
             'id' => $n->id,
             'data' => $n->data,
             'read_at' => $n->read_at?->toIso8601String(),
@@ -53,7 +54,7 @@ class NotificationController extends Controller
     public function unreadCount(Request $request): JsonResponse
     {
         return response()->json([
-            'count' => $request->user()->unreadNotifications()->count(),
+            'count' => WorkspaceNotifications::forRequest($request)->whereNull('read_at')->count(),
         ]);
     }
 
@@ -62,7 +63,7 @@ class NotificationController extends Controller
      */
     public function markRead(Request $request, string $notificationId): JsonResponse
     {
-        $notification = $request->user()->notifications()->findOrFail($notificationId);
+        $notification = WorkspaceNotifications::forRequest($request)->findOrFail($notificationId);
         $notification->markAsRead();
 
         return response()->json(['ok' => true]);
@@ -73,7 +74,7 @@ class NotificationController extends Controller
      */
     public function markAllRead(Request $request): RedirectResponse
     {
-        $request->user()->unreadNotifications->markAsRead();
+        WorkspaceNotifications::forRequest($request)->whereNull('read_at')->update(['read_at' => now()]);
 
         return back()->with('success', __('All notifications marked as read.'));
     }
@@ -83,7 +84,7 @@ class NotificationController extends Controller
      */
     public function destroy(Request $request, string $notificationId): JsonResponse
     {
-        $request->user()->notifications()->findOrFail($notificationId)->delete();
+        WorkspaceNotifications::forRequest($request)->findOrFail($notificationId)->delete();
 
         return response()->json(['ok' => true]);
     }

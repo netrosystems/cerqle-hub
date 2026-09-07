@@ -21,7 +21,7 @@ class WidgetHumanHandoverTest extends TestCase
     {
         Event::fake([MessageReceived::class]);
         Notification::fake();
-        ['workspace' => $workspace, 'user' => $user] = $this->createWorkspaceContext();
+        ['workspace' => $workspace, 'user' => $user] = $this->createSubscribedWorkspaceContext();
 
         $chatbot = AiChatbot::create([
             'workspace_id' => $workspace->id,
@@ -59,18 +59,18 @@ class WidgetHumanHandoverTest extends TestCase
             ])->assertOk()
             ->assertJsonPath('handover.visitor_message_count', 1);
 
-        $this->withHeaders(['X-Widget-Token' => $first->json('token')])
+        $this->withHeaders(['X-Widget-Token' => ($first->json('token') ?: $session->json('token'))])
             ->postJson(route('widget.handover'), ['key' => $widget->widget_key])
             ->assertStatus(422);
 
-        $second = $this->withHeaders(['X-Widget-Token' => $first->json('token')])
+        $second = $this->withHeaders(['X-Widget-Token' => ($first->json('token') ?: $session->json('token'))])
             ->postJson(route('widget.send'), [
                 'key' => $widget->widget_key,
                 'message' => 'Second question',
             ])->assertOk()
             ->assertJsonPath('handover.visitor_message_count', 2);
 
-        $this->withHeaders(['X-Widget-Token' => $first->json('token')])
+        $this->withHeaders(['X-Widget-Token' => ($first->json('token') ?: $session->json('token'))])
             ->postJson(route('widget.handover'), ['key' => $widget->widget_key])
             ->assertOk()
             ->assertJsonPath('status', 'connected')
@@ -86,7 +86,7 @@ class WidgetHumanHandoverTest extends TestCase
             fn (ConversationHandoverNotification $notification) => $notification->reason === 'widget_request'
         );
 
-        $this->withHeaders(['X-Widget-Token' => $first->json('token')])
+        $this->withHeaders(['X-Widget-Token' => ($first->json('token') ?: $session->json('token'))])
             ->getJson(route('widget.poll', [
                 'key' => $widget->widget_key,
                 'after' => 0,
@@ -97,7 +97,7 @@ class WidgetHumanHandoverTest extends TestCase
 
     public function test_handover_is_not_available_without_an_enabled_ai_chatbot(): void
     {
-        ['workspace' => $workspace] = $this->createWorkspaceContext();
+        ['workspace' => $workspace] = $this->createSubscribedWorkspaceContext();
         $account = ChannelAccount::create([
             'workspace_id' => $workspace->id,
             'channel' => 'webchat',

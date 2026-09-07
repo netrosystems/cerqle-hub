@@ -2,7 +2,6 @@
 
 namespace Tests\Feature\MarketingSuite;
 
-use App\Models\User;
 use App\Models\Workspace;
 use App\Modules\Shared\Models\ChannelAccount;
 use App\Modules\Whatsapp\Models\WhatsappBusinessAccount;
@@ -20,8 +19,7 @@ class WhatsappWebhookTest extends TestCase
 
     private function makeWaba(): WhatsappBusinessAccount
     {
-        $user = User::factory()->create(['role' => 'client', 'email_verified_at' => now()]);
-        $workspace = Workspace::factory()->create(['owner_id' => $user->id]);
+        ['workspace' => $workspace] = $this->createSubscribedWorkspaceContext();
 
         $waba = WhatsappBusinessAccount::factory()->create([
             'workspace_id' => $workspace->id,

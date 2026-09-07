@@ -42,6 +42,7 @@ class PendingCustomerReplyNotification extends Notification
     {
         return [
             'type' => 'pending_customer_reply',
+            'workspace_id' => $this->conversation->workspace_id,
             'conversation_id' => $this->conversation->id,
             'contact_name' => $this->contactName(),
             'snippet' => mb_substr((string) $this->message->body, 0, 120),
