@@ -14,7 +14,8 @@ class WhatsappWidgetEmbedTest extends TestCase
     #[Test]
     public function launcher_remains_clickable_and_opens_the_whatsapp_prompt(): void
     {
-        ['workspace' => $workspace] = $this->createWorkspaceContext();
+        ['workspace' => $workspace, 'client' => $client] = $this->createWorkspaceContext();
+        $this->attachPlanToClient($client, \App\Models\Plan::factory()->create(['limits' => ['whatsapp_chatbots' => 5]]));
 
         $widget = WhatsappWidget::create([
             'workspace_id' => $workspace->id,

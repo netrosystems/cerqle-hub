@@ -4,6 +4,7 @@ namespace App\Modules\Inbox\Http\Controllers;
 
 use App\Events\MessageSent;
 use App\Http\Controllers\Controller;
+use App\Models\Workspace;
 use App\Modules\Inbox\Jobs\SyncEmailAccountJob;
 use App\Modules\Inbox\Services\GenericMailboxClient;
 use App\Modules\Inbox\Services\GoogleGmailClient;
@@ -13,6 +14,7 @@ use App\Modules\Shared\Models\ChannelAccount;
 use App\Modules\Shared\Models\Contact;
 use App\Modules\Shared\Models\Conversation;
 use App\Modules\Shared\Models\Message;
+use App\Services\EmailAccountLimitService;
 use App\Services\Media\AttachmentService;
 use App\Services\StorageManager;
 use Illuminate\Http\RedirectResponse;
@@ -34,6 +36,7 @@ class EmailAccountController extends Controller
         $microsoft = IntegrationConfig::forProvider('oauth_microsoft_365');
 
         return Inertia::render('Inbox/EmailSetup', [
+            'mailboxUsage' => app(EmailAccountLimitService::class)->usage(Workspace::findOrFail($workspaceId)),
             'accounts' => ChannelAccount::where('workspace_id', $workspaceId)
                 ->where('channel', 'email')->latest()->get()
                 ->map(fn (ChannelAccount $account) => [
@@ -96,7 +99,7 @@ class EmailAccountController extends Controller
             if (! $refreshToken) {
                 throw new \RuntimeException('Google did not issue offline access. Revoke the app in your Google Account and reconnect.');
             }
-            $account = ChannelAccount::updateOrCreate(
+            $account = app(EmailAccountLimitService::class)->save(
                 [
                     'workspace_id' => (int) $pending['workspace_id'],
                     'channel' => 'email',
@@ -155,7 +158,7 @@ class EmailAccountController extends Controller
             if (! filter_var($email, FILTER_VALIDATE_EMAIL)) {
                 throw new \RuntimeException('Microsoft did not return a usable mailbox email address.');
             }
-            $account = ChannelAccount::updateOrCreate(
+            $account = app(EmailAccountLimitService::class)->save(
                 [
                     'workspace_id' => (int) $pending['workspace_id'],
                     'channel' => 'email',
@@ -216,7 +219,7 @@ class EmailAccountController extends Controller
 
         try {
             $client->verify($pendingAccount);
-            $account = ChannelAccount::updateOrCreate(
+            $account = app(EmailAccountLimitService::class)->save(
                 ['workspace_id' => $workspaceId, 'channel' => 'email', 'provider' => 'imap_smtp', 'business_account_id' => $email],
                 [
                     'display_name' => $pendingAccount->display_name,

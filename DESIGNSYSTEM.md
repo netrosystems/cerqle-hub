@@ -110,6 +110,10 @@ Primary Plum:    #3E2A49   Brand Lilac:    #8F5FA7   Cool Accent:  #45B6D6   Cor
 | **Warning / Pending** | `bg-amber-50 text-amber-700 border-amber-200` | `dark:bg-amber-900/30 dark:text-amber-300 dark:border-amber-700` | Snoozed, Quota Warning, Pending OAuth |
 
 Account-access states use persistent, accessible banners beneath the top bar: amber for pending email verification, brand lilac for plan selection, and red for an expired/read-only subscription. Destructive client deletion uses a red warning panel, states that recovery is impossible, requires the exact client name, and keeps the permanent-delete action disabled until it matches.
+
+Email Setup uses the same `ChannelPlanUsage` strip below the header as the other setup pages, displaying connected email accounts as `4/5 · 1 left` with organization scope. It uses infinity for unlimited plans and amber at capacity, with no duplicate in-page usage card. Connection controls remain available for reauthorization of existing mailboxes; the server rejects additional identities at capacity.
+
+Messaging Setup, the inbox, Website Widgets, WA Chatbot, and Social pages use the shared `ChannelPlanUsage` strip: compact `4/5 · 1 left` counts, explicit organization scope, infinity for unlimited plans, amber at capacity, and accessible inline quota errors. Creation/edit routes keep the strip visible; reconnect controls remain usable at capacity. It does not display the messaging quota on Email Inbox or website-widget pages.
 | **Danger / Failed** | `bg-coral-50 text-coral-800 border-coral-200` | `dark:bg-coral-950/40 dark:text-coral-300 dark:border-coral-800` | Failed delivery, Expired token, Canceled |
 | **Neutral / Default** | `bg-neutral-100 text-neutral-700 border-neutral-200` | `dark:bg-neutral-800 dark:text-neutral-300 dark:border-neutral-700` | Draft, Archived, Unassigned |
 

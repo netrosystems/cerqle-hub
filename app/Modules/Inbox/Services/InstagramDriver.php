@@ -10,6 +10,7 @@ use App\Modules\Shared\Models\Contact;
 use App\Modules\Shared\Models\Conversation;
 use App\Modules\Shared\Models\Message;
 use App\Modules\Shared\Services\ContactService;
+use App\Services\MessagingMessageLimitService;
 use App\Services\WebhookIdempotencyService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
@@ -40,17 +41,17 @@ class InstagramDriver implements ChannelDriverInterface
         // Image messages (e.g. shared products): send the photo as an attachment,
         // then the caption as a follow-up — an IG attachment carries no text.
         if ($message->type === 'image' && $imageUrl) {
-            $messageId = $this->postMessage($accessToken, $igAccountId, $recipientId, [
+            $messageId = $this->postMessage($conv->workspace_id, $accessToken, $igAccountId, $recipientId, [
                 'attachment' => ['type' => 'image', 'payload' => ['url' => $imageUrl, 'is_reusable' => true]],
             ]);
             if (! empty($message->body)) {
-                $this->postMessage($accessToken, $igAccountId, $recipientId, ['text' => $message->body]);
+                $this->postMessage($conv->workspace_id, $accessToken, $igAccountId, $recipientId, ['text' => $message->body]);
             }
 
             return $messageId;
         }
 
-        return $this->postMessage($accessToken, $igAccountId, $recipientId, ['text' => $message->body]);
+        return $this->postMessage($conv->workspace_id, $accessToken, $igAccountId, $recipientId, ['text' => $message->body]);
     }
 
     /**
@@ -59,7 +60,14 @@ class InstagramDriver implements ChannelDriverInterface
      *
      * @param  array<string, mixed>  $messageObj
      */
-    private function postMessage(string $accessToken, string $igAccountId, string $recipientId, array $messageObj): string
+    private function postMessage(int $workspaceId, string $accessToken, string $igAccountId, string $recipientId, array $messageObj): string
+    {
+        return app(MessagingMessageLimitService::class)->send(
+            $workspaceId, fn () => $this->postUnmeteredMessage($accessToken, $igAccountId, $recipientId, $messageObj),
+        );
+    }
+
+    private function postUnmeteredMessage(string $accessToken, string $igAccountId, string $recipientId, array $messageObj): string
     {
         // Primary (existing behaviour): send via the IG account messages endpoint.
         $resp = Http::withToken($accessToken)

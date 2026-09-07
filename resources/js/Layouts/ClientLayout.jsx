@@ -7,6 +7,7 @@ import Topbar from '@/Components/Topbar';
 import Sidebar from '@/Components/Sidebar';
 import UpgradeModal from '@/Components/UpgradeModal';
 import ReleaseBadge from '@/Components/ReleaseBadge';
+import ChannelPlanUsage from '@/Components/ChannelPlanUsage';
 import useClientNav from '@/Layouts/useClientNav';
 import { ChannelBrandIcon } from '@/Components/BrandIcons';
 import {
@@ -187,6 +188,7 @@ footer={<ClientLayoutFooter />}
                     showWorkspace={false}
                 />
                 <UsageBanner usage={current_workspace_usage} />
+                <ChannelPlanUsage />
                 {clientAccess?.state === 'unverified' && (
                     <div className="flex flex-wrap items-center justify-between gap-3 border-b border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-200">
                         <span>Verify your email address before using Cerqle features.</span>

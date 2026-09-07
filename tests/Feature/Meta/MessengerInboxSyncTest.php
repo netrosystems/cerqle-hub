@@ -20,7 +20,9 @@ class MessengerInboxSyncTest extends TestCase
     #[Test]
     public function it_recovers_missed_inbound_page_messages_without_importing_outbound_messages_or_duplicates(): void
     {
-        ['workspace' => $workspace] = $this->createWorkspaceContext();
+        $this->travelTo(\Illuminate\Support\Carbon::parse('2026-08-22T12:00:00Z'));
+        ['workspace' => $workspace, 'client' => $client] = $this->createWorkspaceContext();
+        $this->attachPlanToClient($client, \App\Models\Plan::factory()->create(['limits' => ['messaging_channels' => 5]]));
 
         $account = ChannelAccount::create([
             'workspace_id' => $workspace->id,
@@ -100,7 +102,8 @@ class MessengerInboxSyncTest extends TestCase
     #[Test]
     public function webhook_page_id_matching_is_string_safe(): void
     {
-        ['workspace' => $workspace] = $this->createWorkspaceContext();
+        ['workspace' => $workspace, 'client' => $client] = $this->createWorkspaceContext();
+        $this->attachPlanToClient($client, \App\Models\Plan::factory()->create(['limits' => ['messaging_channels' => 5]]));
 
         ChannelAccount::create([
             'workspace_id' => $workspace->id,

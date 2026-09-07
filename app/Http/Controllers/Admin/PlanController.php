@@ -20,12 +20,15 @@ class PlanController extends Controller
             'users' => null,
             'workspaces' => null,
             'storage' => null,
-            'whatsapp_accounts' => null,
+            'messaging_channels' => null,
+            'website_widgets' => null,
+            'whatsapp_chatbots' => null,
             'whatsapp_templates' => null,
-            'whatsapp_messages_per_month' => null,
+            'messaging_messages_per_month' => null,
             'campaigns_per_month' => null,
             'sms_per_month' => null,
             'emails_per_month' => null,
+            'email_accounts' => null,
             'inbox_agents' => null,
             'ai_credits_per_month' => 0,
             'knowledge_bases' => null,
@@ -51,6 +54,8 @@ class PlanController extends Controller
         // Keep older plans compatible when new limit types are introduced.
         // A missing limit is intentionally unlimited.
         $limits = array_merge(self::defaultLimits(), is_array($p->limits) ? $p->limits : []);
+        $limits['messaging_channels'] = $p->limitValue('messaging_channels');
+        $limits['messaging_messages_per_month'] = $p->limitValue('messaging_messages_per_month');
 
         return [
             'id' => $p->id,

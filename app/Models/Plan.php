@@ -89,6 +89,11 @@ class Plan extends Model
     {
         $limits = $this->limits;
 
+        $legacy = ['messaging_channels' => 'whatsapp_accounts', 'messaging_messages_per_month' => 'whatsapp_messages_per_month'];
+        if (is_array($limits) && ! array_key_exists($key, $limits) && isset($legacy[$key])) {
+            return $limits[$legacy[$key]] ?? null;
+        }
+
         return is_array($limits) ? ($limits[$key] ?? null) : null;
     }
 

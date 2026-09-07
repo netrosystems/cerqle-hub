@@ -22,12 +22,15 @@ class WorkspacePlanLimitTest extends TestCase
             'users',
             'workspaces',
             'storage',
-            'whatsapp_accounts',
+            'messaging_channels',
+            'website_widgets',
+            'whatsapp_chatbots',
             'whatsapp_templates',
-            'whatsapp_messages_per_month',
+            'messaging_messages_per_month',
             'campaigns_per_month',
             'sms_per_month',
             'emails_per_month',
+            'email_accounts',
             'inbox_agents',
             'ai_credits_per_month',
             'knowledge_bases',
@@ -57,6 +60,7 @@ class WorkspacePlanLimitTest extends TestCase
             'monthly_price_cents' => 2500,
             'limits' => [
                 'workspaces' => 2,
+                'email_accounts' => 3,
                 'automations' => 25,
                 'social_accounts' => null,
                 'ai_credits_per_month' => 0,
@@ -69,6 +73,7 @@ class WorkspacePlanLimitTest extends TestCase
 
         $plan = Plan::where('slug', 'workspace-limited')->sole();
         $this->assertSame(2, $plan->limitValue('workspaces'));
+        $this->assertSame(3, $plan->limitValue('email_accounts'));
         $this->assertSame(25, $plan->limitValue('automations'));
         $this->assertNull($plan->limitValue('social_accounts'));
     }

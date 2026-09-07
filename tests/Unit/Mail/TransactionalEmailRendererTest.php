@@ -21,6 +21,7 @@ class TransactionalEmailRendererTest extends TestCase
         $this->assertStringContainsString('Verify your account', $html);
         $this->assertStringContainsString('background:#7c3f91', $html);
         $this->assertStringContainsString('https://cerqle.ai/verify/123', $html);
+        $this->assertStringContainsString('>Cerqle.ai</a>', $html);
         $this->assertStringNotContainsString('<img', $html);
         $this->assertStringNotContainsString('@import', $html);
         $this->assertStringNotContainsString('unsubscribe', strtolower($html));

@@ -7,7 +7,7 @@
 <p style="margin-top: 8px; font-size: 12px; color: #8a8490;">
     This is an automated service email from {{ config('app.name') }}.<br>
     @if(config('app.url'))
-    <a href="{{ config('app.url') }}" style="color: #6d6471; text-decoration: underline;">{{ preg_replace('#^https?://#', '', rtrim(config('app.url'), '/')) }}</a>
+    <a href="{{ config('app.url') }}" style="color: #6d6471; text-decoration: underline;">{{ str_ireplace('cerqle.ai', 'Cerqle.ai', preg_replace('#^https?://#', '', rtrim(config('app.url'), '/'))) }}</a>
     &nbsp;&middot;&nbsp;
     <a href="{{ rtrim(config('app.url'), '/') }}/privacy" style="color: #6d6471; text-decoration: underline;">Privacy</a>
     @endif

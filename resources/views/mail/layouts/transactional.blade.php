@@ -40,7 +40,7 @@
                     <td style="color:#8a8490;font-size:12px;line-height:18px;padding:20px 8px 0;text-align:center;">
                         This is an automated service email from {{ $appName }}.<br>
                         @if($appUrl)
-                            <a href="{{ $appUrl }}" style="color:#6d6471;text-decoration:underline;">{{ preg_replace('#^https?://#', '', rtrim($appUrl, '/')) }}</a>
+                            <a href="{{ $appUrl }}" style="color:#6d6471;text-decoration:underline;">{{ str_ireplace('cerqle.ai', 'Cerqle.ai', preg_replace('#^https?://#', '', rtrim($appUrl, '/'))) }}</a>
                             <span aria-hidden="true"> &middot; </span>
                             <a href="{{ rtrim($appUrl, '/') }}/privacy" style="color:#6d6471;text-decoration:underline;">Privacy</a>
                         @endif

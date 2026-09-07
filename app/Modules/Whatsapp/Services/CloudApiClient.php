@@ -4,6 +4,7 @@ namespace App\Modules\Whatsapp\Services;
 
 use App\Modules\Whatsapp\Models\WhatsappBusinessAccount;
 use App\Modules\Whatsapp\Models\WhatsappPhoneNumber;
+use App\Services\MessagingMessageLimitService;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
@@ -15,6 +16,7 @@ class CloudApiClient
     public function __construct(
         private readonly string $phoneNumberId,
         private readonly string $accessToken,
+        private readonly int $workspaceId,
     ) {}
 
     public static function forWorkspace(int $workspaceId): ?static
@@ -45,7 +47,7 @@ class CloudApiClient
             return null;
         }
 
-        return new static($phoneNumberId, $token);
+        return new static($phoneNumberId, $token, $workspaceId);
     }
 
     public static function forPhoneNumber(string $phoneNumberId, int $workspaceId): ?static
@@ -76,7 +78,7 @@ class CloudApiClient
             return null;
         }
 
-        return new static($phoneNumberId, $token);
+        return new static($phoneNumberId, $token, $workspaceId);
     }
 
     /** Phone number ID used for Graph API sends (matches webhook `metadata.phone_number_id`). */
@@ -437,8 +439,13 @@ class CloudApiClient
 
     private function post(string $path, array $data): Response
     {
-        return Http::withToken($this->accessToken)
+        $send = fn () => Http::withToken($this->accessToken)
             ->timeout(30)
             ->post(self::BASE.$path, $data);
+
+        // Read receipts are not outbound messages. All text/template/media paths, including API and campaigns, pass here.
+        return isset($data['to']) && str_ends_with($path, '/messages')
+            ? app(MessagingMessageLimitService::class)->send($this->workspaceId, $send)
+            : $send();
     }
 }

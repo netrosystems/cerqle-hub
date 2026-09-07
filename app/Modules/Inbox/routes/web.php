@@ -23,8 +23,8 @@ Route::middleware(['web', 'client-app'])->prefix('app/inbox')->name('client.inbo
     Route::post('/conversations/start', [InboxController::class, 'startConversation'])->name('start');
     Route::get('/conversations/{conversation}', [InboxController::class, 'show'])->name('show');
     Route::get('/conversations/{conversation}/poll', [InboxController::class, 'pollMessages'])->name('messages.poll');
-    Route::post('/conversations/{conversation}/reply', [InboxController::class, 'reply'])->name('reply')->middleware('limit:whatsapp_messages_per_month,whatsapp_messages');
-    Route::post('/conversations/{conversation}/share-product', [InboxController::class, 'shareProduct'])->name('share-product')->middleware('limit:whatsapp_messages_per_month,whatsapp_messages');
+    Route::post('/conversations/{conversation}/reply', [InboxController::class, 'reply'])->name('reply');
+    Route::post('/conversations/{conversation}/share-product', [InboxController::class, 'shareProduct'])->name('share-product');
     Route::post('/conversations/{conversation}/assign', [InboxController::class, 'assign'])->name('assign');
     Route::post('/conversations/{conversation}/status', [InboxController::class, 'updateStatus'])->name('status');
     Route::post('/conversations/{conversation}/typing', [InboxController::class, 'typing'])->name('typing');

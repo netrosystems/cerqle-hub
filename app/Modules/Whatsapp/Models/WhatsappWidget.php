@@ -2,11 +2,19 @@
 
 namespace App\Modules\Whatsapp\Models;
 
+use App\Support\Concerns\EnforcesChannelPlanLimit;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Str;
 
 class WhatsappWidget extends Model
 {
+    use EnforcesChannelPlanLimit;
+
+    protected function channelPlanLimitKey(): string
+    {
+        return 'whatsapp_chatbots';
+    }
+
     protected $table = 'whatsapp_widgets';
 
     protected $fillable = [

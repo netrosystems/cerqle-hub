@@ -11,8 +11,10 @@ use App\Models\Workspace;
 use App\Modules\Broadcasting\Models\UsageMeter;
 use App\Modules\Integrations\Services\CredentialResolver;
 use App\Services\AddonEntitlementService;
+use App\Services\ChannelPlanLimitService;
 use App\Services\ClientAccessService;
 use App\Services\I18n\I18nFileService;
+use App\Services\MessagingMessageLimitService;
 use App\Services\OnboardingService;
 use App\Services\OneSignalService;
 use App\Services\PusherPublicConfig;
@@ -182,6 +184,10 @@ class HandleInertiaRequests extends Middleware
 
         $usage = [];
         foreach ($limits as $limitKey => $limit) {
+            // Inventory and shared messaging quotas are reported by channel_plan_usage, not workspace meters.
+            if (in_array($limitKey, ['whatsapp_accounts', 'whatsapp_messages_per_month', 'messaging_channels', 'messaging_messages_per_month', 'website_widgets', 'whatsapp_chatbots', 'social_accounts'], true)) {
+                continue;
+            }
             if ($limit === null) {
                 continue;
             }
@@ -369,6 +375,20 @@ class HandleInertiaRequests extends Middleware
             'displayCurrency' => $displayCurrency,
             'demo_mode' => config('app.demo_mode', false),
             'current_workspace_usage' => $this->workspaceUsage($workspaceId ?? null, $plan ?? null),
+            'channel_plan_usage' => function () use ($workspaceId) {
+                $workspace = $workspaceId ? Workspace::find($workspaceId) : null;
+                if (! $workspace) {
+                    return [];
+                }
+                $limits = app(ChannelPlanLimitService::class);
+                $usage = [];
+                foreach (['messaging_channels', 'website_widgets', 'whatsapp_chatbots', 'social_accounts'] as $key) {
+                    $usage[$key] = $limits->usage($workspace, $key);
+                }
+                $usage['messaging_messages_per_month'] = app(MessagingMessageLimitService::class)->usage($workspace);
+
+                return $usage;
+            },
             'app_version' => $release['version'],
             'release' => $release,
             'onboardingSummary' => $onboardingSummary,

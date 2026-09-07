@@ -17,6 +17,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Session;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -108,6 +109,16 @@ class SocialAccountController extends Controller
     }
 
     public function callback(Request $request, string $network): RedirectResponse
+    {
+        try {
+            return $this->completeCallback($request, $network);
+        } catch (ValidationException $e) {
+            return redirect()->route('client.social.accounts.index')->withErrors($e->errors())
+                ->with('error', $e->getMessage().' Any accounts already connected remain available.');
+        }
+    }
+
+    private function completeCallback(Request $request, string $network): RedirectResponse
     {
         $code = $request->query('code');
         $state = $request->query('state');
@@ -213,6 +224,7 @@ class SocialAccountController extends Controller
             }
 
             $connected = 0;
+            $capacityError = null;
 
             foreach ($pages as $page) {
                 $pageToken = $page['access_token'] ?? null;
@@ -226,48 +238,55 @@ class SocialAccountController extends Controller
                     continue;
                 }
 
-                if ($network === 'instagram') {
-                    $igAccount = $page['instagram_business_account'] ?? null;
-                    if (! $igAccount) {
-                        // This page has no linked Instagram Business account — skip it.
-                        continue;
+                try {
+                    if ($network === 'instagram') {
+                        $igAccount = $page['instagram_business_account'] ?? null;
+                        if (! $igAccount) {
+                            // This page has no linked Instagram Business account — skip it.
+                            continue;
+                        }
+
+                        $igName = ! empty($igAccount['username'])
+                            ? '@'.$igAccount['username']
+                            : ($igAccount['name'] ?? $page['name']);
+
+                        SocialAccount::updateOrCreate(
+                            ['workspace_id' => $wid, 'network' => 'instagram', 'account_id' => $igAccount['id']],
+                            [
+                                'name' => $igName,
+                                'picture_url' => $igAccount['profile_picture_url'] ?? ($page['picture']['data']['url'] ?? null),
+                                'access_token' => $pageToken, // page token is used for IG Graph API calls
+                                'refresh_token' => null,
+                                'token_expires_at' => null,
+                                'scopes' => $grantedScopes,
+                                'active' => true,
+                            ]
+                        );
+                    } else {
+                        SocialAccount::updateOrCreate(
+                            ['workspace_id' => $wid, 'network' => 'facebook', 'account_id' => $page['id']],
+                            [
+                                'name' => $page['name'],
+                                'picture_url' => $page['picture']['data']['url'] ?? null,
+                                'access_token' => $pageToken,
+                                'refresh_token' => null,
+                                'token_expires_at' => null,
+                                'scopes' => $grantedScopes,
+                                'active' => true,
+                            ]
+                        );
                     }
 
-                    $igName = ! empty($igAccount['username'])
-                        ? '@'.$igAccount['username']
-                        : ($igAccount['name'] ?? $page['name']);
-
-                    SocialAccount::updateOrCreate(
-                        ['workspace_id' => $wid, 'network' => 'instagram', 'account_id' => $igAccount['id']],
-                        [
-                            'name' => $igName,
-                            'picture_url' => $igAccount['profile_picture_url'] ?? ($page['picture']['data']['url'] ?? null),
-                            'access_token' => $pageToken, // page token is used for IG Graph API calls
-                            'refresh_token' => null,
-                            'token_expires_at' => null,
-                            'scopes' => $grantedScopes,
-                            'active' => true,
-                        ]
-                    );
-                } else {
-                    SocialAccount::updateOrCreate(
-                        ['workspace_id' => $wid, 'network' => 'facebook', 'account_id' => $page['id']],
-                        [
-                            'name' => $page['name'],
-                            'picture_url' => $page['picture']['data']['url'] ?? null,
-                            'access_token' => $pageToken,
-                            'refresh_token' => null,
-                            'token_expires_at' => null,
-                            'scopes' => $grantedScopes,
-                            'active' => true,
-                        ]
-                    );
+                    $connected++;
+                } catch (ValidationException $e) {
+                    $capacityError = $e->getMessage();
                 }
-
-                $connected++;
             }
 
             if ($connected === 0) {
+                if ($capacityError) {
+                    return redirect()->route('client.social.accounts.index')->with('error', $capacityError);
+                }
                 $message = $network === 'instagram'
                     ? 'No Instagram Business accounts were found linked to your Facebook Pages. Make sure your Instagram account is set to Business type and connected to a Facebook Page.'
                     : 'Facebook Pages were discovered, but Meta did not return a Page access token. Reconnect and grant Page management access.';
@@ -276,6 +295,10 @@ class SocialAccountController extends Controller
             }
 
             $message = $connected.' '.ucfirst($network).' account(s) connected.';
+
+            if ($capacityError) {
+                return redirect()->route('client.social.accounts.index')->with('success', $message)->with('error', $capacityError.' Additional accounts were not connected.');
+            }
 
             return redirect()->route('client.social.accounts.index')->with('success', $message);
         }
