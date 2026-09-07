@@ -328,6 +328,8 @@ Cerqle Hub includes health and readiness endpoints protected by `HEALTHZ_TOKEN`:
 
 ### Static analysis contracts (2026-09-07)
 
+Deployment follows the `spiderman` → fast-forward `dev` → approved merge `main` workflow recorded in `AGENTS.md` and `DEPLOYMENT.md`. Production synchronizes to a fetched `origin/main` commit under a deploy lock; it retains a recovery ref, repairs only history-only divergence, and stops on actual server-only changes or local-file collisions. It never creates server merge commits. Release recording occurs after build/migration/worker checks, not during the deployment build hook.
+
 PHPStan remains at level 6. `phpstan.neon` scans both `database/migrations` and `app/Modules/*/database/migrations`, and enables `parseModelCastsMethod` for Laravel's `casts()` declarations. Relationship return types identify both related and declaring models. Remove baseline entries only when their errors are confirmed absent; do not generate new suppressions to obtain a passing check. See `PHPSTAN_CLEANUP.md` for the current audit checkpoint.
 
 Messenger's pending Page-selection session retains its user authorization token server-side until the selection is consumed. It is used only to fetch a missing Page token; the user token is never returned in the selection response or substituted for a Page credential. Legacy pending selections without either token skip the Page without making an unauthenticated Graph request.

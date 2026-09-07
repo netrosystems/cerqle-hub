@@ -2,10 +2,16 @@
 
 set -Eeuo pipefail
 
+main() {
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DEPLOY_BRANCH="${CERQLE_DEPLOY_BRANCH:-main}"
 
 cd "$PROJECT_DIR"
+
+# Linux production hosts must serialize deploys, including code synchronization.
+command -v flock >/dev/null 2>&1 || { echo "flock is required for safe deployment." >&2; exit 1; }
+exec 9>"$(git rev-parse --git-path cerqle-deploy.lock)"
+flock -n 9 || { echo "Another deployment is running." >&2; exit 1; }
 
 CURRENT_BRANCH="$(git branch --show-current)"
 if [[ "$CURRENT_BRANCH" != "$DEPLOY_BRANCH" ]]; then
@@ -13,8 +19,7 @@ if [[ "$CURRENT_BRANCH" != "$DEPLOY_BRANCH" ]]; then
     exit 1
 fi
 
-echo "Fetching origin/$DEPLOY_BRANCH..."
-git pull --ff-only origin "$DEPLOY_BRANCH"
+bash scripts/sync-production-code.sh
 
 # Laravel's deploy user and PHP-FPM must both be able to create cache and log
 # files. Normalize these narrowly scoped runtime directories before Composer
@@ -49,9 +54,8 @@ APP_IS_DOWN=1
 # and environment values are available to the release recorder.
 php artisan optimize:clear
 
-# The postbuild hook records the successful deployment and automatically bumps
-# the visible patch version (for example 1.0.0 -> 1.0.1).
-npm run build
+# Record the release only after migrations and worker checks succeed.
+npm --ignore-scripts run build
 
 php artisan migrate --force
 php artisan optimize
@@ -87,6 +91,7 @@ else
     echo "WARNING: Supervisor is unavailable; verify queue workers manually." >&2
 fi
 
+php artisan app:release
 php artisan up
 APP_IS_DOWN=0
 trap - EXIT
@@ -101,3 +106,7 @@ fi
 
 echo "Deployment completed."
 php artisan app:release --show
+}
+
+# Parse the complete implementation before synchronization replaces this file.
+main "$@"

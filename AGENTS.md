@@ -4,6 +4,14 @@ These instructions apply to every file in this repository and to every person or
 
 ## Source of truth
 
+## Git promotion and deployment workflow
+
+User preference (2026-09-07): commit changes on `spiderman` first. Other developers may commit directly to `dev`. Before promotion, fetch origin and incorporate current `origin/dev` into `spiderman`, preserving their work; run checks, then fast-forward `dev` to `spiderman`. Never force-push a shared branch. Merge `dev` into `main` only after validation and user release approval. Deploy only GitHub `main`.
+
+Production must not create Git merge commits. Use `bash scripts/deploy-production.sh`; its synchronization helper backs up the previous HEAD and permits history-only divergence when the server tree matches the common ancestor. Real server-only changes and dirty tracked files stop deployment for review. Preserve `.env`, uploads, untracked files, and ignored runtime release metadata. See `DEPLOYMENT.md`.
+
+## Documentation source of truth
+
 The running code and database migrations are authoritative. Documentation explains the intended system. If code and documentation disagree, investigate the discrepancy; do not silently preserve contradictory behavior.
 
 Start work by reading `docs/README.md`, and the authoritative domain specification for your change from the table below:
