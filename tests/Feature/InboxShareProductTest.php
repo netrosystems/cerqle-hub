@@ -97,13 +97,13 @@ class InboxShareProductTest extends TestCase
 
     public function test_product_search_returns_only_workspace_products(): void
     {
-        ['user' => $user, 'workspace' => $ws] = $this->createWorkspaceContext();
+        ['user' => $user, 'workspace' => $ws] = $this->createSubscribedWorkspaceContext();
         $store = $this->store($ws->id);
         $this->product($ws->id, $store->id, ['name' => 'Red Shoes', 'sku' => 'RS-9']);
         $this->product($ws->id, $store->id, ['name' => 'Green Hat', 'sku' => 'GH-2']);
 
         // A product in a different workspace must never leak.
-        ['workspace' => $other] = $this->createWorkspaceContext();
+        ['workspace' => $other] = $this->createSubscribedWorkspaceContext();
         $otherStore = $this->store($other->id);
         $this->product($other->id, $otherStore->id, ['name' => 'Red Secret', 'sku' => 'X-1']);
 
@@ -117,7 +117,7 @@ class InboxShareProductTest extends TestCase
 
     public function test_share_product_sends_image_card_on_whatsapp(): void
     {
-        ['user' => $user, 'workspace' => $ws] = $this->createWorkspaceContext();
+        ['user' => $user, 'workspace' => $ws] = $this->createSubscribedWorkspaceContext();
         $store = $this->store($ws->id);
         $product = $this->product($ws->id, $store->id);
         $conversation = $this->conversation($ws->id, 'whatsapp');
@@ -145,7 +145,7 @@ class InboxShareProductTest extends TestCase
 
     public function test_share_product_sends_image_card_on_messenger(): void
     {
-        ['user' => $user, 'workspace' => $ws] = $this->createWorkspaceContext();
+        ['user' => $user, 'workspace' => $ws] = $this->createSubscribedWorkspaceContext();
         $store = $this->store($ws->id);
         $product = $this->product($ws->id, $store->id);
         $conversation = $this->conversation($ws->id, 'messenger');
@@ -167,7 +167,7 @@ class InboxShareProductTest extends TestCase
 
     public function test_share_product_falls_back_to_text_without_photo(): void
     {
-        ['user' => $user, 'workspace' => $ws] = $this->createWorkspaceContext();
+        ['user' => $user, 'workspace' => $ws] = $this->createSubscribedWorkspaceContext();
         $store = $this->store($ws->id);
         $product = $this->product($ws->id, $store->id, ['image_url' => null]);
         $conversation = $this->conversation($ws->id, 'messenger');
@@ -186,7 +186,7 @@ class InboxShareProductTest extends TestCase
 
     public function test_messenger_driver_sends_photo_attachment_then_caption(): void
     {
-        ['workspace' => $ws] = $this->createWorkspaceContext();
+        ['workspace' => $ws] = $this->createSubscribedWorkspaceContext();
         $conversation = $this->conversation($ws->id, 'messenger', ['page_access_token' => 'TKN']);
 
         $message = Message::create([
@@ -215,7 +215,7 @@ class InboxShareProductTest extends TestCase
 
     public function test_share_product_blocked_when_whatsapp_window_closed(): void
     {
-        ['user' => $user, 'workspace' => $ws] = $this->createWorkspaceContext();
+        ['user' => $user, 'workspace' => $ws] = $this->createSubscribedWorkspaceContext();
         $store = $this->store($ws->id);
         $product = $this->product($ws->id, $store->id);
         $conversation = $this->conversation($ws->id, 'whatsapp'); // no inbound -> window closed
@@ -235,10 +235,10 @@ class InboxShareProductTest extends TestCase
 
     public function test_share_product_rejects_other_workspace_product(): void
     {
-        ['user' => $user, 'workspace' => $ws] = $this->createWorkspaceContext();
+        ['user' => $user, 'workspace' => $ws] = $this->createSubscribedWorkspaceContext();
         $conversation = $this->conversation($ws->id, 'messenger');
 
-        ['workspace' => $other] = $this->createWorkspaceContext();
+        ['workspace' => $other] = $this->createSubscribedWorkspaceContext();
         $otherStore = $this->store($other->id);
         $foreign = $this->product($other->id, $otherStore->id);
 

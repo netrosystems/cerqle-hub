@@ -14,11 +14,13 @@ class InboxLabel extends Model
 
     protected $fillable = ['workspace_id', 'name', 'color'];
 
+    /** @return BelongsTo<Workspace, $this> */
     public function workspace(): BelongsTo
     {
         return $this->belongsTo(Workspace::class);
     }
 
+    /** @return BelongsToMany<Conversation, $this> */
     public function conversations(): BelongsToMany
     {
         return $this->belongsToMany(Conversation::class, 'inbox_label_conversation', 'label_id', 'conversation_id');

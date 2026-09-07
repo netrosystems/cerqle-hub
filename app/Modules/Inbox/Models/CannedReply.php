@@ -12,6 +12,7 @@ class CannedReply extends Model
 
     protected $fillable = ['workspace_id', 'shortcut', 'body'];
 
+    /** @return BelongsTo<Workspace, $this> */
     public function workspace(): BelongsTo
     {
         return $this->belongsTo(Workspace::class);

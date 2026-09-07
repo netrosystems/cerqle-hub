@@ -44,6 +44,7 @@ class Media extends Model
         return $this->morphTo();
     }
 
+    /** @return BelongsToMany<SocialPost, $this> */
     public function socialPosts(): BelongsToMany
     {
         return $this->belongsToMany(

@@ -95,21 +95,25 @@ class AnalyticsService
      */
     public function campaignDeliveryOverTime(int $campaignId, ?string $channel = null): array
     {
+        // SQLite backs local development/tests; production uses MySQL.
+        $hour = fn (string $column): string => (new CampaignRecipient)->getConnection()->getDriverName() === 'sqlite'
+            ? "strftime('%Y-%m-%d %H:00', {$column})"
+            : "DATE_FORMAT({$column}, '%Y-%m-%d %H:00')";
         $sent = CampaignRecipient::where('campaign_id', $campaignId)
             ->whereNotNull('sent_at')
-            ->selectRaw("DATE_FORMAT(sent_at, '%Y-%m-%d %H:00') as hour, COUNT(*) as total")
+            ->selectRaw($hour('sent_at').' as hour, COUNT(*) as total')
             ->groupBy('hour')->orderBy('hour')
             ->pluck('total', 'hour')->toArray();
 
         $delivered = CampaignRecipient::where('campaign_id', $campaignId)
             ->whereNotNull('delivered_at')
-            ->selectRaw("DATE_FORMAT(delivered_at, '%Y-%m-%d %H:00') as hour, COUNT(*) as total")
+            ->selectRaw($hour('delivered_at').' as hour, COUNT(*) as total')
             ->groupBy('hour')->orderBy('hour')
             ->pluck('total', 'hour')->toArray();
 
         $read = CampaignRecipient::where('campaign_id', $campaignId)
             ->whereNotNull('read_at')
-            ->selectRaw("DATE_FORMAT(read_at, '%Y-%m-%d %H:00') as hour, COUNT(*) as total")
+            ->selectRaw($hour('read_at').' as hour, COUNT(*) as total')
             ->groupBy('hour')->orderBy('hour')
             ->pluck('total', 'hour')->toArray();
 

@@ -40,11 +40,13 @@ class ClientAddonSubscription extends Model
         ];
     }
 
+    /** @return BelongsTo<Client, $this> */
     public function client(): BelongsTo
     {
         return $this->belongsTo(Client::class);
     }
 
+    /** @return BelongsTo<User, $this> */
     public function purchasedBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'purchased_by_user_id');

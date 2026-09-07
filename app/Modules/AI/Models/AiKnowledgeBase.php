@@ -36,11 +36,13 @@ class AiKnowledgeBase extends Model
 
     protected $fillable = ['workspace_id', 'name', 'embedding_model', 'dimensions', 'status'];
 
+    /** @return HasMany<AiKbDocument, $this> */
     public function documents(): HasMany
     {
         return $this->hasMany(AiKbDocument::class, 'kb_id');
     }
 
+    /** @return HasMany<AiChatbot, $this> */
     public function chatbots(): HasMany
     {
         return $this->hasMany(AiChatbot::class, 'ai_kb_id');

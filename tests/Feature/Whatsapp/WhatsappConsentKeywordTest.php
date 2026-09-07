@@ -2,12 +2,10 @@
 
 namespace Tests\Feature\Whatsapp;
 
-use App\Models\User;
 use App\Models\Workspace;
 use App\Modules\Shared\Models\ChannelAccount;
 use App\Modules\Shared\Models\Contact;
 use App\Modules\Whatsapp\Models\WhatsappBusinessAccount;
-use App\Modules\Whatsapp\Services\WhatsappDriver;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use PHPUnit\Framework\Attributes\Test;
 use Tests\TestCase;
@@ -36,8 +34,7 @@ class WhatsappConsentKeywordTest extends TestCase
 
     private function makeWaba(): WhatsappBusinessAccount
     {
-        $user = User::factory()->create(['role' => 'client', 'email_verified_at' => now()]);
-        $workspace = Workspace::factory()->create(['owner_id' => $user->id]);
+        ['workspace' => $workspace] = $this->createSubscribedWorkspaceContext();
 
         $waba = WhatsappBusinessAccount::factory()->create([
             'workspace_id' => $workspace->id,

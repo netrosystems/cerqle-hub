@@ -20,7 +20,7 @@ class OnboardingMilestonesTest extends TestCase
 
     public function test_connect_first_channel_auto_detected_after_channel_account_created(): void
     {
-        ['user' => $user, 'workspace' => $workspace] = $this->createWorkspaceContext();
+        ['user' => $user, 'workspace' => $workspace] = $this->createSubscribedWorkspaceContext();
 
         $service = $this->makeService();
         $progress = $service->getProgress($user);

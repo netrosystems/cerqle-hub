@@ -30,7 +30,7 @@ class WebhookEndpoint extends Model
 
     public static function generateSecret(): string
     {
-        return 'whsec_' . Str::random(48);
+        return 'whsec_'.Str::random(48);
     }
 
     public function signature(string $payload): string
@@ -38,7 +38,7 @@ class WebhookEndpoint extends Model
         $timestamp = now()->timestamp;
         $body = "{$timestamp}.{$payload}";
 
-        return 't=' . $timestamp . ',v1=' . hash_hmac('sha256', $body, $this->secret);
+        return 't='.$timestamp.',v1='.hash_hmac('sha256', $body, $this->secret);
     }
 
     public function listensTo(string $event): bool
@@ -50,11 +50,13 @@ class WebhookEndpoint extends Model
         return in_array($event, $this->events);
     }
 
+    /** @return BelongsTo<User, $this> */
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
     }
 
+    /** @return HasMany<WebhookDelivery, $this> */
     public function deliveries(): HasMany
     {
         return $this->hasMany(WebhookDelivery::class);

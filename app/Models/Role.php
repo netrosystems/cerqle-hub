@@ -14,14 +14,18 @@ class Role extends Model
     ];
 
     public const KEY_SUPER_ADMIN = 'SUPER_ADMIN';
+
     public const KEY_ADMIN = 'ADMIN';
+
     public const KEY_SUPPORT = 'SUPPORT';
 
+    /** @return BelongsToMany<Permission, $this> */
     public function permissions(): BelongsToMany
     {
         return $this->belongsToMany(Permission::class, 'role_permission');
     }
 
+    /** @return BelongsToMany<AdminUser, $this> */
     public function adminUsers(): BelongsToMany
     {
         return $this->belongsToMany(AdminUser::class, 'admin_role');

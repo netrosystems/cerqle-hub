@@ -20,7 +20,7 @@ class WebhookSignatureTest extends TestCase
 
     private function makeWaba(): array
     {
-        $user = $this->createWorkspaceContext();
+        $user = $this->createSubscribedWorkspaceContext();
         $waba = WhatsappBusinessAccount::factory()->create([
             'workspace_id' => $user['workspace']->id,
             'waba_id' => 'WABA_SIG_TEST',

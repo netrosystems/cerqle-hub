@@ -30,6 +30,7 @@ class WebhookDelivery extends Model
         return $this->response_status >= 200 && $this->response_status < 300;
     }
 
+    /** @return BelongsTo<WebhookEndpoint, $this> */
     public function endpoint(): BelongsTo
     {
         return $this->belongsTo(WebhookEndpoint::class, 'webhook_endpoint_id');

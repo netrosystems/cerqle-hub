@@ -369,8 +369,7 @@ class MobileConversationTest extends TestCase
     {
         Storage::fake('public');
 
-        $workspace = Workspace::factory()->create();
-        $user = User::factory()->create(['workspace_id' => $workspace->id]);
+        ['workspace' => $workspace, 'user' => $user] = $this->createSubscribedWorkspaceContext();
         $channelAccount = ChannelAccount::create([
             'workspace_id' => $workspace->id,
             'channel' => 'instagram',
@@ -459,8 +458,7 @@ class MobileConversationTest extends TestCase
 
     public function test_mobile_conversations_index_with_folder_all_and_pagination(): void
     {
-        $workspace = Workspace::factory()->create();
-        $user = User::factory()->create(['workspace_id' => $workspace->id]);
+        ['workspace' => $workspace, 'user' => $user] = $this->createSubscribedWorkspaceContext();
         $webchatAccount = ChannelAccount::create([
             'workspace_id' => $workspace->id,
             'channel' => 'webchat',

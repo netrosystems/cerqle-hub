@@ -109,16 +109,19 @@ class Contact extends Model
         return $query->where('is_campaign_only', true);
     }
 
+    /** @return BelongsToMany<ContactTag, $this> */
     public function tags(): BelongsToMany
     {
         return $this->belongsToMany(ContactTag::class, 'contact_tag_pivot', 'contact_id', 'tag_id');
     }
 
+    /** @return BelongsToMany<Segment, $this> */
     public function segments(): BelongsToMany
     {
         return $this->belongsToMany(Segment::class, 'segment_contact');
     }
 
+    /** @return HasMany<Conversation, $this> */
     public function conversations(): HasMany
     {
         return $this->hasMany(Conversation::class);

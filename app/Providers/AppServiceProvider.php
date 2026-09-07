@@ -163,8 +163,8 @@ class AppServiceProvider extends ServiceProvider
 
         RateLimiter::for('ai-runs', function (Request $request) {
             $workspaceId = $request->user()?->current_workspace_id ?? $request->ip();
-            $workspace = $workspaceId ? Workspace::with('client.activePlan')->find($workspaceId) : null;
-            $perMinute = $workspace?->client?->activePlan?->limits['ai_runs_per_minute'] ?? 10;
+            $workspace = $workspaceId ? Workspace::with('client.activeSubscription.plan')->find($workspaceId) : null;
+            $perMinute = $workspace?->client?->activePlan()?->limits['ai_runs_per_minute'] ?? 10;
 
             return Limit::perMinute((int) $perMinute)->by((string) $workspaceId);
         });

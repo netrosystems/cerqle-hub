@@ -75,11 +75,13 @@ class Campaign extends Model
         ];
     }
 
+    /** @return HasMany<CampaignRecipient, $this> */
     public function recipients(): HasMany
     {
         return $this->hasMany(CampaignRecipient::class);
     }
 
+    /** @return HasMany<CampaignStep, $this> */
     public function steps(): HasMany
     {
         return $this->hasMany(CampaignStep::class)->orderBy('position');

@@ -16,6 +16,7 @@ class AiKbChunk extends Model
         return ['tokens' => 'integer', 'ord' => 'integer'];
     }
 
+    /** @return BelongsTo<AiKbDocument, $this> */
     public function document(): BelongsTo
     {
         return $this->belongsTo(AiKbDocument::class, 'document_id');

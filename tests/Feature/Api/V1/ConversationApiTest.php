@@ -21,7 +21,7 @@ class ConversationApiTest extends TestCase
 
     public function test_wrong_scope_returns_403(): void
     {
-        ['user' => $user] = $this->createWorkspaceContext();
+        ['user' => $user] = $this->createSubscribedWorkspaceContext();
         $this->grantDeveloperToolsAddon($user);
         $token = $user->createToken('t', [ApiAbilities::CONTACTS_READ])->plainTextToken;
 
@@ -30,7 +30,7 @@ class ConversationApiTest extends TestCase
 
     public function test_list_conversations_returns_200(): void
     {
-        ['user' => $user, 'workspace' => $workspace] = $this->createWorkspaceContext();
+        ['user' => $user, 'workspace' => $workspace] = $this->createSubscribedWorkspaceContext();
         $this->grantDeveloperToolsAddon($user);
         $token = $user->createToken('t', ['*'])->plainTextToken;
 
@@ -60,7 +60,7 @@ class ConversationApiTest extends TestCase
 
     public function test_conversation_messages_returns_thread(): void
     {
-        ['user' => $user, 'workspace' => $workspace] = $this->createWorkspaceContext();
+        ['user' => $user, 'workspace' => $workspace] = $this->createSubscribedWorkspaceContext();
         $this->grantDeveloperToolsAddon($user);
         $token = $user->createToken('t', ['*'])->plainTextToken;
 
@@ -100,9 +100,9 @@ class ConversationApiTest extends TestCase
 
     public function test_conversation_from_other_workspace_returns_404(): void
     {
-        ['user' => $user] = $this->createWorkspaceContext();
+        ['user' => $user] = $this->createSubscribedWorkspaceContext();
         $this->grantDeveloperToolsAddon($user);
-        ['workspace' => $otherWs] = $this->createWorkspaceContext();
+        ['workspace' => $otherWs] = $this->createSubscribedWorkspaceContext();
         $token = $user->createToken('t', ['*'])->plainTextToken;
 
         $channelAccount = ChannelAccount::create([

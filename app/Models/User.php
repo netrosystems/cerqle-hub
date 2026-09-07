@@ -115,6 +115,7 @@ class User extends Authenticatable implements MustVerifyEmail
     // Social accounts
     // -------------------------------------------------------------------------
 
+    /** @return HasMany<SocialAccount, $this> */
     public function socialAccounts(): HasMany
     {
         return $this->hasMany(SocialAccount::class);
@@ -124,7 +125,9 @@ class User extends Authenticatable implements MustVerifyEmail
     // Client / Organisation
     // -------------------------------------------------------------------------
 
-    /** Client (organisation) this user belongs to (null = standalone user). */
+    /** Client (organisation) this user belongs to (null = standalone user).
+     * @return BelongsTo<Client, $this>
+     */
     public function client(): BelongsTo
     {
         return $this->belongsTo(Client::class);
@@ -134,19 +137,25 @@ class User extends Authenticatable implements MustVerifyEmail
     // Workspaces
     // -------------------------------------------------------------------------
 
-    /** Primary/active workspace for this user. */
+    /** Primary/active workspace for this user.
+     * @return BelongsTo<Workspace, $this>
+     */
     public function workspace(): BelongsTo
     {
         return $this->belongsTo(Workspace::class, 'workspace_id');
     }
 
-    /** Workspaces this user owns. */
+    /** Workspaces this user owns.
+     * @return HasMany<Workspace, $this>
+     */
     public function ownedWorkspaces(): HasMany
     {
         return $this->hasMany(Workspace::class, 'owner_id');
     }
 
-    /** Workspaces this user is a member of (via workspace_user pivot). */
+    /** Workspaces this user is a member of (via workspace_user pivot).
+     * @return BelongsToMany<Workspace, $this>
+     */
     public function workspaces(): BelongsToMany
     {
         return $this->belongsToMany(Workspace::class, 'workspace_user')
@@ -209,16 +218,19 @@ class User extends Authenticatable implements MustVerifyEmail
     // Subscriptions
     // -------------------------------------------------------------------------
 
+    /** @return HasMany<Subscription, $this> */
     public function subscriptions(): HasMany
     {
         return $this->hasMany(Subscription::class);
     }
 
+    /** @return HasMany<ClientAddonSubscription, $this> */
     public function purchasedAddonSubscriptions(): HasMany
     {
         return $this->hasMany(ClientAddonSubscription::class, 'purchased_by_user_id');
     }
 
+    /** @return HasOne<Subscription, $this> */
     public function activeSubscription(): HasOne
     {
         return $this->hasOne(Subscription::class)
@@ -357,16 +369,19 @@ class User extends Authenticatable implements MustVerifyEmail
     // Notifications & Webhooks
     // -------------------------------------------------------------------------
 
+    /** @return HasMany<NotificationPreference, $this> */
     public function notificationPreferences(): HasMany
     {
         return $this->hasMany(NotificationPreference::class);
     }
 
+    /** @return HasMany<WebhookEndpoint, $this> */
     public function webhookEndpoints(): HasMany
     {
         return $this->hasMany(WebhookEndpoint::class);
     }
 
+    /** @return HasMany<PaymentTransaction, $this> */
     public function paymentTransactions(): HasMany
     {
         return $this->hasMany(PaymentTransaction::class);

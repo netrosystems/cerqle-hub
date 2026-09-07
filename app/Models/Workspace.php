@@ -26,17 +26,21 @@ class Workspace extends Model
         'default_locale' => 'en',
     ];
 
+    /** @return BelongsTo<User, $this> */
     public function owner(): BelongsTo
     {
         return $this->belongsTo(User::class, 'owner_id');
     }
 
+    /** @return BelongsTo<Client, $this> */
     public function client(): BelongsTo
     {
         return $this->belongsTo(Client::class);
     }
 
-    /** Users who are members of this workspace (via pivot). */
+    /** Users who are members of this workspace (via pivot).
+     * @return BelongsToMany<User, $this>
+     */
     public function members(): BelongsToMany
     {
         return $this->belongsToMany(User::class, 'workspace_user')
@@ -44,7 +48,9 @@ class Workspace extends Model
             ->withTimestamps();
     }
 
-    /** Users whose primary workspace is this one. */
+    /** Users whose primary workspace is this one.
+     * @return HasMany<User, $this>
+     */
     public function users(): HasMany
     {
         return $this->hasMany(User::class, 'workspace_id');

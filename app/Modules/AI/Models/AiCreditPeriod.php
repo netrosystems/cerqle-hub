@@ -14,6 +14,7 @@ class AiCreditPeriod extends Model
         return ['period_start' => 'datetime', 'period_end' => 'datetime', 'allowance' => 'integer', 'used_credits' => 'integer', 'reserved_credits' => 'integer'];
     }
 
+    /** @return HasMany<AiCreditUsage, $this> */
     public function usages(): HasMany
     {
         return $this->hasMany(AiCreditUsage::class, 'period_id');

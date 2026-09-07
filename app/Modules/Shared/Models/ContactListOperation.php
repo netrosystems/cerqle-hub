@@ -33,6 +33,7 @@ class ContactListOperation extends Model
         ];
     }
 
+    /** @return BelongsTo<Segment, $this> */
     public function segment(): BelongsTo
     {
         return $this->belongsTo(Segment::class);

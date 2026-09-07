@@ -45,7 +45,7 @@ class AutomationEngineTest extends TestCase
     {
         Queue::fake();
 
-        $data = $this->createWorkspaceContext();
+        $data = $this->createSubscribedWorkspaceContext();
         $workspace = $data['workspace'];
         $contact = Contact::factory()->create(['workspace_id' => $workspace->id]);
 
@@ -78,7 +78,7 @@ class AutomationEngineTest extends TestCase
     {
         Queue::fake();
 
-        $data = $this->createWorkspaceContext();
+        $data = $this->createSubscribedWorkspaceContext();
         $workspace = $data['workspace'];
         $contact = Contact::factory()->create(['workspace_id' => $workspace->id]);
         $channel = ChannelAccount::create([
@@ -129,7 +129,7 @@ class AutomationEngineTest extends TestCase
     {
         Queue::fake();
 
-        $data = $this->createWorkspaceContext();
+        $data = $this->createSubscribedWorkspaceContext();
         $workspace = $data['workspace'];
         $contact = Contact::factory()->create(['workspace_id' => $workspace->id]);
 

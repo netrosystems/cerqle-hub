@@ -10,7 +10,9 @@ use App\Models\Permission;
 use App\Models\Plan;
 use App\Models\Role;
 use App\Models\User;
+use App\Modules\Broadcasting\Models\SmsProviderConfig;
 use App\Services\AddonEntitlementService;
+use Illuminate\Foundation\Http\Middleware\ValidateCsrfToken;
 use Illuminate\Foundation\Testing\TestCase as BaseTestCase;
 
 abstract class TestCase extends BaseTestCase
@@ -20,6 +22,19 @@ abstract class TestCase extends BaseTestCase
         parent::setUp();
 
         config(['saas.enforce_client_subscription' => false]);
+    }
+
+    /** Exercise the real CSRF check, which Laravel normally skips under PHPUnit. */
+    protected function enforceCsrfForNextRequests(): void
+    {
+        $this->app->instance(ValidateCsrfToken::class,
+            new class($this->app, $this->app['encrypter']) extends ValidateCsrfToken
+            {
+                protected function runningUnitTests(): bool
+                {
+                    return false;
+                }
+            });
     }
 
     /**
@@ -95,6 +110,22 @@ abstract class TestCase extends BaseTestCase
         return ['user' => $user, 'workspace' => $workspace, 'client' => $client];
     }
 
+    /** Operational fixtures opt into a real, finite subscription; no-plan tests remain unchanged. */
+    protected function createSubscribedWorkspaceContext(array $clientAttrs = [], array $userAttrs = [], array $workspaceAttrs = []): array
+    {
+        $context = $this->createWorkspaceContext($clientAttrs, $userAttrs, $workspaceAttrs);
+        $plan = Plan::factory()->create(['limits' => [
+            'messaging_channels' => 20,
+            'website_widgets' => 20,
+            'whatsapp_chatbots' => 20,
+            'social_accounts' => 20,
+            'messaging_messages_per_month' => 1000,
+        ]]);
+        $this->attachPlanToClient($context['client'], $plan);
+
+        return $context;
+    }
+
     protected function grantDeveloperToolsAddon(Client|User $subject): ClientAddonSubscription
     {
         $client = $subject instanceof User ? $subject->client : $subject;
@@ -114,6 +145,20 @@ abstract class TestCase extends BaseTestCase
                 'ends_at' => null,
             ]
         );
+    }
+
+    protected function configureTestSmsProvider(int $workspaceId): void
+    {
+        SmsProviderConfig::create([
+            'workspace_id' => $workspaceId,
+            'provider' => 'twilio',
+            'credentials' => [
+                'account_sid' => 'AC-test',
+                'auth_token' => 'test-only-token',
+                'from_number' => '+15555550123',
+            ],
+            'default' => true,
+        ]);
     }
 
     /**

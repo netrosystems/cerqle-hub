@@ -82,11 +82,13 @@ class EcommerceStore extends Model
         });
     }
 
+    /** @return HasMany<EcommerceOrder, $this> */
     public function orders(): HasMany
     {
         return $this->hasMany(EcommerceOrder::class, 'store_id');
     }
 
+    /** @return HasMany<EcommerceCart, $this> */
     public function carts(): HasMany
     {
         return $this->hasMany(EcommerceCart::class, 'store_id');

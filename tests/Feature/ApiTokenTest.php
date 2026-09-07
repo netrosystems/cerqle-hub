@@ -12,10 +12,10 @@ class ApiTokenTest extends TestCase
 
     private function clientUser(): User
     {
-        return User::factory()->create([
-            'role'              => 'client',
-            'email_verified_at' => now(),
-        ]);
+        $user = $this->createWorkspaceContext()['user'];
+        $this->grantDeveloperToolsAddon($user);
+
+        return $user;
     }
 
     public function test_user_can_create_api_token(): void
@@ -26,7 +26,7 @@ class ApiTokenTest extends TestCase
             ->postJson('/api/v1/tokens', ['name' => 'My Token']);
 
         $response->assertSuccessful()
-                 ->assertJsonStructure(['token', 'name', 'id']);
+            ->assertJsonStructure(['token', 'name', 'id']);
     }
 
     public function test_user_can_list_api_tokens(): void
@@ -43,7 +43,7 @@ class ApiTokenTest extends TestCase
 
     public function test_user_can_revoke_token(): void
     {
-        $user  = $this->clientUser();
+        $user = $this->clientUser();
         $token = $user->createToken('Revokeable');
 
         $this->actingAs($user)
@@ -56,17 +56,17 @@ class ApiTokenTest extends TestCase
     public function test_unauthenticated_cannot_access_api(): void
     {
         $this->getJson('/api/v1/me')
-             ->assertUnauthorized();
+            ->assertUnauthorized();
     }
 
     public function test_authenticated_user_can_get_profile(): void
     {
-        $user  = $this->clientUser();
+        $user = $this->clientUser();
         $token = $user->createToken('test')->plainTextToken;
 
         $this->withToken($token)
-             ->getJson('/api/v1/me')
-             ->assertOk()
-             ->assertJsonPath('email', $user->email);
+            ->getJson('/api/v1/me')
+            ->assertOk()
+            ->assertJsonPath('email', $user->email);
     }
 }

@@ -24,17 +24,21 @@ class Invitation extends Model
         'expires_at' => 'datetime',
     ];
 
+    /** @return BelongsTo<Client, $this> */
     public function client(): BelongsTo
     {
         return $this->belongsTo(Client::class);
     }
 
+    /** @return BelongsTo<User, $this> */
     public function invitedBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'invited_by');
     }
 
-    /** Workspaces and roles that will be granted when this invitation is accepted. */
+    /** Workspaces and roles that will be granted when this invitation is accepted.
+     * @return BelongsToMany<Workspace, $this>
+     */
     public function workspaces(): BelongsToMany
     {
         return $this->belongsToMany(Workspace::class, 'invitation_workspace')

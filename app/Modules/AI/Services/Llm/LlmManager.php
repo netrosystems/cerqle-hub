@@ -120,8 +120,8 @@ class LlmManager
 
     public static function build(string $provider, array $creds, array $models = []): LlmProviderInterface
     {
-        $chatModel = static::currentChatModel($provider, $models['chat'] ?? null);
-        $embedModel = static::currentEmbedModel($provider, $models['embed'] ?? null);
+        $chatModel = self::currentChatModel($provider, $models['chat'] ?? null);
+        $embedModel = self::currentEmbedModel($provider, $models['embed'] ?? null);
 
         return match ($provider) {
             'openai' => new OpenAiProvider(

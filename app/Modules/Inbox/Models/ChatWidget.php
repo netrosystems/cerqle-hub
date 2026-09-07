@@ -69,11 +69,13 @@ class ChatWidget extends Model
         });
     }
 
+    /** @return BelongsTo<ChannelAccount, $this> */
     public function channelAccount(): BelongsTo
     {
         return $this->belongsTo(ChannelAccount::class);
     }
 
+    /** @return BelongsTo<Workspace, $this> */
     public function workspace(): BelongsTo
     {
         return $this->belongsTo(Workspace::class);

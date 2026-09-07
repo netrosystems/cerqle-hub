@@ -30,7 +30,7 @@ class WidgetRealtimeTest extends TestCase
             'broadcasting.connections.pusher.options.cluster' => 'mt1',
         ]);
 
-        ['workspace' => $workspace] = $this->createWorkspaceContext();
+        ['workspace' => $workspace] = $this->createSubscribedWorkspaceContext();
         [$widget] = $this->createWebchatWidget($workspace->id);
 
         $session = $this->postJson(route('widget.session'), [
@@ -65,7 +65,7 @@ class WidgetRealtimeTest extends TestCase
             'broadcasting.connections.pusher.app_id' => 'test-app',
         ]);
 
-        ['workspace' => $workspace] = $this->createWorkspaceContext();
+        ['workspace' => $workspace] = $this->createSubscribedWorkspaceContext();
         [$widget] = $this->createWebchatWidget($workspace->id, [
             'allowed_domains' => ['allowed.example'],
         ]);
@@ -86,7 +86,7 @@ class WidgetRealtimeTest extends TestCase
 
     public function test_widget_session_can_store_optional_sdk_push_token(): void
     {
-        ['workspace' => $workspace] = $this->createWorkspaceContext();
+        ['workspace' => $workspace] = $this->createSubscribedWorkspaceContext();
         [$widget] = $this->createWebchatWidget($workspace->id);
 
         $session = $this->postJson(route('widget.session'), [
@@ -110,7 +110,7 @@ class WidgetRealtimeTest extends TestCase
     {
         Event::fake([WidgetMessageCreated::class]);
 
-        ['workspace' => $workspace, 'user' => $agent] = $this->createWorkspaceContext();
+        ['workspace' => $workspace, 'user' => $agent] = $this->createSubscribedWorkspaceContext();
         [$widget, $account] = $this->createWebchatWidget($workspace->id);
         $conversation = $this->createConversation($workspace->id, $account->id);
 
@@ -165,7 +165,7 @@ class WidgetRealtimeTest extends TestCase
             'services.onesignal.rest_api_key' => 'onesignal-rest-key',
         ]);
 
-        ['workspace' => $workspace, 'user' => $agent] = $this->createWorkspaceContext();
+        ['workspace' => $workspace, 'user' => $agent] = $this->createSubscribedWorkspaceContext();
         [$widget, $account] = $this->createWebchatWidget($workspace->id);
         $conversation = $this->createConversation($workspace->id, $account->id);
 
@@ -209,7 +209,7 @@ class WidgetRealtimeTest extends TestCase
     {
         Event::fake([WidgetMessageCreated::class]);
 
-        ['workspace' => $workspace] = $this->createWorkspaceContext();
+        ['workspace' => $workspace] = $this->createSubscribedWorkspaceContext();
         $account = ChannelAccount::create([
             'workspace_id' => $workspace->id,
             'channel' => 'whatsapp',
@@ -236,7 +236,7 @@ class WidgetRealtimeTest extends TestCase
     {
         Event::fake([MessageStatusUpdated::class]);
 
-        ['workspace' => $workspace] = $this->createWorkspaceContext();
+        ['workspace' => $workspace] = $this->createSubscribedWorkspaceContext();
         [$widget, $account] = $this->createWebchatWidget($workspace->id);
         $conversation = $this->createConversation($workspace->id, $account->id);
 
@@ -277,7 +277,7 @@ class WidgetRealtimeTest extends TestCase
     {
         Event::fake([MessageStatusUpdated::class]);
 
-        ['workspace' => $workspace] = $this->createWorkspaceContext();
+        ['workspace' => $workspace] = $this->createSubscribedWorkspaceContext();
         [$widget, $account] = $this->createWebchatWidget($workspace->id);
         $conversation = $this->createConversation($workspace->id, $account->id);
 

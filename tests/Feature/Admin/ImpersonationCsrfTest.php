@@ -81,6 +81,7 @@ class ImpersonationCsrfTest extends TestCase
         //    shares and what app.jsx's syncCsrfToken() copies into axios
         //    and the meta tag.
         $rotatedToken = $this->app['session']->token();
+        $this->enforceCsrfForNextRequests();
         $this->assertNotSame(
             $tokenBefore,
             $rotatedToken,
@@ -140,13 +141,11 @@ class ImpersonationCsrfTest extends TestCase
         $imp->assertRedirect();
 
         // Try to stop impersonation using the *stale* token — no sync.
+        $this->enforceCsrfForNextRequests();
         $stop = $this->post(
             route('admin.impersonation.stop'),
             [],
             ['X-CSRF-TOKEN' => $tokenBefore],
-        );
-        dump('stop status=', $stop->getStatusCode(),
-             ' stop location=', $stop->headers->get('Location'),
         );
         $stop->assertStatus(419);
     }

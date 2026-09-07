@@ -20,7 +20,7 @@ class WebchatAttachmentTest extends TestCase
 
     public function test_agent_can_send_an_image_to_a_website_chat_without_whatsapp(): void
     {
-        ['user' => $user, 'workspace' => $workspace] = $this->createWorkspaceContext();
+        ['user' => $user, 'workspace' => $workspace] = $this->createSubscribedWorkspaceContext();
         Storage::fake('public');
 
         $account = ChannelAccount::create([
@@ -68,7 +68,7 @@ class WebchatAttachmentTest extends TestCase
 
     public function test_agent_audio_is_saved_as_a_playable_voice_message_instead_of_a_filename(): void
     {
-        ['user' => $user, 'workspace' => $workspace] = $this->createWorkspaceContext();
+        ['user' => $user, 'workspace' => $workspace] = $this->createSubscribedWorkspaceContext();
         Storage::fake('public');
 
         $account = ChannelAccount::create([
@@ -109,7 +109,7 @@ class WebchatAttachmentTest extends TestCase
 
     public function test_agent_can_send_a_document_to_a_website_chat(): void
     {
-        ['user' => $user, 'workspace' => $workspace] = $this->createWorkspaceContext();
+        ['user' => $user, 'workspace' => $workspace] = $this->createSubscribedWorkspaceContext();
         Storage::fake('public');
 
         $account = ChannelAccount::create([
@@ -158,7 +158,7 @@ class WebchatAttachmentTest extends TestCase
 
     public function test_agent_cannot_send_document_to_instagram(): void
     {
-        ['user' => $user, 'workspace' => $workspace] = $this->createWorkspaceContext();
+        ['user' => $user, 'workspace' => $workspace] = $this->createSubscribedWorkspaceContext();
         Storage::fake('public');
 
         $account = ChannelAccount::create([
@@ -195,7 +195,7 @@ class WebchatAttachmentTest extends TestCase
 
     public function test_attachment_exceeding_10mb_is_rejected(): void
     {
-        ['user' => $user, 'workspace' => $workspace] = $this->createWorkspaceContext();
+        ['user' => $user, 'workspace' => $workspace] = $this->createSubscribedWorkspaceContext();
         Storage::fake('public');
 
         $account = ChannelAccount::create([
@@ -233,7 +233,7 @@ class WebchatAttachmentTest extends TestCase
 
     public function test_widget_visitor_can_upload_pdf_document(): void
     {
-        ['workspace' => $workspace] = $this->createWorkspaceContext();
+        ['workspace' => $workspace] = $this->createSubscribedWorkspaceContext();
         Storage::fake('public');
 
         $account = ChannelAccount::create([
@@ -280,7 +280,7 @@ class WebchatAttachmentTest extends TestCase
 
     public function test_website_visitors_are_not_automatically_opted_into_marketing(): void
     {
-        ['workspace' => $workspace] = $this->createWorkspaceContext();
+        ['workspace' => $workspace] = $this->createSubscribedWorkspaceContext();
         $account = ChannelAccount::create([
             'workspace_id' => $workspace->id,
             'channel' => 'webchat',

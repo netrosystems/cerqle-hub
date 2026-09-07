@@ -3,6 +3,8 @@
 namespace App\Modules\Automation\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class AutomationRun extends Model
 {
@@ -19,12 +21,14 @@ class AutomationRun extends Model
         ];
     }
 
-    public function automation()
+    /** @return BelongsTo<Automation, $this> */
+    public function automation(): BelongsTo
     {
         return $this->belongsTo(Automation::class);
     }
 
-    public function logs()
+    /** @return HasMany<AutomationRunLog, $this> */
+    public function logs(): HasMany
     {
         return $this->hasMany(AutomationRunLog::class, 'run_id');
     }

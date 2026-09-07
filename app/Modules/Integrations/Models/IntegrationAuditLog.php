@@ -38,11 +38,13 @@ class IntegrationAuditLog extends Model
         });
     }
 
+    /** @return BelongsTo<AdminUser, $this> */
     public function admin(): BelongsTo
     {
         return $this->belongsTo(AdminUser::class, 'admin_user_id');
     }
 
+    /** @return BelongsTo<IntegrationConfig, $this> */
     public function config(): BelongsTo
     {
         return $this->belongsTo(IntegrationConfig::class, 'integration_config_id');

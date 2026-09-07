@@ -14,7 +14,7 @@ class NewConversationReachabilityTest extends TestCase
 
     public function test_contact_search_returns_channel_thread_indicators(): void
     {
-        ['user' => $user, 'workspace' => $workspace] = $this->createWorkspaceContext();
+        ['user' => $user, 'workspace' => $workspace] = $this->createSubscribedWorkspaceContext();
 
         $account = ChannelAccount::create([
             'workspace_id' => $workspace->id,
@@ -50,7 +50,7 @@ class NewConversationReachabilityTest extends TestCase
 
     public function test_start_conversation_validates_whatsapp_phone_requirement(): void
     {
-        ['user' => $user, 'workspace' => $workspace] = $this->createWorkspaceContext();
+        ['user' => $user, 'workspace' => $workspace] = $this->createSubscribedWorkspaceContext();
 
         $waAccount = ChannelAccount::create([
             'workspace_id' => $workspace->id,
@@ -95,7 +95,7 @@ class NewConversationReachabilityTest extends TestCase
 
     public function test_start_conversation_validates_email_requirement(): void
     {
-        ['user' => $user, 'workspace' => $workspace] = $this->createWorkspaceContext();
+        ['user' => $user, 'workspace' => $workspace] = $this->createSubscribedWorkspaceContext();
 
         $emailAccount = ChannelAccount::create([
             'workspace_id' => $workspace->id,
@@ -121,7 +121,7 @@ class NewConversationReachabilityTest extends TestCase
 
     public function test_start_conversation_validates_social_prior_thread_requirement(): void
     {
-        ['user' => $user, 'workspace' => $workspace] = $this->createWorkspaceContext();
+        ['user' => $user, 'workspace' => $workspace] = $this->createSubscribedWorkspaceContext();
 
         $igAccount = ChannelAccount::create([
             'workspace_id' => $workspace->id,
@@ -147,7 +147,7 @@ class NewConversationReachabilityTest extends TestCase
 
     public function test_contact_update_api_saves_phone_and_returns_json(): void
     {
-        ['user' => $user, 'workspace' => $workspace] = $this->createWorkspaceContext();
+        ['user' => $user, 'workspace' => $workspace] = $this->createSubscribedWorkspaceContext();
 
         $contact = Contact::create([
             'workspace_id' => $workspace->id,
@@ -168,7 +168,7 @@ class NewConversationReachabilityTest extends TestCase
 
     public function test_contact_search_detects_whatsapp_inbound_source_and_can_reach_flags(): void
     {
-        ['user' => $user, 'workspace' => $workspace] = $this->createWorkspaceContext();
+        ['user' => $user, 'workspace' => $workspace] = $this->createSubscribedWorkspaceContext();
 
         // Contact 1: Imported contact with phone only (no conversations yet)
         $imported = Contact::create([

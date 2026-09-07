@@ -93,7 +93,7 @@ class WebchatIdentityWidgetTest extends TestCase
     public function test_logged_in_widget_session_still_accepts_visitor_image_uploads(): void
     {
         Storage::fake('public');
-        ['workspace' => $workspace] = $this->createWorkspaceContext();
+        ['workspace' => $workspace] = $this->createSubscribedWorkspaceContext();
 
         $account = ChannelAccount::create([
             'workspace_id' => $workspace->id,
@@ -136,7 +136,7 @@ class WebchatIdentityWidgetTest extends TestCase
 
     public function test_unverified_identity_is_ignored_when_identity_verification_is_enabled(): void
     {
-        ['workspace' => $workspace] = $this->createWorkspaceContext();
+        ['workspace' => $workspace] = $this->createSubscribedWorkspaceContext();
 
         $account = ChannelAccount::create([
             'workspace_id' => $workspace->id,
@@ -182,7 +182,7 @@ class WebchatIdentityWidgetTest extends TestCase
 
     public function test_anonymous_visitors_from_different_devices_get_distinct_inbox_threads(): void
     {
-        ['workspace' => $workspace] = $this->createWorkspaceContext();
+        ['workspace' => $workspace] = $this->createSubscribedWorkspaceContext();
 
         $account = ChannelAccount::create([
             'workspace_id' => $workspace->id,
@@ -228,7 +228,7 @@ class WebchatIdentityWidgetTest extends TestCase
 
     public function test_repeat_visit_from_same_anonymous_device_restores_only_its_thread(): void
     {
-        ['workspace' => $workspace] = $this->createWorkspaceContext();
+        ['workspace' => $workspace] = $this->createSubscribedWorkspaceContext();
 
         $account = ChannelAccount::create([
             'workspace_id' => $workspace->id,

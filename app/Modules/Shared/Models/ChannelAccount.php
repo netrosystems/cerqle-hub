@@ -31,6 +31,7 @@ class ChannelAccount extends Model
         ];
     }
 
+    /** @return HasMany<Conversation, $this> */
     public function conversations(): HasMany
     {
         return $this->hasMany(Conversation::class);

@@ -18,6 +18,7 @@ class NotificationPreference extends Model
         'enabled' => 'boolean',
     ];
 
+    /** @return BelongsTo<User, $this> */
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);

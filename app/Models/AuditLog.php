@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\MorphTo;
 
 class AuditLog extends Model
 {
@@ -31,22 +32,25 @@ class AuditLog extends Model
         ];
     }
 
+    /** @return BelongsTo<User, $this> */
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
     }
 
+    /** @return BelongsTo<Client, $this> */
     public function client(): BelongsTo
     {
         return $this->belongsTo(Client::class);
     }
 
+    /** @return BelongsTo<AdminUser, $this> */
     public function actorAdmin(): BelongsTo
     {
         return $this->belongsTo(AdminUser::class, 'actor_admin_id');
     }
 
-    public function auditable(): \Illuminate\Database\Eloquent\Relations\MorphTo
+    public function auditable(): MorphTo
     {
         return $this->morphTo();
     }

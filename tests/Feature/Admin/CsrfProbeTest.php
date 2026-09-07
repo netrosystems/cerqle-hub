@@ -13,6 +13,7 @@ class CsrfProbeTest extends TestCase
     #[Test]
     public function plain_post_without_csrf_419s(): void
     {
+        $this->enforceCsrfForNextRequests();
         $this->post('/admin/clients/1/impersonate', [], [
             'X-CSRF-TOKEN' => 'definitely-not-a-real-token',
         ])->assertStatus(419);

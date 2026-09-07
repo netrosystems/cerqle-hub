@@ -11,6 +11,7 @@ class ClientSetting extends Model
 
     protected $fillable = ['client_id', 'key', 'value'];
 
+    /** @return BelongsTo<Client, $this> */
     public function client(): BelongsTo
     {
         return $this->belongsTo(Client::class);

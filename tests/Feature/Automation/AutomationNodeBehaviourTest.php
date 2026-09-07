@@ -38,7 +38,7 @@ class AutomationNodeBehaviourTest extends TestCase
     {
         parent::setUp();
 
-        $ctx = $this->createWorkspaceContext();
+        $ctx = $this->createSubscribedWorkspaceContext();
         $this->workspace = $ctx['workspace'];
         $this->client = $ctx['client'];
 
@@ -568,7 +568,7 @@ class AutomationNodeBehaviourTest extends TestCase
     {
         // setUp's WhatsApp account belongs to this workspace; make a different workspace
         // with its own active account and ensure it is NOT used.
-        $other = $this->createWorkspaceContext();
+        $other = $this->createSubscribedWorkspaceContext();
         ChannelAccount::create([
             'workspace_id' => $other['workspace']->id, 'channel' => 'whatsapp', 'provider' => 'whatsapp',
             'status' => 'active', 'display_name' => 'Other WA', 'phone_number_id' => '9999999999',

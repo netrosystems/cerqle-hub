@@ -14,6 +14,7 @@ class Segment extends Model
         return ['contact_count' => 'integer'];
     }
 
+    /** @return BelongsToMany<Contact, $this> */
     public function contacts(): BelongsToMany
     {
         return $this->belongsToMany(Contact::class, 'segment_contact');
