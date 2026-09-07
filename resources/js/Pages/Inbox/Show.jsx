@@ -15,7 +15,7 @@ import { ChannelBrandIcon, CHANNEL_LABELS } from '@/Components/BrandIcons';
 import { formatTimeTz, formatInTz, formatInboxTimestamp } from '@/Utils/datetime';
 import { playInboundSound, getSoundPrefs, setChannelSoundEnabled, SOUND_CHANNELS } from '@/Utils/notificationSound';
 import { getCountryFlagEmoji } from '@/Components/Inbox/LiveVisitorsMap';
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useLayoutEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import axios from 'axios';
 
@@ -1494,20 +1494,41 @@ export default function InboxShow({
     const recordingChunksRef = useRef([]);
     const fileRef = useRef(null);
     const bottomRef = useRef(null);
+    const messagesContainerRef = useRef(null);
+    const prevConversationId = useRef(null);
+    const prevMessagesCount = useRef(0);
 
     const { data, setData, reset } = useForm({ body: '', type: 'text', payload: null });
 
-    const scrollToBottom = useCallback(() => {
-        bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    const scrollToBottom = useCallback((behavior = 'smooth') => {
+        if (messagesContainerRef.current) {
+            if (behavior === 'instant' || behavior === 'auto') {
+                messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
+            } else {
+                bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+            }
+        } else {
+            bottomRef.current?.scrollIntoView({ behavior });
+        }
     }, []);
 
-    useEffect(() => {
-        axios.get(route('client.inbox.canned-replies.list'))
-            .then(r => setCannedReplies(r.data ?? []))
-            .catch(() => {});
-    }, []);
+    useLayoutEffect(() => {
+        const isNewConv = prevConversationId.current !== conversation.id;
+        prevConversationId.current = conversation.id;
 
-    useEffect(() => { scrollToBottom(); }, [messages]);
+        if (isNewConv) {
+            scrollToBottom('instant');
+            prevMessagesCount.current = messages.length;
+            requestAnimationFrame(() => {
+                scrollToBottom('instant');
+            });
+        } else if (messages.length > prevMessagesCount.current) {
+            scrollToBottom('smooth');
+            prevMessagesCount.current = messages.length;
+        } else {
+            prevMessagesCount.current = messages.length;
+        }
+    }, [conversation.id, messages, scrollToBottom]);
 
     // WS: conversation events
     useEffect(() => {
@@ -2036,7 +2057,7 @@ export default function InboxShow({
 
                     {/* Messages tab */}
                     {activeTab === 'messages' && (
-                        <div className="flex-1 overflow-y-auto p-4 space-y-1">
+                        <div ref={messagesContainerRef} className="flex-1 overflow-y-auto p-4 space-y-1">
                             {groupMessagesForRender(messages).map(item => (
                                 item.kind === 'album'
                                     ? <ImageGallery key={item.key} messages={item.messages} conversationId={conversation.uuid} />

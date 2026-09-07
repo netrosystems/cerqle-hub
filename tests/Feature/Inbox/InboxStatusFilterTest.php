@@ -110,9 +110,9 @@ class InboxStatusFilterTest extends TestCase
                 ->where('channelAccounts.1.channel', 'whatsapp'));
 
         $this->actingAs($user)
-            ->getJson(route('client.inbox.poll', ['channel' => 'email']))
+            ->get(route('client.inbox.index', ['channel' => 'email']))
             ->assertOk()
-            ->assertJsonPath('conversations.total', 0);
+            ->assertInertia(fn (Assert $page) => $page->where('conversations.total', 0));
 
         $this->actingAs($user)
             ->getJson(route('client.inbox.channel-accounts'))

@@ -160,11 +160,26 @@ class MobileInboxController extends WorkspaceScopedController
         $contacts = Contact::where('workspace_id', $wsId)
             ->customerDirectory()
             ->withCount([
-                'conversations as has_messenger_thread' => fn ($q) => $q->whereHas('channelAccount', fn ($ca) => $ca->where('channel', 'messenger')),
-                'conversations as has_instagram_thread' => fn ($q) => $q->whereHas('channelAccount', fn ($ca) => $ca->where('channel', 'instagram')),
-                'conversations as has_webchat_thread' => fn ($q) => $q->whereHas('channelAccount', fn ($ca) => $ca->where('channel', 'webchat')),
-                'conversations as has_email_thread' => fn ($q) => $q->whereHas('channelAccount', fn ($ca) => $ca->where('channel', 'email')),
-                'conversations as has_whatsapp_thread' => fn ($q) => $q->whereHas('channelAccount', fn ($ca) => $ca->where('channel', 'whatsapp')),
+                'conversations as has_messenger_thread' => fn ($q) => $q->where(function ($conv) {
+                    $conv->whereHas('channelAccount', fn ($ca) => $ca->where('channel', 'messenger'))
+                        ->orWhereHas('messages', fn ($m) => $m->where('channel', 'messenger'));
+                }),
+                'conversations as has_instagram_thread' => fn ($q) => $q->where(function ($conv) {
+                    $conv->whereHas('channelAccount', fn ($ca) => $ca->where('channel', 'instagram'))
+                        ->orWhereHas('messages', fn ($m) => $m->where('channel', 'instagram'));
+                }),
+                'conversations as has_webchat_thread' => fn ($q) => $q->where(function ($conv) {
+                    $conv->whereHas('channelAccount', fn ($ca) => $ca->where('channel', 'webchat'))
+                        ->orWhereHas('messages', fn ($m) => $m->where('channel', 'webchat'));
+                }),
+                'conversations as has_email_thread' => fn ($q) => $q->where(function ($conv) {
+                    $conv->whereHas('channelAccount', fn ($ca) => $ca->where('channel', 'email'))
+                        ->orWhereHas('messages', fn ($m) => $m->where('channel', 'email'));
+                }),
+                'conversations as has_whatsapp_thread' => fn ($q) => $q->where(function ($conv) {
+                    $conv->whereHas('channelAccount', fn ($ca) => $ca->where('channel', 'whatsapp'))
+                        ->orWhereHas('messages', fn ($m) => $m->where('channel', 'whatsapp'));
+                }),
             ])
             ->where(function ($query) use ($q) {
                 $query->where('first_name', 'like', "%{$q}%")
@@ -177,22 +192,68 @@ class MobileInboxController extends WorkspaceScopedController
             ->get(['id', 'uuid', 'first_name', 'last_name', 'phone_e164', 'email', 'avatar', 'custom_fields', 'source']);
 
         return response()->json([
-            'data' => $contacts->map(fn ($c) => [
-                'id' => $c->id,
-                'uuid' => $c->uuid,
-                'name' => Demo::name($c->name),
-                'phone' => Demo::phone($c->phone_e164),
-                'phone_e164' => $c->phone_e164,
-                'email' => Demo::email($c->email),
-                'avatar' => Demo::active() ? null : $c->avatar_url,
-                'custom_fields' => $c->custom_fields,
-                'source' => $c->source,
-                'has_messenger_thread' => (int) ($c->has_messenger_thread ?? 0) > 0,
-                'has_instagram_thread' => (int) ($c->has_instagram_thread ?? 0) > 0,
-                'has_webchat_thread' => (int) ($c->has_webchat_thread ?? 0) > 0,
-                'has_email_thread' => (int) ($c->has_email_thread ?? 0) > 0,
-                'has_whatsapp_thread' => (int) ($c->has_whatsapp_thread ?? 0) > 0,
-            ]),
+            'data' => $contacts->map(function ($c) {
+                $canWhatsapp = ! empty($c->phone_e164);
+                $canSms = ! empty($c->phone_e164);
+                $canEmail = ! empty($c->email);
+                $hasMessenger = (int) ($c->has_messenger_thread ?? 0) > 0 || $c->source === 'messenger' || ! empty($c->custom_fields['messenger_psid']);
+                $hasInstagram = (int) ($c->has_instagram_thread ?? 0) > 0 || $c->source === 'instagram' || ! empty($c->custom_fields['instagram_scoped_id']);
+                $hasWebchat = (int) ($c->has_webchat_thread ?? 0) > 0 || $c->source === 'webchat' || ! empty($c->custom_fields['webchat_visitor_id']);
+                $hasEmail = (int) ($c->has_email_thread ?? 0) > 0 || $c->source === 'email';
+                $hasWhatsapp = (int) ($c->has_whatsapp_thread ?? 0) > 0 || $c->source === 'whatsapp_inbound';
+
+                return [
+                    'id' => $c->id,
+                    'uuid' => $c->uuid,
+                    'name' => Demo::name($c->name),
+                    'phone' => Demo::phone($c->phone_e164),
+                    'phone_e164' => $c->phone_e164,
+                    'email' => Demo::email($c->email),
+                    'avatar' => Demo::active() ? null : $c->avatar_url,
+                    'custom_fields' => $c->custom_fields,
+                    'source' => $c->source,
+                    'can_whatsapp' => $canWhatsapp,
+                    'can_sms' => $canSms,
+                    'can_email' => $canEmail,
+                    'has_messenger_thread' => $hasMessenger,
+                    'has_instagram_thread' => $hasInstagram,
+                    'has_webchat_thread' => $hasWebchat,
+                    'has_email_thread' => $hasEmail,
+                    'has_whatsapp_thread' => $hasWhatsapp,
+                    'channel_reachability' => [
+                        'whatsapp' => [
+                            'reachable' => $canWhatsapp,
+                            'reason' => $canWhatsapp ? null : 'missing_phone',
+                            'label' => $canWhatsapp ? null : 'Missing phone number',
+                        ],
+                        'sms' => [
+                            'reachable' => $canSms,
+                            'reason' => $canSms ? null : 'missing_phone',
+                            'label' => $canSms ? null : 'Missing phone number',
+                        ],
+                        'email' => [
+                            'reachable' => $canEmail,
+                            'reason' => $canEmail ? null : 'missing_email',
+                            'label' => $canEmail ? null : 'Missing email address',
+                        ],
+                        'messenger' => [
+                            'reachable' => $hasMessenger,
+                            'reason' => $hasMessenger ? null : 'inbound_only',
+                            'label' => $hasMessenger ? null : 'Inbound only (no social thread)',
+                        ],
+                        'instagram' => [
+                            'reachable' => $hasInstagram,
+                            'reason' => $hasInstagram ? null : 'inbound_only',
+                            'label' => $hasInstagram ? null : 'Inbound only (no social thread)',
+                        ],
+                        'webchat' => [
+                            'reachable' => $hasWebchat,
+                            'reason' => $hasWebchat ? null : 'no_web_session',
+                            'label' => $hasWebchat ? null : 'No active web session',
+                        ],
+                    ],
+                ];
+            }),
         ]);
     }
 
