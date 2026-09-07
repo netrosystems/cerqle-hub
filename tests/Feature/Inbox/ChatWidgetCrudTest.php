@@ -20,6 +20,7 @@ class ChatWidgetCrudTest extends TestCase
     {
         parent::setUp();
         $this->ctx = $this->createWorkspaceContext();
+        $this->attachPlanToClient($this->ctx['client'], Plan::factory()->create(['white_label_enabled' => false, 'limits' => ['website_widgets' => 10]]));
     }
 
     public function test_can_delete_owned_chat_widget(): void
@@ -52,6 +53,7 @@ class ChatWidgetCrudTest extends TestCase
     public function test_cannot_delete_another_workspaces_chat_widget(): void
     {
         $other = $this->createWorkspaceContext();
+        $this->attachPlanToClient($other['client'], Plan::factory()->create(['limits' => ['website_widgets' => 10]]));
         $channelAccount = ChannelAccount::create([
             'workspace_id' => $other['workspace']->id,
             'channel' => 'webchat',
@@ -93,7 +95,7 @@ class ChatWidgetCrudTest extends TestCase
         ]);
 
         $this->assertSame('Cerqle', $widget->publicConfig()['footer_company_name']);
-        $this->assertStringContainsString('cerqle-icon-white-bg.svg', $widget->publicConfig()['launcher_logo_url']);
+        $this->assertStringContainsString('cerqle-logo-transparent.svg', $widget->publicConfig()['launcher_logo_url']);
         $this->assertGreaterThanOrEqual(1, $widget->publicConfig()['available_team']['count']);
         $this->assertArrayNotHasKey('email', $widget->publicConfig()['available_team']['members'][0]);
         $this->assertArrayNotHasKey('id', $widget->publicConfig()['available_team']['members'][0]);

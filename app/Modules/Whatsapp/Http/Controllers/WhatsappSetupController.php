@@ -23,6 +23,8 @@ class WhatsappSetupController extends Controller
 
         try {
             $n = $this->importPhoneNumbersFromMeta($waba);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            throw $e;
         } catch (HttpConnectionException $e) {
             Log::warning('WhatsApp setup: phone sync failed (TLS/network)', [
                 'workspace_id' => $workspaceId,
@@ -231,6 +233,9 @@ class WhatsappSetupController extends Controller
             'code_verification_status' => $metaRow['code_verification_status'] ?? null,
         ], fn ($v) => $v !== null && $v !== '');
 
+        $workspace = \App\Models\Workspace::findOrFail($waba->workspace_id);
+        \Illuminate\Support\Facades\DB::transaction(function () use ($workspace, $waba, $phoneNumberId, $details, $metaRow) {
+        app(\App\Services\ChannelPlanLimitService::class)->account($workspace, true);
         WhatsappPhoneNumber::updateOrCreate(
             ['phone_number_id' => $phoneNumberId],
             array_merge(['waba_id_fk' => $waba->id], $details),
@@ -254,6 +259,7 @@ class WhatsappSetupController extends Controller
         }
 
         $account->save();
+        });
     }
 
     /**

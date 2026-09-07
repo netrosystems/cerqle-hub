@@ -63,6 +63,7 @@ journey
   - Internal agent private notes and conversation tagging.
   - Real-time agent typing indicators and live presence detection.
 - **Master Email Inbox (`/app/inbox/email`)**: Dedicated multi-mailbox email client synchronizing Gmail, Microsoft 365, and IMAP/SMTP accounts with folder organization and threaded conversations.
+  - **Connected mailbox allowance**: Admin Plan Limits includes `email_accounts`, shared across every workspace in the client organization (or the standalone workspace owner's workspaces). Zero blocks new mailboxes; null/missing preserves unlimited legacy plans. Inactive/error connections still count until disconnected. Downgrades retain existing mailboxes and allow same-provider identity reconnects; a different provider or workspace is a separate connection. Email Setup displays usage and a capacity warning. This is distinct from monthly sending limits.
 
 #### UI State Machine
 ```text
@@ -158,6 +159,15 @@ journey
 ---
 
 ### Feature 10: Subscriptions, Add-ons & Developer Platform (`app/Http/Controllers/Client/*`)
+
+#### Channel allowances (2026-09-07)
+- `messaging_channels` replaces the WhatsApp-only account limit. Each connected WhatsApp phone number, Messenger Page, or Instagram messaging account uses one slot, pooled across the billing organization's workspaces. These are the currently implemented Messaging Channel Setup integrations; email and website chat are separate.
+- `website_widgets` limits Website Widgets; `whatsapp_chatbots` limits the **WA Chatbot** click-to-chat widgets. These are independent from `chatbots` (AI Smart Bots).
+- `social_accounts` is enforced at OAuth persistence, including multi-Page connections. Reauthorization does not use another slot. Bulk callbacks retain successful connections and report accounts skipped at capacity.
+- Inactive resources still count. Deletion/disconnection frees a resource slot. Downgrades do not delete resources or block editing/reauthorization, but prevent additional resources. Zero blocks creation; missing/null preserves unlimited legacy plans; no plan allows no new resources.
+- `messaging_messages_per_month` pools outbound WhatsApp/Messenger/Instagram messages across all workspaces, including API, bot, automation and campaign sends through their transports. Incoming messages, read receipts, email, and website-chat messages do not count. Each provider message counts (an image plus a separately sent caption is two). Definitive failures refund; ambiguous network timeouts retain usage conservatively. Calendar-month reset uses application time, not a subscription-anniversary reset.
+- Existing WhatsApp limit values seed the new keys without widening finite plans; existing current-month sent/read/delivered history seeds message usage, using the greater of WhatsApp history and its old campaign meter. New widget limits default to unlimited until explicitly configured by an administrator. Migration should run with outbound workers paused during deployment.
+- Relevant setup, widget creation/edit, social and inbox pages show `used/limit` and remaining allowance across all workspaces. Email Setup uses the same compact strip, showing its independent mailbox allowance.
 
 #### Capabilities
 - **Tiered Plans & Usage Metering**: Automated enforcement of contact limits, monthly message quotas, AI vector tokens, and team member capacity.

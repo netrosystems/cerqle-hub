@@ -15,7 +15,8 @@ class SocialAccessTokenServiceTest extends TestCase
 
     public function test_it_refreshes_an_expiring_youtube_token_and_keeps_the_connection_active(): void
     {
-        ['workspace' => $workspace] = $this->createWorkspaceContext();
+        ['workspace' => $workspace, 'client' => $client] = $this->createWorkspaceContext();
+        $this->attachPlanToClient($client, \App\Models\Plan::factory()->create(['limits' => ['social_accounts' => 1]]));
         $account = $this->youtubeAccount($workspace->id, now()->subMinute());
 
         $oauth = Mockery::mock(OAuthManager::class);
@@ -38,7 +39,8 @@ class SocialAccessTokenServiceTest extends TestCase
 
     public function test_it_does_not_refresh_a_youtube_token_that_is_not_near_expiry(): void
     {
-        ['workspace' => $workspace] = $this->createWorkspaceContext();
+        ['workspace' => $workspace, 'client' => $client] = $this->createWorkspaceContext();
+        $this->attachPlanToClient($client, \App\Models\Plan::factory()->create(['limits' => ['social_accounts' => 1]]));
         $account = $this->youtubeAccount($workspace->id, now()->addMinutes(30));
 
         $oauth = Mockery::mock(OAuthManager::class);
@@ -52,7 +54,8 @@ class SocialAccessTokenServiceTest extends TestCase
 
     public function test_a_transient_refresh_failure_does_not_disable_or_delete_the_connection(): void
     {
-        ['workspace' => $workspace] = $this->createWorkspaceContext();
+        ['workspace' => $workspace, 'client' => $client] = $this->createWorkspaceContext();
+        $this->attachPlanToClient($client, \App\Models\Plan::factory()->create(['limits' => ['social_accounts' => 1]]));
         $account = $this->youtubeAccount($workspace->id, now()->subMinute());
 
         $oauth = Mockery::mock(OAuthManager::class);

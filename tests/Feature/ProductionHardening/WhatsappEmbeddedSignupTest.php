@@ -66,8 +66,10 @@ class WhatsappEmbeddedSignupTest extends TestCase
 
     public function test_meta_phone_sync_prunes_stale_local_phone_numbers(): void
     {
+        $ctx = $this->createWorkspaceContext();
+        $this->attachPlanToClient($ctx['client'], \App\Models\Plan::factory()->create(['limits' => ['messaging_channels' => 5]]));
         $waba = WhatsappBusinessAccount::factory()->create([
-            'workspace_id' => 7,
+            'workspace_id' => $ctx['workspace']->id,
             'waba_id' => 'WABA_123',
             'credentials' => ['system_user_token' => 'TOKEN'],
         ]);
@@ -80,7 +82,7 @@ class WhatsappEmbeddedSignupTest extends TestCase
         ]);
 
         ChannelAccount::create([
-            'workspace_id' => 7,
+            'workspace_id' => $ctx['workspace']->id,
             'channel' => 'whatsapp',
             'provider' => 'meta',
             'display_name' => 'Old test number',
@@ -124,8 +126,10 @@ class WhatsappEmbeddedSignupTest extends TestCase
 
     public function test_embedded_signup_sync_keeps_only_selected_whatsapp_phone_number(): void
     {
+        $ctx = $this->createWorkspaceContext();
+        $this->attachPlanToClient($ctx['client'], \App\Models\Plan::factory()->create(['limits' => ['messaging_channels' => 5]]));
         $waba = WhatsappBusinessAccount::factory()->create([
-            'workspace_id' => 7,
+            'workspace_id' => $ctx['workspace']->id,
             'waba_id' => 'WABA_123',
             'credentials' => [
                 'system_user_token' => 'TOKEN',
@@ -141,7 +145,7 @@ class WhatsappEmbeddedSignupTest extends TestCase
         ]);
 
         ChannelAccount::create([
-            'workspace_id' => 7,
+            'workspace_id' => $ctx['workspace']->id,
             'channel' => 'whatsapp',
             'provider' => 'meta',
             'display_name' => 'Old test number',

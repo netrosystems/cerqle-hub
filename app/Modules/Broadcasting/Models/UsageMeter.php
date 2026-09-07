@@ -18,7 +18,7 @@ class UsageMeter extends Model
     public static function track(int $workspaceId, string $metric, int $by = 1): void
     {
         $period = (int) now()->format('Ym');
-        static::updateOrCreate(
+        static::firstOrCreate(
             ['workspace_id' => $workspaceId, 'metric' => $metric, 'period' => $period],
             ['value' => 0]
         );

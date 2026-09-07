@@ -159,6 +159,8 @@ class WhatsappEmbeddedSignupController extends Controller
         $selectedPhoneNumberId = $validated['phone_number_id'] ?? null;
         try {
             $phoneCount = $this->syncPhoneNumbers($waba->fresh(), $accessToken, $meta, $selectedPhoneNumberId);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            throw $e;
         } catch (\Throwable $e) {
             $syncError = $e->getMessage();
             Log::warning('WhatsApp embedded signup: phone sync failed', [
@@ -175,6 +177,8 @@ class WhatsappEmbeddedSignupController extends Controller
                     $this->attachPhoneNumber($waba->fresh(), $validated['phone_number_id'], $details ?? ['id' => $validated['phone_number_id']]);
                     $phoneCount = max($phoneCount, 1);
                 }
+            } catch (\Illuminate\Validation\ValidationException $e) {
+                throw $e;
             } catch (\Throwable $e) {
                 Log::warning('WhatsApp embedded signup: session phone attach failed', [
                     'phone_number_id' => $validated['phone_number_id'],
@@ -497,12 +501,16 @@ class WhatsappEmbeddedSignupController extends Controller
             'code_verification_status' => $metaRow['code_verification_status'] ?? null,
         ], fn ($v) => $v !== null && $v !== '');
 
+        $workspace = \App\Models\Workspace::findOrFail($waba->workspace_id);
+        \Illuminate\Support\Facades\DB::transaction(function () use ($workspace, $waba, $phoneNumberId, $details, $metaRow) {
+        app(\App\Services\ChannelPlanLimitService::class)->account($workspace, true);
         \App\Modules\Whatsapp\Models\WhatsappPhoneNumber::updateOrCreate(
             ['phone_number_id' => $phoneNumberId],
             array_merge(['waba_id_fk' => $waba->id], $details),
         );
 
         $this->upsertChannelAccount($waba, $phoneNumberId, $metaRow);
+        });
     }
 
     /**

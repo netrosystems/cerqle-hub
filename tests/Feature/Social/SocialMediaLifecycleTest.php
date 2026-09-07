@@ -130,6 +130,7 @@ class SocialMediaLifecycleTest extends TestCase
             'processingDetails' => ['processingStatus' => 'succeeded'],
         ]]])]);
         ['user' => $user, 'workspace' => $workspace] = $this->createWorkspaceContext();
+        $this->attachPlanToClient($workspace->client, \App\Models\Plan::factory()->create(['limits' => ['social_accounts' => 1]]));
         $account = SocialAccount::create([
             'workspace_id' => $workspace->id,
             'network' => 'youtube',

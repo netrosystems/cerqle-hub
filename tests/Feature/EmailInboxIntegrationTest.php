@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\Plan;
 use App\Modules\Inbox\Jobs\SyncEmailAccountJob;
 use App\Modules\Inbox\Services\GenericMailboxClient;
 use App\Modules\Inbox\Services\GoogleGmailClient;
@@ -29,6 +30,7 @@ class EmailInboxIntegrationTest extends TestCase
     {
         Queue::fake();
         $context = $this->createWorkspaceContext();
+        $this->attachPlanToClient($context['client'], Plan::factory()->create(['limits' => ['email_accounts' => 2]]));
         $client = Mockery::mock(GenericMailboxClient::class);
         $client->shouldReceive('verify')->once()->withArgs(function (ChannelAccount $account): bool {
             $this->assertFalse($account->exists);
@@ -113,6 +115,7 @@ class EmailInboxIntegrationTest extends TestCase
     {
         Queue::fake();
         $context = $this->createWorkspaceContext();
+        $this->attachPlanToClient($context['client'], Plan::factory()->create(['limits' => ['email_accounts' => 2]]));
         $client = Mockery::mock(GenericMailboxClient::class);
         $client->shouldReceive('verify')->twice()->andReturnTrue();
         $this->app->instance(GenericMailboxClient::class, $client);

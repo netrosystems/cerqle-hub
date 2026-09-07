@@ -161,32 +161,6 @@ export default function PlanForm({
                 </div>
             </section>
 
-            {/* Paddle Integration */}
-            <section>
-                <h4 className="text-sm font-semibold text-neutral-900 dark:text-neutral-100 mb-3">
-                    Paddle Integration
-                </h4>
-                <div className="bg-gray-50 dark:bg-neutral-800/50 border border-neutral-200 dark:border-neutral-700 rounded-lg p-4 space-y-4">
-                    <p className="text-xs text-neutral-500 dark:text-neutral-400">
-                        Enter recurring Paddle catalog price IDs. Paddle checkout cannot create subscriptions from inline amounts.
-                    </p>
-                    <Input
-                        label="Monthly Paddle price ID"
-                        value={data.paddle_monthly_id ?? ''}
-                        onChange={(e) => setData('paddle_monthly_id', e.target.value)}
-                        placeholder="pri_…"
-                        error={errors.paddle_monthly_id}
-                    />
-                    <Input
-                        label="Yearly Paddle price ID"
-                        value={data.paddle_yearly_id ?? ''}
-                        onChange={(e) => setData('paddle_yearly_id', e.target.value)}
-                        placeholder="pri_…"
-                        error={errors.paddle_yearly_id}
-                    />
-                </div>
-            </section>
-
             {/* Plan Limits */}
             <section>
                 <h4 className="text-sm font-semibold text-neutral-900 dark:text-neutral-100 mb-3">{t('admin.plan_limits')}</h4>

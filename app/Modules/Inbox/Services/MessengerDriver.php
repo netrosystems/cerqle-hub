@@ -10,6 +10,7 @@ use App\Modules\Shared\Models\Contact;
 use App\Modules\Shared\Models\Conversation;
 use App\Modules\Shared\Models\Message;
 use App\Modules\Shared\Services\ContactService;
+use App\Services\MessagingMessageLimitService;
 use App\Services\WebhookIdempotencyService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -40,17 +41,17 @@ class MessengerDriver implements ChannelDriverInterface
         // Image messages (e.g. shared products): send the photo as an attachment,
         // then the caption as a follow-up — a Messenger attachment carries no text.
         if ($message->type === 'image' && $imageUrl) {
-            $messageId = $this->postMessage($accessToken, $recipient, [
+            $messageId = $this->postMessage($conv->workspace_id, $accessToken, $recipient, [
                 'attachment' => ['type' => 'image', 'payload' => ['url' => $imageUrl, 'is_reusable' => true]],
             ]);
             if (! empty($message->body)) {
-                $this->postMessage($accessToken, $recipient, ['text' => $message->body]);
+                $this->postMessage($conv->workspace_id, $accessToken, $recipient, ['text' => $message->body]);
             }
 
             return $messageId;
         }
 
-        return $this->postMessage($accessToken, $recipient, ['text' => $message->body]);
+        return $this->postMessage($conv->workspace_id, $accessToken, $recipient, ['text' => $message->body]);
     }
 
     /**
@@ -59,7 +60,14 @@ class MessengerDriver implements ChannelDriverInterface
      * @param  array<string, mixed>  $recipient
      * @param  array<string, mixed>  $message
      */
-    private function postMessage(string $accessToken, array $recipient, array $message): string
+    private function postMessage(int $workspaceId, string $accessToken, array $recipient, array $message): string
+    {
+        return app(MessagingMessageLimitService::class)->send(
+            $workspaceId, fn () => $this->postUnmeteredMessage($accessToken, $recipient, $message),
+        );
+    }
+
+    private function postUnmeteredMessage(string $accessToken, array $recipient, array $message): string
     {
         $resp = Http::withToken($accessToken)
             ->timeout(15)

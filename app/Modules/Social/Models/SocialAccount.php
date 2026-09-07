@@ -2,10 +2,18 @@
 
 namespace App\Modules\Social\Models;
 
+use App\Support\Concerns\EnforcesChannelPlanLimit;
 use Illuminate\Database\Eloquent\Model;
 
 class SocialAccount extends Model
 {
+    use EnforcesChannelPlanLimit;
+
+    protected function channelPlanLimitKey(): string
+    {
+        return 'social_accounts';
+    }
+
     protected $table = 'social_media_accounts';
 
     protected $fillable = ['workspace_id', 'network', 'account_id', 'name', 'picture_url', 'access_token', 'refresh_token', 'token_expires_at', 'scopes', 'meta', 'active'];

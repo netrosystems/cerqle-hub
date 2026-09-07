@@ -224,6 +224,8 @@ Cerqle Hub integrates with multiple third-party providers with resilient fallbac
 
 Transactional system email uses the active encrypted SMTP configuration and an email-client-safe Cerqle layout with a plain-text alternative. Verification delivery failures are logged and may fall back to Laravel notifications, but a provider or recipient rejection must not roll back an already-created user account.
 
+Mailbox persistence from Gmail/Microsoft OAuth callbacks and IMAP/SMTP setup passes through `EmailAccountLimitService`. The service serializes capacity checks and upserts in a database transaction on the client row (or standalone workspace owner). Remote credential verification happens outside the lock. `limits.email_accounts` counts all email channel-account rows across that billing account's workspaces, including inactive connections. OAuth capacity is checked at callback persistence, allowing reconnect at capacity and handling slots consumed during consent. No-plan accounts have zero new-mailbox capacity. Disconnect removes the row and frees a slot; no migration or automatic plan-price mapping is needed for this JSON limit.
+
 ---
 
 ## 6. Real-Time Event & Broadcasting Architecture
@@ -257,6 +259,14 @@ sequenceDiagram
 ---
 
 ## 7. Health Monitoring & Observability
+
+### Shared channel quota enforcement (2026-09-07)
+
+`ChannelPlanLimitService` and `EnforcesChannelPlanLimit` serialize resource saves on the billing client row (standalone accounts use the owner user). `ChannelAccount`, `SocialAccount`, `ChatWidget`, and `WhatsappWidget` enforce capacity on creation/transfer; ordinary edits and token renewal are unaffected. Identity lookups inside the lock handle concurrent reauthorization. Website widget/channel creation and WhatsApp phone/channel attachment are transactional. Do not introduce query-builder inserts or bulk upserts that bypass these model saves.
+
+`MessagingMessageLimitService` reserves `messaging_quota_periods` before provider I/O, keyed by billing `account_key` and `Ym` period. This account-level counter survives workspace deletion and contains only aggregate counts, not message content. WhatsApp enforcement is in `CloudApiClient::post`, covering direct API/campaign callers; Messenger and Instagram enforce each message in their private transport wrapper. No network call holds the quota database lock. Definitive failure refunds use the original account/period even at month rollover or workspace deletion; ambiguous HTTP connection errors retain the reservation. This is capacity accounting, not provider-delivery idempotency: never automatically replay a send with uncertain delivery. `UsageMeter::track` now uses `firstOrCreate` so subsequent increments cannot reset prior usage.
+
+Inertia's `channel_plan_usage` exposes organization counts (not other workspaces' identities). Resource limits and message limits are independent from email, AI credits, and website-chat usage. Migration `2026_09_07_130000_unify_messaging_plan_limits` preserves legacy plan keys for rollback while introducing the new keys and current-month usage baseline; it deliberately never deletes usage on rollback.
 
 Cerqle Hub includes health and readiness endpoints protected by `HEALTHZ_TOKEN`:
 

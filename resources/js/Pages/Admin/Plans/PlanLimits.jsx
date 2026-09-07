@@ -5,12 +5,15 @@ const LIMIT_KEYS = [
     'users',
     'workspaces',
     'storage',
-    'whatsapp_accounts',
+    'messaging_channels',
+    'website_widgets',
+    'whatsapp_chatbots',
     'whatsapp_templates',
-    'whatsapp_messages_per_month',
+    'messaging_messages_per_month',
     'campaigns_per_month',
     'sms_per_month',
     'emails_per_month',
+    'email_accounts',
     'inbox_agents',
     'ai_credits_per_month',
     'knowledge_bases',
@@ -24,12 +27,15 @@ const LABELS = {
     users: 'Users',
     workspaces: 'Workspaces',
     storage: 'Storage (MB)',
-    whatsapp_accounts: 'WhatsApp Accounts',
+    messaging_channels: 'Messaging Channels (all workspaces)',
+    website_widgets: 'Website Widgets (all workspaces)',
+    whatsapp_chatbots: 'WA Chatbots (all workspaces)',
     whatsapp_templates: 'WhatsApp Templates',
-    whatsapp_messages_per_month: 'WhatsApp Messages / mo',
+    messaging_messages_per_month: 'Messaging Channel Messages / month (all channels)',
     campaigns_per_month: 'Campaigns / mo',
     sms_per_month: 'SMS Messages / mo',
     emails_per_month: 'Emails / mo',
+    email_accounts: 'Connected Email Accounts (all workspaces)',
     inbox_agents: 'Inbox Agents',
     ai_credits_per_month: 'Cerqle AI Credits / month',
     knowledge_bases: 'Knowledge Bases',
@@ -68,7 +74,7 @@ export default function PlanLimits({ limits = {}, onChange }) {
                         key={key}
                         type="number"
                         min={0}
-                        label={LABELS[key]}
+                        label={t(`limits.labels.${key}`, { defaultValue: LABELS[key] })}
                         value={key === 'ai_credits_per_month' ? (value[key] ?? 0) : (value[key] ?? '')}
                         onChange={(e) => update(key, e.target.value ? e.target.value : (key === 'ai_credits_per_month' ? 0 : null))}
                         placeholder={key === 'ai_credits_per_month' ? '0 (no managed credits)' : t('admin.unlimited_placeholder')}

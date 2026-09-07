@@ -8,9 +8,11 @@ use App\Modules\AI\Models\AiChatbot;
 use App\Modules\Inbox\Models\ChatWidget;
 use App\Modules\Inbox\Services\ChatWidgetAvatarProcessor;
 use App\Modules\Shared\Models\ChannelAccount;
+use App\Services\ChannelPlanLimitService;
 use App\Services\StorageManager;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
@@ -67,21 +69,25 @@ class ChatWidgetController extends Controller
     {
         $data = $this->validated($request);
         $workspaceId = $this->workspaceId($request);
-        $data = $this->applyLauncherLogo($request, $data);
-        $data = $this->applyAvatar($request, $data);
+        $workspace = Workspace::findOrFail($workspaceId);
+        DB::transaction(function () use ($request, $workspace, $workspaceId, $data) {
+            $limits = app(ChannelPlanLimitService::class);
+            $limits->ensureCapacity($limits->usage($workspace, 'website_widgets', true));
+            $data = $this->applyLauncherLogo($request, $data);
+            $data = $this->applyAvatar($request, $data);
+            $channelAccount = ChannelAccount::create([
+                'workspace_id' => $workspaceId,
+                'channel' => 'webchat',
+                'status' => 'active',
+                'display_name' => $data['name'] ?: 'Website chat',
+                'meta_json' => $this->metaFor($data),
+            ]);
 
-        $channelAccount = ChannelAccount::create([
-            'workspace_id' => $workspaceId,
-            'channel' => 'webchat',
-            'status' => 'active',
-            'display_name' => $data['name'] ?: 'Website chat',
-            'meta_json' => $this->metaFor($data),
-        ]);
-
-        ChatWidget::create(array_merge($data, [
-            'workspace_id' => $workspaceId,
-            'channel_account_id' => $channelAccount->id,
-        ]));
+            ChatWidget::create(array_merge($data, [
+                'workspace_id' => $workspaceId,
+                'channel_account_id' => $channelAccount->id,
+            ]));
+        });
 
         return redirect()->route('client.inbox.chat-widgets.index')->with('success', 'Chat widget created.');
     }

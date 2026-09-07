@@ -6,7 +6,9 @@ use App\Models\User;
 use App\Models\Workspace;
 use App\Modules\AI\Models\AiChatbot;
 use App\Modules\Shared\Models\ChannelAccount;
+use App\Services\PusherPublicConfig;
 use App\Services\StorageManager;
+use App\Support\Concerns\EnforcesChannelPlanLimit;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Facades\Storage;
@@ -18,6 +20,13 @@ use Illuminate\Support\Str;
  */
 class ChatWidget extends Model
 {
+    use EnforcesChannelPlanLimit;
+
+    protected function channelPlanLimitKey(): string
+    {
+        return 'website_widgets';
+    }
+
     protected $table = 'chat_widgets';
 
     protected $fillable = [
@@ -186,7 +195,7 @@ class ChatWidget extends Model
             'require_prechat' => (bool) $this->require_prechat,
             'prechat_fields' => $this->prechat_fields ?: ['name', 'email'],
             'offline_message' => $this->offline_message,
-            'realtime' => app(\App\Services\PusherPublicConfig::class)->widget(),
+            'realtime' => app(PusherPublicConfig::class)->widget(),
         ];
     }
 }
