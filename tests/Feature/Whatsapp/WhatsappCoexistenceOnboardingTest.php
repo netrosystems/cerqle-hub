@@ -37,12 +37,10 @@ class WhatsappCoexistenceOnboardingTest extends TestCase
 
     private function attempt(): string
     {
-        return $this->postJson('/test/coexistence/begin', [
-            'phone' => '+15550000001', 'acknowledge_limitations' => true,
-        ])->assertOk()->json('attempt_id');
+        return $this->postJson('/test/coexistence/begin', [])->assertOk()->json('attempt_id');
     }
 
-    private function fakeMeta(array $phone = [], array $debug = []): void
+    private function fakeMeta(array $phone = [], array $debug = [], array $extraPhones = []): void
     {
         Http::fake([
             '*/oauth/access_token*' => Http::response(['access_token' => 'test-token']),
@@ -54,7 +52,7 @@ class WhatsappCoexistenceOnboardingTest extends TestCase
             '*/200/phone_numbers*' => Http::response(['data' => [array_merge([
                 'id' => '300', 'display_phone_number' => '+1 555 000 0001',
                 'is_on_biz_app' => true, 'platform_type' => 'CLOUD_API', 'verified_name' => 'Demo',
-            ], $phone)]]),
+            ], $phone), ...$extraPhones]]),
             '*/200/subscribed_apps' => Http::response(['success' => true]),
         ]);
     }
@@ -122,10 +120,35 @@ class WhatsappCoexistenceOnboardingTest extends TestCase
         $this->finish($id)->assertConflict();
     }
 
-    public function test_different_phone_cannot_be_silently_selected(): void
+    public function test_number_is_discovered_from_meta_without_manual_entry(): void
     {
         $this->fakeMeta(['display_phone_number' => '+15550000002']);
+        $this->finish($this->attempt())->assertOk();
+        $this->assertSame('+15550000002', WhatsappPhoneNumber::first()->getRawOriginal('display_phone'));
+    }
+
+    public function test_multiple_eligible_numbers_are_not_silently_selected(): void
+    {
+        $this->fakeMeta([], [], [['id' => '301', 'display_phone_number' => '+15550000002',
+            'is_on_biz_app' => true, 'platform_type' => 'CLOUD_API']]);
         $this->finish($this->attempt())->assertUnprocessable();
+        $this->assertDatabaseCount('channel_accounts', 0);
+    }
+
+    public function test_meta_phone_selection_is_verified_against_waba(): void
+    {
+        $this->fakeMeta([], [], [['id' => '301', 'display_phone_number' => '+15550000002',
+            'is_on_biz_app' => true, 'platform_type' => 'CLOUD_API']]);
+        $this->postJson('/test/coexistence/store', ['attempt_id' => $this->attempt(),
+            'code' => 'test-code', 'waba_id' => '200', 'phone_number_id' => '301'])->assertOk();
+        $this->assertSame('301', WhatsappPhoneNumber::first()->phone_number_id);
+    }
+
+    public function test_unverified_phone_selection_is_rejected(): void
+    {
+        $this->fakeMeta();
+        $this->postJson('/test/coexistence/store', ['attempt_id' => $this->attempt(),
+            'code' => 'test-code', 'waba_id' => '200', 'phone_number_id' => '999'])->assertUnprocessable();
         $this->assertDatabaseCount('channel_accounts', 0);
     }
 
