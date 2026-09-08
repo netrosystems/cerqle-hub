@@ -6,9 +6,10 @@ import {
     Trash2, RefreshCw, Bot, ChevronDown, ExternalLink,
     Edit3, Clock, ShieldCheck, ShieldAlert, Wifi, WifiOff, X,
 } from 'lucide-react';
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
+import { createWhatsappSignupSession } from '@/Utils/whatsappSignupSession';
 
 /* brand logos (accurate official paths) */
 
@@ -285,6 +286,9 @@ function PhoneStatusCard({ num, wabaId, onRefreshed }) {
                         <span className="font-semibold text-sm text-neutral-900 dark:text-neutral-100">
                             {data.display_phone ?? data.display_phone_number ?? '—'}
                         </span>
+                        {data.connection_mode === 'coexistence' && <span className="rounded-full bg-brand-50 dark:bg-brand-950 px-2 py-0.5 text-[10px] text-brand-700 dark:text-brand-300">
+                            {data.coexistence_meta?.disconnected_at ? t('inbox.business_app_disconnected', 'Business app disconnected') : t('inbox.business_app_connected', 'Business app + API')}
+                        </span>}
                         <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium ${overallStatus.color}`}>
                             <span className={`h-1.5 w-1.5 rounded-full ${overallStatus.dot}`} />
                             {overallStatus.label}
@@ -546,21 +550,46 @@ function WabaCard({ waba, webhookGlobalUrl, channelAccounts, chatbots }) {
 
 export function ConnectWhatsAppForm({ onClose, metaConfigIdWhatsapp, metaAppId }) {
     const { t } = useTranslation();
+    const { props } = usePage();
+    const [mode, setMode] = useState('cloud_api');
+    const [phone, setPhone] = useState('');
+    const [acknowledged, setAcknowledged] = useState(false);
+    const [attemptId, setAttemptId] = useState(null);
     const [waApiError, setWaApiError] = useState(null);
     const [waSubmitting, setWaSubmitting] = useState(false);
+
+    const prepareCoexistence = async () => {
+        setWaApiError(null);
+        setWaSubmitting(true);
+        try {
+            const response = await fetch(route('client.whatsapp.setup.coexistence.begin'), {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Accept': 'application/json',
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content },
+                body: JSON.stringify({ phone: phone.replace(/[\s()-]/g, ''), acknowledge_limitations: acknowledged }),
+            });
+            const data = await response.json();
+            if (!response.ok) throw new Error(data.message ?? t('inbox.connection_failed'));
+            setAttemptId(data.attempt_id);
+        } catch (error) {
+            setWaApiError(error.message ?? t('inbox.network_error_retry'));
+        } finally { setWaSubmitting(false); }
+    };
 
     const handleWaEmbeddedCode = useCallback(async (code, wabaId, phoneNumberId = null) => {
         setWaApiError(null);
         setWaSubmitting(true);
         try {
-            const res = await fetch(route('client.whatsapp.setup.embedded-signup'), {
+            const res = await fetch(route(mode === 'coexistence' ? 'client.whatsapp.setup.coexistence.store' : 'client.whatsapp.setup.embedded-signup'), {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
                     'Accept': 'application/json',
                 },
-                body: JSON.stringify({ code, waba_id: wabaId, phone_number_id: phoneNumberId }),
+                body: JSON.stringify(mode === 'coexistence'
+                    ? { code, waba_id: wabaId, attempt_id: attemptId }
+                    : { code, waba_id: wabaId, phone_number_id: phoneNumberId }),
             });
             const json = await res.json();
             if (!res.ok) {
@@ -575,17 +604,56 @@ export function ConnectWhatsAppForm({ onClose, metaConfigIdWhatsapp, metaAppId }
             setWaApiError(t('inbox.network_error_retry'));
         } finally {
             setWaSubmitting(false);
+            setAttemptId(null);
         }
-    }, [onClose, t]);
+    }, [onClose, t, mode, attemptId]);
 
     return (
         <div className="space-y-3">
             {metaConfigIdWhatsapp ? (
                 <>
+                    {props.whatsappCoexistenceEnabled && (
+                        <fieldset disabled={waSubmitting || !!attemptId} className="space-y-2 text-xs">
+                            <legend className="mb-2 font-semibold">{t('inbox.choose_connection', 'Choose how to connect')}</legend>
+                            {[
+                                ['coexistence', t('inbox.keep_business_app', 'Keep WhatsApp Business app')],
+                                ['cloud_api', t('inbox.cloud_api_only', 'Cloud API only')],
+                            ].map(([value, label]) => (
+                                <label key={value} className={`flex gap-2 rounded-lg border p-3 ${mode === value ? 'border-brand-500 bg-brand-50 dark:bg-brand-950' : 'border-neutral-200 dark:border-neutral-700'}`}>
+                                    <input type="radio" name="wa-connection-mode" value={value} checked={mode === value}
+                                        onChange={() => { setMode(value); setAttemptId(null); setWaApiError(null); }} />
+                                    <span>{label}</span>
+                                </label>
+                            ))}
+                            {mode === 'coexistence' && <>
+                                <label className="block space-y-1">
+                                    <span>{t('inbox.business_app_number', 'Business app number, including country code')}</span>
+                                    <input type="tel" autoComplete="tel" value={phone} onChange={(e) => setPhone(e.target.value)}
+                                        placeholder="+1 555 000 0000" className="w-full rounded-lg border-neutral-300 dark:border-neutral-600 dark:bg-neutral-900 text-sm" />
+                                </label>
+                                <p className="text-neutral-500">{t('inbox.coexistence_no_history', 'New messages only. Existing chats and contacts will not be imported.')}</p>
+                                <details className="text-neutral-500">
+                                    <summary className="cursor-pointer">{t('inbox.business_app_changes', 'Changes to your Business app')}</summary>
+                                    <p className="mt-2">{t('inbox.coexistence_limitations', 'Linked devices are disconnected during setup. Windows and WearOS companions are unsupported. Broadcast lists become read-only; disappearing messages, view-once and live location are disabled in individual chats. Group chats are not synced.')}</p>
+                                </details>
+                                <label className="flex gap-2 items-start">
+                                    <input type="checkbox" checked={acknowledged} onChange={(e) => setAcknowledged(e.target.checked)} />
+                                    <span>{t('inbox.coexistence_acknowledge', 'I understand these changes and can approve the connection in my Business app.')}</span>
+                                </label>
+                            </>}
+                        </fieldset>
+                    )}
                     <p className="text-xs text-neutral-500 dark:text-neutral-400 leading-relaxed">
                         {t('inbox.authorize_whatsapp_help')}
                     </p>
-                    <EmbeddedSignupButton
+                    {mode === 'coexistence' && !attemptId ? (
+                        <button type="button" onClick={prepareCoexistence} disabled={waSubmitting || !acknowledged || !/^\+[1-9][0-9]{5,14}$/.test(phone.replace(/[\s()-]/g, ''))}
+                            className="w-full rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50">
+                            {t('inbox.prepare_connection', 'Prepare connection')}
+                        </button>
+                    ) : <EmbeddedSignupButton
+                        key={`${mode}-${attemptId ?? 'standard'}`}
+                        connectionMode={mode}
                         configId={metaConfigIdWhatsapp}
                         appId={metaAppId}
                         channel="whatsapp"
@@ -593,7 +661,10 @@ export function ConnectWhatsAppForm({ onClose, metaConfigIdWhatsapp, metaAppId }
                         color="green"
                         onCode={handleWaEmbeddedCode}
                         disabled={waSubmitting}
-                    />
+                    />}
+                    {attemptId && <button type="button" disabled={waSubmitting} onClick={() => setAttemptId(null)} className="text-xs text-brand-600 underline">
+                        {t('inbox.change_number', 'Change number / restart')}
+                    </button>}
                     {waSubmitting && <p role="status" className="text-xs text-neutral-400">{t('inbox.connecting_whatsapp')}</p>}
                     {waApiError && <p role="alert" className="text-xs text-red-500">{waApiError}</p>}
                 </>
@@ -714,54 +785,6 @@ function AccountRow({ account, channel, chatbots }) {
 
 /* ─────────────────── Meta Embedded Signup helpers ─────────────────── */
 
-/**
- * Listens for the WA_EMBEDDED_SIGNUP postMessage that Meta sends when
- * sessionInfoVersion:'3' is set. Resolves with { waba_id, phone_number_id }.
- */
-function waitForWabaSessionInfo(timeout = 15000) {
-    return new Promise((resolve, reject) => {
-        const timer = setTimeout(() => {
-            window.removeEventListener('message', handler);
-            // Meta can return a valid OAuth code without sending the optional
-            // WA_EMBEDDED_SIGNUP payload (notably when previous settings are
-            // reused). The backend can discover the granted WABA from the token.
-            resolve({});
-        }, timeout);
-
-        function handler(event) {
-            let hostname;
-            try {
-                hostname = new URL(event.origin).hostname;
-            } catch {
-                return;
-            }
-            if (hostname !== 'facebook.com' && !hostname.endsWith('.facebook.com')) return;
-
-            try {
-                const parsed = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
-                if (parsed?.type === 'WA_EMBEDDED_SIGNUP') {
-                    if (parsed.event === 'CANCEL' || parsed.event === 'ERROR') {
-                        clearTimeout(timer);
-                        window.removeEventListener('message', handler);
-                        reject(new Error(parsed.data?.error_message ?? 'WhatsApp authorization was not completed.'));
-                        return;
-                    }
-
-                    if (parsed.event && parsed.event !== 'FINISH') return;
-
-                    clearTimeout(timer);
-                    window.removeEventListener('message', handler);
-                    resolve(parsed.data ?? {});
-                }
-            } catch {
-                // Ignore unrelated non-JSON cross-window messages.
-            }
-        }
-
-        window.addEventListener('message', handler);
-    });
-}
-
 function initFbSdk(appId) {
     if (typeof window.FB === 'undefined' || !appId) return false;
     try {
@@ -861,12 +884,14 @@ function loadFbSdk(appId) {
     return window.__fbSdkPromise;
 }
 
-function EmbeddedSignupButton({ configId, appId, channel, label, color, onCode, children, disabled = false }) {
+function EmbeddedSignupButton({ configId, appId, channel, label, color, onCode, children, disabled = false, connectionMode = 'cloud_api' }) {
     const { t } = useTranslation();
     const { props } = usePage();
     const resolvedAppId = appId || props.metaAppId;
     const [loading, setLoading] = useState(false);
     const [error, setError]     = useState(null);
+    const activeSession = useRef(null);
+    useEffect(() => () => activeSession.current?.dispose(), []);
 
     const launch = useCallback(async () => {
         setError(null);
@@ -887,30 +912,34 @@ function EmbeddedSignupButton({ configId, appId, channel, label, color, onCode, 
         }
 
         const isWhatsapp = channel === 'whatsapp';
-        const sessionInfoPromise = isWhatsapp ? waitForWabaSessionInfo() : Promise.resolve(null);
+        activeSession.current?.dispose();
+        const session = isWhatsapp ? createWhatsappSignupSession({ mode: connectionMode }) : null;
+        activeSession.current = session;
 
         const extrasMap = {
-            whatsapp:  { setup: {}, featureType: '', sessionInfoVersion: '3' },
+            whatsapp:  { setup: {}, featureType: connectionMode === 'coexistence' ? 'whatsapp_business_app_onboarding' : '', sessionInfoVersion: '3' },
             instagram: { feature_type: 'instagram_management' },
             messenger: { feature_type: 'messenger_chat' },
         };
 
+        try {
         window.FB.login(
             (response) => {
                 if (response.authResponse && response.authResponse.code) {
                     const code = response.authResponse.code;
                     if (isWhatsapp) {
-                        sessionInfoPromise
+                        session.wait()
                             .then((info) => {
                                 setLoading(false);
                                 onCode(code, info?.waba_id ?? null, info?.phone_number_id ?? null);
                             })
-                            .catch(() => { setLoading(false); onCode(code, null, null); });
+                            .catch((error) => { setLoading(false); setError(error.message); });
                     } else {
                         setLoading(false);
                         onCode(code);
                     }
                 } else {
+                    session?.dispose();
                     setLoading(false);
                     if (response.status !== 'connected') {
                         setError(t('inbox.authorization_cancelled'));
@@ -924,7 +953,12 @@ function EmbeddedSignupButton({ configId, appId, channel, label, color, onCode, 
                 extras: extrasMap[channel] ?? {},
             },
         );
-    }, [configId, resolvedAppId, channel, onCode, t]);
+        } catch (error) {
+            session?.dispose();
+            setLoading(false);
+            setError(error?.message ?? t('inbox.authorization_cancelled'));
+        }
+    }, [configId, resolvedAppId, channel, onCode, t, connectionMode]);
 
     const colors = {
         green:  'bg-[#25D366] hover:bg-[#1ebe5d] text-white',

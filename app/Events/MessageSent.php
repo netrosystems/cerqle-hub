@@ -49,6 +49,7 @@ class MessageSent implements ShouldBroadcastNow
             'payload' => $this->message->payload,
             'status' => $this->message->status,
             'sent_by' => $this->message->sent_by,
+            'origin' => $this->message->origin,
             'user_id' => $this->message->user_id,
             'user' => $senderUser?->only(['id', 'name', 'avatar']),
             'sender' => $senderUser

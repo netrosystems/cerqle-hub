@@ -1,11 +1,11 @@
 <?php
 
 use App\Modules\Whatsapp\Http\Controllers\WhatsappAutoReplyController;
+use App\Modules\Whatsapp\Http\Controllers\WhatsappCoexistenceController;
 use App\Modules\Whatsapp\Http\Controllers\WhatsappEmbeddedSignupController;
 use App\Modules\Whatsapp\Http\Controllers\WhatsappSetupController;
 use App\Modules\Whatsapp\Http\Controllers\WhatsappTemplateController;
 use App\Modules\Whatsapp\Http\Controllers\WhatsappWidgetController;
-
 use Illuminate\Support\Facades\Route;
 
 // Public: JS widget embed (no auth)
@@ -16,6 +16,8 @@ Route::middleware(['web', 'client-app'])->prefix('app/whatsapp')->name('client.w
     // Setup GET redirects to the unified Channel Setup page
     Route::get('/setup', fn () => redirect()->route('client.inbox.setup'))->name('setup');
     Route::post('/setup/embedded-signup', [WhatsappEmbeddedSignupController::class, 'store'])->name('setup.embedded-signup');
+    Route::post('/setup/coexistence/begin', [WhatsappCoexistenceController::class, 'begin'])->middleware('throttle:10,1')->name('setup.coexistence.begin');
+    Route::post('/setup/coexistence', [WhatsappCoexistenceController::class, 'store'])->middleware('throttle:10,1')->name('setup.coexistence.store');
     Route::post('/setup/{waba}/reregister-webhook', [WhatsappEmbeddedSignupController::class, 'reregisterWebhook'])->name('setup.reregister-webhook');
     Route::delete('/setup/{waba}', [WhatsappSetupController::class, 'destroy'])->name('setup.destroy');
     Route::post('/setup/{waba}/sync-phone-numbers', [WhatsappSetupController::class, 'syncPhoneNumbers'])->name('setup.sync-phone-numbers');

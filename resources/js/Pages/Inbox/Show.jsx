@@ -193,6 +193,7 @@ function groupMessagesForRender(messages) {
                 n &&
                 n.type === 'image' &&
                 n.direction === m.direction &&
+                (n.origin ?? 'live') === (m.origin ?? 'live') &&
                 Math.abs(new Date(n.sent_at) - new Date(m.sent_at)) <= ALBUM_WINDOW_MS,
         );
         if (adjacentToImage) hiddenIds.add(m.id);
@@ -215,6 +216,7 @@ function groupMessagesForRender(messages) {
                     next.type !== 'image' ||
                     instagramAttachments(next).length > 0 ||
                     next.direction !== msg.direction ||
+                    (next.origin ?? 'live') !== (msg.origin ?? 'live') ||
                     Math.abs(new Date(next.sent_at) - new Date(prev.sent_at)) > ALBUM_WINDOW_MS
                 ) break;
                 group.push(next);
@@ -238,6 +240,7 @@ function galleryImageSrc(msg, conversationId) {
 }
 
 function ImageGallery({ messages, conversationId }) {
+    const { t } = useTranslation();
     const { props: pageProps } = usePage();
     const bubbleTz = pageProps.timezone || 'Asia/Dhaka';
     const [lightbox, setLightbox] = useState(null);
@@ -287,6 +290,7 @@ function ImageGallery({ messages, conversationId }) {
                         <span className="max-w-28 truncate" title={last.user.name}>{last.user.name}</span>
                     )}
                     {last.sent_at ? formatTimeTz(last.sent_at, bubbleTz) : ''}
+                    {last.origin === 'whatsapp_business_app' && <span>{t('inbox.sent_from_business_app', 'Business app')}</span>}
                     {isOut && <span title={last.status} className={statusClass}>{statusGlyph}</span>}
                 </div>
             </div>
@@ -655,6 +659,7 @@ function SoundPrefsMenu() {
 }
 
 function MessageBubble({ msg, conversationId }) {
+    const { t } = useTranslation();
     const { props: pageProps } = usePage();
     const bubbleTz = pageProps.timezone || 'Asia/Dhaka';
     const isOut = msg.direction === 'out';
@@ -715,6 +720,7 @@ function MessageBubble({ msg, conversationId }) {
                 <span className="max-w-28 truncate" title={msg.user.name}>{msg.user.name}</span>
             )}
             {msg.sent_at ? formatTimeTz(msg.sent_at, bubbleTz) : ''}
+            {msg.origin === 'whatsapp_business_app' && <span>{t('inbox.sent_from_business_app', 'Business app')}</span>}
             {isOut && (
                 <span title={msg.status} className={statusClass}>{statusGlyph}</span>
             )}

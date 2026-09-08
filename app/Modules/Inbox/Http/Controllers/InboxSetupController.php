@@ -8,6 +8,7 @@ use App\Modules\Integrations\Services\CredentialResolver;
 use App\Modules\Integrations\Services\MetaPageDiscoveryService;
 use App\Modules\Shared\Models\ChannelAccount;
 use App\Modules\Whatsapp\Models\WhatsappBusinessAccount;
+use App\Modules\Whatsapp\Services\CoexistenceRollout;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -84,6 +85,7 @@ class InboxSetupController extends Controller
             'metaWebhookUrl' => $metaWebhookUrl,
             'metaAppId' => $metaCreds?->appId() ?: null,
             'metaConfigIdWhatsapp' => $metaCreds?->configIdWhatsapp() ?: null,
+            'whatsappCoexistenceEnabled' => CoexistenceRollout::enabledFor((int) $workspaceId),
             'metaConfigIdSocial' => $metaCreds?->configIdSocial() ?: null,
         ]);
     }
