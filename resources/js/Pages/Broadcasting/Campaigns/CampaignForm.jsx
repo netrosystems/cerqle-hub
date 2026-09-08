@@ -281,6 +281,7 @@ export default function CampaignForm({
     contactTokens = [],
     smsDeliveryLimits = { safetyRate: 5, bulkRate: 180, speedOptions: [1, 2, 3, 4, 5, 10, 25, 50, 75, 100, 125, 150, 160, 180] },
     smsProviders = [],
+    csvUploadLimits = { maxFileMb: 20, maxRowsPerFile: 50000 },
 }) {
     const { t } = useTranslation();
     const [step, setStep] = useState(0);
@@ -294,6 +295,13 @@ export default function CampaignForm({
         error: null,
     });
     const [testTo, setTestTo] = useState({ phone_e164: '', email: '', sending: false, result: null });
+    const [csvUpload, setCsvUpload] = useState({
+        uploading: false,
+        error: null,
+        result: campaign?.audience_type === 'csv' && campaign?.audience_ref
+            ? { name: campaign.audience_ref.split('/').pop(), eligible: campaign.estimated_recipients ?? null }
+            : null,
+    });
 
     const userTz = usePage().props.timezone || browserTz() || 'Asia/Dhaka';
     const defaultSmsProvider = smsProviders.find((provider) => provider.default)?.provider ?? smsProviders[0]?.provider ?? '';
@@ -467,11 +475,11 @@ export default function CampaignForm({
             setDraftUuid(res.data.uuid);
             setDraftStatus('saved');
             setTimeout(() => setDraftStatus(null), 3000);
-            return true;
+            return res.data.uuid;
         } catch {
             setDraftStatus('error');
             setTimeout(() => setDraftStatus(null), 4000);
-            return false;
+            return null;
         }
     };
 
@@ -479,6 +487,34 @@ export default function CampaignForm({
         const saved = await saveDraft();
         if (saved) {
             setStep((s) => Math.min(s + 1, STEPS.length - 1));
+        }
+    };
+
+    const uploadAudienceCsv = async (file) => {
+        if (!file) return;
+        setCsvUpload({ uploading: true, error: null, result: null });
+
+        const campaignUuid = draftUuid || await saveDraft();
+        if (!campaignUuid) {
+            setCsvUpload({ uploading: false, error: t('campaign.csv_draft_required'), result: null });
+            return;
+        }
+
+        const formData = new FormData();
+        formData.append('file', file);
+        try {
+            const response = await axios.post(route('client.campaigns.audience-csv', campaignUuid), formData, {
+                headers: { 'Content-Type': 'multipart/form-data' },
+            });
+            setData('audience_ref', response.data.path);
+            setCsvUpload({ uploading: false, error: null, result: response.data });
+        } catch (error) {
+            setData('audience_ref', '');
+            setCsvUpload({
+                uploading: false,
+                error: error?.response?.data?.errors?.file?.[0] ?? error?.response?.data?.message ?? t('campaign.csv_upload_failed'),
+                result: null,
+            });
         }
     };
     const prev = () => setStep((s) => Math.max(s - 1, 0));
@@ -491,6 +527,7 @@ export default function CampaignForm({
             if (data.channel === 'whatsapp' && whatsappPhoneNumbers.length > 1 && !data.whatsapp_phone_number_id) {
                 return false;
             }
+            if (data.audience_type === 'csv') return !!data.audience_ref && !csvUpload.uploading;
             return true;
         }
         if (step === 1) {
@@ -512,7 +549,7 @@ export default function CampaignForm({
             }
         }
         return true;
-    }, [step, data]);
+    }, [step, data, csvUpload.uploading]);
 
     const handleSubmit = (e) => {
         e.preventDefault();
@@ -625,6 +662,9 @@ export default function CampaignForm({
                                 data={data}
                                 setData={setData}
                                 errors={errors}
+                                csvUpload={csvUpload}
+                                csvUploadLimits={csvUploadLimits}
+                                uploadAudienceCsv={uploadAudienceCsv}
                                 whatsappPhoneNumbers={whatsappPhoneNumbers}
                                 smsProviders={smsProviders}
                             />
@@ -954,7 +994,7 @@ function ChannelStep({ data, setData, errors, whatsappPhoneNumbers = [], smsProv
     );
 }
 
-function AudienceStep({ data, setData, segments, tags, preview, errors }) {
+function AudienceStep({ data, setData, segments, tags, preview, errors, csvUpload, csvUploadLimits, uploadAudienceCsv }) {
     const { t } = useTranslation();
     const channelLabel = CHANNEL_META[data.channel]?.label ?? data.channel;
 
@@ -1025,22 +1065,40 @@ function AudienceStep({ data, setData, segments, tags, preview, errors }) {
             )}
 
             {data.audience_type === 'csv' && (
-                <div>
-                    <label className="text-sm font-medium text-neutral-700 dark:text-neutral-300">
-                        {t('campaign.csv_path')}
+                <div className="rounded-lg border border-dashed border-neutral-300 bg-neutral-50 p-4 dark:border-neutral-600 dark:bg-neutral-800/40">
+                    <label className="flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-neutral-300 bg-white px-4 py-3 text-sm font-medium text-neutral-700 transition hover:border-brand-400 hover:text-brand-700 dark:border-neutral-600 dark:bg-neutral-800 dark:text-neutral-200">
+                        {csvUpload.uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                        {csvUpload.uploading ? t('campaign.csv_uploading') : t('campaign.csv_choose_file')}
+                        <input
+                            type="file"
+                            accept=".csv,text/csv,text/plain"
+                            disabled={csvUpload.uploading}
+                            className="sr-only"
+                            onChange={(event) => {
+                                uploadAudienceCsv(event.target.files?.[0]);
+                                event.target.value = '';
+                            }}
+                        />
                     </label>
-                    <input
-                        type="text"
-                        value={data.audience_ref}
-                        onChange={(e) => setData('audience_ref', e.target.value)}
-                        placeholder="campaigns/imports/abc.csv"
-                        className={inputClass}
-                    />
-                    <p className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">
-                        {t('campaign.csv_hint')}
-                        <span className="font-mono"> phone_e164</span> {t('campaign.or')}
-                        <span className="font-mono"> email</span>.
+                    <p className="mt-2 text-xs text-neutral-500 dark:text-neutral-400">
+                        {t('campaign.csv_upload_limits', {
+                            size: csvUploadLimits.maxFileMb,
+                            rows: Number(csvUploadLimits.maxRowsPerFile).toLocaleString(),
+                        })}{' '}
+                        {t('campaign.csv_phone_hint')} <span className="font-mono">phone_e164</span>.
                     </p>
+                    {csvUpload.result && (
+                        <div className="mt-3 flex items-start gap-2 rounded-lg bg-emerald-50 px-3 py-2 text-xs text-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-300">
+                            <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
+                            <span>
+                                <strong>{csvUpload.result.name}</strong> — {Number(csvUpload.result.eligible ?? 0).toLocaleString()} {t('campaign.csv_eligible')}.
+                                {csvUpload.result.skipped > 0 && ` ${Number(csvUpload.result.skipped).toLocaleString()} ${t('campaign.csv_skipped')}.`}
+                                {csvUpload.result.ignored_over_limit > 0 && ` ${Number(csvUpload.result.ignored_over_limit).toLocaleString()} ${t('campaign.csv_ignored_over_limit')}.`}
+                            </span>
+                        </div>
+                    )}
+                    {csvUpload.error && <FieldError message={csvUpload.error} />}
+                    <FieldError message={errors.audience_ref} />
                 </div>
             )}
 
@@ -1054,7 +1112,9 @@ function AudienceStep({ data, setData, segments, tags, preview, errors }) {
                     <p className="mt-2 text-xs text-red-600 dark:text-red-400">{preview.error}</p>
                 ) : data.audience_type === 'csv' ? (
                     <p className="mt-2 text-xs text-neutral-500">
-                        {t('campaign.csv_no_preview')}
+                        {csvUpload.result
+                            ? t('campaign.csv_preview', { count: Number(csvUpload.result.eligible ?? 0).toLocaleString() })
+                            : t('campaign.csv_no_preview')}
                     </p>
                 ) : (
                     <>

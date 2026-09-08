@@ -7,6 +7,7 @@ use App\Modules\Broadcasting\Models\CampaignRecipient;
 use App\Modules\Broadcasting\Services\CampaignAudienceService;
 use App\Modules\Broadcasting\Services\CampaignStepService;
 use App\Modules\Broadcasting\Services\SmsCampaignCapacityService;
+use App\Modules\Shared\Jobs\ImportContactsToListJob;
 use App\Modules\Shared\Services\ContactService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -109,47 +110,61 @@ class PrepareSmsCampaignAudienceJob implements ShouldQueue
     private function readCsvChunk(Campaign $campaign, int $limit): array
     {
         $path = $campaign->audience_ref;
+        $requiredPrefix = 'campaign-imports/'.$campaign->workspace_id.'/';
         if (
             ! $path || str_contains($path, '..') || str_starts_with($path, '/')
-            || str_starts_with($path, '\\') || ! Storage::exists($path)
+            || str_starts_with($path, '\\') || ! str_starts_with($path, $requiredPrefix)
+            || ! Storage::disk('local')->exists($path)
         ) {
             throw new \RuntimeException('Campaign CSV is missing or has an invalid storage path.');
         }
 
-        $handle = fopen(Storage::path($path), 'r');
+        $handle = fopen(Storage::disk('local')->path($path), 'rb');
         if (! $handle) {
             throw new \RuntimeException('Campaign CSV could not be opened.');
         }
 
         $ids = [];
         try {
-            $header = fgetcsv($handle);
+            $normaliser = new ImportContactsToListJob(0);
+            $normaliser->assertPhoneValidationAvailable();
+            $header = fgetcsv($handle, null, ',', '"', '');
             if (! is_array($header)) {
                 return [];
             }
-            $header = array_map(fn ($value) => trim(strtolower((string) $value)), $header);
+            $header = $normaliser->normaliseHeaders($header);
+            if (! in_array('phone_e164', $header, true)) {
+                throw new \RuntimeException('Campaign CSV must include a phone column.');
+            }
 
             if ($campaign->preparation_offset > 0) {
                 fseek($handle, (int) $campaign->preparation_offset);
             }
 
             $service = app(ContactService::class);
-            while (count($ids) < $limit && ($line = fgetcsv($handle)) !== false) {
-                $row = array_combine($header, array_pad($line, count($header), null));
-                if (! is_array($row)) {
+            $rowsRead = 0;
+            $maxRows = (int) config('contact_imports.max_rows_per_file');
+            while (
+                count($ids) < $limit
+                && (int) $campaign->preparation_cursor + $rowsRead < $maxRows
+                && ($line = fgetcsv($handle, null, ',', '"', '')) !== false
+            ) {
+                if ($line === [null] || $line === [] || $line === ['']) {
                     continue;
                 }
+                $rowsRead++;
+                if (count($line) !== count($header)) {
+                    continue;
+                }
+                $row = array_combine($header, $line) ?: [];
                 try {
-                    $contact = $service->upsert($campaign->workspace_id, [
-                        'phone_e164' => $row['phone_e164'] ?? $row['phone'] ?? null,
-                        'email' => $row['email'] ?? null,
-                        'first_name' => $row['first_name'] ?? null,
-                        'last_name' => $row['last_name'] ?? null,
-                        'country' => $row['country'] ?? null,
-                        'language' => $row['language'] ?? null,
-                        'opt_in_sms' => $service->coerceOptIn($row['opt_in_sms'] ?? null),
-                        'source' => 'campaign_csv',
-                    ], false);
+                    $country = strtoupper(trim((string) ($row['country'] ?? ''))) ?: null;
+                    $normalised = $normaliser->normaliseRow($row, $campaign->workspace_id, $country, $service);
+                    if ($normalised === null || ! $normalised['opt_in_sms']) {
+                        continue;
+                    }
+                    $normalised['source'] = 'campaign_csv';
+                    $contact = $service->upsert($campaign->workspace_id, $normalised, false);
                     if ($contact->opt_in_sms && filled($contact->phone_e164)) {
                         $ids[] = $contact->id;
                     }
@@ -161,7 +176,10 @@ class PrepareSmsCampaignAudienceJob implements ShouldQueue
                 }
             }
 
-            $campaign->update(['preparation_offset' => ftell($handle)]);
+            $campaign->update([
+                'preparation_offset' => ftell($handle),
+                'preparation_cursor' => (int) $campaign->preparation_cursor + $rowsRead,
+            ]);
         } finally {
             fclose($handle);
         }

@@ -12,6 +12,7 @@ export default function CampaignWizard({
     contactTokens = [],
     smsDeliveryLimits,
     smsProviders = [],
+    csvUploadLimits,
 }) {
     const { t } = useTranslation();
     return (
@@ -39,6 +40,7 @@ export default function CampaignWizard({
                     contactTokens={contactTokens}
                     smsDeliveryLimits={smsDeliveryLimits}
                     smsProviders={smsProviders}
+                    csvUploadLimits={csvUploadLimits}
                 />
             </div>
         </ClientLayout>
