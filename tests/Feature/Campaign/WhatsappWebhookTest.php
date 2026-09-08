@@ -50,6 +50,7 @@ class WhatsappWebhookTest extends TestCase
                 [
                     'changes' => [
                         [
+                            'field' => 'messages',
                             'value' => array_merge([
                                 'statuses' => [
                                     array_merge([

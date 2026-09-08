@@ -57,7 +57,7 @@ class CloudApiClient
             ->with('businessAccount')
             ->first();
 
-        if (! $phone) {
+        if (! $phone || ! empty($phone->coexistence_meta['disconnected_at'])) {
             Log::warning('CloudApiClient: phone number not linked to workspace', [
                 'workspace_id' => $workspaceId,
                 'phone_number_id' => $phoneNumberId,

@@ -7,6 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Modules\Integrations\Services\CredentialResolver;
 use App\Modules\Whatsapp\Jobs\ProcessInboundMessageJob;
 use App\Modules\Whatsapp\Models\WhatsappBusinessAccount;
+use App\Modules\Whatsapp\Services\CoexistenceWebhookIngress;
 use App\Services\WebhookIdempotencyService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -16,6 +17,7 @@ use Illuminate\Support\Facades\Log;
 class WhatsappWebhookController extends Controller
 {
     use FlushesWebhookResponse;
+
     /**
      * A stable, system-wide verify token derived from app credentials.
      * Used by the global endpoint so all embedded-signup WABAs share one callback URL.
@@ -26,7 +28,8 @@ class WhatsappWebhookController extends Controller
         if (! $meta?->appId() || ! $meta->appSecret()) {
             return null;
         }
-        return hash('sha256', $meta->appId() . $meta->appSecret() . 'wh_global_verify');
+
+        return hash('sha256', $meta->appId().$meta->appSecret().'wh_global_verify');
     }
 
     /** GET /webhooks/whatsapp/global — Meta challenge verification for the global endpoint */
@@ -49,7 +52,7 @@ class WhatsappWebhookController extends Controller
     /** POST /webhooks/whatsapp/global — receives events for all embedded-signup WABAs */
     public function receiveGlobal(Request $request): JsonResponse
     {
-        $meta      = CredentialResolver::system()->meta();
+        $meta = CredentialResolver::system()->meta();
         $appSecret = $meta?->appSecret();
 
         if ($appSecret) {
@@ -61,8 +64,9 @@ class WhatsappWebhookController extends Controller
             Log::warning('whatsapp.webhook.global.unsigned', ['ip' => $request->ip()]);
         }
 
+        app(CoexistenceWebhookIngress::class)->capture($request->input('entry', []));
         $idempotency = app(WebhookIdempotencyService::class);
-        $newEntries  = [];
+        $newEntries = [];
         foreach ($request->input('entry', []) as $entry) {
             $eventKey = $this->entryEventKey($entry);
             if ($eventKey === null || $idempotency->isNewEvent('whatsapp_global', $eventKey)) {
@@ -77,8 +81,8 @@ class WhatsappWebhookController extends Controller
         $payload = array_merge($request->all(), ['entry' => $newEntries]);
 
         Log::info('whatsapp.webhook.global.received', [
-            'entry_count'  => count($newEntries),
-            'waba_ids'     => collect($newEntries)->pluck('id')->all(),
+            'entry_count' => count($newEntries),
+            'waba_ids' => collect($newEntries)->pluck('id')->all(),
             'has_messages' => collect($newEntries)->contains(
                 fn ($e) => collect($e['changes'] ?? [])->contains(
                     fn ($c) => ! empty($c['value']['messages'] ?? [])
@@ -118,10 +122,10 @@ class WhatsappWebhookController extends Controller
 
         if (! $waba) {
             Log::warning('whatsapp.webhook.unknown_token', [
-                'ip'             => $request->ip(),
-                'received_token' => substr($token, 0, 12) . '…',
-                'token_hash'     => hash('sha256', $token),
-                'hint'           => 'Token hash does not match any webhook_verify_token_hash in whatsapp_business_accounts. Run: php artisan tinker --execute="DB::table(\'whatsapp_business_accounts\')->get([\'waba_id\',\'webhook_verify_token_hash\',\'status\'])->each(fn(\$r)=>print_r((array)\$r));"',
+                'ip' => $request->ip(),
+                'received_token' => substr($token, 0, 12).'…',
+                'token_hash' => hash('sha256', $token),
+                'hint' => 'Token hash does not match any webhook_verify_token_hash in whatsapp_business_accounts. Run: php artisan tinker --execute="DB::table(\'whatsapp_business_accounts\')->get([\'waba_id\',\'webhook_verify_token_hash\',\'status\'])->each(fn(\$r)=>print_r((array)\$r));"',
             ]);
             abort(403, 'Invalid verify token');
         }
@@ -143,8 +147,9 @@ class WhatsappWebhookController extends Controller
 
         // Deduplicate at the entry level before dispatching any jobs.
         // insertOrIgnore is atomic — only one concurrent request gets affected=1 per event key.
+        app(CoexistenceWebhookIngress::class)->capture($request->input('entry', []), $waba->waba_id);
         $idempotency = app(WebhookIdempotencyService::class);
-        $newEntries  = [];
+        $newEntries = [];
         foreach ($request->input('entry', []) as $entry) {
             $eventKey = $this->entryEventKey($entry);
             if ($eventKey === null || $idempotency->isNewEvent('whatsapp', $eventKey)) {
@@ -160,8 +165,8 @@ class WhatsappWebhookController extends Controller
 
         Log::info('whatsapp.webhook.received', [
             'workspace_id' => $waba->workspace_id,
-            'waba_id'      => $waba->waba_id,
-            'entry_count'  => count($newEntries),
+            'waba_id' => $waba->waba_id,
+            'entry_count' => count($newEntries),
             'has_messages' => collect($newEntries)->contains(fn ($e) => ! empty(data_get($e, 'changes.0.value.messages'))),
             'has_statuses' => collect($newEntries)->contains(fn ($e) => ! empty(data_get($e, 'changes.0.value.statuses'))),
         ]);
@@ -230,17 +235,17 @@ class WhatsappWebhookController extends Controller
      */
     private function verifyHmacSignature(Request $request, string $appSecret): void
     {
-        $expected = 'sha256=' . hash_hmac('sha256', $request->getContent(), $appSecret);
+        $expected = 'sha256='.hash_hmac('sha256', $request->getContent(), $appSecret);
         $received = $request->header('X-Hub-Signature-256', '');
 
         if (! hash_equals($expected, $received)) {
             Log::warning('whatsapp.webhook.signature_mismatch', [
-                'ip'       => $request->ip(),
-                'path'     => $request->path(),
-                'object'   => $request->input('object'),
+                'ip' => $request->ip(),
+                'path' => $request->path(),
+                'object' => $request->input('object'),
                 'body_len' => strlen($request->getContent()),
-                'expected' => substr($expected, 0, 20) . '…',
-                'received' => substr($received, 0, 20) . '…',
+                'expected' => substr($expected, 0, 20).'…',
+                'received' => substr($received, 0, 20).'…',
             ]);
             abort(401, 'Invalid signature');
         }

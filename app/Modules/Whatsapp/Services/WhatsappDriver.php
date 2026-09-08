@@ -25,6 +25,9 @@ class WhatsappDriver implements ChannelDriverInterface
 
     public function send(Message $message): string
     {
+        if (in_array($message->origin, ['whatsapp_history', 'whatsapp_business_app'], true)) {
+            throw new \DomainException('Imported or mobile-app messages cannot be resent through the API.');
+        }
         $conversation = $message->conversation;
         $contact = $conversation->contact;
         $phone = $contact->phone_e164;
@@ -35,13 +38,26 @@ class WhatsappDriver implements ChannelDriverInterface
         $client = $phoneNumberId
             ? CloudApiClient::forPhoneNumber($phoneNumberId, $conversation->workspace_id)
             : null;
-        $client ??= CloudApiClient::forWorkspace($conversation->workspace_id);
+        if (! $phoneNumberId) {
+            $client = CloudApiClient::forWorkspace($conversation->workspace_id);
+        }
 
         if (! $client) {
             throw new \RuntimeException('No active WhatsApp account for workspace.');
         }
 
         $payload = $message->payload ?? [];
+
+        // Generation/queueing may have started before an agent took over. Do
+        // not rely on the relationship cached when the message was created.
+        // This cannot retract a provider request that was already in flight.
+        if ($message->sent_by === 'bot') {
+            $current = Conversation::whereKey($message->conversation_id)
+                ->where('workspace_id', $conversation->workspace_id)->first();
+            if (! $current || $current->assigned_to === 'human') {
+                throw new \DomainException('AI reply stopped because this conversation was handed to a human.');
+            }
+        }
 
         $resp = match ($message->type) {
             'template' => $client->sendTemplate($phone, $payload['template']['name'] ?? '', $payload['template']['language'] ?? 'en', $payload['template']['components'] ?? []),
@@ -92,6 +108,13 @@ class WhatsappDriver implements ChannelDriverInterface
                 if (in_array($field, ['phone_number_quality_update', 'phone_number_name_update', 'account_update'], true)) {
                     $this->processPhoneNumberUpdate($value);
 
+                    continue;
+                }
+
+                // History media payloads also contain `messages`. They must not
+                // enter live ingestion (AI, consent, notifications, service window).
+                // Coexistence fields need their own importer before activation.
+                if ($field !== 'messages') {
                     continue;
                 }
 

@@ -23,7 +23,14 @@ class WhatsappPhoneNumber extends Model
         'name_status',
         'requested_verified_name',
         'account_mode',
+        'connection_mode',
+        'coexistence_meta',
     ];
+
+    protected function casts(): array
+    {
+        return ['coexistence_meta' => 'array'];
+    }
 
     /**
      * Hide the connected business number / verified name in demo mode.

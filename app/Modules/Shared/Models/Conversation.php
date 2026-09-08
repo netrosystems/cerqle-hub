@@ -133,9 +133,8 @@ class Conversation extends Model
      * open this window until the contact sends a message (including tapping a
      * template button).
      *
-     * Inbounds are scoped by workspace + contact across all WhatsApp threads so
-     * a campaign-mirrored conversation still reflects replies if webhooks
-     * attached to a different row (e.g. mismatched channel_account_id).
+     * Inbounds are scoped by workspace, contact, and connected phone/channel.
+     * Imported pre-onboarding history must not open the service window.
      */
     public function isWhatsappWindowOpen(): bool
     {
@@ -146,13 +145,16 @@ class Conversation extends Model
         $latestInbound = Message::query()
             ->where('direction', 'in')
             ->where('channel', 'whatsapp')
+            ->where('origin', '!=', 'whatsapp_history')
             ->whereHas('conversation', function ($q) {
                 $q->where('workspace_id', $this->workspace_id)
-                    ->where('contact_id', $this->contact_id);
+                    ->where('contact_id', $this->contact_id)
+                    ->where('channel_account_id', $this->channel_account_id);
             })
             ->latest('sent_at')
             ->value('sent_at');
 
-        return (bool) $latestInbound && now()->diffInHours($latestInbound) < 24;
+        return (bool) $latestInbound && $latestInbound <= now()
+            && $latestInbound > now()->subHours(24);
     }
 }

@@ -11,8 +11,10 @@ use App\Modules\Shared\Models\ChannelAccount;
 use App\Modules\Social\Jobs\DispatchScheduledPostsJob;
 use App\Modules\Social\Jobs\PurgeTemporarySocialMediaJob;
 use App\Modules\Social\Jobs\RefreshSocialTokensJob;
+use App\Modules\Whatsapp\Jobs\ProcessCoexistenceEchoJob;
 use App\Modules\Whatsapp\Jobs\TemplateSyncJob;
 use App\Modules\Whatsapp\Models\WhatsappBusinessAccount;
+use App\Modules\Whatsapp\Models\WhatsappEchoReceipt;
 use App\Services\WebhookIdempotencyService;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
@@ -62,6 +64,19 @@ Schedule::call(function () {
 })->everyMinute()->name('sync-messenger-inboxes')->withoutOverlapping();
 
 // Sync WhatsApp templates from Meta (once per day)
+Schedule::call(function () {
+    WhatsappEchoReceipt::where('status', 'pending')
+        ->where('created_at', '>=', now()->subDay())
+        ->where('updated_at', '<', now()->subMinutes(5))
+        ->orderBy('id')->limit(100)->get(['id'])->each(function ($receipt) {
+            ProcessCoexistenceEchoJob::dispatch($receipt->id);
+        });
+    // Expire stalled payloads after 24 hours; preserve only receipt metadata for diagnostics.
+    WhatsappEchoReceipt::where('status', 'pending')
+        ->where('created_at', '<', now()->subDay())->update(['status' => 'expired', 'payload' => null]);
+    WhatsappEchoReceipt::where('created_at', '<', now()->subDays(30))->delete();
+})->everyFiveMinutes()->name('recover-whatsapp-echoes')->withoutOverlapping();
+
 Schedule::call(function () {
     WhatsappBusinessAccount::all()->each(function ($waba) {
         TemplateSyncJob::dispatch($waba->id)->onQueue('whatsapp');

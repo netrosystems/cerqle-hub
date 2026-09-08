@@ -3,16 +3,20 @@
 namespace App\Modules\Whatsapp\Http\Controllers;
 
 use App\Http\Controllers\Controller;
+use App\Models\Workspace;
 use App\Modules\Integrations\Services\CredentialResolver;
 use App\Modules\Shared\Models\ChannelAccount;
 use App\Modules\Whatsapp\Models\WhatsappBusinessAccount;
 use App\Modules\Whatsapp\Models\WhatsappPhoneNumber;
 use App\Modules\Whatsapp\Services\CloudApiClient;
+use App\Services\ChannelPlanLimitService;
 use Illuminate\Http\Client\ConnectionException as HttpConnectionException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Validation\ValidationException;
 
 class WhatsappSetupController extends Controller
 {
@@ -23,7 +27,7 @@ class WhatsappSetupController extends Controller
 
         try {
             $n = $this->importPhoneNumbersFromMeta($waba);
-        } catch (\Illuminate\Validation\ValidationException $e) {
+        } catch (ValidationException $e) {
             throw $e;
         } catch (HttpConnectionException $e) {
             Log::warning('WhatsApp setup: phone sync failed (TLS/network)', [
@@ -95,21 +99,21 @@ class WhatsappSetupController extends Controller
         $tier = $details['messaging_limit_tier'] ?? ($throughput['level'] ?? null);
 
         $patch = array_filter([
-            'display_phone'            => $details['display_phone_number'] ?? null,
-            'verified_name'            => $details['verified_name'] ?? null,
-            'quality_rating'           => $details['quality_rating'] ?? null,
-            'messaging_limit_tier'     => is_string($tier) ? $tier : null,
+            'display_phone' => $details['display_phone_number'] ?? null,
+            'verified_name' => $details['verified_name'] ?? null,
+            'quality_rating' => $details['quality_rating'] ?? null,
+            'messaging_limit_tier' => is_string($tier) ? $tier : null,
             'code_verification_status' => $details['code_verification_status'] ?? null,
-            'name_status'              => $details['name_status'] ?? null,
-            'requested_verified_name'  => $details['requested_verified_name'] ?? null,
-            'account_mode'             => $details['account_mode'] ?? null,
+            'name_status' => $details['name_status'] ?? null,
+            'requested_verified_name' => $details['requested_verified_name'] ?? null,
+            'account_mode' => $details['account_mode'] ?? null,
         ], fn ($v) => $v !== null);
 
         WhatsappPhoneNumber::where('phone_number_id', $phoneNumberId)->update($patch);
 
         return response()->json([
             'success' => true,
-            'data'    => array_merge($details, ['phone_number_id' => $phoneNumberId]),
+            'data' => array_merge($details, ['phone_number_id' => $phoneNumberId]),
         ]);
     }
 
@@ -134,19 +138,20 @@ class WhatsappSetupController extends Controller
             $metaError = $result['response']['error'] ?? null;
             $errMsg = $metaError['error_user_msg']
                 ?? $metaError['message']
-                ?? ('Meta rejected the name change. Code: ' . ($metaError['code'] ?? 'unknown'));
+                ?? ('Meta rejected the name change. Code: '.($metaError['code'] ?? 'unknown'));
             Log::warning('WhatsApp display name change failed', [
                 'phone_number_id' => $phoneNumberId,
-                'new_name'        => $validated['name'],
-                'http_status'     => $result['status'],
-                'meta_response'   => $result['response'],
+                'new_name' => $validated['name'],
+                'http_status' => $result['status'],
+                'meta_response' => $result['response'],
             ]);
+
             return response()->json(['error' => $errMsg], 422);
         }
 
         // Update local DB to reflect pending review
         WhatsappPhoneNumber::where('phone_number_id', $phoneNumberId)->update([
-            'name_status'             => 'PENDING_REVIEW',
+            'name_status' => 'PENDING_REVIEW',
             'requested_verified_name' => $validated['name'],
         ]);
 
@@ -173,6 +178,11 @@ class WhatsappSetupController extends Controller
 
     private function importPhoneNumbersFromMeta(WhatsappBusinessAccount $waba): int
     {
+        if ($waba->phoneNumbers()->where('connection_mode', 'coexistence')->exists()) {
+            throw ValidationException::withMessages([
+                'sync' => 'Use Keep WhatsApp Business app to verify or reconnect this account. Standard phone sync is disabled to preserve its existing numbers.',
+            ]);
+        }
         $token = $this->metaAccessToken($waba);
 
         if ($token === '') {
@@ -226,39 +236,39 @@ class WhatsappSetupController extends Controller
         // Filter nulls so a partial Meta response never wipes previously-synced
         // descriptive fields. The waba link is always set.
         $details = array_filter([
-            'display_phone'            => $metaRow['display_phone_number'] ?? null,
-            'verified_name'            => $metaRow['verified_name'] ?? null,
-            'quality_rating'           => $metaRow['quality_rating'] ?? null,
-            'messaging_limit_tier'     => is_string($tier) ? $tier : null,
+            'display_phone' => $metaRow['display_phone_number'] ?? null,
+            'verified_name' => $metaRow['verified_name'] ?? null,
+            'quality_rating' => $metaRow['quality_rating'] ?? null,
+            'messaging_limit_tier' => is_string($tier) ? $tier : null,
             'code_verification_status' => $metaRow['code_verification_status'] ?? null,
         ], fn ($v) => $v !== null && $v !== '');
 
-        $workspace = \App\Models\Workspace::findOrFail($waba->workspace_id);
-        \Illuminate\Support\Facades\DB::transaction(function () use ($workspace, $waba, $phoneNumberId, $details, $metaRow) {
-        app(\App\Services\ChannelPlanLimitService::class)->account($workspace, true);
-        WhatsappPhoneNumber::updateOrCreate(
-            ['phone_number_id' => $phoneNumberId],
-            array_merge(['waba_id_fk' => $waba->id], $details),
-        );
+        $workspace = Workspace::findOrFail($waba->workspace_id);
+        DB::transaction(function () use ($workspace, $waba, $phoneNumberId, $details, $metaRow) {
+            app(ChannelPlanLimitService::class)->account($workspace, true);
+            WhatsappPhoneNumber::updateOrCreate(
+                ['phone_number_id' => $phoneNumberId],
+                array_merge(['waba_id_fk' => $waba->id], $details),
+            );
 
-        $account = ChannelAccount::firstOrNew([
-            'workspace_id'    => $waba->workspace_id,
-            'phone_number_id' => $phoneNumberId,
-        ]);
+            $account = ChannelAccount::firstOrNew([
+                'workspace_id' => $waba->workspace_id,
+                'phone_number_id' => $phoneNumberId,
+            ]);
 
-        $account->channel             = 'whatsapp';
-        $account->provider            = 'meta';
-        $account->business_account_id = $waba->waba_id;
-        $account->status              = 'active';
+            $account->channel = 'whatsapp';
+            $account->provider = 'meta';
+            $account->business_account_id = $waba->waba_id;
+            $account->status = 'active';
 
-        $label = $metaRow['verified_name'] ?? $metaRow['display_phone_number'] ?? null;
-        if ($label !== null && $label !== '') {
-            $account->display_name = mb_substr((string) $label, 0, 128);
-        } elseif (! $account->exists) {
-            $account->display_name = 'WhatsApp';
-        }
+            $label = $metaRow['verified_name'] ?? $metaRow['display_phone_number'] ?? null;
+            if ($label !== null && $label !== '') {
+                $account->display_name = mb_substr((string) $label, 0, 128);
+            } elseif (! $account->exists) {
+                $account->display_name = 'WhatsApp';
+            }
 
-        $account->save();
+            $account->save();
         });
     }
 

@@ -209,6 +209,42 @@ YouTube OAuth requests `https://www.googleapis.com/auth/youtube.force-ssl`, the 
 
 ## 5. Integrations & External Service Contracts
 
+### WhatsApp coexistence preparation (2026-09-09; not enabled)
+
+The signup session listener captures Meta events for the whole OAuth interaction;
+its 15-second grace period starts only after the code callback. Explicit CANCEL,
+ERROR, and mismatched connection-mode events fail closed instead of invoking
+standard registration. Only a standard-flow missing-event timeout retains the
+legacy server discovery fallback. The session utility understands the documented
+`FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING` event. The separate coexistence option is
+exposed only when rollout is enabled for the active workspace.
+
+`WhatsappDriver` sends only the `messages` field to live message/status ingestion.
+History media can also contain a `messages` array: it must never enter that path
+and trigger consent changes, AI, or live notifications. History and contact sync
+are intentionally not imported in the pilot. Mobile-app echoes have a separate
+HMAC-gated durable ingress, encrypted receipts, and idempotent WhatsApp queue job.
+
+`WhatsappCoexistenceController` provides separate begin/store routes. It
+binds a single-use attempt to the actor, workspace, expected E.164 number, and
+expiry; verifies the token app/scopes and exact phone membership; and never calls
+registration/deregistration or prunes other phones. New onboarding/import config
+flags default off, with an optional workspace allowlist. `CoexistenceMessageStore`
+is connected only to the mobile-app echo ingress (not historical import):
+its persistence tests cover history consent, phone/WABA/workspace scoping,
+duplicates, media enrichment, and mobile-app human takeover. Echo receipts are
+stored before acknowledgement and recovered by the scheduler. The send boundary rejects imported
+and mobile-app-origin messages and rechecks current human assignment before bot
+sends. It cannot retract a provider request already in flight.
+
+The additive migration introduces phone `connection_mode`/`coexistence_meta` and
+message `origin`. The WhatsApp service-window query excludes `whatsapp_history`,
+is scoped to the conversation's channel account, and rejects future timestamps.
+Run this migration before deploying the query change; it has not been applied to
+production by this implementation work.
+
+See `WHATSAPP_COEXISTENCE.md` for verified provider contracts and rollout gates.
+
 Cerqle Hub integrates with multiple third-party providers with resilient fallback mechanisms:
 
 Instagram DM inbound/echo attachment types are derived from `message.attachments`, while the original webhook payload remains intact. The web inbox reads every nested attachment, including legacy rows saved as text: image/video/audio previews use HTTPS provider URLs; shares and unknown attachment types use safe links. Expired/missing URLs show an unavailable state. No server-side fetch of arbitrary attachment URLs is introduced, and Instagram attachments do not use the WhatsApp media proxy or album grouping. Provider-hosted URLs are not guaranteed to remain available indefinitely.
