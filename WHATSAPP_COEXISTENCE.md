@@ -5,8 +5,12 @@ or deployed. The current checkpoint below supersedes the earlier preparation not
 
 ## Current pilot checkpoint
 
-- Separate begin/store routes and a two-mode connection drawer are wired. An exact
-  country-coded number and limitations acknowledgement are required before Meta.
+- Separate begin/store routes and a compact two-mode connection drawer are wired.
+  Number entry occurs only in Meta. Selecting coexistence prepares a bound session;
+  the explicit Continue click opens Meta. The server checks any returned phone ID
+  against Graph's WABA phone list and coexistence mode; without an ID, multiple
+  eligible phones fail closed instead of selecting the first. Limitations remain
+  expandable and history/contact import stays off.
 - `WHATSAPP_COEXISTENCE_ENABLED` defaults false. Set the comma-separated
   `WHATSAPP_COEXISTENCE_WORKSPACES` allowlist to the pilot workspace before enabling;
   an empty list allows all workspaces and must not be used for this pilot.

@@ -552,8 +552,6 @@ export function ConnectWhatsAppForm({ onClose, metaConfigIdWhatsapp, metaAppId }
     const { t } = useTranslation();
     const { props } = usePage();
     const [mode, setMode] = useState('cloud_api');
-    const [phone, setPhone] = useState('');
-    const [acknowledged, setAcknowledged] = useState(false);
     const [attemptId, setAttemptId] = useState(null);
     const [waApiError, setWaApiError] = useState(null);
     const [waSubmitting, setWaSubmitting] = useState(false);
@@ -566,7 +564,7 @@ export function ConnectWhatsAppForm({ onClose, metaConfigIdWhatsapp, metaAppId }
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Accept': 'application/json',
                     'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content },
-                body: JSON.stringify({ phone: phone.replace(/[\s()-]/g, ''), acknowledge_limitations: acknowledged }),
+                body: JSON.stringify({}),
             });
             const data = await response.json();
             if (!response.ok) throw new Error(data.message ?? t('inbox.connection_failed'));
@@ -588,7 +586,7 @@ export function ConnectWhatsAppForm({ onClose, metaConfigIdWhatsapp, metaAppId }
                     'Accept': 'application/json',
                 },
                 body: JSON.stringify(mode === 'coexistence'
-                    ? { code, waba_id: wabaId, attempt_id: attemptId }
+                    ? { code, waba_id: wabaId, phone_number_id: phoneNumberId, attempt_id: attemptId }
                     : { code, waba_id: wabaId, phone_number_id: phoneNumberId }),
             });
             const json = await res.json();
@@ -613,7 +611,7 @@ export function ConnectWhatsAppForm({ onClose, metaConfigIdWhatsapp, metaAppId }
             {metaConfigIdWhatsapp ? (
                 <>
                     {props.whatsappCoexistenceEnabled && (
-                        <fieldset disabled={waSubmitting || !!attemptId} className="space-y-2 text-xs">
+                        <fieldset disabled={waSubmitting} className="space-y-2 text-xs">
                             <legend className="mb-2 font-semibold">{t('inbox.choose_connection', 'Choose how to connect')}</legend>
                             {[
                                 ['coexistence', t('inbox.keep_business_app', 'Keep WhatsApp Business app')],
@@ -621,35 +619,29 @@ export function ConnectWhatsAppForm({ onClose, metaConfigIdWhatsapp, metaAppId }
                             ].map(([value, label]) => (
                                 <label key={value} className={`flex gap-2 rounded-lg border p-3 ${mode === value ? 'border-brand-500 bg-brand-50 dark:bg-brand-950' : 'border-neutral-200 dark:border-neutral-700'}`}>
                                     <input type="radio" name="wa-connection-mode" value={value} checked={mode === value}
-                                        onChange={() => { setMode(value); setAttemptId(null); setWaApiError(null); }} />
+                                        onChange={() => {
+                                            setMode(value); setAttemptId(null); setWaApiError(null);
+                                            if (value === 'coexistence') prepareCoexistence();
+                                        }} />
                                     <span>{label}</span>
                                 </label>
                             ))}
                             {mode === 'coexistence' && <>
-                                <label className="block space-y-1">
-                                    <span>{t('inbox.business_app_number', 'Business app number, including country code')}</span>
-                                    <input type="tel" autoComplete="tel" value={phone} onChange={(e) => setPhone(e.target.value)}
-                                        placeholder="+1 555 000 0000" className="w-full rounded-lg border-neutral-300 dark:border-neutral-600 dark:bg-neutral-900 text-sm" />
-                                </label>
-                                <p className="text-neutral-500">{t('inbox.coexistence_no_history', 'New messages only. Existing chats and contacts will not be imported.')}</p>
+                                <p className="text-neutral-500">{t('inbox.coexistence_brief', 'Keep the mobile app. New messages only.')}</p>
                                 <details className="text-neutral-500">
                                     <summary className="cursor-pointer">{t('inbox.business_app_changes', 'Changes to your Business app')}</summary>
                                     <p className="mt-2">{t('inbox.coexistence_limitations', 'Linked devices are disconnected during setup. Windows and WearOS companions are unsupported. Broadcast lists become read-only; disappearing messages, view-once and live location are disabled in individual chats. Group chats are not synced.')}</p>
                                 </details>
-                                <label className="flex gap-2 items-start">
-                                    <input type="checkbox" checked={acknowledged} onChange={(e) => setAcknowledged(e.target.checked)} />
-                                    <span>{t('inbox.coexistence_acknowledge', 'I understand these changes and can approve the connection in my Business app.')}</span>
-                                </label>
                             </>}
                         </fieldset>
                     )}
-                    <p className="text-xs text-neutral-500 dark:text-neutral-400 leading-relaxed">
-                        {t('inbox.authorize_whatsapp_help')}
-                    </p>
+                    {mode === 'cloud_api' && <p className="text-xs text-neutral-500 dark:text-neutral-400">
+                        {t('inbox.cloud_api_brief', 'For a new or dedicated API number.')}
+                    </p>}
                     {mode === 'coexistence' && !attemptId ? (
-                        <button type="button" onClick={prepareCoexistence} disabled={waSubmitting || !acknowledged || !/^\+[1-9][0-9]{5,14}$/.test(phone.replace(/[\s()-]/g, ''))}
+                        <button type="button" onClick={prepareCoexistence} disabled={waSubmitting}
                             className="w-full rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50">
-                            {t('inbox.prepare_connection', 'Prepare connection')}
+                            {waSubmitting ? t('inbox.connecting_whatsapp') : t('common.retry', 'Retry')}
                         </button>
                     ) : <EmbeddedSignupButton
                         key={`${mode}-${attemptId ?? 'standard'}`}
@@ -662,9 +654,6 @@ export function ConnectWhatsAppForm({ onClose, metaConfigIdWhatsapp, metaAppId }
                         onCode={handleWaEmbeddedCode}
                         disabled={waSubmitting}
                     />}
-                    {attemptId && <button type="button" disabled={waSubmitting} onClick={() => setAttemptId(null)} className="text-xs text-brand-600 underline">
-                        {t('inbox.change_number', 'Change number / restart')}
-                    </button>}
                     {waSubmitting && <p role="status" className="text-xs text-neutral-400">{t('inbox.connecting_whatsapp')}</p>}
                     {waApiError && <p role="alert" className="text-xs text-red-500">{waApiError}</p>}
                 </>

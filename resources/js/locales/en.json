@@ -2698,6 +2698,8 @@
         "cloud_api_only": "Cloud API only",
         "business_app_number": "Business app number, including country code",
         "coexistence_no_history": "New messages only. Existing chats and contacts will not be imported.",
+        "coexistence_brief": "Keep the mobile app. New messages only.",
+        "cloud_api_brief": "For a new or dedicated API number.",
         "business_app_changes": "Changes to your Business app",
         "coexistence_limitations": "Linked devices are disconnected during setup. Windows and WearOS companions are unsupported. Broadcast lists become read-only; disappearing messages, view-once and live location are disabled in individual chats. Group chats are not synced.",
         "coexistence_acknowledge": "I understand these changes and can approve the connection in my Business app.",

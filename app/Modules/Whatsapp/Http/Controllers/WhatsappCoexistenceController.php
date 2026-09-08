@@ -24,16 +24,12 @@ class WhatsappCoexistenceController extends Controller
     public function begin(Request $request): JsonResponse
     {
         abort_unless(CoexistenceRollout::enabledFor((int) ($request->user()->current_workspace_id ?? $request->user()->workspace_id)), 404);
-        $data = $request->validate([
-            'phone' => ['required', 'regex:/^\+[1-9][0-9]{5,14}$/'],
-            'acknowledge_limitations' => ['accepted'],
-        ]);
         $workspaceId = (int) ($request->user()->current_workspace_id ?? $request->user()->workspace_id);
         $workspace = Workspace::findOrFail($workspaceId);
-        $existingPhone = WhatsappPhoneNumber::whereHas('businessAccount', fn ($query) => $query->where('workspace_id', $workspaceId))
-            ->get()->first(fn ($phone) => '+'.preg_replace('/\D/', '', (string) $phone->getRawOriginal('display_phone')) === $data['phone']);
-        $existingChannel = $existingPhone && ChannelAccount::where('workspace_id', $workspaceId)
-            ->where('channel', 'whatsapp')->where('phone_number_id', $existingPhone->phone_number_id)->exists();
+        // Identity is selected in Meta. Allow reauthorization at capacity; model
+        // enforcement still checks new identities under the billing lock at save.
+        $existingChannel = ChannelAccount::where('workspace_id', $workspaceId)
+            ->where('channel', 'whatsapp')->exists();
         if (! $existingChannel) {
             $limits = app(ChannelPlanLimitService::class);
             $limits->ensureCapacity($limits->usage($workspace, 'messaging_channels'));
@@ -42,7 +38,7 @@ class WhatsappCoexistenceController extends Controller
         $request->session()->put('whatsapp.coexistence_attempt', [
             'id' => $id, 'actor' => $request->user()->id,
             'workspace' => $request->user()->current_workspace_id ?? $request->user()->workspace_id,
-            'phone' => $data['phone'], 'expires_at' => now()->addMinutes(30)->timestamp,
+            'expires_at' => now()->addMinutes(30)->timestamp,
         ]);
 
         return response()->json(['attempt_id' => $id]);
@@ -55,6 +51,7 @@ class WhatsappCoexistenceController extends Controller
             'attempt_id' => ['required', 'uuid'],
             'code' => ['required', 'string', 'max:2048'],
             'waba_id' => ['required', 'regex:/^[0-9]{1,64}$/'],
+            'phone_number_id' => ['nullable', 'regex:/^[0-9]{1,64}$/'],
         ]);
         $workspaceId = (int) ($request->user()->current_workspace_id ?? $request->user()->workspace_id);
         $attempt = $request->session()->get('whatsapp.coexistence_attempt');
@@ -101,7 +98,9 @@ class WhatsappCoexistenceController extends Controller
                 $response = Http::withToken($token)->timeout(30)->get($base.'/'.$wabaId.'/phone_numbers', $params);
                 abort_unless($response->successful(), 422, 'Could not verify WhatsApp phone ownership.');
                 foreach ($response->json('data', []) as $row) {
-                    if ('+'.preg_replace('/\D/', '', (string) ($row['display_phone_number'] ?? '')) === $attempt['phone']) {
+                    if (($row['is_on_biz_app'] ?? false) === true
+                        && ($row['platform_type'] ?? '') === 'CLOUD_API'
+                        && (empty($data['phone_number_id']) || (string) ($row['id'] ?? '') === $data['phone_number_id'])) {
                         $matches[] = $row;
                     }
                 }
@@ -112,6 +111,8 @@ class WhatsappCoexistenceController extends Controller
                     $seen[$after] = true;
                 }
             } while ($after !== null);
+            abort_if(count($matches) > 1, 422,
+                'Meta returned multiple Business app numbers without a unique selection. Restart setup and select a single number.');
             abort_unless(count($matches) === 1 && ($matches[0]['is_on_biz_app'] ?? false) === true
                 && ($matches[0]['platform_type'] ?? '') === 'CLOUD_API',
                 422, 'Meta has not confirmed coexistence for the selected Business app number. Do not delete or migrate it.');

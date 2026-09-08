@@ -24,29 +24,26 @@ it('keeps the legacy flow when coexistence rollout is disabled', () => {
     expect(screen.getByRole('button', { name: 'inbox.continue_meta_whatsapp' })).toBeEnabled();
 });
 
-it('requires an exact number and acknowledgement before preparing coexistence', async () => {
+it('prepares coexistence on mode selection without duplicate number entry', async () => {
     fetch.mockResolvedValue({ ok: true, json: async () => ({ attempt_id: 'demo-attempt' }) });
     render(<ConnectWhatsAppForm onClose={vi.fn()} metaConfigIdWhatsapp="config" metaAppId="app" />);
     fireEvent.click(screen.getByLabelText('Keep WhatsApp Business app'));
-    expect(screen.getByRole('button', { name: 'Prepare connection' })).toBeDisabled();
-    fireEvent.change(screen.getByRole('textbox'), { target: { value: '+1 555 000 0000' } });
-    fireEvent.click(screen.getByRole('checkbox'));
-    fireEvent.click(screen.getByRole('button', { name: 'Prepare connection' }));
+    expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
+    expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
     await waitFor(() => expect(screen.getByRole('button', { name: 'inbox.continue_meta_whatsapp' })).toBeEnabled());
     expect(fetch).toHaveBeenCalledWith('/client.whatsapp.setup.coexistence.begin', expect.objectContaining({
-        body: JSON.stringify({ phone: '+15550000000', acknowledge_limitations: true }),
+        body: JSON.stringify({}),
     }));
-    expect(screen.getByRole('textbox')).toBeDisabled();
-    expect(screen.getByText('New messages only. Existing chats and contacts will not be imported.')).toBeInTheDocument();
+    expect(screen.getByText('Keep the mobile app. New messages only.')).toBeInTheDocument();
 });
 
 it('does not open authorization when the server rejects the attempt', async () => {
     fetch.mockResolvedValue({ ok: false, json: async () => ({ message: 'Setup unavailable' }) });
     render(<ConnectWhatsAppForm onClose={vi.fn()} metaConfigIdWhatsapp="config" metaAppId="app" />);
     fireEvent.click(screen.getByLabelText('Keep WhatsApp Business app'));
-    fireEvent.change(screen.getByRole('textbox'), { target: { value: '+15550000000' } });
-    fireEvent.click(screen.getByRole('checkbox'));
-    fireEvent.click(screen.getByRole('button', { name: 'Prepare connection' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('Setup unavailable');
     expect(screen.queryByRole('button', { name: 'inbox.continue_meta_whatsapp' })).not.toBeInTheDocument();
+    fetch.mockResolvedValue({ ok: true, json: async () => ({ attempt_id: 'retry-attempt' }) });
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'inbox.continue_meta_whatsapp' })).toBeEnabled());
 });

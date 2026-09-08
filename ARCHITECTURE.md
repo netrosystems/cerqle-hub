@@ -226,8 +226,12 @@ are intentionally not imported in the pilot. Mobile-app echoes have a separate
 HMAC-gated durable ingress, encrypted receipts, and idempotent WhatsApp queue job.
 
 `WhatsappCoexistenceController` provides separate begin/store routes. It
-binds a single-use attempt to the actor, workspace, expected E.164 number, and
-expiry; verifies the token app/scopes and exact phone membership; and never calls
+binds a single-use attempt to the actor, workspace and expiry; number entry occurs
+only in Meta. It verifies token app/scopes and phone membership/mode through Graph.
+An optional returned phone ID must match that verified list; without an ID, exactly
+one eligible coexistence phone is required. Ambiguous discovery fails closed.
+Reauthorization can begin at capacity; new identities still undergo model quota
+enforcement inside the billing-account lock. The controller never calls
 registration/deregistration or prunes other phones. New onboarding/import config
 flags default off, with an optional workspace allowlist. `CoexistenceMessageStore`
 is connected only to the mobile-app echo ingress (not historical import):
