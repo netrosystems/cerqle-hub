@@ -153,7 +153,7 @@ onboarding remains the only mode shown while rollout is disabled.
 
 #### Capabilities
 - **Pluggable SMS Gateways**: Pre-integrated drivers for Twilio, MessageBird, SMSBD, REVE SMS, BulkSMS BD, ProSMS (Alaris), and Amazon SNS.
-- **Segmented Campaigns**: Dispatch targeted SMS broadcasts to dynamic contact segments or CSV uploads.
+- **Segmented Campaigns**: Dispatch targeted SMS broadcasts to dynamic contact segments or real browser CSV uploads. Campaign CSVs use the same configured file-size and per-file row ceilings as Contact List imports, are validated before selection, and are stored in a workspace-scoped campaign path.
 - **Rate Limiting & Queue Batching**: Throttled chunk dispatching on the `broadcast` queue to comply with carrier rate limits.
 - **Delivery Callbacks**: Real-time SMS status tracking (Queued, Sent, Delivered, Failed) with cost metering.
 

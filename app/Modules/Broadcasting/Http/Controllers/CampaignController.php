@@ -10,6 +10,7 @@ use App\Modules\Broadcasting\Models\CampaignRecipient;
 use App\Modules\Broadcasting\Models\SmsProviderConfig;
 use App\Modules\Broadcasting\Models\UsageMeter;
 use App\Modules\Broadcasting\Models\WorkspaceSmtpConfig;
+use App\Modules\Broadcasting\Services\CampaignCsvService;
 use App\Modules\Broadcasting\Services\CampaignPersonalizer;
 use App\Modules\Broadcasting\Services\CampaignStepService;
 use App\Modules\Broadcasting\Services\Sms\SmsDriverManager;
@@ -26,6 +27,8 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -123,6 +126,12 @@ class CampaignController extends Controller
             'schedule_at' => $validated['schedule_at'] ?? null,
             'timezone' => $validated['timezone'] ?? null,
         ], fn ($v) => $v !== null);
+        if (array_key_exists('audience_type', $validated)) {
+            $fields['audience_ref'] = $validated['audience_ref'] ?? null;
+            if ($validated['audience_type'] === 'csv' && filled($fields['audience_ref'])) {
+                $this->assertCampaignCsvReference($workspaceId, $fields['audience_ref']);
+            }
+        }
 
         if (! empty($validated['uuid'])) {
             $existing = Campaign::where('workspace_id', $workspaceId)
@@ -131,7 +140,11 @@ class CampaignController extends Controller
                 ->first();
 
             if ($existing) {
+                $previousCsv = $existing->audience_type === 'csv' ? $existing->audience_ref : null;
                 $existing->update($fields);
+                if ($previousCsv && ($existing->audience_type !== 'csv' || $existing->audience_ref !== $previousCsv)) {
+                    $this->deleteCampaignCsv($existing->workspace_id, $previousCsv);
+                }
                 app(CampaignStepService::class)->sync($existing, $validated['delivery_steps'] ?? null);
 
                 return response()->json(['uuid' => $existing->uuid]);
@@ -160,7 +173,7 @@ class CampaignController extends Controller
             $this->wizardProps($request),
             ['campaign' => array_merge($campaign->only(
                 'id', 'uuid', 'name', 'channel', 'whatsapp_phone_number_id', 'sms_provider', 'audience_type', 'audience_ref',
-                'template_ref', 'payload_json', 'schedule_at', 'timezone', 'status',
+                'template_ref', 'payload_json', 'schedule_at', 'timezone', 'status', 'estimated_recipients',
             ), ['steps' => $campaign->steps])],
         ));
     }
@@ -174,7 +187,11 @@ class CampaignController extends Controller
         $steps = $validated['delivery_steps'] ?? null;
         unset($validated['delivery_steps']);
         $this->assertPreparedAudienceIsUnchanged($campaign, $validated);
+        $previousCsv = $campaign->audience_type === 'csv' ? $campaign->audience_ref : null;
         $campaign->update($validated);
+        if ($previousCsv && ($campaign->audience_type !== 'csv' || $campaign->audience_ref !== $previousCsv)) {
+            $this->deleteCampaignCsv($campaign->workspace_id, $previousCsv);
+        }
         app(CampaignStepService::class)->sync($campaign, $steps);
 
         return redirect()->route('client.campaigns.show', $campaign)->with('success', 'Campaign updated.');
@@ -285,6 +302,9 @@ class CampaignController extends Controller
         if ($campaign->channel === 'sms') {
             app(SmsCampaignCapacityService::class)->release($campaign);
         }
+        if ($campaign->audience_type === 'csv') {
+            $this->deleteCampaignCsv($campaign->workspace_id, $campaign->audience_ref);
+        }
         $campaign->delete();
 
         return redirect()->route('client.campaigns.index')->with('success', 'Campaign deleted.');
@@ -335,6 +355,58 @@ class CampaignController extends Controller
             'matched' => $totalMatched,
             'deliverable' => $deliverable,
             'sample' => $sample,
+        ]);
+    }
+
+    public function uploadAudienceCsv(Request $request, Campaign $campaign, CampaignCsvService $csv): JsonResponse
+    {
+        $this->authorise($request, $campaign);
+        abort_unless($campaign->status === 'draft', 422, 'Only draft campaigns can receive a new audience CSV.');
+
+        $maxFileMb = (int) config('contact_imports.max_file_mb');
+        $validated = $request->validate([
+            'file' => ['required', 'file', 'mimes:csv,txt', 'max:'.($maxFileMb * 1024)],
+        ], [
+            'file.max' => 'The CSV is too large. Upload a file no larger than '.$maxFileMb.' MB.',
+        ]);
+
+        try {
+            $summary = $csv->inspect($validated['file']->getRealPath(), $campaign->workspace_id);
+        } catch (\RuntimeException $exception) {
+            throw ValidationException::withMessages(['file' => $exception->getMessage()]);
+        }
+
+        if ($summary['eligible'] === 0) {
+            throw ValidationException::withMessages([
+                'file' => 'The CSV has no valid, SMS-opted-in phone numbers in its first '.number_format(config('contact_imports.max_rows_per_file')).' rows.',
+            ]);
+        }
+
+        $directory = 'campaign-imports/'.$campaign->workspace_id;
+        $path = $validated['file']->store($directory, 'local');
+        $previousPath = $campaign->audience_type === 'csv' ? $campaign->audience_ref : null;
+
+        $campaign->update([
+            'audience_type' => 'csv',
+            'audience_ref' => $path,
+            'estimated_recipients' => $summary['eligible'],
+            'preparation_cursor' => 0,
+            'preparation_offset' => 0,
+        ]);
+
+        if ($previousPath && $previousPath !== $path && str_starts_with($previousPath, $directory.'/')) {
+            Storage::disk('local')->delete($previousPath);
+        }
+
+        return response()->json([
+            'path' => $path,
+            'name' => $validated['file']->getClientOriginalName(),
+            'rows' => $summary['rows'],
+            'eligible' => $summary['eligible'],
+            'skipped' => $summary['skipped'],
+            'ignored_over_limit' => $summary['ignored_over_limit'],
+            'max_rows' => (int) config('contact_imports.max_rows_per_file'),
+            'max_file_mb' => $maxFileMb,
         ]);
     }
 
@@ -489,7 +561,26 @@ class CampaignController extends Controller
             }
         }
 
+        if ($validated['audience_type'] === 'csv') {
+            $this->assertCampaignCsvReference($this->workspaceId($request), $validated['audience_ref'] ?? null);
+        }
+
         return $validated;
+    }
+
+    private function assertCampaignCsvReference(int $workspaceId, ?string $path): void
+    {
+        $prefix = 'campaign-imports/'.$workspaceId.'/';
+        if (! $path || ! str_starts_with($path, $prefix) || ! Storage::disk('local')->exists($path)) {
+            abort(422, 'Upload a valid campaign CSV before continuing.');
+        }
+    }
+
+    private function deleteCampaignCsv(int $workspaceId, ?string $path): void
+    {
+        if ($path && str_starts_with($path, 'campaign-imports/'.$workspaceId.'/')) {
+            Storage::disk('local')->delete($path);
+        }
     }
 
     /**
@@ -566,6 +657,10 @@ class CampaignController extends Controller
             'contactTokens' => CampaignPersonalizer::availableContactTokens(),
             'smsDeliveryLimits' => $this->smsDeliveryLimits(),
             'smsProviders' => $this->configuredSmsProviders($workspaceId),
+            'csvUploadLimits' => [
+                'maxFileMb' => (int) config('contact_imports.max_file_mb'),
+                'maxRowsPerFile' => (int) config('contact_imports.max_rows_per_file'),
+            ],
         ];
     }
 
@@ -664,6 +759,7 @@ class CampaignController extends Controller
         if (! $segment) {
             return [];
         }
+
         return $segment->contacts()->pluck('contacts.id')->all();
     }
 

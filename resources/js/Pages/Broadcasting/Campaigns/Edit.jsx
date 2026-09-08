@@ -22,6 +22,7 @@ export default function CampaignEdit({
     contactTokens = [],
     smsDeliveryLimits,
     smsProviders = [],
+    csvUploadLimits,
 }) {
     const { t } = useTranslation();
     return (
@@ -53,6 +54,7 @@ export default function CampaignEdit({
                     contactTokens={contactTokens}
                     smsDeliveryLimits={smsDeliveryLimits}
                     smsProviders={smsProviders}
+                    csvUploadLimits={csvUploadLimits}
                 />
             </div>
         </ClientLayout>
