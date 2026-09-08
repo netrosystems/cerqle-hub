@@ -63,6 +63,7 @@ flowchart TD
 2. **Encrypted Credentials**: External API keys, OAuth refresh tokens, and provider secrets are encrypted in the database (`Crypt::encryptString`) and never returned unmasked to the browser.
 3. **Public Widget Isolation**: Visitor conversations from `/widget/v1/*` are pinned to a unique session token. Unsigned identities remain anonymous; signed identities require server-side HMAC validation (`hash_hmac`).
 4. **Idempotent Webhook Processing**: Inbound webhooks (`/webhooks/*`) undergo cryptographic signature verification and payload deduplication before dispatching jobs onto background queues.
+5. **Single Event Registration**: Laravel automatically discovers typed handler methods in `app/Listeners`. Do not also register those handlers with `Event::listen` in an application service provider; verify `php artisan event:list` reports each listener once so one inbound event cannot create duplicate automation runs, notifications, or outbound webhook deliveries.
 
 ---
 

@@ -116,13 +116,16 @@ class AutomationEngineTest extends TestCase
 
         MessageReceived::dispatch($message);
 
-        // AutomationTriggerListener should have dispatched ExecuteAutomationRunJob
+        // Laravel auto-discovers listeners in app/Listeners. The listener must not
+        // also be registered manually, or one inbound message creates two runs.
         Queue::assertPushedOn('automation', ExecuteAutomationRunJob::class);
+        Queue::assertPushed(ExecuteAutomationRunJob::class, 1);
 
         $this->assertDatabaseHas('automation_runs', [
             'automation_id' => $automation->id,
             'contact_id' => $contact->id,
         ]);
+        $this->assertSame(1, AutomationRun::where('automation_id', $automation->id)->count());
     }
 
     public function test_live_engine_executes_builder_style_trigger_node(): void
