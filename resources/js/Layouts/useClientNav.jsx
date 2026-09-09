@@ -114,7 +114,7 @@ export default function useClientNav() {
     ];
 
     const campaignItems = [
-        { label: t('nav.sms_campaigns'), href: safeRoute('client.campaigns.index'), icon: <Radio className={iconClass} />, activePattern: 'client.campaigns.*' },
+        { label: t('nav.campaigns'), href: safeRoute('client.campaigns.index'), icon: <Radio className={iconClass} />, activePattern: 'client.campaigns.*' },
         ...messagingItems,
     ];
 

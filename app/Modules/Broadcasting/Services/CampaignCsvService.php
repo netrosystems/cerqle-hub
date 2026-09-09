@@ -8,11 +8,11 @@ use App\Modules\Shared\Services\ContactService;
 class CampaignCsvService
 {
     /**
-     * Validate an SMS campaign CSV without changing any contacts.
+     * Validate an SMS or WhatsApp campaign CSV without changing contacts.
      *
      * @return array{rows: int, eligible: int, skipped: int, ignored_over_limit: int}
      */
-    public function inspect(string $path, int $workspaceId): array
+    public function inspect(string $path, int $workspaceId, string $channel = 'sms'): array
     {
         $normaliser = new ImportContactsToListJob(0);
         $normaliser->assertPhoneValidationAvailable();
@@ -59,7 +59,8 @@ class CampaignCsvService
                 $normalised = $normaliser->normaliseRow($row, $workspaceId, $country, $contactService);
                 $phone = $normalised['phone_e164'] ?? null;
 
-                if ($normalised === null || ! $normalised['opt_in_sms'] || isset($seen[$phone])) {
+                $consent = $channel === 'whatsapp' ? 'opt_in_whatsapp' : 'opt_in_sms';
+                if ($normalised === null || ! ($normalised[$consent] ?? false) || isset($seen[$phone])) {
                     $skipped++;
 
                     continue;

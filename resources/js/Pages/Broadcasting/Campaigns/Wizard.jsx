@@ -7,10 +7,12 @@ import CampaignForm from './CampaignForm';
 export default function CampaignWizard({
     whatsappTemplates = [],
     whatsappPhoneNumbers = [],
+    whatsappBusinessAccounts = [],
     segments = [],
     tags = [],
     contactTokens = [],
     smsDeliveryLimits,
+    whatsappDeliveryLimits,
     smsProviders = [],
     csvUploadLimits,
 }) {
@@ -35,10 +37,12 @@ export default function CampaignWizard({
                     mode="create"
                     whatsappTemplates={whatsappTemplates}
                     whatsappPhoneNumbers={whatsappPhoneNumbers}
+                    whatsappBusinessAccounts={whatsappBusinessAccounts}
                     segments={segments}
                     tags={tags}
                     contactTokens={contactTokens}
                     smsDeliveryLimits={smsDeliveryLimits}
+                    whatsappDeliveryLimits={whatsappDeliveryLimits}
                     smsProviders={smsProviders}
                     csvUploadLimits={csvUploadLimits}
                 />

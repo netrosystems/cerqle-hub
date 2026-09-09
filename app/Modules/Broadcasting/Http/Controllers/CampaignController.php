@@ -15,12 +15,13 @@ use App\Modules\Broadcasting\Services\CampaignPersonalizer;
 use App\Modules\Broadcasting\Services\CampaignStepService;
 use App\Modules\Broadcasting\Services\Sms\SmsDriverManager;
 use App\Modules\Broadcasting\Services\SmsCampaignCapacityService;
+use App\Modules\Broadcasting\Services\WhatsappCampaignValidator;
+use App\Modules\Shared\Models\ChannelAccount;
 use App\Modules\Shared\Models\Contact;
 use App\Modules\Shared\Models\ContactTag;
 use App\Modules\Shared\Models\Segment;
 use App\Modules\Whatsapp\Models\WhatsappBusinessAccount;
 use App\Modules\Whatsapp\Models\WhatsappTemplate;
-use App\Modules\Whatsapp\Services\CloudApiClient;
 use App\Services\Mail\MailService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -95,10 +96,8 @@ class CampaignController extends Controller
         $validated = $request->validate([
             'uuid' => ['nullable', 'string', 'uuid'],
             'name' => ['required', 'string', 'max:128'],
-            // WhatsApp broadcasting is deliberately unavailable until its
-            // campaign workflow is completed and tested end-to-end. Existing
-            // WhatsApp campaigns remain readable for historic reporting.
-            'channel' => ['required', 'in:sms'],
+            'channel' => ['required', 'in:sms,whatsapp'],
+            'whatsapp_waba_id' => ['nullable', 'string', 'max:64'],
             'whatsapp_phone_number_id' => ['nullable', 'string'],
             'sms_provider' => ['nullable', 'string', 'in:'.implode(',', SmsProviderController::CLIENT_VISIBLE_PROVIDERS)],
             'audience_type' => ['nullable', 'in:segment,contact_list,tag,csv'],
@@ -117,6 +116,7 @@ class CampaignController extends Controller
         $fields = array_filter([
             'name' => $validated['name'],
             'channel' => $validated['channel'],
+            'whatsapp_waba_id' => $validated['whatsapp_waba_id'] ?? null,
             'whatsapp_phone_number_id' => $validated['whatsapp_phone_number_id'] ?? null,
             'sms_provider' => $validated['sms_provider'] ?? null,
             'audience_type' => $validated['audience_type'] ?? null,
@@ -172,7 +172,7 @@ class CampaignController extends Controller
         return Inertia::render('Broadcasting/Campaigns/Edit', array_merge(
             $this->wizardProps($request),
             ['campaign' => array_merge($campaign->only(
-                'id', 'uuid', 'name', 'channel', 'whatsapp_phone_number_id', 'sms_provider', 'audience_type', 'audience_ref',
+                'id', 'uuid', 'name', 'channel', 'whatsapp_waba_id', 'whatsapp_phone_number_id', 'sms_provider', 'audience_type', 'audience_ref',
                 'template_ref', 'payload_json', 'schedule_at', 'timezone', 'status', 'estimated_recipients',
             ), ['steps' => $campaign->steps])],
         ));
@@ -268,7 +268,9 @@ class CampaignController extends Controller
             $patch['schedule_at'] = filled($value) ? $value : null;
         }
 
-        abort_unless($campaign->channel === 'sms', 422, 'WhatsApp campaigns are coming soon and cannot be launched yet.');
+        if ($campaign->channel === 'whatsapp') {
+            app(WhatsappCampaignValidator::class)->validate($campaign);
+        }
 
         $campaign->update($patch);
         $campaign->refresh();
@@ -321,7 +323,7 @@ class CampaignController extends Controller
         $validated = $request->validate([
             'audience_type' => ['required', 'in:segment,contact_list,tag,csv'],
             'audience_ref' => ['nullable', 'string'],
-            'channel' => ['required', 'in:sms'],
+            'channel' => ['required', 'in:sms,whatsapp'],
         ]);
 
         $query = $this->audienceQueryForPreview(
@@ -371,14 +373,14 @@ class CampaignController extends Controller
         ]);
 
         try {
-            $summary = $csv->inspect($validated['file']->getRealPath(), $campaign->workspace_id);
+            $summary = $csv->inspect($validated['file']->getRealPath(), $campaign->workspace_id, $campaign->channel);
         } catch (\RuntimeException $exception) {
             throw ValidationException::withMessages(['file' => $exception->getMessage()]);
         }
 
         if ($summary['eligible'] === 0) {
             throw ValidationException::withMessages([
-                'file' => 'The CSV has no valid, SMS-opted-in phone numbers in its first '.number_format(config('contact_imports.max_rows_per_file')).' rows.',
+                'file' => 'The CSV has no valid, '.ucfirst($campaign->channel).'-opted-in phone numbers in its first '.number_format(config('contact_imports.max_rows_per_file')).' rows.',
             ]);
         }
 
@@ -511,8 +513,8 @@ class CampaignController extends Controller
             return;
         }
 
-        foreach (['channel', 'sms_provider', 'audience_type', 'audience_ref'] as $field) {
-            if (array_key_exists($field, $validated) && (string) $validated[$field] !== (string) $campaign->{$field}) {
+        foreach (['channel', 'sms_provider', 'whatsapp_waba_id', 'whatsapp_phone_number_id', 'template_ref', 'audience_type', 'audience_ref'] as $field) {
+            if (array_key_exists($field, $validated) && json_encode($validated[$field]) !== json_encode($campaign->{$field})) {
                 abort(422, 'Channel and audience cannot change after campaign recipients have been prepared.');
             }
         }
@@ -533,7 +535,8 @@ class CampaignController extends Controller
 
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:128'],
-            'channel' => ['required', 'in:sms'],
+            'channel' => ['required', 'in:sms,whatsapp'],
+            'whatsapp_waba_id' => ['nullable', 'string', 'max:64'],
             'whatsapp_phone_number_id' => ['nullable', 'string'],
             'sms_provider' => ['nullable', 'string', 'in:'.implode(',', SmsProviderController::CLIENT_VISIBLE_PROVIDERS)],
             'audience_type' => ['required', 'in:segment,contact_list,tag,csv'],
@@ -561,6 +564,14 @@ class CampaignController extends Controller
             }
         }
 
+        if ($validated['channel'] === 'whatsapp') {
+            app(WhatsappCampaignValidator::class)->validateSelection($this->workspaceId($request), $validated);
+            $validated['sms_provider'] = null;
+        } else {
+            $validated['whatsapp_waba_id'] = null;
+            $validated['whatsapp_phone_number_id'] = null;
+        }
+
         if ($validated['audience_type'] === 'csv') {
             $this->assertCampaignCsvReference($this->workspaceId($request), $validated['audience_ref'] ?? null);
         }
@@ -580,36 +591,6 @@ class CampaignController extends Controller
     {
         if ($path && str_starts_with($path, 'campaign-imports/'.$workspaceId.'/')) {
             Storage::disk('local')->delete($path);
-        }
-    }
-
-    /**
-     * Build the props the wizard / edit page need.
-     */
-    private function assertWhatsAppCampaignReady(Campaign $campaign): void
-    {
-        $client = $campaign->whatsapp_phone_number_id
-            ? CloudApiClient::forPhoneNumber($campaign->whatsapp_phone_number_id, $campaign->workspace_id)
-            : CloudApiClient::forWorkspace($campaign->workspace_id);
-
-        if (! $client) {
-            abort(422, 'WhatsApp is not ready: connect a WABA on Channel Setup and sync at least one phone number.');
-        }
-
-        $tpl = $campaign->template_ref ?? [];
-        $name = $tpl['name'] ?? '';
-        if ($name === '') {
-            abort(422, 'Select an approved WhatsApp template before launching.');
-        }
-
-        $approved = WhatsappTemplate::where('workspace_id', $campaign->workspace_id)
-            ->where('name', $name)
-            ->where('language', $tpl['language'] ?? 'en')
-            ->where('status', 'APPROVED')
-            ->exists();
-
-        if (! $approved) {
-            abort(422, 'Template "'.$name.'" is not APPROVED. Sync templates from Meta on the Templates page, then try again.');
         }
     }
 
@@ -637,25 +618,41 @@ class CampaignController extends Controller
             ->orderBy('name')
             ->get(['id', 'name', 'color']);
 
-        $whatsappPhoneNumbers = WhatsappBusinessAccount::where('workspace_id', $workspaceId)
+        $activeChannels = ChannelAccount::where('workspace_id', $workspaceId)
+            ->where('channel', 'whatsapp')->where('status', 'active')->get()
+            ->keyBy(fn ($channel) => $channel->business_account_id.'|'.$channel->phone_number_id);
+
+        $whatsappBusinessAccounts = WhatsappBusinessAccount::where('workspace_id', $workspaceId)
             ->where('status', 'active')
             ->with('phoneNumbers')
             ->get()
-            ->flatMap(fn ($waba) => $waba->phoneNumbers->map(fn ($p) => [
-                'phone_number_id' => $p->phone_number_id,
-                'display_phone' => $p->display_phone,
-                'verified_name' => $p->verified_name,
-                'waba_id' => $waba->waba_id,
-            ]))
+            ->map(function ($waba) use ($activeChannels) {
+                $phones = $waba->phoneNumbers->filter(fn ($p) => blank(data_get($p->coexistence_meta, 'disconnected_at'))
+                    && $activeChannels->has($waba->waba_id.'|'.$p->phone_number_id))->map(fn ($p) => [
+                        'phone_number_id' => $p->phone_number_id, 'display_phone' => $p->display_phone,
+                        'verified_name' => $p->verified_name, 'quality_rating' => $p->quality_rating,
+                        'messaging_limit_tier' => $p->messaging_limit_tier, 'waba_id' => $waba->waba_id,
+                    ])->values();
+
+                return ['waba_id' => $waba->waba_id, 'name' => data_get($waba->meta_json, 'name') ?: data_get($waba->meta_json, 'business_name') ?: 'WABA '.$waba->waba_id, 'phone_numbers' => $phones];
+            })->filter(fn ($waba) => $waba['phone_numbers']->isNotEmpty())
             ->values();
+
+        $whatsappPhoneNumbers = $whatsappBusinessAccounts->flatMap(fn ($waba) => $waba['phone_numbers'])->values();
 
         return [
             'whatsappTemplates' => $whatsappTemplates,
             'whatsappPhoneNumbers' => $whatsappPhoneNumbers,
+            'whatsappBusinessAccounts' => $whatsappBusinessAccounts,
             'segments' => $segments,
             'tags' => $tags,
             'contactTokens' => CampaignPersonalizer::availableContactTokens(),
             'smsDeliveryLimits' => $this->smsDeliveryLimits(),
+            'whatsappDeliveryLimits' => [
+                'safetyRate' => app(CampaignStepService::class)->maxRateForStep(1, null, 'whatsapp'),
+                'bulkRate' => app(CampaignStepService::class)->maxRateForStep(2, null, 'whatsapp'),
+                'speedOptions' => range(1, app(CampaignStepService::class)->maxRateForStep(2, null, 'whatsapp')),
+            ],
             'smsProviders' => $this->configuredSmsProviders($workspaceId),
             'csvUploadLimits' => [
                 'maxFileMb' => (int) config('contact_imports.max_file_mb'),
@@ -782,12 +779,7 @@ class CampaignController extends Controller
             throw new \RuntimeException('Phone is required for a WhatsApp test send.');
         }
 
-        $client = $campaign->whatsapp_phone_number_id
-            ? CloudApiClient::forPhoneNumber($campaign->whatsapp_phone_number_id, $campaign->workspace_id)
-            : CloudApiClient::forWorkspace($campaign->workspace_id);
-        if (! $client) {
-            throw new \RuntimeException('No WhatsApp client configured for this workspace.');
-        }
+        $client = app(WhatsappCampaignValidator::class)->validate($campaign)['client'];
 
         $tpl = $campaign->template_ref ?? [];
         $name = $tpl['name'] ?? '';

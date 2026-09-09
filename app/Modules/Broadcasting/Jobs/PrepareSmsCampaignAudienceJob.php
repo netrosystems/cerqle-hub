@@ -45,7 +45,7 @@ class PrepareSmsCampaignAudienceJob implements ShouldQueue
             return;
         }
 
-        $chunkSize = max(100, (int) config('broadcasting.sms.audience_chunk_size', 2000));
+        $chunkSize = max(100, (int) config('broadcasting.'.($campaign->channel === 'whatsapp' ? 'whatsapp' : 'sms').'.audience_chunk_size', 2000));
         $contactIds = $campaign->audience_type === 'csv'
             ? $this->readCsvChunk($campaign, $chunkSize)
             : $audience->nextIds(
@@ -160,12 +160,13 @@ class PrepareSmsCampaignAudienceJob implements ShouldQueue
                 try {
                     $country = strtoupper(trim((string) ($row['country'] ?? ''))) ?: null;
                     $normalised = $normaliser->normaliseRow($row, $campaign->workspace_id, $country, $service);
-                    if ($normalised === null || ! $normalised['opt_in_sms']) {
+                    $consent = $campaign->channel === 'whatsapp' ? 'opt_in_whatsapp' : 'opt_in_sms';
+                    if ($normalised === null || ! ($normalised[$consent] ?? false)) {
                         continue;
                     }
                     $normalised['source'] = 'campaign_csv';
                     $contact = $service->upsert($campaign->workspace_id, $normalised, false);
-                    if ($contact->opt_in_sms && filled($contact->phone_e164)) {
+                    if ($contact->{$consent} && filled($contact->phone_e164)) {
                         $ids[] = $contact->id;
                     }
                 } catch (\Throwable $e) {
@@ -193,10 +194,12 @@ class PrepareSmsCampaignAudienceJob implements ShouldQueue
         if ($campaign->prepared_recipients === 0) {
             $campaign->update([
                 'status' => 'failed',
-                'pause_reason' => 'No eligible SMS contacts matched the audience.',
+                'pause_reason' => 'No eligible '.ucfirst($campaign->channel).' contacts matched the audience.',
                 'totals_json' => ['total' => 0, 'failed_reason' => 'No matching contacts for audience.'],
             ]);
-            $capacity->release($campaign);
+            if ($campaign->channel === 'sms') {
+                $capacity->release($campaign);
+            }
 
             return;
         }
@@ -231,6 +234,8 @@ class PrepareSmsCampaignAudienceJob implements ShouldQueue
             'status' => 'safety_paused',
             'pause_reason' => 'Audience preparation stopped after repeated errors: '.substr($exception->getMessage(), 0, 350),
         ]);
-        app(SmsCampaignCapacityService::class)->release($campaign->fresh());
+        if ($campaign->channel === 'sms') {
+            app(SmsCampaignCapacityService::class)->release($campaign->fresh());
+        }
     }
 }
