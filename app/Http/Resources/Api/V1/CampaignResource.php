@@ -15,6 +15,8 @@ class CampaignResource extends JsonResource
             'id' => $this->id,
             'name' => $this->name,
             'channel' => $this->channel,
+            'whatsapp_waba_id' => $this->whatsapp_waba_id,
+            'whatsapp_phone_number_id' => $this->whatsapp_phone_number_id,
             'sms_provider' => $this->sms_provider,
             'status' => $this->status,
             'audience_type' => $this->audience_type,

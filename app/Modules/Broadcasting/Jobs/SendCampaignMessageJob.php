@@ -9,7 +9,9 @@ use App\Modules\Broadcasting\Models\CampaignRecipient;
 use App\Modules\Broadcasting\Models\UsageMeter;
 use App\Modules\Broadcasting\Models\WorkspaceSmtpConfig;
 use App\Modules\Broadcasting\Services\CampaignPersonalizer;
+use App\Modules\Broadcasting\Services\Sms\SmsDispatchRateLimiter;
 use App\Modules\Broadcasting\Services\Sms\SmsDriverManager;
+use App\Modules\Broadcasting\Services\WhatsappCampaignValidator;
 use App\Modules\Shared\Models\ChannelAccount;
 use App\Modules\Shared\Models\Contact;
 use App\Modules\Shared\Models\Conversation;
@@ -29,6 +31,7 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 
 class SendCampaignMessageJob implements ShouldQueue
 {
@@ -68,24 +71,55 @@ class SendCampaignMessageJob implements ShouldQueue
             ->where('contact_id', $this->contactId)
             ->first();
 
+        if ($campaign->channel === 'whatsapp' && (! $recipient || ! in_array($recipient->status, ['dispatching', 'retrying'], true))) {
+            return;
+        }
+
         // Pre-flight opt-in check (defence in depth — LaunchCampaignJob already filters these).
         if ($this->isOptedOut($campaign, $contact)) {
             $recipient?->update([
                 'status' => 'failed',
                 'failed_reason' => 'opted_out',
+                'failure_class' => 'recipient',
                 'opted_out_at' => now(),
+                'claimed_at' => null,
             ]);
 
             return;
         }
 
         try {
+            $whatsappContext = null;
+            if ($campaign->channel === 'whatsapp') {
+                $whatsappContext = app(WhatsappCampaignValidator::class)->validate($campaign);
+                $rate = max(1, (int) ($recipient?->step?->rate_per_second ?? config('broadcasting.whatsapp.platform_rate_per_second', 20)));
+                $reservation = app(SmsDispatchRateLimiter::class)->reserveMany([
+                    'whatsapp-platform' => (int) config('broadcasting.whatsapp.platform_rate_per_second', 20),
+                    'whatsapp-phone:'.$campaign->whatsapp_phone_number_id => $rate,
+                ]);
+                if (! $reservation->reserved) {
+                    $recipient?->update(['status' => 'retrying', 'next_attempt_at' => now()->addSeconds(2), 'failure_class' => 'rate_limit_wait']);
+                    PumpSmsCampaignJob::dispatch($campaign->id)->onQueue('broadcast')->delay(now()->addSeconds(2));
+
+                    return;
+                }
+                if ($reservation->waitMicroseconds > 0) {
+                    usleep($reservation->waitMicroseconds);
+                }
+                $campaign->refresh();
+                if (! in_array($campaign->status, ['sending', 'retrying'], true)) {
+                    $recipient?->update(['status' => 'queued', 'claimed_at' => null]);
+
+                    return;
+                }
+                $recipient?->update(['status' => 'sending', 'attempts' => ((int) $recipient->attempts) + 1]);
+            }
             $trackingToken = $campaign->channel === 'email' ? Str::random(32) : null;
             // Unsubscribe token is always generated for email — CAN-SPAM requires opt-out in every commercial email.
             $unsubscribeToken = $campaign->channel === 'email' ? Str::random(32) : null;
 
             $sent = match ($campaign->channel) {
-                'whatsapp' => $this->sendWhatsApp($campaign, $contact, $personalizer),
+                'whatsapp' => $this->sendWhatsApp($campaign, $contact, $personalizer, $whatsappContext['client']),
                 'sms' => $this->sendSms($campaign, $contact, $personalizer),
                 'email' => $this->sendEmail($campaign, $contact, $personalizer, $trackingToken, $unsubscribeToken),
             };
@@ -95,6 +129,9 @@ class SendCampaignMessageJob implements ShouldQueue
                 'provider_message_id' => $sent['id'],
                 'sent_at' => now(),
                 'failed_reason' => null,
+                'failure_class' => null,
+                'next_attempt_at' => null,
+                'claimed_at' => null,
             ];
 
             if ($trackingToken !== null) {
@@ -125,10 +162,21 @@ class SendCampaignMessageJob implements ShouldQueue
                 'message_id' => $sent['id'],
             ]);
         } catch (\Throwable $e) {
+            if ($campaign->channel === 'whatsapp' && $e instanceof ValidationException) {
+                $campaign->update(['status' => 'safety_paused', 'pause_reason' => 'WhatsApp campaign configuration changed: '.substr($e->getMessage(), 0, 350)]);
+            }
+            $retryable = $campaign->channel === 'whatsapp'
+                && preg_match('/HTTP 429|\b(4|80007|130429|131048)\b/', $e->getMessage())
+                && (int) ($recipient?->attempts ?? 0) < 5;
             $recipient?->update([
-                'status' => 'failed',
+                'status' => $retryable ? 'retrying' : 'failed',
                 'failed_reason' => substr($e->getMessage(), 0, 512),
+                'failure_class' => $retryable ? 'rate_limit_wait' : ($e instanceof ValidationException ? 'configuration' : 'provider_rejection'),
+                'next_attempt_at' => $retryable ? now()->addSeconds(60) : null,
             ]);
+            if ($retryable) {
+                PumpSmsCampaignJob::dispatch($campaign->id)->onQueue('broadcast')->delay(now()->addSeconds(60));
+            }
             Log::channel('json')->warning('campaign.message.failed', [
                 'workspace_id' => $campaign->workspace_id,
                 'campaign_id' => $campaign->id,
@@ -158,15 +206,8 @@ class SendCampaignMessageJob implements ShouldQueue
     /**
      * @return array{id: string, body: string, type: string, payload: array<string, mixed>}
      */
-    private function sendWhatsApp(Campaign $campaign, Contact $contact, CampaignPersonalizer $personalizer): array
+    private function sendWhatsApp(Campaign $campaign, Contact $contact, CampaignPersonalizer $personalizer, CloudApiClient $client): array
     {
-        $client = $campaign->whatsapp_phone_number_id
-            ? CloudApiClient::forPhoneNumber($campaign->whatsapp_phone_number_id, $campaign->workspace_id)
-            : CloudApiClient::forWorkspace($campaign->workspace_id);
-        if (! $client) {
-            throw new \RuntimeException('No WhatsApp client for workspace '.$campaign->workspace_id);
-        }
-
         $tpl = $campaign->template_ref ?? [];
         $name = $tpl['name'] ?? '';
         $language = $tpl['language'] ?? 'en';
@@ -200,7 +241,12 @@ class SendCampaignMessageJob implements ShouldQueue
 
         if (! $resp->successful()) {
             $metaError = $resp->json('error.message') ?? $resp->body();
-            throw new \RuntimeException('WhatsApp send failed: '.$metaError);
+            throw new \RuntimeException('WhatsApp send failed (HTTP '.$resp->status().'): '.$metaError.' code '.($resp->json('error.code') ?? 'unknown'));
+        }
+
+        $messageId = trim((string) $resp->json('messages.0.id', ''));
+        if ($messageId === '') {
+            throw new \RuntimeException('WhatsApp accepted the request but returned no message identifier; outcome is unknown and was not retried.');
         }
 
         // Build a full template `definition` (canonical components + merged
@@ -219,7 +265,7 @@ class SendCampaignMessageJob implements ShouldQueue
         }
 
         return [
-            'id' => $resp->json('messages.0.id', ''),
+            'id' => $messageId,
             'body' => $this->summariseTemplateForInbox($name, $rendered, $definition),
             'type' => 'template',
             'payload' => [
@@ -240,6 +286,7 @@ class SendCampaignMessageJob implements ShouldQueue
     private function buildTemplateDefinition(Campaign $campaign, string $name, string $language, array $rendered): ?array
     {
         $template = WhatsappTemplate::where('workspace_id', $campaign->workspace_id)
+            ->where('waba_id', $campaign->whatsapp_waba_id)
             ->where('name', $name)
             ->where('language', $language)
             ->first();
@@ -320,17 +367,35 @@ class SendCampaignMessageJob implements ShouldQueue
         $cacheKey = 'wa_header_media:'.$client->phoneNumberId().':'.sha1($url);
 
         return Cache::remember($cacheKey, now()->addHours(6), function () use ($client, $url) {
-            $resp = Http::timeout(30)->get($url);
-            if (! $resp->successful()) {
-                throw new \RuntimeException("Could not download header media (HTTP {$resp->status()}) from {$url}");
-            }
-
-            $mime = trim(explode(';', (string) ($resp->header('Content-Type') ?: $this->guessMimeFromUrl($url)))[0]);
-
+            $resolvedAddress = $this->assertPublicMediaUrl($url);
             $tmp = tempnam(sys_get_temp_dir(), 'wamedia_');
-            file_put_contents($tmp, $resp->body());
-
+            if ($tmp === false) {
+                throw new \RuntimeException('Could not allocate temporary storage for WhatsApp template media.');
+            }
             try {
+                $maximum = max(1, (int) config('broadcasting.whatsapp.media_max_bytes', 16 * 1024 * 1024));
+                $host = (string) parse_url($url, PHP_URL_HOST);
+                $port = (int) (parse_url($url, PHP_URL_PORT) ?: 443);
+                $options = [
+                    'allow_redirects' => false,
+                    'sink' => $tmp,
+                    'on_headers' => function ($response) use ($maximum) {
+                        if ((int) $response->getHeaderLine('Content-Length') > $maximum) {
+                            throw new \RuntimeException('WhatsApp template media exceeds the configured size limit.');
+                        }
+                    },
+                ];
+                if (defined('CURLOPT_RESOLVE')) {
+                    $options['curl'] = [CURLOPT_RESOLVE => ["{$host}:{$port}:{$resolvedAddress}"]];
+                }
+                $resp = Http::timeout(30)->withOptions($options)->get($url);
+                if (! $resp->successful()) {
+                    throw new \RuntimeException("Could not download header media (HTTP {$resp->status()}) from {$url}");
+                }
+                if (filesize($tmp) > $maximum) {
+                    throw new \RuntimeException('WhatsApp template media exceeds the configured size limit.');
+                }
+                $mime = trim(explode(';', (string) ($resp->header('Content-Type') ?: $this->guessMimeFromUrl($url)))[0]);
                 $mediaId = $client->uploadMedia($tmp, $mime);
             } finally {
                 @unlink($tmp);
@@ -342,6 +407,28 @@ class SendCampaignMessageJob implements ShouldQueue
 
             return $mediaId;
         });
+    }
+
+    private function assertPublicMediaUrl(string $url): string
+    {
+        $host = parse_url($url, PHP_URL_HOST);
+        if (parse_url($url, PHP_URL_SCHEME) !== 'https' || ! is_string($host) || $host === '') {
+            throw new \RuntimeException('WhatsApp template media must use a public HTTPS URL.');
+        }
+
+        $addresses = filter_var($host, FILTER_VALIDATE_IP) ? [$host] : array_values(array_unique(array_filter([
+            ...array_column(dns_get_record($host, DNS_A) ?: [], 'ip'),
+            ...array_column(dns_get_record($host, DNS_AAAA) ?: [], 'ipv6'),
+        ])));
+        if ($addresses === [] || collect($addresses)->contains(fn ($address) => filter_var(
+            $address,
+            FILTER_VALIDATE_IP,
+            FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE,
+        ) === false)) {
+            throw new \RuntimeException('WhatsApp template media host must resolve only to public internet addresses.');
+        }
+
+        return (string) $addresses[0];
     }
 
     private function guessMimeFromUrl(string $url): string
@@ -588,19 +675,10 @@ class SendCampaignMessageJob implements ShouldQueue
     private function resolveChannelAccount(Campaign $campaign): ?ChannelAccount
     {
         if ($campaign->channel === 'whatsapp') {
-            $client = CloudApiClient::forWorkspace($campaign->workspace_id);
-            $phoneNumberId = $client?->phoneNumberId();
-            if ($phoneNumberId !== null && $phoneNumberId !== '') {
-                $match = ChannelAccount::where('workspace_id', $campaign->workspace_id)
-                    ->where('channel', 'whatsapp')
-                    ->where('phone_number_id', $phoneNumberId)
-                    ->orderByRaw("CASE WHEN status = 'active' THEN 0 ELSE 1 END")
-                    ->orderBy('id')
-                    ->first();
-                if ($match) {
-                    return $match;
-                }
-            }
+            return ChannelAccount::where('workspace_id', $campaign->workspace_id)
+                ->where('channel', 'whatsapp')->where('status', 'active')
+                ->where('business_account_id', $campaign->whatsapp_waba_id)
+                ->where('phone_number_id', $campaign->whatsapp_phone_number_id)->first();
         }
 
         return ChannelAccount::where('workspace_id', $campaign->workspace_id)

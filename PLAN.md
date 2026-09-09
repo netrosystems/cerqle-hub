@@ -149,11 +149,12 @@ onboarding remains the only mode shown while rollout is disabled.
 
 ---
 
-### Feature 8: SMS Broadcasting & Gateway Connector (`app/Modules/Broadcasting`)
+### Feature 8: Campaigns & SMS Gateway Connector (`app/Modules/Broadcasting`)
 
 #### Capabilities
 - **Pluggable SMS Gateways**: Pre-integrated drivers for Twilio, MessageBird, SMSBD, REVE SMS, BulkSMS BD, ProSMS (Alaris), and Amazon SNS.
 - **Segmented Campaigns**: Dispatch targeted SMS broadcasts to dynamic contact segments or real browser CSV uploads. Campaign CSVs use the same configured file-size and per-file row ceilings as Contact List imports, are validated before selection, and are stored in a workspace-scoped campaign path.
+- **WhatsApp Campaigns**: Dispatch approved Meta templates from an explicitly selected workspace-owned WABA and active phone number. The launch and send paths revalidate WABA, phone, channel and template ownership; require WhatsApp consent; and retain scheduling, staged pacing, pause/resume, monthly message limits and webhook delivery reporting.
 - **Rate Limiting & Queue Batching**: Throttled chunk dispatching on the `broadcast` queue to comply with carrier rate limits.
 - **Delivery Callbacks**: Real-time SMS status tracking (Queued, Sent, Delivered, Failed) with cost metering.
 

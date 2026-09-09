@@ -20,7 +20,7 @@ class RecoverSmsCampaignsJob implements ShouldQueue
 
     public function handle(): void
     {
-        Campaign::where('channel', 'sms')
+        Campaign::whereIn('channel', ['sms', 'whatsapp'])
             ->where('status', 'preparing')
             ->where('updated_at', '<=', now()->subMinutes(2))
             ->orderBy('id')
@@ -28,7 +28,7 @@ class RecoverSmsCampaignsJob implements ShouldQueue
             ->pluck('id')
             ->each(fn ($id) => PrepareSmsCampaignAudienceJob::dispatch((int) $id)->onQueue('broadcast'));
 
-        Campaign::where('channel', 'sms')
+        Campaign::whereIn('channel', ['sms', 'whatsapp'])
             ->whereIn('status', ['sending', 'retrying'])
             ->orderBy('id')
             ->limit(100)

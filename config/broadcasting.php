@@ -105,4 +105,15 @@ return [
         'retry_delays' => [3, 15, 60, 300, 900],
         'systemic_failure_pause_threshold' => (int) env('SMS_SYSTEMIC_FAILURE_PAUSE_THRESHOLD', 3),
     ],
+
+    'whatsapp' => [
+        // Conservative application-side pacing. Meta remains authoritative for
+        // each phone number's quality, throughput and messaging-tier limits.
+        'safety_rate_per_second' => (int) env('WHATSAPP_CAMPAIGN_SAFETY_RATE_PER_SECOND', 2),
+        'platform_rate_per_second' => (int) env('WHATSAPP_CAMPAIGN_RATE_PER_SECOND', 20),
+        'dispatch_buffer' => (int) env('WHATSAPP_CAMPAIGN_DISPATCH_BUFFER', 40),
+        'audience_chunk_size' => (int) env('WHATSAPP_CAMPAIGN_AUDIENCE_CHUNK_SIZE', 1000),
+        'claim_timeout_seconds' => (int) env('WHATSAPP_CAMPAIGN_CLAIM_TIMEOUT_SECONDS', 180),
+        'media_max_bytes' => (int) env('WHATSAPP_CAMPAIGN_MEDIA_MAX_BYTES', 16 * 1024 * 1024),
+    ],
 ];

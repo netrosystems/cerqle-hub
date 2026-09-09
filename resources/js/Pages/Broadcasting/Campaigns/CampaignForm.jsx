@@ -36,6 +36,7 @@ const STEPS = [
 
 const CHANNEL_META = {
     sms: { label: 'SMS', Icon: (p) => <ChannelBrandIcon channel="sms" {...p} /> },
+    whatsapp: { label: 'WhatsApp', Icon: (p) => <ChannelBrandIcon channel="whatsapp" {...p} /> },
 };
 
 const inputClass =
@@ -51,13 +52,15 @@ function FieldError({ message }) {
     );
 }
 
-function defaultInitialData(campaign, userTz, smsDeliveryLimits, defaultSmsProvider = '') {
+function defaultInitialData(campaign, userTz, smsDeliveryLimits, defaultSmsProvider = '', whatsappDeliveryLimits = smsDeliveryLimits) {
     const fallbackTz = userTz || browserTz() || 'Asia/Dhaka';
     if (campaign) {
         const tz = campaign.timezone || fallbackTz;
+        const deliveryLimits = campaign.channel === 'whatsapp' ? whatsappDeliveryLimits : smsDeliveryLimits;
         return {
             name: campaign.name ?? '',
             channel: campaign.channel ?? 'sms',
+            whatsapp_waba_id: campaign.whatsapp_waba_id ?? '',
             whatsapp_phone_number_id: campaign.whatsapp_phone_number_id ?? '',
             sms_provider: campaign.sms_provider ?? defaultSmsProvider,
             audience_type: campaign.audience_type ?? 'segment',
@@ -85,17 +88,18 @@ function defaultInitialData(campaign, userTz, smsDeliveryLimits, defaultSmsProvi
                           recipient_limit: step.recipient_limit,
                           delay_after_previous_seconds: step.delay_after_previous_seconds ?? 0,
                           rate_per_second: Math.min(
-                              index === 0 ? smsDeliveryLimits.safetyRate : smsDeliveryLimits.bulkRate,
+                              index === 0 ? deliveryLimits.safetyRate : deliveryLimits.bulkRate,
                               Math.max(1, step.rate_per_second ?? 5),
                           ),
                       }))
-                    : defaultDeliverySteps(smsDeliveryLimits),
+                    : defaultDeliverySteps(deliveryLimits),
         };
     }
 
     return {
         name: '',
         channel: 'sms',
+        whatsapp_waba_id: '',
         whatsapp_phone_number_id: '',
         sms_provider: defaultSmsProvider,
         audience_type: 'segment',
@@ -276,10 +280,12 @@ export default function CampaignForm({
     mode = 'create',
     whatsappTemplates = [],
     whatsappPhoneNumbers = [],
+    whatsappBusinessAccounts = [],
     segments = [],
     tags = [],
     contactTokens = [],
     smsDeliveryLimits = { safetyRate: 5, bulkRate: 180, speedOptions: [1, 2, 3, 4, 5, 10, 25, 50, 75, 100, 125, 150, 160, 180] },
+    whatsappDeliveryLimits = { safetyRate: 2, bulkRate: 20, speedOptions: [1, 2, 5, 10, 20] },
     smsProviders = [],
     csvUploadLimits = { maxFileMb: 20, maxRowsPerFile: 50000 },
 }) {
@@ -306,8 +312,8 @@ export default function CampaignForm({
     const userTz = usePage().props.timezone || browserTz() || 'Asia/Dhaka';
     const defaultSmsProvider = smsProviders.find((provider) => provider.default)?.provider ?? smsProviders[0]?.provider ?? '';
     const initialData = useMemo(
-        () => defaultInitialData(campaign, userTz, smsDeliveryLimits, defaultSmsProvider),
-        [campaign?.id, smsDeliveryLimits.safetyRate, smsDeliveryLimits.bulkRate, defaultSmsProvider],
+        () => defaultInitialData(campaign, userTz, smsDeliveryLimits, defaultSmsProvider, whatsappDeliveryLimits),
+        [campaign?.id, smsDeliveryLimits.safetyRate, smsDeliveryLimits.bulkRate, whatsappDeliveryLimits.safetyRate, whatsappDeliveryLimits.bulkRate, defaultSmsProvider],
     );
     const { data, setData, post, patch, processing, errors, transform } = useForm(initialData);
     const selectedSmsProvider = smsProviders.find((provider) => provider.provider === data.sms_provider);
@@ -335,13 +341,11 @@ export default function CampaignForm({
         })));
     }, [data.sms_provider]); // eslint-disable-line react-hooks/exhaustive-deps
 
-    // Templates filtered to the selected phone number's WABA.
+    // Templates are WABA-scoped; never infer or fall back to another account.
     const filteredTemplates = useMemo(() => {
-        if (data.channel !== 'whatsapp' || !data.whatsapp_phone_number_id) return whatsappTemplates;
-        const phone = whatsappPhoneNumbers.find((p) => p.phone_number_id === data.whatsapp_phone_number_id);
-        if (!phone?.waba_id) return whatsappTemplates;
-        return whatsappTemplates.filter((t) => t.waba_id === phone.waba_id);
-    }, [whatsappTemplates, whatsappPhoneNumbers, data.channel, data.whatsapp_phone_number_id]);
+        if (data.channel !== 'whatsapp' || !data.whatsapp_waba_id) return [];
+        return whatsappTemplates.filter((t) => t.waba_id === data.whatsapp_waba_id && t.status === 'APPROVED');
+    }, [whatsappTemplates, data.channel, data.whatsapp_waba_id]);
 
     // The selected WhatsApp template (from the workspace) — used to derive parameter slots.
     const selectedTemplate = useMemo(() => {
@@ -361,13 +365,29 @@ export default function CampaignForm({
 
     // Auto-select the only phone number when switching to WhatsApp with a single number.
     useEffect(() => {
-        if (data.channel === 'whatsapp' && whatsappPhoneNumbers.length === 1 && !data.whatsapp_phone_number_id) {
-            setData('whatsapp_phone_number_id', whatsappPhoneNumbers[0].phone_number_id);
+        if (data.channel === 'whatsapp' && whatsappBusinessAccounts.length === 1 && !data.whatsapp_waba_id) {
+            setData('whatsapp_waba_id', whatsappBusinessAccounts[0].waba_id);
         }
-        if (data.channel !== 'whatsapp' && data.whatsapp_phone_number_id) {
+        if (data.channel !== 'whatsapp' && (data.whatsapp_phone_number_id || data.whatsapp_waba_id)) {
+            setData('whatsapp_waba_id', '');
             setData('whatsapp_phone_number_id', '');
         }
     }, [data.channel]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    useEffect(() => {
+        const limits = data.channel === 'whatsapp' ? whatsappDeliveryLimits : activeSmsDeliveryLimits;
+        setData('delivery_steps', (data.delivery_steps ?? []).map((deliveryStep, index) => ({
+            ...deliveryStep,
+            rate_per_second: Math.min(index === 0 ? limits.safetyRate : limits.bulkRate, Math.max(1, Number(deliveryStep.rate_per_second) || 1)),
+        })));
+    }, [data.channel]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    useEffect(() => {
+        if (data.channel !== 'whatsapp') return;
+        const phones = whatsappBusinessAccounts.find((waba) => waba.waba_id === data.whatsapp_waba_id)?.phone_numbers ?? [];
+        if (phones.length === 1 && !data.whatsapp_phone_number_id) setData('whatsapp_phone_number_id', phones[0].phone_number_id);
+        if (data.whatsapp_phone_number_id && !phones.some((phone) => phone.phone_number_id === data.whatsapp_phone_number_id)) setData('whatsapp_phone_number_id', '');
+    }, [data.whatsapp_waba_id]); // eslint-disable-line react-hooks/exhaustive-deps
 
     // Reset template when the phone number changes (templates are WABA-scoped).
     const prevPhoneRef = useRef(data.whatsapp_phone_number_id);
@@ -460,6 +480,7 @@ export default function CampaignForm({
                 uuid: draftUuid,
                 name: data.name,
                 channel: data.channel,
+                whatsapp_waba_id: data.whatsapp_waba_id || null,
                 whatsapp_phone_number_id: data.whatsapp_phone_number_id || null,
                 audience_type: data.audience_type,
                 audience_ref: data.audience_ref || null,
@@ -524,9 +545,7 @@ export default function CampaignForm({
             if (!data.name.trim() || !data.channel) return false;
             if (data.channel === 'sms' && !data.sms_provider) return false;
             // When WhatsApp is selected and there are multiple numbers, one must be chosen.
-            if (data.channel === 'whatsapp' && whatsappPhoneNumbers.length > 1 && !data.whatsapp_phone_number_id) {
-                return false;
-            }
+            if (data.channel === 'whatsapp' && (!data.whatsapp_waba_id || !data.whatsapp_phone_number_id)) return false;
             if (data.audience_type === 'csv') return !!data.audience_ref && !csvUpload.uploading;
             return true;
         }
@@ -538,7 +557,10 @@ export default function CampaignForm({
         }
         if (step === 2) {
             if (data.channel === 'whatsapp') {
-                return !!data.template_ref.name;
+                return !!data.template_ref.name && slots.flatMap((section) => section.slots ?? []).every((slot) => {
+                    const value = String(slot.value ?? '').trim();
+                    return value !== '' && (!slot.mediaKind || value.startsWith('https://'));
+                });
             }
             if (data.channel === 'sms') return (data.payload_json.body || '').trim().length > 0;
             if (data.channel === 'email') {
@@ -549,7 +571,7 @@ export default function CampaignForm({
             }
         }
         return true;
-    }, [step, data, csvUpload.uploading]);
+    }, [step, data, slots, csvUpload.uploading]);
 
     const handleSubmit = (e) => {
         e.preventDefault();
@@ -665,7 +687,7 @@ export default function CampaignForm({
                                 csvUpload={csvUpload}
                                 csvUploadLimits={csvUploadLimits}
                                 uploadAudienceCsv={uploadAudienceCsv}
-                                whatsappPhoneNumbers={whatsappPhoneNumbers}
+                                whatsappBusinessAccounts={whatsappBusinessAccounts}
                                 smsProviders={smsProviders}
                             />
                         )}
@@ -702,7 +724,7 @@ export default function CampaignForm({
                                 setData={setData}
                                 errors={errors}
                                 audienceCount={audiencePreview.deliverable}
-                                smsDeliveryLimits={activeSmsDeliveryLimits}
+                                smsDeliveryLimits={data.channel === 'whatsapp' ? whatsappDeliveryLimits : activeSmsDeliveryLimits}
                             />
                         )}
 
@@ -796,7 +818,7 @@ export default function CampaignForm({
 
 // ─── Step components ──────────────────────────────────────────────────────────
 
-function ChannelStep({ data, setData, errors, whatsappPhoneNumbers = [], smsProviders = [] }) {
+function ChannelStep({ data, setData, errors, whatsappBusinessAccounts = [], smsProviders = [] }) {
     const { t } = useTranslation();
     return (
         <>
@@ -837,32 +859,32 @@ function ChannelStep({ data, setData, errors, whatsappPhoneNumbers = [], smsProv
                             </button>
                         );
                     })}
-                    <div className="rounded-xl border border-dashed border-neutral-300 bg-neutral-50 p-4 text-center text-sm dark:border-neutral-700 dark:bg-neutral-800/50">
-                        <ChannelBrandIcon channel="whatsapp" className="mx-auto h-6 w-6 text-neutral-400" />
-                        <div className="mt-2 font-medium text-neutral-600 dark:text-neutral-300">WhatsApp</div>
-                        <div className="mt-1 text-xs text-neutral-500">Coming soon</div>
-                    </div>
                 </div>
                 <FieldError message={errors.channel} />
             </div>
 
-            {data.channel === 'whatsapp' && whatsappPhoneNumbers.length > 0 && (
+            {data.channel === 'whatsapp' && (
                 <div>
                     <label className="text-sm font-medium text-neutral-700 dark:text-neutral-300 block mb-2">
-                        {t('campaign.send_from')}
+                        WhatsApp Business Account
                     </label>
-                    {whatsappPhoneNumbers.length === 1 ? (
-                        <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800 px-3 py-2 text-sm text-neutral-700 dark:text-neutral-300">
-                            {whatsappPhoneNumbers[0].display_phone}
-                            {whatsappPhoneNumbers[0].verified_name && (
-                                <span className="ml-2 text-neutral-500 dark:text-neutral-400">
-                                    — {whatsappPhoneNumbers[0].verified_name}
-                                </span>
-                            )}
+                    {whatsappBusinessAccounts.length === 0 ? (
+                        <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
+                            Connect an active WhatsApp Business Account and phone in Channel Setup first.
                         </div>
                     ) : (
-                        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                            {whatsappPhoneNumbers.map((p) => {
+                        <>
+                            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                                {whatsappBusinessAccounts.map((waba) => (
+                                    <button key={waba.waba_id} type="button" onClick={() => { setData('whatsapp_waba_id', waba.waba_id); setData('whatsapp_phone_number_id', ''); }} className={`rounded-xl border p-3 text-left text-sm ${data.whatsapp_waba_id === waba.waba_id ? 'border-brand-600 bg-brand-50 dark:bg-brand-900/20' : 'border-neutral-200 dark:border-neutral-700'}`}>
+                                        <span className="font-medium">{waba.name}</span>
+                                        <span className="block text-xs text-neutral-500">{waba.phone_numbers.length} sending number{waba.phone_numbers.length === 1 ? '' : 's'}</span>
+                                    </button>
+                                ))}
+                            </div>
+                            {data.whatsapp_waba_id && <label className="mt-4 block text-sm font-medium">{t('campaign.send_from')}</label>}
+                            <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                            {(whatsappBusinessAccounts.find((w) => w.waba_id === data.whatsapp_waba_id)?.phone_numbers ?? []).map((p) => {
                                 const active = data.whatsapp_phone_number_id === p.phone_number_id;
                                 return (
                                     <button
@@ -881,11 +903,14 @@ function ChannelStep({ data, setData, errors, whatsappPhoneNumbers = [], smsProv
                                                 {p.verified_name}
                                             </span>
                                         )}
+                                        {(p.quality_rating || p.messaging_limit_tier) && <span className="text-xs font-normal text-neutral-500">{[p.quality_rating, p.messaging_limit_tier].filter(Boolean).join(' · ')}</span>}
                                     </button>
                                 );
                             })}
-                        </div>
+                            </div>
+                        </>
                     )}
+                    <FieldError message={errors.whatsapp_waba_id} />
                     <FieldError message={errors.whatsapp_phone_number_id} />
                 </div>
             )}

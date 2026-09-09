@@ -4,13 +4,14 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Resources\Api\V1\CampaignRecipientResource;
 use App\Http\Resources\Api\V1\CampaignResource;
-use App\Modules\Broadcasting\Jobs\LaunchCampaignJob;
 use App\Modules\Broadcasting\Http\Controllers\SmsProviderController;
+use App\Modules\Broadcasting\Jobs\LaunchCampaignJob;
 use App\Modules\Broadcasting\Models\Campaign;
 use App\Modules\Broadcasting\Models\CampaignRecipient;
 use App\Modules\Broadcasting\Models\UsageMeter;
 use App\Modules\Broadcasting\Services\CampaignStepService;
 use App\Modules\Broadcasting\Services\Sms\SmsDriverManager;
+use App\Modules\Broadcasting\Services\WhatsappCampaignValidator;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -42,7 +43,9 @@ class CampaignApiController extends WorkspaceScopedController
     {
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:200'],
-            'channel' => ['required', 'string', 'in:sms,email'],
+            'channel' => ['required', 'string', 'in:sms,email,whatsapp'],
+            'whatsapp_waba_id' => ['nullable', 'string', 'max:64'],
+            'whatsapp_phone_number_id' => ['nullable', 'string', 'max:64'],
             'audience_type' => ['nullable', 'string', 'in:segment,contact_list,tag,csv'],
             'audience_ref' => ['nullable', 'string'],
             'template_ref' => ['nullable', 'array'],
@@ -109,7 +112,7 @@ class CampaignApiController extends WorkspaceScopedController
         }
 
         if ($campaign->channel === 'whatsapp') {
-            return response()->json(['error' => 'WhatsApp campaigns are coming soon and cannot be launched yet.'], 422);
+            app(WhatsappCampaignValidator::class)->validate($campaign);
         }
 
         $patch = ['status' => 'queued'];
@@ -189,7 +192,9 @@ class CampaignApiController extends WorkspaceScopedController
 
         $validated = $request->validate([
             'name' => ['sometimes', 'required', 'string', 'max:200'],
-            'channel' => ['sometimes', 'required', 'string', 'in:sms,email'],
+            'channel' => ['sometimes', 'required', 'string', 'in:sms,email,whatsapp'],
+            'whatsapp_waba_id' => ['nullable', 'string', 'max:64'],
+            'whatsapp_phone_number_id' => ['nullable', 'string', 'max:64'],
             'audience_type' => ['sometimes', 'required', 'string', 'in:segment,contact_list,tag,csv'],
             'audience_ref' => ['nullable', 'string'],
             'template_ref' => ['nullable', 'array'],
@@ -212,8 +217,8 @@ class CampaignApiController extends WorkspaceScopedController
             $validated['sms_provider'] ?? $campaign->sms_provider,
         );
         if ($campaign->recipients()->exists()) {
-            foreach (['channel', 'sms_provider', 'audience_type', 'audience_ref'] as $field) {
-                if (array_key_exists($field, $validated) && (string) $validated[$field] !== (string) $campaign->{$field}) {
+            foreach (['channel', 'sms_provider', 'whatsapp_waba_id', 'whatsapp_phone_number_id', 'template_ref', 'audience_type', 'audience_ref'] as $field) {
+                if (array_key_exists($field, $validated) && json_encode($validated[$field]) !== json_encode($campaign->{$field})) {
                     return response()->json([
                         'error' => 'Channel and audience cannot change after campaign recipients have been prepared.',
                     ], 422);

@@ -8,6 +8,7 @@ use App\Modules\Broadcasting\Services\CampaignAudienceService;
 use App\Modules\Broadcasting\Services\CampaignStepService;
 use App\Modules\Broadcasting\Services\Sms\SmsDriverManager;
 use App\Modules\Broadcasting\Services\SmsCampaignCapacityService;
+use App\Modules\Broadcasting\Services\WhatsappCampaignValidator;
 use App\Modules\Shared\Models\Contact;
 use App\Modules\Shared\Models\Segment;
 use App\Modules\Shared\Services\ContactService;
@@ -45,7 +46,7 @@ class LaunchCampaignJob implements ShouldQueue
             return;
         }
 
-        if ($campaign->channel === 'sms') {
+        if (in_array($campaign->channel, ['sms', 'whatsapp'], true)) {
             $this->launchSms($campaign);
 
             return;
@@ -129,12 +130,17 @@ class LaunchCampaignJob implements ShouldQueue
 
     private function launchSms(Campaign $campaign): void
     {
+        $resolved = null;
         try {
-            $resolved = SmsDriverManager::resolveForWorkspace($campaign->workspace_id, $campaign->sms_provider);
+            if ($campaign->channel === 'sms') {
+                $resolved = SmsDriverManager::resolveForWorkspace($campaign->workspace_id, $campaign->sms_provider);
+            } else {
+                app(WhatsappCampaignValidator::class)->validate($campaign);
+            }
         } catch (\Throwable $exception) {
             $campaign->update([
                 'status' => 'safety_paused',
-                'pause_reason' => 'SMS provider is not configured: '.substr($exception->getMessage(), 0, 350),
+                'pause_reason' => ucfirst($campaign->channel).' campaign preflight failed: '.substr($exception->getMessage(), 0, 350),
             ]);
 
             return;
@@ -147,10 +153,9 @@ class LaunchCampaignJob implements ShouldQueue
             // the campaign as large from the outset so it receives exclusive
             // provider capacity.
             $cutoffId = null;
-            $recipientCount = max(
-                (int) $campaign->estimated_recipients,
-                (int) config('broadcasting.sms.large_campaign_threshold', 10000),
-            );
+            $recipientCount = $campaign->channel === 'sms'
+                ? max((int) $campaign->estimated_recipients, (int) config('broadcasting.sms.large_campaign_threshold', 10000))
+                : (int) $campaign->estimated_recipients;
         } else {
             $cutoffId = $campaign->audience_cutoff_id ?: $audience->maxContactId($campaign);
             $recipientCount = $cutoffId ? $audience->count($campaign, $cutoffId) : 0;
@@ -159,7 +164,7 @@ class LaunchCampaignJob implements ShouldQueue
         if ($campaign->audience_type !== 'csv' && $recipientCount === 0) {
             $campaign->update([
                 'status' => 'failed',
-                'pause_reason' => 'No eligible SMS contacts matched the audience.',
+                'pause_reason' => 'No eligible '.ucfirst($campaign->channel).' contacts matched the audience.',
                 'totals_json' => ['total' => 0, 'failed_reason' => 'No matching contacts for audience.'],
             ]);
 
@@ -167,7 +172,7 @@ class LaunchCampaignJob implements ShouldQueue
         }
 
         $capacity = app(SmsCampaignCapacityService::class);
-        if (! $capacity->admit($campaign, $resolved->providerKey, $recipientCount)) {
+        if ($campaign->channel === 'sms' && ! $capacity->admit($campaign, $resolved->providerKey, $recipientCount)) {
             return;
         }
 

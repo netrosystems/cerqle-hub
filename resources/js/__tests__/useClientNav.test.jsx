@@ -55,7 +55,7 @@ describe('client navigation organization', () => {
             'nav.ai_providers',
         ]);
         expect(campaigns.items.map((item) => item.label)).toEqual([
-            'nav.sms_campaigns',
+            'nav.campaigns',
             'nav.templates',
             'nav.auto_replies',
         ]);

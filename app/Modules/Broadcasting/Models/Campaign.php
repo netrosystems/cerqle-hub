@@ -49,7 +49,7 @@ class Campaign extends Model
     }
 
     protected $fillable = [
-        'workspace_id', 'name', 'channel', 'whatsapp_phone_number_id', 'sms_provider', 'audience_type', 'audience_ref',
+        'workspace_id', 'name', 'channel', 'whatsapp_waba_id', 'whatsapp_phone_number_id', 'sms_provider', 'audience_type', 'audience_ref',
         'template_ref', 'payload_json', 'schedule_at', 'timezone', 'status', 'totals_json', 'created_by',
         'provider_key', 'estimated_recipients', 'prepared_recipients', 'preparation_cursor',
         'preparation_offset', 'audience_cutoff_id', 'is_large', 'pause_reason',
@@ -110,10 +110,9 @@ class Campaign extends Model
         $delivered = $counts['delivered'] ?? 0;
         $read = $counts['read'] ?? 0;
 
-        if (in_array($this->channel, ['sms', 'whatsapp'], true)) {
-            // SMS and campaign-level WhatsApp delivery do not expose a
-            // trustworthy customer "seen" signal. Keep successful rows in the
-            // delivered bucket and do not surface a misleading read metric.
+        if ($this->channel === 'sms') {
+            // SMS delivery providers do not expose a trustworthy customer
+            // "seen" signal. WhatsApp does, through Meta status webhooks.
             $delivered += $sent + $read;
             $sent = 0;
             $read = 0;

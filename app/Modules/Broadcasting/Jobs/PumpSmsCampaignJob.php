@@ -7,6 +7,7 @@ use App\Modules\Broadcasting\Models\CampaignRecipient;
 use App\Modules\Broadcasting\Models\CampaignStep;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
+use Illuminate\Database\Query\Builder;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\Middleware\WithoutOverlapping;
@@ -35,7 +36,8 @@ class PumpSmsCampaignJob implements ShouldQueue
             return;
         }
 
-        $claimTimeout = max(60, (int) config('broadcasting.sms.claim_timeout_seconds', 180));
+        $configChannel = $campaign->channel === 'whatsapp' ? 'whatsapp' : 'sms';
+        $claimTimeout = max(60, (int) config("broadcasting.{$configChannel}.claim_timeout_seconds", 180));
         CampaignRecipient::where('campaign_id', $campaign->id)
             ->where('status', 'dispatching')
             ->where('claimed_at', '<', now()->subSeconds($claimTimeout))
@@ -64,7 +66,12 @@ class PumpSmsCampaignJob implements ShouldQueue
 
         $ids = $this->claimDueRecipients($campaign, $step);
         foreach ($ids as $recipientId) {
-            SendSmsCampaignMessageJob::dispatch($recipientId)->onQueue('broadcast');
+            if ($campaign->channel === 'whatsapp') {
+                $contactId = CampaignRecipient::whereKey($recipientId)->value('contact_id');
+                SendCampaignMessageJob::dispatch($campaign->id, $contactId)->onQueue('broadcast');
+            } else {
+                SendSmsCampaignMessageJob::dispatch($recipientId)->onQueue('broadcast');
+            }
         }
 
         if ($ids !== []) {
@@ -128,7 +135,8 @@ class PumpSmsCampaignJob implements ShouldQueue
         // otherwise cap a 180 TPS campaign at roughly 25 sends/second because
         // the pump runs once per second.
         $targetRate = max(1, (int) $step->rate_per_second);
-        $configuredBuffer = max(1, (int) config('broadcasting.sms.dispatch_buffer', 360));
+        $configChannel = $campaign->channel === 'whatsapp' ? 'whatsapp' : 'sms';
+        $configuredBuffer = max(1, (int) config("broadcasting.{$configChannel}.dispatch_buffer", 360));
         $buffer = $configuredBuffer >= $targetRate
             ? $configuredBuffer
             : max($configuredBuffer, $targetRate * 2);
@@ -177,7 +185,7 @@ class PumpSmsCampaignJob implements ShouldQueue
     }
 
     /**
-     * @param  \Closure(\Illuminate\Database\Query\Builder): void  $constraint
+     * @param  \Closure(Builder): void  $constraint
      * @return array<int, int>
      */
     private function claimWhere(Campaign $campaign, CampaignStep $step, int $limit, \Closure $constraint): array

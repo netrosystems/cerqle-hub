@@ -10,7 +10,7 @@ class CampaignStepService
 {
     public function sync(Campaign $campaign, ?array $steps): void
     {
-        if ($campaign->channel !== 'sms') {
+        if (! in_array($campaign->channel, ['sms', 'whatsapp'], true)) {
             $campaign->steps()->delete();
 
             return;
@@ -25,7 +25,7 @@ class CampaignStepService
             return;
         }
 
-        $normalised = $this->normalise($steps, $this->bulkRateForCampaign($campaign));
+        $normalised = $this->normalise($steps, $this->bulkRateForCampaign($campaign), $campaign->channel);
         $keep = [];
         foreach ($normalised as $position => $step) {
             $model = CampaignStep::updateOrCreate(
@@ -46,7 +46,7 @@ class CampaignStepService
     }
 
     /** @return array<int, array<string, mixed>> */
-    public function normalise(?array $steps, ?int $bulkRate = null): array
+    public function normalise(?array $steps, ?int $bulkRate = null, string $channel = 'sms'): array
     {
         if (empty($steps)) {
             return [
@@ -54,7 +54,7 @@ class CampaignStepService
                     'name' => 'Safety check',
                     'recipient_limit' => 100,
                     'delay_after_previous_seconds' => 0,
-                    'rate_per_second' => $this->maxRateForStep(1, $bulkRate),
+                    'rate_per_second' => $this->maxRateForStep(1, $bulkRate, $channel),
                 ],
                 [
                     'name' => 'Remaining contacts',
@@ -64,7 +64,7 @@ class CampaignStepService
                     // before bulk delivery; users who want a pause can add it
                     // explicitly in the delivery-step editor.
                     'delay_after_previous_seconds' => 0,
-                    'rate_per_second' => $this->maxRateForStep(2, $bulkRate),
+                    'rate_per_second' => $this->maxRateForStep(2, $bulkRate, $channel),
                 ],
             ];
         }
@@ -72,7 +72,7 @@ class CampaignStepService
         $out = [];
         foreach (array_slice($steps, 0, 10) as $index => $step) {
             $position = $index + 1;
-            $maximum = $this->maxRateForStep($position, $bulkRate);
+            $maximum = $this->maxRateForStep($position, $bulkRate, $channel);
             $out[] = [
                 'name' => trim((string) ($step['name'] ?? 'Step '.$position)) ?: 'Step '.$position,
                 'recipient_limit' => filled($step['recipient_limit'] ?? null)
@@ -98,8 +98,15 @@ class CampaignStepService
      * later step can use the verified gateway ceiling (180 TPS by default),
      * shared across all campaigns using the same provider credentials.
      */
-    public function maxRateForStep(int $position, ?int $bulkRate = null): int
+    public function maxRateForStep(int $position, ?int $bulkRate = null, string $channel = 'sms'): int
     {
+        if ($channel === 'whatsapp') {
+            $bulk = max(1, (int) config('broadcasting.whatsapp.platform_rate_per_second', 20));
+
+            return $position <= 1
+                ? max(1, min($bulk, (int) config('broadcasting.whatsapp.safety_rate_per_second', 2)))
+                : $bulk;
+        }
         if ($position <= 1) {
             return max(1, (int) config('broadcasting.sms.safety_rate_per_second', 5));
         }
@@ -112,6 +119,9 @@ class CampaignStepService
 
     private function bulkRateForCampaign(Campaign $campaign): int
     {
+        if ($campaign->channel === 'whatsapp') {
+            return max(1, (int) config('broadcasting.whatsapp.platform_rate_per_second', 20));
+        }
         try {
             return SmsDriverManager::resolveForWorkspace($campaign->workspace_id, $campaign->sms_provider)->throughputTps;
         } catch (\Throwable) {

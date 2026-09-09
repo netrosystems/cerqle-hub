@@ -75,7 +75,7 @@ export default function CampaignShow({ campaign, sample = [], errorSummary = nul
     const userTz = props.timezone || browserTz() || 'Asia/Dhaka';
     const totals = campaign.totals_json ?? {};
     const isSms = campaign.channel === 'sms';
-    const supportsReadTracking = campaign.channel === 'email';
+    const supportsReadTracking = ['email', 'whatsapp'].includes(campaign.channel);
     const total = totals.total || 1;
     const processed =
         (totals.sent ?? 0) + (totals.delivered ?? 0) + (supportsReadTracking ? (totals.read ?? 0) : 0) + (totals.failed ?? 0);
@@ -117,8 +117,7 @@ export default function CampaignShow({ campaign, sample = [], errorSummary = nul
         }
     };
 
-    const campaignAvailable = campaign.channel !== 'whatsapp';
-    const canEdit = campaignAvailable && ['draft', 'queued', 'paused', 'safety_paused'].includes(campaign.status);
+    const canEdit = ['draft', 'queued', 'paused', 'safety_paused'].includes(campaign.status);
 
     return (
         <ClientLayout title={campaign.name}>
@@ -166,7 +165,7 @@ export default function CampaignShow({ campaign, sample = [], errorSummary = nul
                         >
                             <Trash2 className="h-4 w-4" /> {t('common.delete')}
                         </button>
-                        {campaignAvailable && campaign.status === 'draft' && (
+                        {campaign.status === 'draft' && (
                             <button
                                 onClick={handleLaunch}
                                 className="flex items-center gap-1.5 rounded-lg bg-green-600 px-3 py-2 text-sm font-medium text-white hover:bg-green-700 transition"
@@ -174,7 +173,7 @@ export default function CampaignShow({ campaign, sample = [], errorSummary = nul
                                 <Play className="h-4 w-4" /> {t('campaign.launch')}
                             </button>
                         )}
-                        {campaignAvailable && ['preparing', 'sending', 'retrying'].includes(campaign.status) && (
+                        {['preparing', 'sending', 'retrying'].includes(campaign.status) && (
                             <button
                                 onClick={handlePause}
                                 className="flex items-center gap-1.5 rounded-lg bg-orange-500 px-3 py-2 text-sm font-medium text-white hover:bg-orange-600 transition"
@@ -182,7 +181,7 @@ export default function CampaignShow({ campaign, sample = [], errorSummary = nul
                                 <Pause className="h-4 w-4" /> {t('campaign.pause')}
                             </button>
                         )}
-                        {campaignAvailable && ['paused', 'safety_paused'].includes(campaign.status) && (
+                        {['paused', 'safety_paused'].includes(campaign.status) && (
                             <button
                                 onClick={handleLaunch}
                                 className="flex items-center gap-1.5 rounded-lg bg-green-600 px-3 py-2 text-sm font-medium text-white hover:bg-green-700 transition"
@@ -192,12 +191,6 @@ export default function CampaignShow({ campaign, sample = [], errorSummary = nul
                         )}
                     </div>
                 </div>
-
-                {!campaignAvailable && (
-                    <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-100">
-                        WhatsApp campaigns are coming soon. This historical campaign remains available for reporting only.
-                    </div>
-                )}
 
                 {countdown && (
                     <div className="flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 dark:border-blue-800 dark:bg-blue-900/20 px-4 py-3 text-sm text-blue-800 dark:text-blue-200">
