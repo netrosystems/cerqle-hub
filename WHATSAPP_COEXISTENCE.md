@@ -1,7 +1,11 @@
 # WhatsApp coexistence implementation checkpoint
 
-Status: 2026-09-09. New-messages-only pilot implemented on `spiderman`; not enabled
-or deployed. The current checkpoint below supersedes the earlier preparation notes.
+Status updated: 2026-09-11. The new-messages-only implementation was deployed in
+release v1.0.82 and rollout was last recorded as limited to one allowlisted pilot
+workspace. Meta onboarding remains blocked by Advanced Access error 2655111; the
+dedicated phone has not connected and end-to-end coexistence is not validated.
+`PROJECT_STATUS.md` is the current operational checkpoint. The implementation
+details below supersede the earlier preparation notes.
 
 ## Current pilot checkpoint
 
@@ -36,18 +40,15 @@ or deployed. The current checkpoint below supersedes the earlier preparation not
   96 tests in 22 files; Vite builds. PHPStan remains
   non-green at 578 findings, with none reported in new coexistence classes.
 
-### Remaining release steps
+### Remaining provider-validation steps
 
-1. Final checks; commit on spiderman, reconcile origin/dev, fast-forward dev, then
-   approved merge to main. No suppression or force push.
-2. Confirm a production database backup, deploy GitHub main with the production
-   script, verify migrations and WhatsApp workers before activation.
-3. Enable only the approved workspace; rebuild config, register and verify Meta
-   subscriptions. Keep import disabled and decline sharing during the live flow.
-4. User approves the new dedicated Business app number on their phone. Verify its
+1. Resolve the Meta Advanced Access eligibility/review blocker for the partner app.
+2. Reconfirm the allowlist and import-disabled production configuration; register
+   and verify exact Meta subscriptions without exposing the pilot globally.
+3. User approves the dedicated Business app number on their phone. Verify its
    exact Graph API mode and test customer inbound, Cerqle reply, Business app echo,
    duplicate handling, human takeover and quota in both Cerqle and WhatsApp.
-5. Do not expose the pilot globally until provider-side checks are complete.
+4. Do not expose the pilot globally until provider-side checks are complete.
 
 Meta documents Embedded Signup v2 deprecation on 2026-10-08. Verify the app's v4
 configuration/SDK compatibility before that deadline. Do not claim historical
