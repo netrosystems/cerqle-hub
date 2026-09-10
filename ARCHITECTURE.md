@@ -210,7 +210,13 @@ YouTube OAuth requests `https://www.googleapis.com/auth/youtube.force-ssl`, the 
 
 ## 5. Integrations & External Service Contracts
 
-### WhatsApp coexistence preparation (2026-09-09; not enabled)
+### WhatsApp coexistence guarded pilot (updated 2026-09-11)
+
+The implementation was deployed in release v1.0.82 and rollout was last recorded
+as enabled only for one allowlisted pilot workspace. Meta onboarding remains
+externally blocked by Advanced Access error 2655111; no successful phone connection
+or end-to-end coexistence validation has been recorded. See `PROJECT_STATUS.md` for
+the dated operational checkpoint.
 
 The signup session listener captures Meta events for the whole OAuth interaction;
 its 15-second grace period starts only after the code callback. Explicit CANCEL,
@@ -245,8 +251,8 @@ sends. It cannot retract a provider request already in flight.
 The additive migration introduces phone `connection_mode`/`coexistence_meta` and
 message `origin`. The WhatsApp service-window query excludes `whatsapp_history`,
 is scoped to the conversation's channel account, and rejects future timestamps.
-Run this migration before deploying the query change; it has not been applied to
-production by this implementation work.
+The migration and query change were deployed with the guarded implementation.
+Provider-side onboarding and end-to-end validation remain incomplete.
 
 See `WHATSAPP_COEXISTENCE.md` for verified provider contracts and rollout gates.
 
