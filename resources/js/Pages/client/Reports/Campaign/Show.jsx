@@ -5,6 +5,7 @@ import { Download, ArrowLeft, Filter, Clock } from 'lucide-react';
 import { useState } from 'react';
 import { formatInTz } from '@/Utils/datetime';
 import { useTranslation } from 'react-i18next';
+import { campaignFailureMessage } from '@/Utils/campaignFailure';
 
 const STATUS_COLORS = {
     queued: 'bg-gray-100 text-gray-700',
@@ -39,6 +40,10 @@ export default function CampaignReportShow({
     const isSms = campaign.channel === 'sms';
     const supportsReadTracking = campaign.channel === 'email';
     const [statusFilter, setStatusFilter] = useState(filters.status ?? '');
+    const displayedFailedReasons = failedReasons.map((item) => ({
+        ...item,
+        name: campaignFailureMessage(campaign.channel, item.name),
+    }));
 
     const applyFilter = (status) => {
         setStatusFilter(status);
@@ -140,7 +145,7 @@ export default function CampaignReportShow({
                         <div className="font-semibold">Delivery issues need attention</div>
                         <div className="mt-1 text-xs">{errorSummary.has_provider_errors ? 'Provider configuration or routing needs attention. ' : ''}{errorSummary.has_recipient_errors ? 'Some recipient details are invalid. ' : ''}{errorSummary.has_retries ? 'Some messages are queued for retry.' : ''}</div>
                         <ul className="mt-3 space-y-1 text-xs">
-                            {(errorSummary.items ?? []).map((item) => <li key={`${item.class}:${item.reason}`}><span className="font-semibold">{item.count}× {String(item.class).replaceAll('_', ' ')}:</span> {item.reason}{item.help && <span className="block pl-3 text-red-700 dark:text-red-200">{item.help}</span>}</li>)}
+                            {(errorSummary.items ?? []).map((item) => <li key={`${item.class}:${item.reason}`}><span className="font-semibold">{item.count}× {String(item.class).replaceAll('_', ' ')}:</span> {campaignFailureMessage(campaign.channel, item.reason)}{item.help && <span className="block pl-3 text-red-700 dark:text-red-200">{item.help}</span>}</li>)}
                         </ul>
                     </div>
                 )}
@@ -151,8 +156,8 @@ export default function CampaignReportShow({
                         <h3 className="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3">
                             {t('reports.failed_reasons')}
                         </h3>
-                        {failedReasons.length > 0 ? (
-                            <DonutChart data={failedReasons} nameKey="name" valueKey="value" height={220} />
+                        {displayedFailedReasons.length > 0 ? (
+                            <DonutChart data={displayedFailedReasons} nameKey="name" valueKey="value" height={220} />
                         ) : (
                             <p className="text-sm text-gray-400 py-8 text-center">{t('reports.no_failures')}</p>
                         )}
@@ -239,7 +244,7 @@ export default function CampaignReportShow({
                                                     {r.read_at ? formatInTz(r.read_at, userTz) : '—'}
                                                 </td>}
                                                 <td className="py-2 text-gray-500 max-w-xs truncate" title={r.failed_reason ?? ''}>
-                                                    {r.failed_reason ?? '—'}
+                                                    {campaignFailureMessage(campaign.channel, r.failed_reason) ?? '—'}
                                                 </td>
                                             </tr>
                                         );

@@ -16,6 +16,7 @@ import {
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { browserTz, formatInTz } from '@/Utils/datetime';
+import { campaignFailureMessage } from '@/Utils/campaignFailure';
 
 const STATUS_COLORS = {
     draft: 'bg-neutral-100 text-neutral-600',
@@ -225,7 +226,8 @@ export default function CampaignShow({ campaign, sample = [], errorSummary = nul
                         <ul className="mt-2 space-y-1 text-xs">
                             {(errorSummary.items ?? []).map((item) => (
                                 <li key={`${item.class}:${item.reason}`}>
-                                    <span className="font-semibold">{item.count}× {String(item.class).replaceAll('_', ' ')}:</span> {item.reason}
+                                    <span className="font-semibold">{item.count}× {String(item.class).replaceAll('_', ' ')}:</span>{' '}
+                                    {campaignFailureMessage(campaign.channel, item.reason)}
                                     {item.help && <span className="block pl-3 text-red-700 dark:text-red-200">{item.help}</span>}
                                 </li>
                             ))}
@@ -369,7 +371,7 @@ export default function CampaignShow({ campaign, sample = [], errorSummary = nul
                                                     </span>
                                                     {r.status === 'failed' && r.failed_reason && (
                                                         <div className="mt-1 text-xs text-red-500 max-w-[200px]" title={r.failed_reason}>
-                                                            {r.failed_reason}
+                                                            {campaignFailureMessage(campaign.channel, r.failed_reason)}
                                                         </div>
                                                     )}
                                                 </td>

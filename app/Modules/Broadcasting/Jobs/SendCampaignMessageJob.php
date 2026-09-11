@@ -4,6 +4,7 @@ namespace App\Modules\Broadcasting\Jobs;
 
 use App\Events\MessageSent;
 use App\Models\SmtpConfiguration;
+use App\Modules\Broadcasting\Exceptions\WhatsappSendFailure;
 use App\Modules\Broadcasting\Models\Campaign;
 use App\Modules\Broadcasting\Models\CampaignRecipient;
 use App\Modules\Broadcasting\Models\UsageMeter;
@@ -23,6 +24,7 @@ use App\Services\Mail\MailService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
+use Illuminate\Http\Client\Response;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Cache;
@@ -171,7 +173,11 @@ class SendCampaignMessageJob implements ShouldQueue
             $recipient?->update([
                 'status' => $retryable ? 'retrying' : 'failed',
                 'failed_reason' => substr($e->getMessage(), 0, 512),
-                'failure_class' => $retryable ? 'rate_limit_wait' : ($e instanceof ValidationException ? 'configuration' : 'provider_rejection'),
+                'failure_class' => $retryable
+                    ? 'rate_limit_wait'
+                    : ($e instanceof WhatsappSendFailure
+                        ? $e->failureClass
+                        : ($e instanceof ValidationException ? 'configuration' : 'provider_rejection')),
                 'next_attempt_at' => $retryable ? now()->addSeconds(60) : null,
             ]);
             if ($retryable) {
@@ -240,8 +246,23 @@ class SendCampaignMessageJob implements ShouldQueue
         $resp = $client->sendTemplate($phone, $name, $language, $forSend);
 
         if (! $resp->successful()) {
-            $metaError = $resp->json('error.message') ?? $resp->body();
-            throw new \RuntimeException('WhatsApp send failed (HTTP '.$resp->status().'): '.$metaError.' code '.($resp->json('error.code') ?? 'unknown'));
+            $metaMessage = trim((string) ($resp->json('error.message') ?? $resp->body()));
+            $metaDetails = trim((string) $resp->json('error.error_data.details', ''));
+            $metaCode = trim((string) $resp->json('error.code', 'unknown'));
+
+            Log::channel('json')->warning('campaign.whatsapp.provider_rejected', [
+                'workspace_id' => $campaign->workspace_id,
+                'campaign_id' => $campaign->id,
+                'contact_id' => $contact->id,
+                'http_status' => $resp->status(),
+                'meta_code' => $metaCode,
+                'meta_message' => $metaMessage,
+                'meta_details' => $metaDetails,
+            ]);
+
+            $failure = $this->whatsappFailure($resp);
+
+            throw new WhatsappSendFailure($failure['message'], $failure['class']);
         }
 
         $messageId = trim((string) $resp->json('messages.0.id', ''));
@@ -271,6 +292,41 @@ class SendCampaignMessageJob implements ShouldQueue
             'payload' => [
                 'template' => $template,
             ],
+        ];
+    }
+
+    /** @return array{message: string, class: string} */
+    private function whatsappFailure(Response $response): array
+    {
+        $code = trim((string) $response->json('error.code', 'unknown'));
+        $message = trim((string) ($response->json('error.message') ?? $response->body()));
+        $details = trim((string) $response->json('error.error_data.details', ''));
+
+        if ($code === '131009') {
+            $providerText = $message.' '.$details;
+            $recipientEvidence = preg_match(
+                '/(?:recipient|phone(?: number)?|wa_id).*(?:not (?:a )?(?:valid|registered)|invalid|not on whatsapp|not a whatsapp user)|(?:not (?:a )?(?:valid|registered)|invalid|not on whatsapp|not a whatsapp user).*(?:recipient|phone(?: number)?|wa_id)/i',
+                $providerText,
+            ) === 1;
+
+            if ($recipientEvidence) {
+                return [
+                    'message' => 'This phone number is not registered on WhatsApp or is invalid. (Meta error 131009)',
+                    'class' => 'recipient',
+                ];
+            }
+
+            return [
+                'message' => 'WhatsApp could not send to this number. It may not be registered on WhatsApp, or a message/template value may be invalid. (Meta error 131009)',
+                'class' => 'provider_rejection',
+            ];
+        }
+
+        $detailSuffix = $details !== '' && ! str_contains($message, $details) ? ': '.$details : '';
+
+        return [
+            'message' => 'WhatsApp send failed (HTTP '.$response->status().'): '.$message.$detailSuffix.' (Meta error '.$code.')',
+            'class' => 'provider_rejection',
         ];
     }
 
