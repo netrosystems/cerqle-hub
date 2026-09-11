@@ -15,6 +15,8 @@ class ProductionDeploymentScriptTest extends TestCase
         $this->assertStringContainsString('start \'cerqle-worker:*\'', $script);
         $this->assertStringContainsString('stop "$BROADCAST_PROGRAM:*"', $script);
         $this->assertStringContainsString('start "$BROADCAST_PROGRAM:*"', $script);
+        $this->assertStringContainsString('RUNNING_BROADCAST_WORKERS', $script);
+        $this->assertStringContainsString('LEGACY_BROADCAST_BACKUP', $script);
         $this->assertStringContainsString('ERROR: Dedicated broadcast workers are not installed', $script);
         $this->assertStringNotContainsString('WARNING: Dedicated broadcast workers are not installed', $script);
     }

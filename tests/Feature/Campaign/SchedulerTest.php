@@ -6,9 +6,11 @@ use App\Models\User;
 use App\Models\Workspace;
 use App\Modules\Broadcasting\Jobs\LaunchCampaignJob;
 use App\Modules\Broadcasting\Jobs\LaunchScheduledCampaignsJob;
+use App\Modules\Broadcasting\Jobs\RecoverSmsCampaignsJob;
 use App\Modules\Broadcasting\Models\Campaign;
 use App\Modules\Broadcasting\Models\CampaignRecipient;
 use App\Modules\Shared\Models\Contact;
+use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Queue;
 use PHPUnit\Framework\Attributes\Test;
@@ -30,7 +32,19 @@ class SchedulerTest extends TestCase
     }
 
     #[Test]
-    public function launching_a_draft_with_a_future_schedule_does_not_dispatch_immediately(): void
+    public function scheduler_maintenance_jobs_are_unique_during_worker_outages(): void
+    {
+        $launch = new LaunchScheduledCampaignsJob;
+        $recover = new RecoverSmsCampaignsJob;
+
+        $this->assertInstanceOf(ShouldBeUnique::class, $launch);
+        $this->assertInstanceOf(ShouldBeUnique::class, $recover);
+        $this->assertSame(3600, $launch->uniqueFor);
+        $this->assertSame(3600, $recover->uniqueFor);
+    }
+
+    #[Test]
+    public function launching_a_draft_with_a_future_schedule_dispatches_a_delayed_job(): void
     {
         Queue::fake();
 
@@ -53,7 +67,11 @@ class SchedulerTest extends TestCase
         $this->assertNotNull($campaign->schedule_at);
         $this->assertTrue($campaign->schedule_at->isFuture());
 
-        Queue::assertNotPushed(LaunchCampaignJob::class);
+        Queue::assertPushed(
+            LaunchCampaignJob::class,
+            fn (LaunchCampaignJob $job) => $job->campaignId === $campaign->id
+                && $job->delay?->getTimestamp() === $campaign->schedule_at->getTimestamp(),
+        );
     }
 
     #[Test]
@@ -84,7 +102,11 @@ class SchedulerTest extends TestCase
             $campaign->schedule_at->getTimestamp(),
             1,
         );
-        Queue::assertNotPushed(LaunchCampaignJob::class);
+        Queue::assertPushed(
+            LaunchCampaignJob::class,
+            fn (LaunchCampaignJob $job) => $job->campaignId === $campaign->id
+                && $job->delay?->getTimestamp() === $campaign->schedule_at->getTimestamp(),
+        );
     }
 
     #[Test]
@@ -121,6 +143,27 @@ class SchedulerTest extends TestCase
             LaunchCampaignJob::class,
             fn (LaunchCampaignJob $job) => $job->campaignId === $notDue->id,
         );
+    }
+
+    #[Test]
+    public function an_obsolete_delayed_job_cannot_launch_a_campaign_before_its_new_schedule(): void
+    {
+        Queue::fake();
+
+        [, $workspace] = $this->ctx();
+
+        $campaign = Campaign::factory()->create([
+            'workspace_id' => $workspace->id,
+            'channel' => 'sms',
+            'sms_provider' => 'twilio',
+            'status' => 'queued',
+            'schedule_at' => now()->addHour(),
+        ]);
+
+        (new LaunchCampaignJob($campaign->id))->handle();
+
+        $this->assertSame('queued', $campaign->fresh()->status);
+        Queue::assertNothingPushed();
     }
 
     #[Test]
@@ -266,6 +309,8 @@ class SchedulerTest extends TestCase
     #[Test]
     public function a_queued_campaign_can_be_edited_before_sending_starts(): void
     {
+        Queue::fake();
+
         [$user, $workspace] = $this->ctx();
 
         $campaign = Campaign::factory()->create([
@@ -297,6 +342,11 @@ class SchedulerTest extends TestCase
         $this->assertSame('queued', $campaign->status);
         $this->assertSame('Updated queued campaign', $campaign->name);
         $this->assertSame('Updated before launch', $campaign->payload_json['body']);
+        Queue::assertPushed(
+            LaunchCampaignJob::class,
+            fn (LaunchCampaignJob $job) => $job->campaignId === $campaign->id
+                && $job->delay?->getTimestamp() === $campaign->schedule_at->getTimestamp(),
+        );
     }
 
     #[Test]

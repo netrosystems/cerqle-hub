@@ -188,11 +188,19 @@ class CampaignController extends Controller
         unset($validated['delivery_steps']);
         $this->assertPreparedAudienceIsUnchanged($campaign, $validated);
         $previousCsv = $campaign->audience_type === 'csv' ? $campaign->audience_ref : null;
+        $previousSchedule = $campaign->schedule_at?->getTimestamp();
         $campaign->update($validated);
         if ($previousCsv && ($campaign->audience_type !== 'csv' || $campaign->audience_ref !== $previousCsv)) {
             $this->deleteCampaignCsv($campaign->workspace_id, $previousCsv);
         }
         app(CampaignStepService::class)->sync($campaign, $steps);
+
+        // A queued campaign already has a delayed launch job. If its delivery
+        // time changes, enqueue a replacement for the new time; the old job
+        // will exit when it sees that the campaign is not due yet.
+        if ($campaign->status === 'queued' && $previousSchedule !== $campaign->schedule_at?->getTimestamp()) {
+            $this->dispatchCampaignLaunch($campaign);
+        }
 
         return redirect()->route('client.campaigns.show', $campaign)->with('success', 'Campaign updated.');
     }
@@ -280,15 +288,22 @@ class CampaignController extends Controller
         $campaign->update($patch);
         $campaign->refresh();
 
-        // Only kick the job immediately when there is no future schedule.
-        // Future-scheduled campaigns are picked up by LaunchScheduledCampaignsJob.
-        if (! $campaign->schedule_at || $campaign->schedule_at->isPast()) {
-            LaunchCampaignJob::dispatch($campaign->id)->onQueue('broadcast');
-        }
+        // Persist the launch in Redis now, using its native delayed queue for
+        // future delivery. The minute scheduler remains a recovery fallback.
+        $this->dispatchCampaignLaunch($campaign);
 
         UsageMeter::track($campaign->workspace_id, 'campaigns');
 
         return back()->with('success', 'Campaign launched.');
+    }
+
+    private function dispatchCampaignLaunch(Campaign $campaign): void
+    {
+        $dispatch = LaunchCampaignJob::dispatch($campaign->id)->onQueue('broadcast');
+
+        if ($campaign->schedule_at?->isFuture()) {
+            $dispatch->delay($campaign->schedule_at);
+        }
     }
 
     public function pause(Request $request, Campaign $campaign): RedirectResponse

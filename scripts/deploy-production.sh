@@ -66,6 +66,8 @@ php artisan queue:restart
 # queue backlog could prevent the broadcast queue from ever being inspected.
 BROADCAST_PROGRAM='cerqle-broadcast-worker'
 BROADCAST_CONFIG='/etc/supervisor/conf.d/cerqle-broadcast-worker.conf'
+LEGACY_BROADCAST_CONFIG='/etc/supervisor/conf.d/cerqle-broadcast.conf'
+LEGACY_BROADCAST_BACKUP='/etc/supervisor/cerqle-broadcast.conf.disabled'
 if command -v supervisorctl >/dev/null 2>&1 && command -v sudo >/dev/null 2>&1 && sudo -n true >/dev/null 2>&1; then
     PHP_CLI_BINARY="$(command -v php)"
     TEMP_CONFIG="$(mktemp)"
@@ -74,6 +76,17 @@ if command -v supervisorctl >/dev/null 2>&1 && command -v sudo >/dev/null 2>&1 &
         deploy/server/cerqle-broadcast-worker.conf.template > "$TEMP_CONFIG"
     sudo -n install -m 0644 "$TEMP_CONFIG" "$BROADCAST_CONFIG"
     rm -f "$TEMP_CONFIG"
+
+    # A former server-local configuration launched twelve campaign workers and
+    # can conflict with the repository-managed group. Disable only that exact
+    # legacy program and retain a recoverable copy outside conf.d.
+    if [[ -f "$LEGACY_BROADCAST_CONFIG" ]] && sudo -n grep -qF '[program:cerqle-broadcast]' "$LEGACY_BROADCAST_CONFIG"; then
+        if [[ -e "$LEGACY_BROADCAST_BACKUP" ]]; then
+            echo "ERROR: Legacy broadcast worker backup already exists; review both Supervisor files manually." >&2
+            exit 1
+        fi
+        sudo -n mv "$LEGACY_BROADCAST_CONFIG" "$LEGACY_BROADCAST_BACKUP"
+    fi
 fi
 
 # `queue:restart` relies on the old worker reading the same cache-backed restart
@@ -104,18 +117,20 @@ if [[ ${#SUPERVISOR[@]} -gt 0 ]]; then
         fi
     fi
 
-    if "${SUPERVISOR[@]}" status "$BROADCAST_PROGRAM:*" >/dev/null 2>&1; then
-        "${SUPERVISOR[@]}" stop "$BROADCAST_PROGRAM:*" || true
-        "${SUPERVISOR[@]}" start "$BROADCAST_PROGRAM:*"
-        sleep 2
-        BROADCAST_STATUS="$("${SUPERVISOR[@]}" status "$BROADCAST_PROGRAM:*")"
-        echo "$BROADCAST_STATUS"
-        if echo "$BROADCAST_STATUS" | grep -Eq '(STOPPED|FATAL|BACKOFF|EXITED|UNKNOWN)'; then
-            echo "ERROR: The dedicated campaign workers failed to start." >&2
-            exit 1
-        fi
-    else
+    BROADCAST_STATUS="$("${SUPERVISOR[@]}" status "$BROADCAST_PROGRAM:*" 2>&1 || true)"
+    if ! grep -qF "$BROADCAST_PROGRAM:" <<< "$BROADCAST_STATUS"; then
         echo "ERROR: Dedicated broadcast workers are not installed; refusing to leave campaign delivery without isolated capacity." >&2
+        exit 1
+    fi
+
+    "${SUPERVISOR[@]}" stop "$BROADCAST_PROGRAM:*" || true
+    "${SUPERVISOR[@]}" start "$BROADCAST_PROGRAM:*"
+    sleep 3
+    BROADCAST_STATUS="$("${SUPERVISOR[@]}" status "$BROADCAST_PROGRAM:*")"
+    echo "$BROADCAST_STATUS"
+    RUNNING_BROADCAST_WORKERS="$(grep -cE "^$BROADCAST_PROGRAM:.*[[:space:]]RUNNING[[:space:]]" <<< "$BROADCAST_STATUS" || true)"
+    if [[ "$RUNNING_BROADCAST_WORKERS" -ne 2 ]] || echo "$BROADCAST_STATUS" | grep -Eq '(STOPPED|FATAL|BACKOFF|EXITED|UNKNOWN)'; then
+        echo "ERROR: Expected two dedicated campaign workers to be RUNNING." >&2
         exit 1
     fi
 else
