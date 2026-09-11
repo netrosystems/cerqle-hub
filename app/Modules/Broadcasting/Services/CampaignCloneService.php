@@ -26,7 +26,7 @@ class CampaignCloneService
                     'whatsapp_phone_number_id' => $source->whatsapp_phone_number_id,
                     'sms_provider' => $source->sms_provider,
                     'audience_type' => $source->audience_type,
-                    'audience_ref' => $copiedCsv ?? $source->audience_ref,
+                    'audience_ref' => $source->audience_type === 'csv' ? $copiedCsv : $source->audience_ref,
                     'template_ref' => $source->template_ref,
                     'payload_json' => $source->payload_json,
                     'schedule_at' => null,
@@ -34,7 +34,7 @@ class CampaignCloneService
                     'status' => 'draft',
                     'totals_json' => null,
                     'created_by' => $createdBy,
-                    'estimated_recipients' => $source->audience_type === 'csv'
+                    'estimated_recipients' => $source->audience_type === 'csv' && $copiedCsv
                         ? $source->estimated_recipients
                         : 0,
                 ]);
@@ -70,7 +70,7 @@ class CampaignCloneService
         $sourcePath = (string) $source->audience_ref;
         $directory = 'campaign-imports/'.$source->workspace_id;
         if (! str_starts_with($sourcePath, $directory.'/') || ! Storage::disk('local')->exists($sourcePath)) {
-            throw new RuntimeException('The campaign CSV is missing and cannot be cloned. Upload a new CSV to a draft campaign instead.');
+            return null;
         }
 
         $extension = pathinfo($sourcePath, PATHINFO_EXTENSION) ?: 'csv';

@@ -70,7 +70,7 @@ class CampaignCloneTest extends TestCase
             ->post(route('client.campaigns.clone', $source));
 
         $copy = Campaign::where('workspace_id', $workspace->id)
-            ->whereKeyNot($source->id)
+            ->where('id', '!=', $source->id)
             ->sole();
         $response->assertRedirect(route('client.campaigns.edit', $copy));
         $response->assertSessionHas('success');
@@ -132,7 +132,7 @@ class CampaignCloneTest extends TestCase
             ->post(route('client.campaigns.clone', $source))
             ->assertRedirect();
 
-        $copy = Campaign::whereKeyNot($source->id)->sole();
+        $copy = Campaign::where('id', '!=', $source->id)->sole();
         $this->assertNotSame($sourcePath, $copy->audience_ref);
         $this->assertSame(1, $copy->estimated_recipients);
         Storage::disk('local')->assertExists($sourcePath);
@@ -160,6 +160,31 @@ class CampaignCloneTest extends TestCase
 
         $this->assertSame(0, Campaign::where('workspace_id', $workspace->id)->count());
         $this->assertSame(1, Campaign::where('workspace_id', $other->id)->count());
+    }
+
+    #[Test]
+    public function a_campaign_with_a_missing_csv_still_clones_and_requests_a_replacement(): void
+    {
+        Storage::fake('local');
+        [$user, $workspace] = $this->context();
+        $source = Campaign::factory()->create([
+            'workspace_id' => $workspace->id,
+            'channel' => 'sms',
+            'audience_type' => 'csv',
+            'audience_ref' => 'campaign-imports/'.$workspace->id.'/missing.csv',
+            'estimated_recipients' => 50,
+            'status' => 'completed',
+        ]);
+
+        $response = $this->actingAs($user)
+            ->post(route('client.campaigns.clone', $source));
+
+        $copy = Campaign::where('id', '!=', $source->id)->sole();
+        $response->assertRedirect(route('client.campaigns.edit', $copy));
+        $response->assertSessionHas('success', fn (string $message) => str_contains($message, 'upload a new CSV'));
+        $this->assertSame('draft', $copy->status);
+        $this->assertNull($copy->audience_ref);
+        $this->assertSame(0, $copy->estimated_recipients);
     }
 
     private function context(): array

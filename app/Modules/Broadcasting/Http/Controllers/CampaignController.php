@@ -10,8 +10,8 @@ use App\Modules\Broadcasting\Models\CampaignRecipient;
 use App\Modules\Broadcasting\Models\SmsProviderConfig;
 use App\Modules\Broadcasting\Models\UsageMeter;
 use App\Modules\Broadcasting\Models\WorkspaceSmtpConfig;
-use App\Modules\Broadcasting\Services\CampaignCsvService;
 use App\Modules\Broadcasting\Services\CampaignCloneService;
+use App\Modules\Broadcasting\Services\CampaignCsvService;
 use App\Modules\Broadcasting\Services\CampaignPersonalizer;
 use App\Modules\Broadcasting\Services\CampaignStepService;
 use App\Modules\Broadcasting\Services\Sms\SmsDriverManager;
@@ -269,9 +269,13 @@ class CampaignController extends Controller
 
         $copy = $cloner->duplicate($campaign, (int) $request->user()->id);
 
+        $message = $campaign->audience_type === 'csv' && blank($copy->audience_ref)
+            ? 'Campaign cloned as a draft. The original CSV is unavailable, so upload a new CSV before launching.'
+            : 'Campaign cloned as a draft. Review it before launching.';
+
         return redirect()
             ->route('client.campaigns.edit', $copy)
-            ->with('success', 'Campaign cloned as a draft. Review it before launching.');
+            ->with('success', $message);
     }
 
     public function launch(Request $request, Campaign $campaign): RedirectResponse
