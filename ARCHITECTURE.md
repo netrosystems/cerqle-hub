@@ -234,6 +234,12 @@ other WhatsApp workflows. Media headers remain template-defined: an approved
 `IMAGE`, `VIDEO`, or `DOCUMENT` header requires one matching parameter per send,
 while header-free templates require no media.
 
+Campaign cloning is workspace-authorized and always creates a draft. It copies
+configuration and delivery-step definitions, but never recipient rows, queue
+state, provider progress, totals, failure history, or schedule timestamps. CSV
+audiences are copied to a new workspace-scoped storage path so either campaign
+can be edited or deleted independently.
+
 ---
 
 ## 5. Integrations & External Service Contracts

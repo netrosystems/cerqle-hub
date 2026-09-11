@@ -12,6 +12,7 @@ import {
     Clock,
     ExternalLink,
     AlertCircle,
+    Copy,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -112,6 +113,8 @@ export default function CampaignShow({ campaign, sample = [], errorSummary = nul
         router.post(route('client.campaigns.launch', campaign.uuid), {}, { preserveScroll: true });
     const handlePause = () =>
         router.post(route('client.campaigns.pause', campaign.uuid), {}, { preserveScroll: true });
+    const handleClone = () =>
+        router.post(route('client.campaigns.clone', campaign.uuid));
     const handleDelete = () => {
         if (confirm(t('campaign.delete_confirm'))) {
             router.delete(route('client.campaigns.destroy', campaign.uuid));
@@ -144,6 +147,13 @@ export default function CampaignShow({ campaign, sample = [], errorSummary = nul
                         </span>
                     </h2>
                     <div className="ml-auto flex flex-wrap gap-2">
+                        <button
+                            type="button"
+                            onClick={handleClone}
+                            className="flex items-center gap-1.5 rounded-lg border border-neutral-300 dark:border-neutral-600 px-3 py-2 text-sm font-medium text-neutral-700 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-800 transition"
+                        >
+                            <Copy className="h-4 w-4" /> {t('campaign.clone')}
+                        </button>
                         {canEdit && (
                             <Link
                                 href={route('client.campaigns.edit', campaign.uuid)}
