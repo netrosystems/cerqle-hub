@@ -17,7 +17,9 @@ class ProductionDeploymentScriptTest extends TestCase
         $this->assertStringContainsString('stop "$BROADCAST_PROGRAM:*"', $script);
         $this->assertStringContainsString('start "$BROADCAST_PROGRAM:*"', $script);
         $this->assertStringContainsString('start "$BROADCAST_PROGRAM:*" || true', $script);
-        $this->assertStringContainsString('RUNNING_BROADCAST_WORKERS', $script);
+        $this->assertStringContainsString('wait_for_supervisor_group', $script);
+        $this->assertStringContainsString('for _attempt in {1..15}', $script);
+        $this->assertStringContainsString('wait_for_supervisor_group "$BROADCAST_PROGRAM" 2', $script);
         $this->assertStringContainsString('LEGACY_BROADCAST_BACKUP', $script);
         $this->assertStringContainsString('ERROR: Dedicated broadcast workers are not installed', $script);
         $this->assertStringNotContainsString('WARNING: Dedicated broadcast workers are not installed', $script);
