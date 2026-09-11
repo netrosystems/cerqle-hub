@@ -11,6 +11,7 @@ use App\Modules\Broadcasting\Models\SmsProviderConfig;
 use App\Modules\Broadcasting\Models\UsageMeter;
 use App\Modules\Broadcasting\Models\WorkspaceSmtpConfig;
 use App\Modules\Broadcasting\Services\CampaignCsvService;
+use App\Modules\Broadcasting\Services\CampaignCloneService;
 use App\Modules\Broadcasting\Services\CampaignPersonalizer;
 use App\Modules\Broadcasting\Services\CampaignStepService;
 use App\Modules\Broadcasting\Services\Sms\SmsDriverManager;
@@ -260,6 +261,17 @@ class CampaignController extends Controller
             ],
             'reportUrl' => route('client.reports.campaigns.show', $campaign->uuid),
         ]);
+    }
+
+    public function duplicate(Request $request, Campaign $campaign, CampaignCloneService $cloner): RedirectResponse
+    {
+        $this->authorise($request, $campaign);
+
+        $copy = $cloner->duplicate($campaign, (int) $request->user()->id);
+
+        return redirect()
+            ->route('client.campaigns.edit', $copy)
+            ->with('success', 'Campaign cloned as a draft. Review it before launching.');
     }
 
     public function launch(Request $request, Campaign $campaign): RedirectResponse

@@ -1373,6 +1373,7 @@
         "edit_head_title": "Edit {{name}} · Campaigns",
         "show_head_title": "{{name}} · Campaigns",
         "delete_confirm": "Delete this campaign?",
+        "clone": "Clone campaign",
         "all_channels": "All Channels",
         "all_statuses": "All Statuses",
         "col_campaign": "Campaign",

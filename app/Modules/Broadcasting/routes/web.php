@@ -14,6 +14,7 @@ Route::middleware(['web', 'client-app'])->prefix('app/broadcasts')->name('client
     Route::get('/campaigns/{campaign}', [CampaignController::class, 'show'])->name('campaigns.show');
     Route::get('/campaigns/{campaign}/edit', [CampaignController::class, 'edit'])->name('campaigns.edit');
     Route::patch('/campaigns/{campaign}', [CampaignController::class, 'update'])->name('campaigns.update');
+    Route::post('/campaigns/{campaign}/clone', [CampaignController::class, 'duplicate'])->name('campaigns.clone');
     Route::post('/campaigns/{campaign}/test-send', [CampaignController::class, 'testSend'])->name('campaigns.test-send');
     Route::post('/campaigns/{campaign}/launch', [CampaignController::class, 'launch'])->name('campaigns.launch')->middleware('limit:campaigns_per_month,campaigns');
     Route::post('/campaigns/{campaign}/pause', [CampaignController::class, 'pause'])->name('campaigns.pause');

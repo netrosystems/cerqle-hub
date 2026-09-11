@@ -8,6 +8,7 @@ import {
     Trash2,
     BarChart2,
     Pencil,
+    Copy,
     Radio,
 } from 'lucide-react';
 import { useEffect } from 'react';
@@ -62,6 +63,8 @@ export default function CampaignsIndex({ campaigns, filters }) {
         router.post(route('client.campaigns.launch', id), {}, { preserveScroll: true });
     const handlePause = (id) =>
         router.post(route('client.campaigns.pause', id), {}, { preserveScroll: true });
+    const handleClone = (id) =>
+        router.post(route('client.campaigns.clone', id));
     const handleDelete = (id) => {
         if (confirm(t('campaign.delete_confirm'))) {
             router.delete(route('client.campaigns.destroy', id), { preserveScroll: true });
@@ -74,10 +77,10 @@ export default function CampaignsIndex({ campaigns, filters }) {
     ).length;
     useEffect(() => {
         if (liveCount === 0) return;
-        const id = setInterval(() => {
+        const id = window.setInterval(() => {
             router.reload({ only: ['campaigns'], preserveScroll: true });
         }, 10000);
-        return () => clearInterval(id);
+        return () => window.clearInterval(id);
     }, [liveCount]);
 
     return (
@@ -227,6 +230,15 @@ export default function CampaignsIndex({ campaigns, filters }) {
                                                 >
                                                     <BarChart2 className="h-4 w-4" />
                                                 </Link>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleClone(c.uuid)}
+                                                    title={t('campaign.clone')}
+                                                    aria-label={t('campaign.clone')}
+                                                    className="text-neutral-400 hover:text-brand-600 transition"
+                                                >
+                                                    <Copy className="h-4 w-4" />
+                                                </button>
                                                 {canEdit && (
                                                     <Link
                                                         href={route('client.campaigns.edit', c.uuid)}
