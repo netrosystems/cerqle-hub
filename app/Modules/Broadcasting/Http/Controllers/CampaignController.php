@@ -266,6 +266,11 @@ class CampaignController extends Controller
         if ($request->has('schedule_at')) {
             $value = $request->input('schedule_at');
             $patch['schedule_at'] = filled($value) ? $value : null;
+        } elseif (in_array($campaign->status, ['paused', 'safety_paused'], true)) {
+            // Resume is an explicit request to continue now. Keeping an old
+            // scheduled timestamp would immediately trip late-send protection
+            // again and make a safety-paused campaign impossible to recover.
+            $patch['schedule_at'] = null;
         }
 
         if ($campaign->channel === 'whatsapp') {

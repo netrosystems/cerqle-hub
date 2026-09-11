@@ -38,6 +38,7 @@ class GenericMailboxClient
         return true;
     }
 
+    /** @return array<int, array<string, mixed>> */
     public function messages(ChannelAccount $account): array
     {
         $imap = $this->open($account);
@@ -53,16 +54,14 @@ class GenericMailboxClient
             }
             $header = imap_headerinfo($imap, imap_msgno($imap, $uid));
             $from = $header->from[0] ?? null;
+            $sender = $this->senderFromHeader($from);
             $body = $this->messageBody($imap, (int) $uid);
             $messages[] = [
                 'id' => 'imap:'.$account->id.':'.$uid,
                 'internetMessageId' => trim((string) ($overview->message_id ?? 'imap-'.$account->id.'-'.$uid), '<>'),
                 'conversationId' => trim((string) ($overview->references ?? $overview->in_reply_to ?? $overview->message_id ?? $uid), '<>'),
                 'subject' => isset($overview->subject) ? $this->decodeHeader($overview->subject) : '(no subject)',
-                'from' => ['emailAddress' => [
-                    'address' => $from ? ($from->mailbox.'@'.$from->host) : '',
-                    'name' => $from?->personal ? $this->decodeHeader($from->personal) : '',
-                ]],
+                'from' => ['emailAddress' => $sender],
                 'receivedDateTime' => isset($overview->date) ? date(DATE_ATOM, strtotime($overview->date)) : now()->toIso8601String(),
                 'bodyPreview' => mb_substr($body, 0, 500),
                 'body' => ['content' => $body],
@@ -78,6 +77,24 @@ class GenericMailboxClient
         return $messages;
     }
 
+    /** @return array{address: string, name: string} */
+    private function senderFromHeader(?object $from): array
+    {
+        $mailbox = trim((string) ($from->mailbox ?? ''));
+        $host = trim((string) ($from->host ?? ''));
+        $personal = trim((string) ($from->personal ?? ''));
+
+        return [
+            'address' => $mailbox !== '' && $host !== '' ? $mailbox.'@'.$host : '',
+            'name' => $personal !== '' ? $this->decodeHeader($personal) : '',
+        ];
+    }
+
+    /**
+     * @param  array<int, string>  $cc
+     * @param  array<int, string>  $bcc
+     * @param  array<int, array{raw_bytes?: string, path?: string, filename?: string, mime_type?: string}>  $attachments
+     */
     public function send(
         ChannelAccount $account,
         string $to,
@@ -143,6 +160,8 @@ class GenericMailboxClient
      * Return the best readable MIME part without ever selecting an attachment.
      * Plain text is preferred because the inbox stores safe text, while HTML is
      * retained as a fallback and converted to readable text below.
+     *
+     * @return array{section: string|null, encoding: int, charset: string, html: bool}|null
      */
     private function preferredTextPart(object $structure, ?string $section = null): ?array
     {

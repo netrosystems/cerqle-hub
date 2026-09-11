@@ -37,6 +37,10 @@ class LaunchCampaignJob implements ShouldQueue
             return;
         }
 
+        if ($this->pauseStaleWhatsappCampaign($campaign)) {
+            return;
+        }
+
         if (! $access->allowsWorkspaceWrite($campaign->workspace_id)) {
             $campaign->update([
                 'status' => 'safety_paused',
@@ -230,6 +234,32 @@ class LaunchCampaignJob implements ShouldQueue
         ]);
 
         PrepareSmsCampaignAudienceJob::dispatch($campaign->id)->onQueue('broadcast');
+    }
+
+    private function pauseStaleWhatsappCampaign(Campaign $campaign): bool
+    {
+        if ($campaign->channel !== 'whatsapp' || $campaign->status !== 'queued' || ! $campaign->schedule_at) {
+            return false;
+        }
+
+        $maximumDelay = max(60, (int) config('broadcasting.whatsapp.stale_schedule_seconds', 21600));
+        if ($campaign->schedule_at->greaterThanOrEqualTo(now()->subSeconds($maximumDelay))) {
+            return false;
+        }
+
+        $campaign->update([
+            'status' => 'safety_paused',
+            'pause_reason' => 'Campaign was not started within the scheduled delivery window. Review and resume it to prevent an unexpected late send.',
+        ]);
+
+        Log::channel('json')->warning('campaign.launch.stale_schedule_paused', [
+            'workspace_id' => $campaign->workspace_id,
+            'campaign_id' => $campaign->id,
+            'scheduled_at' => $campaign->schedule_at->toIso8601String(),
+            'maximum_delay_seconds' => $maximumDelay,
+        ]);
+
+        return true;
     }
 
     /**

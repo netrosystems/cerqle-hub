@@ -115,5 +115,10 @@ return [
         'audience_chunk_size' => (int) env('WHATSAPP_CAMPAIGN_AUDIENCE_CHUNK_SIZE', 1000),
         'claim_timeout_seconds' => (int) env('WHATSAPP_CAMPAIGN_CLAIM_TIMEOUT_SECONDS', 180),
         'media_max_bytes' => (int) env('WHATSAPP_CAMPAIGN_MEDIA_MAX_BYTES', 16 * 1024 * 1024),
+
+        // A long worker outage must not silently release old marketing sends.
+        // Recent campaigns recover automatically; stale ones require an
+        // operator to review and resume them from their safety-paused state.
+        'stale_schedule_seconds' => (int) env('WHATSAPP_CAMPAIGN_STALE_SCHEDULE_SECONDS', 21600),
     ],
 ];

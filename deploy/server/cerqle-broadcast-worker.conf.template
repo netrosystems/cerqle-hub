@@ -1,0 +1,15 @@
+[program:cerqle-broadcast-worker]
+command=@PHP_BINARY@ @PROJECT_DIR@/artisan queue:work redis --queue=broadcast --sleep=1 --tries=2 --timeout=120 --max-time=3600
+directory=@PROJECT_DIR@
+user=www-data
+numprocs=2
+process_name=%(program_name)s_%(process_num)02d
+autostart=true
+autorestart=true
+stopasgroup=true
+killasgroup=true
+stopwaitsecs=130
+redirect_stderr=true
+stdout_logfile=@PROJECT_DIR@/storage/logs/broadcast-worker.log
+stdout_logfile_maxbytes=50MB
+stdout_logfile_backups=5

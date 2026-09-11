@@ -79,6 +79,21 @@ class GenericMailboxMimeParserTest extends TestCase
         );
     }
 
+    public function test_it_accepts_an_imap_sender_without_an_optional_personal_name(): void
+    {
+        $client = app(GenericMailboxClient::class);
+
+        $sender = $this->invoke($client, 'senderFromHeader', [(object) [
+            'mailbox' => 'customer',
+            'host' => 'example.com',
+        ]]);
+
+        $this->assertSame([
+            'address' => 'customer@example.com',
+            'name' => '',
+        ], $sender);
+    }
+
     private function invoke(object $target, string $method, array $arguments): mixed
     {
         $reflection = new ReflectionMethod($target, $method);

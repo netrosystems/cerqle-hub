@@ -64,6 +64,22 @@ function relativeTime(iso, t) {
     return t('cron.time.days_ago', { count: days });
 }
 
+export function buildSupervisorConfig({ basePath, phpBinary, queueConnection, queueNames }) {
+    return queueNames.map(queue => `[program:cerqle-worker-${queue}]
+command=${phpBinary} ${basePath}/artisan queue:work ${queueConnection} --queue=${queue} --sleep=3 --tries=${queue === 'broadcast' ? 2 : 3} --timeout=120 --max-time=3600
+directory=${basePath}
+user=www-data
+numprocs=${['default', 'whatsapp', 'broadcast'].includes(queue) ? 2 : 1}
+process_name=%(program_name)s_%(process_num)02d
+autostart=true
+autorestart=true
+stopasgroup=true
+killasgroup=true
+stopwaitsecs=130
+redirect_stderr=true
+stdout_logfile=${basePath}/storage/logs/worker-${queue}.log`).join('\n\n');
+}
+
 const STATUS = {
     active:   { icon: CheckCircle,   badge: 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300',     note: 'bg-green-50 dark:bg-green-900/20 text-green-800 dark:text-green-200' },
     stale:    { icon: AlertTriangle, badge: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300',     note: 'bg-amber-50 dark:bg-amber-900/20 text-amber-800 dark:text-amber-200' },
@@ -86,18 +102,7 @@ export default function CronSetupIndex({
 
     const queueCommand = `${phpBinary} ${basePath}/artisan queue:work ${queueConnection} --queue=${queueList} --sleep=3 --tries=3 --timeout=120 --max-time=3600`;
 
-    const supervisorConfig = `[program:cerqle-worker]
-command=${phpBinary} ${basePath}/artisan queue:work ${queueConnection} --queue=${queueList} --sleep=3 --tries=3 --timeout=120 --max-time=3600
-directory=${basePath}
-user=www-data
-numprocs=2
-autostart=true
-autorestart=true
-stopasgroup=true
-killasgroup=true
-stopwaitsecs=130
-redirect_stderr=true
-stdout_logfile=${basePath}/storage/logs/worker.log`;
+    const supervisorConfig = buildSupervisorConfig({ basePath, phpBinary, queueConnection, queueNames });
 
     const status = STATUS[schedulerStatus] || STATUS.inactive;
     const StatusIcon = status.icon;
