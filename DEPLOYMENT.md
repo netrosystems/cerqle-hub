@@ -11,7 +11,10 @@ Recorded user preference: 2026-09-07.
 The deployment installs and verifies an additive dedicated Supervisor program
 for the `broadcast` queue when passwordless `sudo` is available. This prevents
 campaigns from being starved by a busy or failing `default` queue while preserving
-the existing worker configuration for other queues.
+the existing worker configuration for other queues. After each release it
+explicitly cycles the Cerqle Supervisor groups; the cache-backed Laravel restart
+signal alone is not considered proof that long-running workers loaded the new
+source. A missing dedicated campaign worker now stops release finalization.
 
 ## Why deployment previously stopped
 
