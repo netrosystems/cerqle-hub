@@ -59,7 +59,6 @@ npm --ignore-scripts run build
 
 php artisan migrate --force
 php artisan optimize
-php artisan queue:restart
 
 # Keep campaign delivery independent from noisy general-purpose jobs. Older
 # installations used a single priority-ordered worker, so a sustained default
@@ -89,9 +88,10 @@ if command -v supervisorctl >/dev/null 2>&1 && command -v sudo >/dev/null 2>&1 &
     fi
 fi
 
-# `queue:restart` relies on the old worker reading the same cache-backed restart
-# signal. Explicitly cycling the known Supervisor groups guarantees every
-# long-running process loads the newly deployed PHP source and configuration.
+# Explicitly cycling the known Supervisor groups guarantees every long-running
+# process loads the newly deployed PHP source and configuration. Do not also
+# broadcast Laravel's cache-backed restart signal: combining both restart
+# mechanisms can make freshly started workers exit during the health check.
 SUPERVISOR=()
 if command -v supervisorctl >/dev/null 2>&1; then
     if supervisorctl status >/dev/null 2>&1; then
@@ -129,9 +129,8 @@ if [[ ${#SUPERVISOR[@]} -gt 0 ]]; then
     EXPECTED_GENERAL_WORKERS="$(grep -cE '^cerqle-worker:' <<< "$GENERAL_STATUS" || true)"
     if [[ "$EXPECTED_GENERAL_WORKERS" -gt 0 ]]; then
         "${SUPERVISOR[@]}" stop 'cerqle-worker:*' || true
-        # Supervisor can return non-zero for a process that exits on Laravel's
-        # queue restart signal while the group is being cycled. Judge the
-        # settled group state below instead of aborting on that transient race.
+        # Supervisor can return non-zero while an autorestarting process is
+        # being cycled. Judge the settled group state below instead.
         "${SUPERVISOR[@]}" start 'cerqle-worker:*' || true
         if ! wait_for_supervisor_group 'cerqle-worker' "$EXPECTED_GENERAL_WORKERS"; then
             echo "ERROR: One or more Cerqle queue workers failed to start." >&2
@@ -152,6 +151,9 @@ if [[ ${#SUPERVISOR[@]} -gt 0 ]]; then
         exit 1
     fi
 else
+    # Without Supervisor access, Laravel's cache-backed signal is the safest
+    # available way to ask long-running queue workers to load the new release.
+    php artisan queue:restart
     echo "WARNING: Supervisor is unavailable; verify queue workers manually." >&2
 fi
 

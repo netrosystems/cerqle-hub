@@ -20,6 +20,8 @@ class ProductionDeploymentScriptTest extends TestCase
         $this->assertStringContainsString('wait_for_supervisor_group', $script);
         $this->assertStringContainsString('for _attempt in {1..45}', $script);
         $this->assertStringContainsString('wait_for_supervisor_group "$BROADCAST_PROGRAM" 2', $script);
+        $this->assertMatchesRegularExpression('/else\n\s+# Without Supervisor access.*?\n\s+#[^\n]+\n\s+php artisan queue:restart/s', $script);
+        $this->assertSame(1, substr_count($script, 'php artisan queue:restart'));
         $this->assertStringContainsString('LEGACY_BROADCAST_BACKUP', $script);
         $this->assertStringContainsString('ERROR: Dedicated broadcast workers are not installed', $script);
         $this->assertStringNotContainsString('WARNING: Dedicated broadcast workers are not installed', $script);
