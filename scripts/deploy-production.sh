@@ -108,7 +108,7 @@ if [[ ${#SUPERVISOR[@]} -gt 0 ]]; then
         local status=''
         local running=0
 
-        for _attempt in {1..15}; do
+        for _attempt in {1..45}; do
             status="$("${SUPERVISOR[@]}" status "$program:*" 2>&1 || true)"
             running="$(grep -cE "^$program:.*[[:space:]]RUNNING[[:space:]]" <<< "$status" || true)"
             if [[ "$running" -eq "$expected" ]] && ! grep -Eq '(STARTING|STOPPING|STOPPED|FATAL|BACKOFF|EXITED|UNKNOWN)' <<< "$status"; then
