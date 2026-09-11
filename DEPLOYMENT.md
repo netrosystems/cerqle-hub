@@ -12,9 +12,10 @@ The deployment installs and verifies an additive dedicated Supervisor program
 for the `broadcast` queue when passwordless `sudo` is available. This prevents
 campaigns from being starved by a busy or failing `default` queue while preserving
 the existing worker configuration for other queues. After each release it
-explicitly cycles the Cerqle Supervisor groups; the cache-backed Laravel restart
-signal alone is not considered proof that long-running workers loaded the new
-source. A missing dedicated campaign worker now stops release finalization.
+explicitly cycles the Cerqle Supervisor groups. The cache-backed Laravel restart
+signal is used only when Supervisor is unavailable, avoiding a double-restart
+race while still providing a fallback. A missing dedicated campaign worker now
+stops release finalization.
 Supervisor's immediate `start` result is treated as advisory because a worker can
 exit on Laravel's restart signal during the cycle. Deployment waits up to forty-five
 seconds and requires every expected process in both worker groups to settle in
