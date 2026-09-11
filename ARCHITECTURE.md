@@ -206,6 +206,13 @@ YouTube OAuth requests `https://www.googleapis.com/auth/youtube.force-ssl`, the 
 | `automation` | XYFlow visual workflow step evaluation & execution | High (1) | `ExecuteAutomationStepJob`, `ResumeDelayedAutomationJob` |
 | `ecommerce` | Store catalog, order, and customer syncing | Low (4) | `SyncStoreOrdersJob`, `ProcessShopifyWebhookJob` |
 
+Production provisions dedicated `broadcast` workers so failures or sustained
+traffic on `default` cannot starve campaign delivery. WhatsApp schedules recover
+automatically only within `WHATSAPP_CAMPAIGN_STALE_SCHEDULE_SECONDS` (six hours by
+default). Older queued schedules enter `safety_paused` and require review before
+resume, preventing a repaired worker from unexpectedly releasing stale marketing
+messages.
+
 ---
 
 ## 5. Integrations & External Service Contracts

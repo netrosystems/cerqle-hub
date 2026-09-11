@@ -149,6 +149,28 @@ class SchedulerTest extends TestCase
     }
 
     #[Test]
+    public function resuming_a_safety_paused_campaign_clears_its_old_schedule_and_dispatches_now(): void
+    {
+        Queue::fake();
+
+        [$user, $workspace] = $this->ctx();
+        $campaign = Campaign::factory()->create([
+            'workspace_id' => $workspace->id,
+            'channel' => 'sms',
+            'sms_provider' => 'twilio',
+            'status' => 'safety_paused',
+            'schedule_at' => now()->subDay(),
+        ]);
+
+        $this->actingAs($user)
+            ->post(route('client.campaigns.launch', $campaign))
+            ->assertRedirect();
+
+        $this->assertNull($campaign->fresh()->schedule_at);
+        Queue::assertPushed(LaunchCampaignJob::class, 1);
+    }
+
+    #[Test]
     public function storing_a_campaign_persists_iso_schedule_as_utc_and_saves_timezone(): void
     {
         [$user, $workspace] = $this->ctx();

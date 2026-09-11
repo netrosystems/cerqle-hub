@@ -8,6 +8,11 @@ Recorded user preference: 2026-09-07.
 4. After validation and release approval, merge `dev` into up-to-date `main` and push. Do not deploy unapproved `dev` commits.
 5. On production, from `/home/ubuntu/cerqle-hub`, run `bash scripts/deploy-production.sh`.
 
+The deployment installs and verifies an additive dedicated Supervisor program
+for the `broadcast` queue when passwordless `sudo` is available. This prevents
+campaigns from being starved by a busy or failing `default` queue while preserving
+the existing worker configuration for other queues.
+
 ## Why deployment previously stopped
 
 The production checkout contained server-local merge commits. `git pull --ff-only` cannot follow GitHub when histories diverge, even when those server commits introduce no file changes. Do not solve this by repeatedly merging on the server.

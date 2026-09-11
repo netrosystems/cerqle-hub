@@ -138,6 +138,24 @@ class WhatsappCampaignTest extends TestCase
     }
 
     #[Test]
+    public function a_stale_scheduled_whatsapp_campaign_requires_review_instead_of_sending_late(): void
+    {
+        Queue::fake();
+        [, $workspace] = $this->context();
+        config(['broadcasting.whatsapp.stale_schedule_seconds' => 3600]);
+        $campaign = $this->campaign($workspace, [
+            'status' => 'queued',
+            'schedule_at' => now()->subHours(2),
+        ]);
+
+        (new LaunchCampaignJob($campaign->id))->handle();
+
+        $this->assertSame('safety_paused', $campaign->fresh()->status);
+        $this->assertStringContainsString('scheduled delivery window', (string) $campaign->fresh()->pause_reason);
+        Queue::assertNothingPushed();
+    }
+
+    #[Test]
     public function sending_uses_the_selected_phone_endpoint_and_preserves_the_selected_inbox_channel(): void
     {
         [, $workspace] = $this->context();

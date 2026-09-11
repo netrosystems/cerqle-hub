@@ -23,14 +23,23 @@ class CronSetupController extends Controller
     public function index(): Response
     {
         return Inertia::render('Admin/CronSetup/Index', [
-            'basePath'        => base_path(),
-            'phpBinary'       => PHP_BINARY,
+            'basePath' => base_path(),
+            'phpBinary' => $this->cliPhpBinary(),
             'queueConnection' => (string) config('queue.default'),
-            'queueNames'      => self::QUEUE_NAMES,
-            'tasks'           => $this->scheduledTasks(),
+            'queueNames' => self::QUEUE_NAMES,
+            'tasks' => $this->scheduledTasks(),
             'schedulerLastRun' => $this->heartbeat()?->toIso8601String(),
-            'schedulerStatus'  => $this->status($this->heartbeat()),
+            'schedulerStatus' => $this->status($this->heartbeat()),
         ]);
+    }
+
+    private function cliPhpBinary(): string
+    {
+        if (PHP_SAPI === 'cli') {
+            return PHP_BINARY;
+        }
+
+        return is_executable('/usr/bin/php') ? '/usr/bin/php' : 'php';
     }
 
     /**
@@ -47,7 +56,7 @@ class CronSetupController extends Controller
             foreach (app(Schedule::class)->events() as $event) {
                 $tasks[] = [
                     'description' => $event->description ?: $event->getSummaryForDisplay(),
-                    'expression'  => $event->expression,
+                    'expression' => $event->expression,
                 ];
             }
         } catch (\Throwable) {
@@ -81,9 +90,9 @@ class CronSetupController extends Controller
         $secondsAgo = $lastRun->diffInSeconds(now());
 
         return match (true) {
-            $secondsAgo <= 120  => 'active',
+            $secondsAgo <= 120 => 'active',
             $secondsAgo <= 3600 => 'stale',
-            default             => 'inactive',
+            default => 'inactive',
         };
     }
 }

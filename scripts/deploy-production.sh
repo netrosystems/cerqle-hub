@@ -61,6 +61,21 @@ php artisan migrate --force
 php artisan optimize
 php artisan queue:restart
 
+# Keep campaign delivery independent from noisy general-purpose jobs. Older
+# installations used a single priority-ordered worker, so a sustained default
+# queue backlog could prevent the broadcast queue from ever being inspected.
+BROADCAST_PROGRAM='cerqle-broadcast-worker'
+BROADCAST_CONFIG='/etc/supervisor/conf.d/cerqle-broadcast-worker.conf'
+if command -v supervisorctl >/dev/null 2>&1 && command -v sudo >/dev/null 2>&1 && sudo -n true >/dev/null 2>&1; then
+    PHP_CLI_BINARY="$(command -v php)"
+    TEMP_CONFIG="$(mktemp)"
+    sed -e "s|@PHP_BINARY@|$PHP_CLI_BINARY|g" \
+        -e "s|@PROJECT_DIR@|$PROJECT_DIR|g" \
+        deploy/server/cerqle-broadcast-worker.conf.template > "$TEMP_CONFIG"
+    sudo -n install -m 0644 "$TEMP_CONFIG" "$BROADCAST_CONFIG"
+    rm -f "$TEMP_CONFIG"
+fi
+
 # `queue:restart` asks current Laravel workers to exit. Supervisor normally
 # starts replacements, but a manually-stopped process group remains STOPPED
 # forever and leaves imports/messages silently queued. Ensure the general
@@ -79,13 +94,28 @@ if [[ ${#SUPERVISOR[@]} -gt 0 ]]; then
     "${SUPERVISOR[@]}" update
     # `start` reports an error when a process is already running, so verify
     # the resulting state explicitly instead of treating that as a failure.
-    "${SUPERVISOR[@]}" start 'cerqle-worker:*' || true
-    sleep 3
-    WORKER_STATUS="$("${SUPERVISOR[@]}" status 'cerqle-worker:*')"
-    echo "$WORKER_STATUS"
-    if echo "$WORKER_STATUS" | grep -Eq '(STOPPED|FATAL|BACKOFF|EXITED|UNKNOWN)'; then
-        echo "ERROR: One or more Cerqle queue workers failed to start." >&2
-        exit 1
+    if "${SUPERVISOR[@]}" status 'cerqle-worker:*' >/dev/null 2>&1; then
+        "${SUPERVISOR[@]}" start 'cerqle-worker:*' || true
+        sleep 3
+        WORKER_STATUS="$("${SUPERVISOR[@]}" status 'cerqle-worker:*')"
+        echo "$WORKER_STATUS"
+        if echo "$WORKER_STATUS" | grep -Eq '(STOPPED|FATAL|BACKOFF|EXITED|UNKNOWN)'; then
+            echo "ERROR: One or more Cerqle queue workers failed to start." >&2
+            exit 1
+        fi
+    fi
+
+    if "${SUPERVISOR[@]}" status "$BROADCAST_PROGRAM:*" >/dev/null 2>&1; then
+        "${SUPERVISOR[@]}" start "$BROADCAST_PROGRAM:*" || true
+        sleep 2
+        BROADCAST_STATUS="$("${SUPERVISOR[@]}" status "$BROADCAST_PROGRAM:*")"
+        echo "$BROADCAST_STATUS"
+        if echo "$BROADCAST_STATUS" | grep -Eq '(STOPPED|FATAL|BACKOFF|EXITED|UNKNOWN)'; then
+            echo "ERROR: The dedicated campaign workers failed to start." >&2
+            exit 1
+        fi
+    else
+        echo "WARNING: Dedicated broadcast workers are not installed; campaign delivery may share general queue capacity." >&2
     fi
 else
     echo "WARNING: Supervisor is unavailable; verify queue workers manually." >&2
