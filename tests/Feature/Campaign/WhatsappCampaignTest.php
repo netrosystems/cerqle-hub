@@ -124,6 +124,24 @@ class WhatsappCampaignTest extends TestCase
     }
 
     #[Test]
+    public function it_rejects_voice_call_templates_before_a_bulk_campaign_can_launch(): void
+    {
+        [, $workspace] = $this->context();
+        $assets = $this->connection($workspace);
+        $assets['template']->update(['components' => [
+            ['type' => 'BODY', 'text' => 'Hello'],
+            ['type' => 'BUTTONS', 'buttons' => [
+                ['type' => 'VOICE_CALL', 'text' => 'Call us'],
+            ]],
+        ]]);
+
+        $this->expectException(ValidationException::class);
+        $this->expectExceptionMessage('cannot be used for bulk campaigns');
+
+        app(WhatsappCampaignValidator::class)->validate($this->campaign($workspace));
+    }
+
+    #[Test]
     public function a_valid_whatsapp_campaign_can_be_launched_and_scheduled_on_the_broadcast_queue(): void
     {
         Queue::fake();

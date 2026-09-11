@@ -227,6 +227,12 @@ while showing a safer operator-facing explanation. Meta code `131009` is a gener
 invalid-parameter response: recipient-specific details may identify an invalid or
 unregistered WhatsApp number, but the code alone must not be presented as proof
 because invalid message and template values can produce the same code.
+Meta error `138000` indicates a selected template contains a voice-call button
+while Calling is unavailable for the sending phone. Bulk campaigns reject
+`VOICE_CALL` templates during validation; the template remains available for
+other WhatsApp workflows. Media headers remain template-defined: an approved
+`IMAGE`, `VIDEO`, or `DOCUMENT` header requires one matching parameter per send,
+while header-free templates require no media.
 
 ---
 

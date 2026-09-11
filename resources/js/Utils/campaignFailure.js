@@ -1,9 +1,15 @@
 export function campaignFailureMessage(channel, reason) {
-    if (!reason || channel !== 'whatsapp' || !String(reason).includes('131009')) {
+    if (!reason || channel !== 'whatsapp') {
         return reason
     }
 
     const providerText = String(reason)
+    if (providerText.includes('138000')) {
+        return 'This template includes a WhatsApp voice-call button, but Calling is not enabled for the selected sending number. Choose a template without a voice-call button.'
+    }
+
+    if (!providerText.includes('131009')) return reason
+
     const hasRecipientEvidence =
         /(?:recipient|phone(?: number)?|wa_id).*(?:not (?:a )?(?:valid|registered)|invalid|not on whatsapp|not a whatsapp user)|(?:not (?:a )?(?:valid|registered)|invalid|not on whatsapp|not a whatsapp user).*(?:recipient|phone(?: number)?|wa_id)/i.test(
             providerText,

@@ -62,6 +62,7 @@ class WhatsappCampaignValidator
             throw ValidationException::withMessages(['template_ref' => 'Choose an APPROVED template belonging to the selected WhatsApp Business Account.']);
         }
 
+        $this->validateCampaignCompatibility($template);
         $this->validateParameters($template, (array) ($reference['components'] ?? []));
         $client = CloudApiClient::forPhoneNumber($phoneId, $workspaceId);
         if (! $client) {
@@ -69,6 +70,23 @@ class WhatsappCampaignValidator
         }
 
         return compact('waba', 'phone', 'channel', 'template', 'client');
+    }
+
+    private function validateCampaignCompatibility(WhatsappTemplate $template): void
+    {
+        foreach ((array) $template->components as $component) {
+            if (! is_array($component) || strtoupper((string) ($component['type'] ?? '')) !== 'BUTTONS') {
+                continue;
+            }
+
+            foreach ((array) ($component['buttons'] ?? []) as $button) {
+                if (strtoupper((string) ($button['type'] ?? '')) === 'VOICE_CALL') {
+                    throw ValidationException::withMessages([
+                        'template_ref' => 'This template contains a WhatsApp voice-call button and cannot be used for bulk campaigns. Choose a template without voice calling.',
+                    ]);
+                }
+            }
+        }
     }
 
     private function validateParameters(WhatsappTemplate $template, array $submitted): void

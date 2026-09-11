@@ -302,6 +302,13 @@ class SendCampaignMessageJob implements ShouldQueue
         $message = trim((string) ($response->json('error.message') ?? $response->body()));
         $details = trim((string) $response->json('error.error_data.details', ''));
 
+        if ($code === '138000') {
+            return [
+                'message' => 'This template includes a WhatsApp voice-call button, but Calling is not enabled for the selected sending number. Choose a template without a voice-call button. (Meta error 138000)',
+                'class' => 'configuration',
+            ];
+        }
+
         if ($code === '131009') {
             $providerText = $message.' '.$details;
             $recipientEvidence = preg_match(
