@@ -76,10 +76,9 @@ if command -v supervisorctl >/dev/null 2>&1 && command -v sudo >/dev/null 2>&1 &
     rm -f "$TEMP_CONFIG"
 fi
 
-# `queue:restart` asks current Laravel workers to exit. Supervisor normally
-# starts replacements, but a manually-stopped process group remains STOPPED
-# forever and leaves imports/messages silently queued. Ensure the general
-# worker group is enabled after every deployment when Supervisor is present.
+# `queue:restart` relies on the old worker reading the same cache-backed restart
+# signal. Explicitly cycling the known Supervisor groups guarantees every
+# long-running process loads the newly deployed PHP source and configuration.
 SUPERVISOR=()
 if command -v supervisorctl >/dev/null 2>&1; then
     if supervisorctl status >/dev/null 2>&1; then
@@ -92,10 +91,10 @@ fi
 if [[ ${#SUPERVISOR[@]} -gt 0 ]]; then
     "${SUPERVISOR[@]}" reread
     "${SUPERVISOR[@]}" update
-    # `start` reports an error when a process is already running, so verify
-    # the resulting state explicitly instead of treating that as a failure.
+
     if "${SUPERVISOR[@]}" status 'cerqle-worker:*' >/dev/null 2>&1; then
-        "${SUPERVISOR[@]}" start 'cerqle-worker:*' || true
+        "${SUPERVISOR[@]}" stop 'cerqle-worker:*' || true
+        "${SUPERVISOR[@]}" start 'cerqle-worker:*'
         sleep 3
         WORKER_STATUS="$("${SUPERVISOR[@]}" status 'cerqle-worker:*')"
         echo "$WORKER_STATUS"
@@ -106,7 +105,8 @@ if [[ ${#SUPERVISOR[@]} -gt 0 ]]; then
     fi
 
     if "${SUPERVISOR[@]}" status "$BROADCAST_PROGRAM:*" >/dev/null 2>&1; then
-        "${SUPERVISOR[@]}" start "$BROADCAST_PROGRAM:*" || true
+        "${SUPERVISOR[@]}" stop "$BROADCAST_PROGRAM:*" || true
+        "${SUPERVISOR[@]}" start "$BROADCAST_PROGRAM:*"
         sleep 2
         BROADCAST_STATUS="$("${SUPERVISOR[@]}" status "$BROADCAST_PROGRAM:*")"
         echo "$BROADCAST_STATUS"
@@ -115,7 +115,8 @@ if [[ ${#SUPERVISOR[@]} -gt 0 ]]; then
             exit 1
         fi
     else
-        echo "WARNING: Dedicated broadcast workers are not installed; campaign delivery may share general queue capacity." >&2
+        echo "ERROR: Dedicated broadcast workers are not installed; refusing to leave campaign delivery without isolated capacity." >&2
+        exit 1
     fi
 else
     echo "WARNING: Supervisor is unavailable; verify queue workers manually." >&2
