@@ -119,6 +119,6 @@ return [
         // A long worker outage must not silently release old marketing sends.
         // Recent campaigns recover automatically; stale ones require an
         // operator to review and resume them from their safety-paused state.
-        'stale_schedule_seconds' => (int) env('WHATSAPP_CAMPAIGN_STALE_SCHEDULE_SECONDS', 21600),
+        'stale_schedule_seconds' => (int) env('WHATSAPP_CAMPAIGN_STALE_SCHEDULE_SECONDS', 900),
     ],
 ];

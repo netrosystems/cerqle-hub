@@ -242,7 +242,7 @@ class LaunchCampaignJob implements ShouldQueue
             return false;
         }
 
-        $maximumDelay = max(60, (int) config('broadcasting.whatsapp.stale_schedule_seconds', 21600));
+        $maximumDelay = max(60, (int) config('broadcasting.whatsapp.stale_schedule_seconds', 900));
         if ($campaign->schedule_at->greaterThanOrEqualTo(now()->subSeconds($maximumDelay))) {
             return false;
         }
