@@ -184,4 +184,45 @@ class WhatsappCampaignTest extends TestCase
         Http::assertSent(fn ($request) => str_contains($request->url(), '/phone-1/messages')
             && data_get($request->data(), 'template.name') === 'hello_campaign');
     }
+
+    #[Test]
+    public function meta_131009_is_explained_without_claiming_the_number_is_definitely_not_on_whatsapp(): void
+    {
+        [, $workspace] = $this->context();
+        $this->connection($workspace);
+        $campaign = $this->campaign($workspace, ['status' => 'sending']);
+        $contact = Contact::factory()->create([
+            'workspace_id' => $workspace->id,
+            'phone_e164' => '+15550000003',
+            'opt_in_whatsapp' => true,
+            'first_name' => 'Grace',
+        ]);
+        $recipient = CampaignRecipient::create([
+            'campaign_id' => $campaign->id,
+            'contact_id' => $contact->id,
+            'status' => 'dispatching',
+            'attempts' => 1,
+        ]);
+
+        $access = $this->mock(ClientAccessService::class);
+        $access->shouldReceive('allowsWorkspaceWrite')->once()->with($workspace->id)->andReturnTrue();
+        $limit = $this->mock(MessagingMessageLimitService::class);
+        $limit->shouldReceive('send')->once()->andReturnUsing(fn ($workspaceId, $send) => $send());
+        Http::fake(['graph.facebook.com/*' => Http::response([
+            'error' => [
+                'message' => '(#131009) Parameter value is not valid',
+                'code' => 131009,
+            ],
+        ], 400)]);
+
+        (new SendCampaignMessageJob($campaign->id, $contact->id))->handle(app(CampaignPersonalizer::class));
+
+        $recipient->refresh();
+        $this->assertSame('failed', $recipient->status);
+        $this->assertSame('provider_rejection', $recipient->failure_class);
+        $this->assertSame(
+            'WhatsApp could not send to this number. It may not be registered on WhatsApp, or a message/template value may be invalid. (Meta error 131009)',
+            $recipient->failed_reason,
+        );
+    }
 }

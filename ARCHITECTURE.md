@@ -222,6 +222,12 @@ one duplicate per minute. Production deployment disables the exact legacy
 twelve-process `cerqle-broadcast` Supervisor group, provisions two dedicated
 workers, and fails unless both repository-managed workers report `RUNNING`.
 
+Campaign delivery keeps Meta's structured WhatsApp rejection details in JSON logs
+while showing a safer operator-facing explanation. Meta code `131009` is a generic
+invalid-parameter response: recipient-specific details may identify an invalid or
+unregistered WhatsApp number, but the code alone must not be presented as proof
+because invalid message and template values can produce the same code.
+
 ---
 
 ## 5. Integrations & External Service Contracts
