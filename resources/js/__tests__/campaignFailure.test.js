@@ -27,4 +27,15 @@ describe('campaignFailureMessage', () => {
         expect(campaignFailureMessage('whatsapp', reason)).toBe(reason)
         expect(campaignFailureMessage('sms', reason)).toBe(reason)
     })
+
+    it('explains Meta 138000 as a voice-call template problem', () => {
+        expect(
+            campaignFailureMessage(
+                'whatsapp',
+                'WhatsApp send failed (HTTP 400): Calling API not enabled. (Meta error 138000)',
+            ),
+        ).toBe(
+            'This template includes a WhatsApp voice-call button, but Calling is not enabled for the selected sending number. Choose a template without a voice-call button.',
+        )
+    })
 })

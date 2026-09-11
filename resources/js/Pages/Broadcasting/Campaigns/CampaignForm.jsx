@@ -21,6 +21,10 @@ import {
     ShieldCheck,
 } from 'lucide-react';
 import { browserTz, formatInTz, tzLocalToUtcIso, utcToTzLocal } from '@/Utils/datetime';
+import {
+    whatsappTemplateOptionLabel,
+    whatsappTemplateRequirements,
+} from '@/Utils/whatsappTemplateRequirements';
 import { ChannelBrandIcon } from '@/Components/BrandIcons';
 import EmailEditor from '@/Components/EmailEditor';
 import TimezonePicker from '@/Components/TimezonePicker';
@@ -557,10 +561,13 @@ export default function CampaignForm({
         }
         if (step === 2) {
             if (data.channel === 'whatsapp') {
-                return !!data.template_ref.name && slots.flatMap((section) => section.slots ?? []).every((slot) => {
+                const templateCanSendCampaigns = !whatsappTemplateRequirements(selectedTemplate).hasVoiceCall;
+                const everyParameterIsValid = slots.flatMap((section) => section.slots ?? []).every((slot) => {
                     const value = String(slot.value ?? '').trim();
                     return value !== '' && (!slot.mediaKind || value.startsWith('https://'));
                 });
+
+                return !!data.template_ref.name && templateCanSendCampaigns && everyParameterIsValid;
             }
             if (data.channel === 'sms') return (data.payload_json.body || '').trim().length > 0;
             if (data.channel === 'email') {
@@ -571,7 +578,7 @@ export default function CampaignForm({
             }
         }
         return true;
-    }, [step, data, slots, csvUpload.uploading]);
+    }, [step, data, slots, csvUpload.uploading, selectedTemplate]);
 
     const handleSubmit = (e) => {
         e.preventDefault();
@@ -1179,6 +1186,7 @@ function ContentStep({
     campaignName,
 }) {
     const { t } = useTranslation();
+    const selectedRequirements = whatsappTemplateRequirements(selectedTemplate);
     return (
         <>
             <h3 className="font-medium text-neutral-800 dark:text-neutral-200">{t('campaign.message_content')}</h3>
@@ -1216,8 +1224,12 @@ function ContentStep({
                         >
                             <option value="">{t('campaign.select_template')}</option>
                             {whatsappTemplates.map((tpl) => (
-                                <option key={tpl.id} value={tpl.id}>
-                                    {tpl.name} ({tpl.language}) — {tpl.status}
+                                <option
+                                    key={tpl.id}
+                                    value={tpl.id}
+                                    disabled={whatsappTemplateRequirements(tpl).hasVoiceCall}
+                                >
+                                    {tpl.name} ({tpl.language}) — {whatsappTemplateOptionLabel(tpl)}
                                 </option>
                             ))}
                         </select>
@@ -1228,6 +1240,21 @@ function ContentStep({
                         )}
                         <FieldError message={errors['template_ref.name']} />
                     </div>
+
+                    {selectedTemplate && selectedRequirements.hasVoiceCall && (
+                        <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/30 dark:text-red-200">
+                            This template contains a WhatsApp voice-call button and cannot be used for bulk campaigns.
+                            Choose a template without voice calling.
+                        </div>
+                    )}
+
+                    {selectedTemplate && !selectedRequirements.hasVoiceCall && (
+                        <div className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-800 dark:border-blue-900 dark:bg-blue-950/30 dark:text-blue-200">
+                            {selectedRequirements.mediaHeader
+                                ? `Meta requires a ${selectedRequirements.mediaHeader.toLowerCase()} for this approved template. To send without media, choose a template labelled “No media needed”.`
+                                : 'This template does not require header media. You can send it without an image, video, or document.'}
+                        </div>
+                    )}
 
                     {selectedTemplate && slots.length > 0 && (
                         <div className="space-y-3">
@@ -2022,7 +2049,14 @@ function MediaSlotInput({ slot, label, mediaKind, onChange }) {
 
     return (
         <div className="space-y-2">
-            <span className="text-xs text-neutral-600 dark:text-neutral-300">{label}</span>
+            <div>
+                <span className="text-xs font-medium text-neutral-700 dark:text-neutral-200">
+                    {label} · Required by this template
+                </span>
+                <p className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">
+                    The selected approved Meta template contains a {mediaKind} header. Choose a template labelled “No media needed” if you do not want header media.
+                </p>
+            </div>
 
             <div className="flex w-fit gap-0.5 rounded-lg bg-neutral-100 dark:bg-neutral-800 p-0.5">
                 {[
