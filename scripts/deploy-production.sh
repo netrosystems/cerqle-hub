@@ -102,19 +102,38 @@ if command -v supervisorctl >/dev/null 2>&1; then
 fi
 
 if [[ ${#SUPERVISOR[@]} -gt 0 ]]; then
+    wait_for_supervisor_group() {
+        local program="$1"
+        local expected="$2"
+        local status=''
+        local running=0
+
+        for _attempt in {1..15}; do
+            status="$("${SUPERVISOR[@]}" status "$program:*" 2>&1 || true)"
+            running="$(grep -cE "^$program:.*[[:space:]]RUNNING[[:space:]]" <<< "$status" || true)"
+            if [[ "$running" -eq "$expected" ]] && ! grep -Eq '(STARTING|STOPPING|STOPPED|FATAL|BACKOFF|EXITED|UNKNOWN)' <<< "$status"; then
+                echo "$status"
+                return 0
+            fi
+            sleep 1
+        done
+
+        echo "$status"
+        return 1
+    }
+
     "${SUPERVISOR[@]}" reread
     "${SUPERVISOR[@]}" update
 
-    if "${SUPERVISOR[@]}" status 'cerqle-worker:*' >/dev/null 2>&1; then
+    GENERAL_STATUS="$("${SUPERVISOR[@]}" status 'cerqle-worker:*' 2>&1 || true)"
+    EXPECTED_GENERAL_WORKERS="$(grep -cE '^cerqle-worker:' <<< "$GENERAL_STATUS" || true)"
+    if [[ "$EXPECTED_GENERAL_WORKERS" -gt 0 ]]; then
         "${SUPERVISOR[@]}" stop 'cerqle-worker:*' || true
         # Supervisor can return non-zero for a process that exits on Laravel's
         # queue restart signal while the group is being cycled. Judge the
         # settled group state below instead of aborting on that transient race.
         "${SUPERVISOR[@]}" start 'cerqle-worker:*' || true
-        sleep 3
-        WORKER_STATUS="$("${SUPERVISOR[@]}" status 'cerqle-worker:*')"
-        echo "$WORKER_STATUS"
-        if echo "$WORKER_STATUS" | grep -Eq '(STOPPED|FATAL|BACKOFF|EXITED|UNKNOWN)'; then
+        if ! wait_for_supervisor_group 'cerqle-worker' "$EXPECTED_GENERAL_WORKERS"; then
             echo "ERROR: One or more Cerqle queue workers failed to start." >&2
             exit 1
         fi
@@ -128,11 +147,7 @@ if [[ ${#SUPERVISOR[@]} -gt 0 ]]; then
 
     "${SUPERVISOR[@]}" stop "$BROADCAST_PROGRAM:*" || true
     "${SUPERVISOR[@]}" start "$BROADCAST_PROGRAM:*" || true
-    sleep 3
-    BROADCAST_STATUS="$("${SUPERVISOR[@]}" status "$BROADCAST_PROGRAM:*")"
-    echo "$BROADCAST_STATUS"
-    RUNNING_BROADCAST_WORKERS="$(grep -cE "^$BROADCAST_PROGRAM:.*[[:space:]]RUNNING[[:space:]]" <<< "$BROADCAST_STATUS" || true)"
-    if [[ "$RUNNING_BROADCAST_WORKERS" -ne 2 ]] || echo "$BROADCAST_STATUS" | grep -Eq '(STOPPED|FATAL|BACKOFF|EXITED|UNKNOWN)'; then
+    if ! wait_for_supervisor_group "$BROADCAST_PROGRAM" 2; then
         echo "ERROR: Expected two dedicated campaign workers to be RUNNING." >&2
         exit 1
     fi

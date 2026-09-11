@@ -16,8 +16,9 @@ explicitly cycles the Cerqle Supervisor groups; the cache-backed Laravel restart
 signal alone is not considered proof that long-running workers loaded the new
 source. A missing dedicated campaign worker now stops release finalization.
 Supervisor's immediate `start` result is treated as advisory because a worker can
-exit on Laravel's restart signal during the cycle; deployment waits briefly and
-requires the settled group status to be healthy before recording the release.
+exit on Laravel's restart signal during the cycle. Deployment waits up to fifteen
+seconds and requires every expected process in both worker groups to settle in
+`RUNNING` before recording the release.
 
 ## Why deployment previously stopped
 
