@@ -107,7 +107,10 @@ if [[ ${#SUPERVISOR[@]} -gt 0 ]]; then
 
     if "${SUPERVISOR[@]}" status 'cerqle-worker:*' >/dev/null 2>&1; then
         "${SUPERVISOR[@]}" stop 'cerqle-worker:*' || true
-        "${SUPERVISOR[@]}" start 'cerqle-worker:*'
+        # Supervisor can return non-zero for a process that exits on Laravel's
+        # queue restart signal while the group is being cycled. Judge the
+        # settled group state below instead of aborting on that transient race.
+        "${SUPERVISOR[@]}" start 'cerqle-worker:*' || true
         sleep 3
         WORKER_STATUS="$("${SUPERVISOR[@]}" status 'cerqle-worker:*')"
         echo "$WORKER_STATUS"
@@ -124,7 +127,7 @@ if [[ ${#SUPERVISOR[@]} -gt 0 ]]; then
     fi
 
     "${SUPERVISOR[@]}" stop "$BROADCAST_PROGRAM:*" || true
-    "${SUPERVISOR[@]}" start "$BROADCAST_PROGRAM:*"
+    "${SUPERVISOR[@]}" start "$BROADCAST_PROGRAM:*" || true
     sleep 3
     BROADCAST_STATUS="$("${SUPERVISOR[@]}" status "$BROADCAST_PROGRAM:*")"
     echo "$BROADCAST_STATUS"
