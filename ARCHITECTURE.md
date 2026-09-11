@@ -211,7 +211,16 @@ traffic on `default` cannot starve campaign delivery. WhatsApp schedules recover
 automatically only within `WHATSAPP_CAMPAIGN_STALE_SCHEDULE_SECONDS` (15 minutes by
 default). Older queued schedules enter `safety_paused` and require review before
 resume, preventing a repaired worker from unexpectedly releasing stale marketing
-messages.
+messages. Creating or rescheduling a queued campaign also persists a delayed
+`LaunchCampaignJob` directly on Redis; the every-minute
+`LaunchScheduledCampaignsJob` scanner is a recovery fallback rather than the
+primary timing mechanism. Concurrent fallback and delayed launches share a
+per-campaign overlap lock, and an obsolete delayed job exits if the campaign has
+since been moved to a future time. The two scheduler maintenance jobs are unique
+for up to one hour while pending, preventing a stopped worker from accumulating
+one duplicate per minute. Production deployment disables the exact legacy
+twelve-process `cerqle-broadcast` Supervisor group, provisions two dedicated
+workers, and fails unless both repository-managed workers report `RUNNING`.
 
 ---
 

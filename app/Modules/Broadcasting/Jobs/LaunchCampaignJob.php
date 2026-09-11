@@ -17,6 +17,7 @@ use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
+use Illuminate\Queue\Middleware\WithoutOverlapping;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
@@ -27,13 +28,31 @@ class LaunchCampaignJob implements ShouldQueue
 
     public int $tries = 2;
 
+    public int $timeout = 180;
+
     public function __construct(public readonly int $campaignId) {}
+
+    /** @return array<int, WithoutOverlapping> */
+    public function middleware(): array
+    {
+        return [
+            (new WithoutOverlapping('campaign-launch:'.$this->campaignId))
+                ->dontRelease()
+                ->expireAfter($this->timeout + 30),
+        ];
+    }
 
     public function handle(): void
     {
         $access = app(ClientAccessService::class);
         $campaign = Campaign::find($this->campaignId);
         if (! $campaign || ! in_array($campaign->status, ['queued', 'waiting_capacity'], true)) {
+            return;
+        }
+
+        // An earlier delayed job may still exist after a queued campaign is
+        // rescheduled. It must never launch before the campaign's current time.
+        if ($campaign->status === 'queued' && $campaign->schedule_at?->isFuture()) {
             return;
         }
 
