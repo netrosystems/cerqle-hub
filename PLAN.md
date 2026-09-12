@@ -63,6 +63,7 @@ journey
   - Internal agent private notes and conversation tagging.
   - Real-time agent typing indicators and live presence detection.
 - **Master Email Inbox (`/app/inbox/email`)**: Dedicated multi-mailbox email client synchronizing Gmail, Microsoft 365, and IMAP/SMTP accounts with folder organization and threaded conversations.
+  - **Resolve all open**: Confirmed bulk action resolves open email threads in the selected mailbox, or every connected mailbox in the current workspace. Includes all pages regardless of search/folder; pending and snoozed threads are unchanged. No email is sent or deleted. Existing resolution timestamps are preserved; the action reports the affected count.
   - **Connected mailbox allowance**: Admin Plan Limits includes `email_accounts`, shared across every workspace in the client organization (or the standalone workspace owner's workspaces). Zero blocks new mailboxes; null/missing preserves unlimited legacy plans. Inactive/error connections still count until disconnected. Downgrades retain existing mailboxes and allow same-provider identity reconnects; a different provider or workspace is a separate connection. Email Setup displays usage and a capacity warning. This is distinct from monthly sending limits.
 
 #### UI State Machine

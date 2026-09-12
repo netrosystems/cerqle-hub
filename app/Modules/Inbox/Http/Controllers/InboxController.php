@@ -602,6 +602,30 @@ class InboxController extends Controller
         return response()->json(['ok' => true]);
     }
 
+    public function resolveOpenEmail(Request $request): RedirectResponse
+    {
+        $validated = $request->validate(['account_id' => ['nullable', 'integer', 'min:1']]);
+        $workspaceId = $request->user()->current_workspace_id ?? $request->user()->workspace_id;
+        abort_unless($workspaceId, 403);
+        $accountId = $validated['account_id'] ?? null;
+        if ($accountId) {
+            ChannelAccount::where('workspace_id', $workspaceId)->where('channel', 'email')->findOrFail($accountId);
+        }
+
+        $resolvedAt = now()->format('Y-m-d H:i:s');
+        // One conditional update avoids overwriting a concurrent pending/snoozed transition.
+        $count = Conversation::where('workspace_id', $workspaceId)
+            ->where('status', 'open')
+            ->whereHas('channelAccount', fn ($query) => $query->where('workspace_id', $workspaceId)->where('channel', 'email'))
+            ->when($accountId, fn ($query) => $query->where('channel_account_id', $accountId))
+            ->update([
+                'status' => 'resolved',
+                'resolved_at' => DB::raw("COALESCE(resolved_at, '{$resolvedAt}')"),
+            ]);
+
+        return back()->with('success', "Resolved {$count} open email threads.");
+    }
+
     public function updateStatus(Request $request, Conversation $conversation): RedirectResponse
     {
         $this->authorise($request, $conversation);
@@ -1039,6 +1063,7 @@ class InboxController extends Controller
             'conversations' => $query->paginate(50)->withQueryString(),
             'filters' => ['folder' => $folder, 'account_id' => $accountId, 'search' => $search],
             'counts' => [
+                'open' => (clone $accountBase)->where('status', 'open')->count(),
                 'inbox' => (clone $accountBase)->where('status', '!=', 'resolved')->count(),
                 'unread' => (clone $accountBase)->where('unread_count', '>', 0)->count(),
                 'sent' => (clone $accountBase)->whereHas('messages', fn ($message) => $message->where('direction', 'out'))->count(),
