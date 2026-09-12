@@ -9,7 +9,7 @@ import {
     RefreshCw, Search, Inbox, User, CheckCircle, Clock, X, Smile,
     Paperclip, Image as ImageIcon, ChevronDown, UserCheck,
     LayoutTemplate, Plus, Loader2, Bot, Calendar, BarChart2, PhoneMissed,
-    Mic, Square,
+    Mic, Square, Trash2,
     Volume2, VolumeX, ShoppingBag, Download, Radio,
 } from 'lucide-react';
 import { ChannelBrandIcon, CHANNEL_LABELS } from '@/Components/BrandIcons';
@@ -1471,6 +1471,7 @@ export default function InboxShow({
     const [showNewModal, setShowNewModal]   = useState(false);
     const [sending, setSending]             = useState(false);
     const [sendError, setSendError]         = useState(null);
+    const [deletingChat, setDeletingChat] = useState(false);
 
     // When Inertia navigates between conversations the page component is
     // re-used, so seed local state from the new server props on conversation
@@ -1869,6 +1870,13 @@ export default function InboxShow({
     };
 
     const handleStatus = (status) => router.post(route('client.inbox.status', conversation.uuid), { status }, { preserveScroll: true });
+    const deleteChat = () => {
+        if (!window.confirm(t('inbox.delete_chat_confirm', 'Permanently delete this chat, its messages and notes from Cerqle? This cannot be undone. The contact and messages on the original provider are kept. New incoming messages may create a new chat.'))) return;
+        router.delete(route('client.inbox.destroy', conversation.uuid), {
+            onStart: () => setDeletingChat(true),
+            onFinish: () => setDeletingChat(false),
+        });
+    };
 
     const navigateList = (params) => {
         if (params.folder === 'live') {
@@ -2034,6 +2042,12 @@ export default function InboxShow({
                         </div>
 
                         {/* Status */}
+                        <button type="button" onClick={deleteChat} disabled={deletingChat}
+                            aria-label={t('inbox.delete_chat', 'Delete chat')}
+                            title={t('inbox.delete_chat', 'Delete chat')}
+                            className="flex shrink-0 items-center gap-1 rounded-lg p-2 text-red-600 hover:bg-red-50 disabled:opacity-40 dark:text-red-400 dark:hover:bg-red-950/30 focus-visible:ring-2 focus-visible:ring-brand-500">
+                            <Trash2 className="h-4 w-4" /><span className="hidden xl:inline text-xs">{t('inbox.delete_chat', 'Delete chat')}</span>
+                        </button>
                         <select
                             defaultValue={conversation.status}
                             onChange={e => handleStatus(e.target.value)}

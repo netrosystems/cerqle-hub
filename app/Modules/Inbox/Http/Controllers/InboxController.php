@@ -626,6 +626,17 @@ class InboxController extends Controller
         return back()->with('success', "Resolved {$count} open email threads.");
     }
 
+    public function destroy(Request $request, Conversation $conversation): RedirectResponse
+    {
+        $this->authorise($request, $conversation);
+        app(\App\Modules\Inbox\Services\ConversationDeletionService::class)->delete(
+            (int) ($request->user()->current_workspace_id ?? $request->user()->workspace_id),
+            $conversation->uuid,
+        );
+
+        return redirect()->route('client.inbox.index')->with('success', 'Chat deleted from Cerqle.');
+    }
+
     public function updateStatus(Request $request, Conversation $conversation): RedirectResponse
     {
         $this->authorise($request, $conversation);
