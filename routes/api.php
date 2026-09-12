@@ -95,6 +95,7 @@ Route::prefix('v1/mobile')->middleware(['auth:sanctum', 'throttle:api', 'demo', 
     // Master Email Inbox (kept separate from the Omni Channel Inbox)
     Route::get('/email/accounts', [MobileEmailInboxController::class, 'accounts']);
     Route::get('/email/threads', [MobileEmailInboxController::class, 'threads']);
+    Route::post('/email/resolve-open', [MobileEmailInboxController::class, 'resolveOpen']);
     Route::get('/email/threads/{uuid}', [MobileEmailInboxController::class, 'show']);
     Route::get('/email/threads/{uuid}/messages', [MobileEmailInboxController::class, 'messages']);
     Route::post('/email/threads/{uuid}/reply', [MobileEmailInboxController::class, 'reply']);
