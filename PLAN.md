@@ -59,6 +59,7 @@ journey
 - **Unified Conversation Stream (`/app/inbox`)**: Real-time conversation list filtered by folders (`All`, `Mine`, `Unassigned`, `Resolved`, `Snoozed`) and channels (WhatsApp, Instagram, Messenger, Webchat).
 - **Interactive Chat Interface**:
   - Rich message formatting with image, video, audio, and document attachment previews.
+  - WhatsApp image previews retry broken saved URLs through the authenticated media endpoint; image files sent as documents also display inline. Cached inbound media is streamed privately from configured storage, and uncached media uses the chat's WhatsApp phone identity rather than the workspace default. Provider-side unavailable media still requires retry/resending.
   - Canned replies (`/quick-reply`) for fast repetitive response delivery.
   - Internal agent private notes and conversation tagging.
   - Real-time agent typing indicators and live presence detection.

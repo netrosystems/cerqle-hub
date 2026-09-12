@@ -682,10 +682,10 @@ class InboxController extends Controller
             $storagePath = "message-media/{$message->id}";
             $disk = $this->storageManager->disk();
             $files = $disk->files($this->storageManager->prefixedPath('message-media'));
-            $cached = collect($files)->first(fn ($f) => str_starts_with($f, $this->storageManager->prefixedPath($storagePath)));
+            $cached = collect($files)->first(fn ($f) => str_starts_with($f, $this->storageManager->prefixedPath($storagePath).'.'));
 
             if ($cached && $disk->exists($cached)) {
-                return redirect($disk->url($cached));
+                return $this->mediaFileResponse($cached, $payload['mime_type'] ?? ($disk->mimeType($cached) ?: null));
             }
 
             // File missing — clear stale preview_url and fall through to re-download
@@ -702,7 +702,10 @@ class InboxController extends Controller
         }
 
         $workspaceId = $request->user()->current_workspace_id ?? $request->user()->workspace_id;
-        $client = CloudApiClient::forWorkspace($workspaceId);
+        $phoneNumberId = $conversation->channelAccount?->phone_number_id;
+        $client = $phoneNumberId
+            ? CloudApiClient::forPhoneNumber($phoneNumberId, (int) $workspaceId)
+            : CloudApiClient::forWorkspace((int) $workspaceId);
 
         if (! $client) {
             abort(503, 'WhatsApp account not configured.');
@@ -711,21 +714,44 @@ class InboxController extends Controller
         try {
             ['url' => $downloadUrl, 'mime_type' => $mimeType] = $client->getMediaUrl($mediaId);
             $bytes = $client->downloadMedia($downloadUrl);
-            $ext = explode('/', $mimeType)[1] ?? 'bin';
+            $ext = explode('/', explode(';', $mimeType)[0])[1] ?? 'bin';
+            $ext = preg_replace('/[^a-zA-Z0-9]/', '', $ext) ?: 'bin';
             $ext = str_replace(['jpeg'], ['jpg'], $ext);
             $filename = "message-media/{$message->id}.{$ext}";
 
             $filename = $this->storageManager->prefixedPath($filename);
-            $this->storageManager->disk()->put($filename, $bytes);
+            if (! $this->storageManager->disk()->put($filename, $bytes)) {
+                throw new \RuntimeException('Media cache write failed.');
+            }
             $previewUrl = $this->storageManager->disk()->url($filename);
 
             // Cache for next request
             $message->update(['payload' => array_merge($payload, ['preview_url' => $previewUrl, 'mime_type' => $mimeType])]);
 
-            return redirect($previewUrl);
+            return $this->mediaFileResponse($filename, $mimeType);
         } catch (\Throwable $e) {
-            abort(502, 'Could not fetch media: '.$e->getMessage());
+            Log::warning('Inbox media retrieval failed', ['message_id' => $message->id, 'workspace_id' => $workspaceId, 'exception' => get_class($e)]);
+            abort(502, 'Could not retrieve this attachment. Please try again later.');
         }
+    }
+
+    private function mediaFileResponse(string $path, ?string $mimeType): \Symfony\Component\HttpFoundation\Response
+    {
+        $stream = $this->storageManager->disk()->readStream($path);
+        abort_unless(is_resource($stream), 404, 'Attachment unavailable.');
+
+        return response()->stream(function () use ($stream): void {
+            try {
+                fpassthru($stream);
+            } finally {
+                fclose($stream);
+            }
+        }, 200, [
+            'Content-Type' => $mimeType ?: 'application/octet-stream',
+            'Content-Security-Policy' => "sandbox; default-src 'none'",
+            'Cache-Control' => 'private, max-age=300',
+            'X-Content-Type-Options' => 'nosniff',
+        ]);
     }
 
     /** Upload a media file to WhatsApp and return the media_id */
