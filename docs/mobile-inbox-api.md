@@ -1,6 +1,6 @@
 # Mobile inbox action contract
 
-Implementation exists on `spiderman`; do not assume deployed availability. Backend regression checks remain pending until a PHP test runtime is available.
+Implementation is committed for release; do not assume deployed availability until production verification. Focused backend inbox/mobile regressions passed with local MAMP PHP on 2026-09-13.
 
 These endpoints require a Sanctum bearer token and `Accept: application/json`. JSON requests also send `Content-Type: application/json`. Scope is the user's mobile-selected workspace, persisted via `POST /api/v1/mobile/workspaces/{workspace}/select`. Subscription and demo write restrictions still apply.
 

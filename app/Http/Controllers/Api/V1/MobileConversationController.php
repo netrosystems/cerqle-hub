@@ -8,6 +8,7 @@ use App\Events\MessageStatusUpdated;
 use App\Events\TypingChanged;
 use App\Models\User;
 use App\Modules\Inbox\Models\InboxLabel;
+use App\Modules\Inbox\Services\ConversationDeletionService;
 use App\Modules\Inbox\Services\WebchatPresence;
 use App\Modules\Shared\Models\ChannelAccount;
 use App\Modules\Shared\Models\Contact;
@@ -20,15 +21,16 @@ use App\Services\StorageManager;
 use App\Support\Demo;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
 
 class MobileConversationController extends WorkspaceScopedController
 {
-    public function destroy(Request $request, string $uuid): \Illuminate\Http\Response
+    public function destroy(Request $request, string $uuid): Response
     {
-        app(\App\Modules\Inbox\Services\ConversationDeletionService::class)->delete($this->workspaceId($request), $uuid);
+        app(ConversationDeletionService::class)->delete($this->workspaceId($request), $uuid);
 
         return response()->noContent();
     }
