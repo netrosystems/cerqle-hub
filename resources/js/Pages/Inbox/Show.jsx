@@ -4,6 +4,7 @@ import InstagramAttachments, { instagramAttachments } from '@/Components/Inbox/I
 import EmptyState from '@/Components/EmptyState';
 import NewConversationModal from '@/Components/Inbox/NewConversationModal';
 import ConversationStatusBadge from '@/Components/Inbox/ConversationStatusBadge';
+import MediaPreviewImage from '@/Components/Inbox/MediaPreviewImage';
 import {
     Send, AlertTriangle, Eye, StickyNote, MessageSquare, Phone, Globe,
     RefreshCw, Search, Inbox, User, CheckCircle, Clock, X, Smile,
@@ -120,8 +121,10 @@ function MediaImage({ src, alt, conversationId, messageId, isOut }) {
     const [loaded, setLoaded]   = useState(false);
     const [errored, setErrored] = useState(false);
     const [open, setOpen]       = useState(false);
-    const proxyUrl = src ?? route('client.inbox.message-media', { conversation: conversationId, message: messageId });
-    if (errored) return <span className="text-xs opacity-60 italic">{t('inbox.image_unavailable')}</span>;
+    const fallbackUrl = route('client.inbox.message-media', { conversation: conversationId, message: messageId });
+    const [proxyUrl, setProxyUrl] = useState(src || fallbackUrl);
+    useEffect(() => { setLoaded(false); setErrored(false); setProxyUrl(src || fallbackUrl); }, [src, fallbackUrl]);
+    if (errored) return <button type="button" onClick={() => { setErrored(false); setLoaded(false); setProxyUrl(`${fallbackUrl}?retry=${Date.now()}`); }} className="text-xs opacity-70 underline">{t('inbox.image_retry', 'Image unavailable · Retry')}</button>;
     return (
         <>
             <button
@@ -131,10 +134,11 @@ function MediaImage({ src, alt, conversationId, messageId, isOut }) {
                 title={t('inbox.view_full_size')}
             >
                 {!loaded && <div className="absolute inset-0 flex items-center justify-center"><Loader2 className="h-5 w-5 animate-spin opacity-40" /></div>}
-                <img
+                <MediaPreviewImage
                     src={proxyUrl}
+                    fallbackSrc={fallbackUrl}
                     alt={alt || 'image'}
-                    onLoad={() => setLoaded(true)}
+                    onLoad={event => { setLoaded(true); setProxyUrl(event.currentTarget.getAttribute('src')); }}
                     onError={() => setErrored(true)}
                     className={`max-w-full max-h-72 object-contain rounded-xl transition-opacity ${loaded ? 'opacity-100' : 'opacity-0'}`}
                 />
@@ -754,6 +758,8 @@ function MessageBubble({ msg, conversationId }) {
 
                     {/* DOCUMENT */}
                     {mediaType === 'document' && (
+                        /^(image\/(png|jpe?g|gif|webp|avif))$/i.test(p.mime_type ?? p.document?.mime_type ?? '') || /\.(png|jpe?g|gif|webp|avif)$/i.test(p.filename ?? p.document?.filename ?? '') ?
+                        <MediaImage src={mediaSrc} alt={p.filename ?? p.document?.filename} conversationId={conversationId} messageId={msg.id} isOut={isOut} /> :
                         <MediaDocument
                             src={mediaSrc}
                             filename={p.filename ?? p.document?.filename ?? p[mediaType]?.filename}
