@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import axios from 'axios';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 function ComposeModal({ accounts, onClose }) {
     const form = useForm({
@@ -406,6 +407,7 @@ export default function EmailInbox({
     selectedConversation,
     messages: initialMessages = [],
 }) {
+    const { t } = useTranslation();
     const { props } = usePage();
     const timezone = props.timezone || 'Asia/Dhaka';
     const [conversations, setConversations] = useState(initialConversations);
@@ -413,6 +415,7 @@ export default function EmailInbox({
     const [messages, setMessages] = useState(initialMessages);
     const [search, setSearch] = useState(filters.search || '');
     const [composeOpen, setComposeOpen] = useState(false);
+    const [resolvingAll, setResolvingAll] = useState(false);
     const [reply, setReply] = useState('');
     const [sending, setSending] = useState(false);
     const [sendError, setSendError] = useState('');
@@ -565,6 +568,16 @@ export default function EmailInbox({
     };
 
     const setStatus = status => router.post(route('client.inbox.status', selectedConversation.uuid), { status }, { preserveScroll: true });
+    const resolveAllOpen = () => {
+        const mailbox = accounts.find(account => String(account.id) === String(filters.account_id));
+        const scope = mailbox?.display_name || t('inbox.resolve_scope_all', 'all connected mailboxes in this workspace');
+        if (!window.confirm(t('inbox.resolve_all_confirm', 'Resolve {{count}} open email threads in {{scope}}? This includes all pages and ignores search/folder filters. Pending and snoozed threads stay unchanged. No emails will be sent or deleted.', { count: counts.open ?? 0, scope }))) return;
+        router.post(route('client.inbox.email.resolve-open'), { account_id: filters.account_id || null }, {
+            preserveScroll: true,
+            onStart: () => setResolvingAll(true),
+            onFinish: () => setResolvingAll(false),
+        });
+    };
     const selectedSubject = safeText(messages.find(message => safeText(message.payload?.subject))?.payload?.subject) || subjectOf(selectedConversation);
     const selectedMailbox = selectedConversation?.channel_account;
 
@@ -602,6 +615,9 @@ export default function EmailInbox({
                     </div>
                     <div className="relative"><Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-400" /><input value={search} onChange={event => setSearch(event.target.value)} placeholder="Search sender, email or message" className="w-full rounded-xl border-0 bg-neutral-100 py-2.5 pl-10 pr-3 text-sm focus:ring-2 focus:ring-brand-500 dark:bg-neutral-800" /></div>
                     <select value={filters.account_id || ''} onChange={event => selectAccount(event.target.value)} className="w-full rounded-xl border-neutral-200 bg-white py-2 text-xs text-neutral-600 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-300"><option value="">All connected accounts</option>{accounts.map(account => <option key={account.id} value={account.id}>{account.display_name} · {account.email || PROVIDER_LABELS[account.provider]}</option>)}</select>
+                    <button type="button" onClick={resolveAllOpen} disabled={resolvingAll || !counts.open} className="flex w-full items-center justify-center gap-2 rounded-xl px-3 py-2 text-xs font-semibold text-emerald-700 hover:bg-emerald-50 disabled:opacity-40 dark:text-emerald-300 dark:hover:bg-emerald-950/30 focus-visible:ring-2 focus-visible:ring-brand-500">
+                        <CheckCircle2 className="h-4 w-4" />{resolvingAll ? t('inbox.resolving_all', 'Resolving…') : t('inbox.resolve_all_open', 'Resolve all open ({{count}})', { count: counts.open ?? 0 })}
+                    </button>
                     <div className="flex gap-1 overflow-x-auto xl:hidden">{FOLDERS.map(folder => <button key={folder.key} type="button" onClick={() => selectFolder(folder.key)} className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-medium ${filters.folder === folder.key ? 'bg-brand-600 text-white' : 'bg-neutral-100 text-neutral-500 dark:bg-neutral-800'}`}>{folder.label} {counts[folder.key] ?? 0}</button>)}</div>
                 </header>
                 <div className="min-h-0 flex-1 overflow-y-auto">

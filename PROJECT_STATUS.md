@@ -13,6 +13,7 @@ Status date: **2026-09-11**. This file is a checkpoint, not permanent proof. Rec
 
 ## Recently implemented
 
+- 2026-09-13: Master Email Inbox has a confirmed “Resolve all open” action scoped to the selected mailbox/current workspace. Existing 105 frontend tests and Vite build passed locally; new backend isolation/status regression test, Pint, PHPStan and route cache checks remain unrun because this PC has no PHP runtime. Not promoted or deployed; backend validation and explicit release approval remain required.
 - WhatsApp Campaigns are available alongside SMS Campaigns under “Campaigns.”
 - WhatsApp campaigns bind an explicit WABA, active phone and approved WABA-scoped template; validate consent and ownership; use paced durable dispatch; honor message quotas; mirror the exact channel into Inbox; and process sent/delivered/read/failed webhooks.
 - Campaign CSV upload uses Contact List file-size and row ceilings and channel-specific consent.
