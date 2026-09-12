@@ -22,6 +22,8 @@ Use this index to load only the context relevant to the task.
 
 ## Decision records
 
+Mobile team handoff: [`mobile-inbox-api.md`](mobile-inbox-api.md) covers email bulk resolve and whole-chat deletion, including rollout status and response contracts.
+
 Decision records explain durable choices and their rationale. A newer record may supersede an older one; do not edit history to imply a decision was always different.
 
 - [`decisions/README.md`](decisions/README.md) — format and maintenance rules

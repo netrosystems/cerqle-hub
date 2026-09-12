@@ -20,6 +20,16 @@ use Illuminate\Support\Str;
 
 class MobileEmailInboxController extends WorkspaceScopedController
 {
+    /** POST /api/v1/mobile/email/resolve-open */
+    public function resolveOpen(Request $request): JsonResponse
+    {
+        $validated = $request->validate(['account_id' => ['nullable', 'integer', 'min:1']]);
+        $accountId = isset($validated['account_id']) ? (int) $validated['account_id'] : null;
+        $count = app(\App\Modules\Inbox\Services\EmailBulkResolveService::class)->resolve($this->workspaceId($request), $accountId);
+
+        return response()->json(['resolved_count' => $count, 'account_id' => $accountId]);
+    }
+
     public function __construct(
         private readonly ChannelManager $channelManager,
         private readonly EmailInboxSyncDispatcher $syncDispatcher,
@@ -102,6 +112,7 @@ class MobileEmailInboxController extends WorkspaceScopedController
                 'total' => $query->total(),
             ],
             'counts' => [
+                'open' => (clone $accountBase)->where('status', 'open')->count(),
                 'inbox' => (clone $accountBase)->where('status', '!=', 'resolved')->count(),
                 'unread' => (clone $accountBase)->where('unread_count', '>', 0)->count(),
                 'sent' => (clone $accountBase)->whereHas('messages', fn ($message) => $message->where('direction', 'out'))->count(),

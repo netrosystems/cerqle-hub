@@ -175,6 +175,8 @@ classDiagram
 ```
 
 ### Tenancy Enforcement Invariants
+Web and mobile email bulk resolution share `EmailBulkResolveService`. Web uses the active session workspace; mobile uses the token user's selected `workspace_id`. The service verifies an explicit mailbox belongs to that workspace and is email, then conditionally updates only open email conversations in that scope. `resolved_at` is set only when absent. The mobile thread response includes `counts.open` independent of search/folder pagination.
+
 Browser `DELETE /app/inbox/conversations/{uuid}` and Sanctum mobile `DELETE /api/v1/mobile/conversations/{uuid}` share `ConversationDeletionService`: lock and recheck workspace ownership, purge dependent chat records transactionally, unlink retained AI usage history, and delete the conversation. Mobile returns 204 on success and 404 for missing/foreign chats. Existing subscription/demo write guards apply. This action makes no provider deletion request and does not delete contacts or shared media assets.
 
 1. **Mandatory Query Scoping**: Every database lookup must scope by the active `workspace_id`.
