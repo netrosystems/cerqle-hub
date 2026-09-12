@@ -175,6 +175,8 @@ classDiagram
 ```
 
 ### Tenancy Enforcement Invariants
+Browser `DELETE /app/inbox/conversations/{uuid}` and Sanctum mobile `DELETE /api/v1/mobile/conversations/{uuid}` share `ConversationDeletionService`: lock and recheck workspace ownership, purge dependent chat records transactionally, unlink retained AI usage history, and delete the conversation. Mobile returns 204 on success and 404 for missing/foreign chats. Existing subscription/demo write guards apply. This action makes no provider deletion request and does not delete contacts or shared media assets.
+
 1. **Mandatory Query Scoping**: Every database lookup must scope by the active `workspace_id`.
 2. **Channel Asset Exclusivity**: A provider account (e.g. WhatsApp Phone Number ID, Facebook Page ID, Instagram Account ID) is bound exclusively to a single `workspace_id` to prevent cross-tenant message contamination.
 3. **Queue Job Hydration**: Queue jobs pass database IDs (not full serialized models) and re-verify tenant ownership at execution time.

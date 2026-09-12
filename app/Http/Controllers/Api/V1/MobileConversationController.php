@@ -26,6 +26,13 @@ use Illuminate\Validation\ValidationException;
 
 class MobileConversationController extends WorkspaceScopedController
 {
+    public function destroy(Request $request, string $uuid): \Illuminate\Http\Response
+    {
+        app(\App\Modules\Inbox\Services\ConversationDeletionService::class)->delete($this->workspaceId($request), $uuid);
+
+        return response()->noContent();
+    }
+
     public function __construct(
         private ChannelManager $channelManager,
         private StorageManager $storageManager,
