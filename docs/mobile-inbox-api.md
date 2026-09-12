@@ -1,6 +1,6 @@
 # Mobile inbox action contract
 
-Implementation is committed for release; do not assume deployed availability until production verification. Focused backend inbox/mobile regressions passed with local MAMP PHP on 2026-09-13.
+Deployed and route registration verified on 2026-09-13 in release `v1.0.90` (production code commit `a621ce5631e4`). Focused backend inbox/mobile regressions passed with local MAMP PHP. Live customer chats were not resolved or deleted for verification; the mobile team should run its authenticated end-to-end checks with designated test data.
 
 These endpoints require a Sanctum bearer token and `Accept: application/json`. JSON requests also send `Content-Type: application/json`. Scope is the user's mobile-selected workspace, persisted via `POST /api/v1/mobile/workspaces/{workspace}/select`. Subscription and demo write restrictions still apply.
 
