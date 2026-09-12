@@ -8,7 +8,9 @@ use App\Events\TypingChanged;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Modules\Inbox\Models\InboxLabel;
+use App\Modules\Inbox\Services\ConversationDeletionService;
 use App\Modules\Inbox\Services\ConversationHandoverService;
+use App\Modules\Inbox\Services\EmailBulkResolveService;
 use App\Modules\Inbox\Services\EmailInboxSyncDispatcher;
 use App\Modules\Inbox\Services\WebchatGeoService;
 use App\Modules\Inbox\Services\WebchatPresence;
@@ -606,7 +608,7 @@ class InboxController extends Controller
     {
         $validated = $request->validate(['account_id' => ['nullable', 'integer', 'min:1']]);
         $workspaceId = $request->user()->current_workspace_id ?? $request->user()->workspace_id;
-        $count = app(\App\Modules\Inbox\Services\EmailBulkResolveService::class)->resolve(
+        $count = app(EmailBulkResolveService::class)->resolve(
             (int) $workspaceId,
             isset($validated['account_id']) ? (int) $validated['account_id'] : null,
         );
@@ -617,7 +619,7 @@ class InboxController extends Controller
     public function destroy(Request $request, Conversation $conversation): RedirectResponse
     {
         $this->authorise($request, $conversation);
-        app(\App\Modules\Inbox\Services\ConversationDeletionService::class)->delete(
+        app(ConversationDeletionService::class)->delete(
             (int) ($request->user()->current_workspace_id ?? $request->user()->workspace_id),
             $conversation->uuid,
         );

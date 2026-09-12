@@ -4,16 +4,17 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Events\MessageSent;
 use App\Modules\Inbox\Jobs\SyncEmailAccountJob;
+use App\Modules\Inbox\Services\EmailBulkResolveService;
 use App\Modules\Inbox\Services\EmailInboxSyncDispatcher;
 use App\Modules\Shared\Models\ChannelAccount;
 use App\Modules\Shared\Models\Contact;
 use App\Modules\Shared\Models\Conversation;
 use App\Modules\Shared\Models\Message;
 use App\Modules\Shared\Services\ChannelManager;
-use App\Support\Demo;
-use Illuminate\Http\JsonResponse;
 use App\Services\Media\AttachmentService;
 use App\Services\StorageManager;
+use App\Support\Demo;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
@@ -25,7 +26,7 @@ class MobileEmailInboxController extends WorkspaceScopedController
     {
         $validated = $request->validate(['account_id' => ['nullable', 'integer', 'min:1']]);
         $accountId = isset($validated['account_id']) ? (int) $validated['account_id'] : null;
-        $count = app(\App\Modules\Inbox\Services\EmailBulkResolveService::class)->resolve($this->workspaceId($request), $accountId);
+        $count = app(EmailBulkResolveService::class)->resolve($this->workspaceId($request), $accountId);
 
         return response()->json(['resolved_count' => $count, 'account_id' => $accountId]);
     }
