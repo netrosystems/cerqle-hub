@@ -98,6 +98,9 @@ class WorkspaceDeletionService
         $this->deleteWhereIn('inbox_notes', 'conversation_id', 'conversations', 'id', 'workspace_id', null, $workspaceId);
         $this->deleteWhereIn('inbox_label_conversation', 'conversation_id', 'conversations', 'id', 'workspace_id', null, $workspaceId);
         $this->deleteWhereIn('inbox_label_conversation', 'label_id', 'inbox_labels', 'id', 'workspace_id', null, $workspaceId);
+        if (Schema::hasTable('inbound_reply_ownerships')) {
+            DB::table('inbound_reply_ownerships')->where('workspace_id', $workspaceId)->delete();
+        }
         $this->deleteWhereIn('messages', 'conversation_id', 'conversations', 'id', 'workspace_id', null, $workspaceId);
 
         $this->deleteWhereIn('contact_tag_pivot', 'contact_id', 'contacts', 'id', 'workspace_id', null, $workspaceId);

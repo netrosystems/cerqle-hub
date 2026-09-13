@@ -57,6 +57,8 @@ flowchart TD
 ```
 
 ### Architectural Invariants
+Grouped inbox AI uses `workspace_ai_automation_settings` (unique workspace/group, optimistic revision, activation timestamp) and `inbound_reply_ownerships` (unique inbound message, workspace/conversation/account and durable attempt state). Both MessageReceived listener entry points delegate to the same ownership pipeline; registration order cannot result in both a workflow and AI reply. Human ownership/request → waiting/matched workflow → reply rule → AI. `GenerateGroupedAiReply` runs on `ai`, uses a shared per-conversation overlap lock and atomic queued→generating claim, and never retries an ambiguous sending attempt. Retried interrupted attempts become delivery-review entries. Settings changes cancel older revisions; legacy account links are honored only without a group row. Job timeout is capped at 120 seconds and ten seconds below connection retry_after; overlap expiry is 180 seconds. Production release checks must verify actual worker/connection timing. Workspace/conversation deletion purges reply receipts. Migration does not rewrite workflows, bots or account metadata.
+
 1. **Strict Dual Authentication Boundaries**: 
    - Browser web sessions use Laravel session cookies with CSRF token verification.
    - Mobile apps and external developer APIs use Laravel Sanctum Bearer tokens.

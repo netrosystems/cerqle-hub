@@ -22,14 +22,19 @@ class AutomationTriggerListener
 
     public function handleMessageReceived(MessageReceived $event): void
     {
+        app(AutoReplyListener::class)->handle($event);
+    }
+
+    public function routeMessage(MessageReceived $event): bool
+    {
         $contactId = $event->message->conversation?->contact_id;
         $workspaceId = $event->message->conversation?->workspace_id;
         if (! $contactId || ! $workspaceId) {
-            return;
+            return false;
         }
 
         if (! $this->access->allowsWorkspaceWrite($workspaceId)) {
-            return;
+            return false;
         }
 
         $messageBody = $event->message->body ?? '';
@@ -37,13 +42,15 @@ class AutomationTriggerListener
         // Resume any runs parked on an "Ask question" node awaiting this contact's reply.
         $consumed = $this->engine->resumeAwaitingReplies($workspaceId, $contactId, $messageBody, $event->message->conversation_id, $event->message->id, data_get($event->message->payload, 'interactive.button_reply.id'));
 
-        $this->fireWithConfig('message.received', $workspaceId, $contactId, [
+        $matched = $this->fireWithConfig('message.received', $workspaceId, $contactId, [
             'message_id' => $event->message->id,
             'message_channel' => $event->message->channel,
             'message_body' => $messageBody,
             'conversation_id' => $event->message->conversation_id,
             'channel_account_id' => $event->message->conversation->channel_account_id,
         ], $messageBody, $consumed);
+
+        return $matched || ! empty($consumed);
     }
 
     public function handleContactCreated(ContactCreated $event): void
@@ -135,10 +142,10 @@ class AutomationTriggerListener
      *
      * @param  list<int>  $consumed
      */
-    private function fireWithConfig(string $triggerType, int $workspaceId, int $contactId, array $context, string $messageBody = '', array $consumed = []): void
+    private function fireWithConfig(string $triggerType, int $workspaceId, int $contactId, array $context, string $messageBody = '', array $consumed = []): bool
     {
         if (! $this->access->allowsWorkspaceWrite($workspaceId)) {
-            return;
+            return false;
         }
         $automations = Automation::where('workspace_id', $workspaceId)
             ->where('status', 'active')
@@ -146,6 +153,7 @@ class AutomationTriggerListener
             ->get();
 
         $bodyLower = mb_strtolower($messageBody);
+        $matched = false;
 
         foreach ($automations as $automation) {
             if (in_array($automation->id, $consumed, true)) {
@@ -156,6 +164,8 @@ class AutomationTriggerListener
                 continue;
             }
             if ($accountId && AutomationRun::where('automation_id', $automation->id)->where('conversation_id', $context['conversation_id'])->whereIn('status', ['pending', 'running', 'waiting'])->exists()) {
+                $matched = true;
+
                 continue;
             }
             $keywords = $automation->trigger_config['keywords'] ?? [];
@@ -174,6 +184,9 @@ class AutomationTriggerListener
             }
 
             $this->engine->triggerForContact($automation, $contactId, $context);
+            $matched = true;
         }
+
+        return $matched;
     }
 }

@@ -4,6 +4,7 @@ namespace App\Modules\Inbox\Http\Controllers;
 
 use App\Http\Controllers\Controller;
 use App\Modules\AI\Models\AiChatbot;
+use App\Modules\Inbox\Services\AiAutomationSettings;
 use App\Modules\Integrations\Services\CredentialResolver;
 use App\Modules\Integrations\Services\MetaPageDiscoveryService;
 use App\Modules\Shared\Models\ChannelAccount;
@@ -73,6 +74,7 @@ class InboxSetupController extends Controller
         $metaCreds = CredentialResolver::system()->meta();
 
         return Inertia::render('Inbox/Setup', [
+            'aiAutomation' => app(AiAutomationSettings::class)->page($workspaceId, 'channels'),
             'wabas' => $wabas,
             'whatsappWebhookUrl' => url('/webhooks/whatsapp'),
             'whatsappWebhookGlobalUrl' => route('webhooks.whatsapp.global.receive'),
@@ -954,6 +956,9 @@ class InboxSetupController extends Controller
     {
         $workspaceId = $request->user()->current_workspace_id ?? $request->user()->workspace_id;
         abort_unless((int) $channelAccount->workspace_id === (int) $workspaceId, 403);
+
+        $group = app(AiAutomationSettings::class)->group($channelAccount->channel);
+        abort_if($group && app(AiAutomationSettings::class)->find($workspaceId, $group), 422, 'Use the grouped AI Automation setting.');
 
         $validated = $request->validate([
             'chatbot_id' => ['nullable', 'integer'],

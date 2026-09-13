@@ -1,5 +1,6 @@
 ﻿import { Head, router, usePage, Link } from '@inertiajs/react';
 import ClientLayout from '@/Layouts/ClientLayout';
+import AiAutomationCard from '@/Components/Inbox/AiAutomationCard';
 import {
     Check, Copy, Link2, AlertTriangle,
     Phone, Inbox, Webhook, FileText,
@@ -131,9 +132,11 @@ function ChannelCard({ icon: Icon, iconBg, title, count, children }) {
 /* â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€ chatbot selector â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€ */
 
 function ChatbotSelector({ channelAccountId, currentChatbotId, chatbots }) {
+    const { props } = usePage();
     const { t } = useTranslation();
     const [saving, setSaving] = useState(false);
     const [value, setValue] = useState(currentChatbotId ? String(currentChatbotId) : '');
+    if (props.aiAutomation?.configured) return null;
 
     const handleChange = (e) => {
         const next = e.target.value;
@@ -1238,6 +1241,7 @@ export default function ChannelSetup({
     channelAccountsByWaba, instagramAccounts, messengerAccounts, metaWebhookUrl,
     metaAppId = null, metaConfigIdWhatsapp = null, metaConfigIdSocial = null,
     chatbots = [],
+    aiAutomation,
 }) {
     const { t } = useTranslation();
     const { props } = usePage();
@@ -1283,6 +1287,7 @@ export default function ChannelSetup({
             </div>
 
             {/* Flash message */}
+            {aiAutomation && <AiAutomationCard settings={aiAutomation} group="channels" />}
             {flash.success && (
                 <div className="mb-4 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200 px-4 py-3 text-sm flex items-center gap-2">
                     <Check className="h-4 w-4 shrink-0" />
@@ -1291,7 +1296,7 @@ export default function ChannelSetup({
             )}
 
             {/* No chatbots warning */}
-            {chatbots.length === 0 && (
+            {!aiAutomation && chatbots.length === 0 && (
                 <div className="mb-4 flex items-start gap-3 rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 px-4 py-3 text-sm text-amber-700 dark:text-amber-300">
                     <Bot className="h-4 w-4 shrink-0 mt-0.5" />
                     <span>{t('inbox.no_active_chatbots')} <Link href={route('client.ai.chatbots.index')} className="underline font-semibold">{t('inbox.create_one')}</Link> {t('inbox.to_enable_ai_replies')}</span>

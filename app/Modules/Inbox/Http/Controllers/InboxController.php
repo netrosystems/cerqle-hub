@@ -649,7 +649,7 @@ class InboxController extends Controller
         if ($mode === 'human') {
             $this->handoverService->request($conversation, 'manual');
         } else {
-            $conversation->update(['assigned_to' => 'bot']);
+            $conversation->forceFill(['assigned_to' => 'bot', 'assigned_user_id' => null, 'handover_at' => null, 'ai_handback_after_message_id' => $conversation->messages()->max('id') ?? 0])->save();
         }
 
         return response()->json(['ok' => true, 'assigned_to' => $mode]);

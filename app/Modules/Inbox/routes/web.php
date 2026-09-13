@@ -1,5 +1,6 @@
 <?php
 
+use App\Modules\Inbox\Http\Controllers\AiAutomationController;
 use App\Modules\Inbox\Http\Controllers\CannedReplyController;
 use App\Modules\Inbox\Http\Controllers\ChatWidgetController;
 use App\Modules\Inbox\Http\Controllers\EmailAccountController;
@@ -10,6 +11,7 @@ use App\Modules\Inbox\Http\Controllers\LabelController;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware(['web', 'client-app'])->prefix('app/inbox')->name('client.inbox.')->group(function () {
+    Route::patch('/ai-automation/{group}', [AiAutomationController::class, 'update'])->middleware('client.access:write')->name('ai-automation.update');
     Route::get('/', [InboxController::class, 'index'])->name('index');
     Route::get('/email', [InboxController::class, 'emailIndex'])->name('email-inbox');
     Route::post('/email/resolve-open', [InboxController::class, 'resolveOpenEmail'])->name('email.resolve-open');

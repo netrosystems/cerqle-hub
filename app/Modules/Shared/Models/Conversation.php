@@ -13,6 +13,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Support\Str;
 
+/** @property int|null $ai_handback_after_message_id */
 class Conversation extends Model
 {
     protected static function boot(): void

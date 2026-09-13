@@ -4,6 +4,7 @@ namespace App\Modules\Inbox\Services;
 
 use App\Modules\Shared\Models\Conversation;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 class ConversationDeletionService
 {
@@ -14,6 +15,9 @@ class ConversationDeletionService
         DB::transaction(function () use ($workspaceId, $uuid): void {
             $conversation = Conversation::where('workspace_id', $workspaceId)
                 ->where('uuid', $uuid)->lockForUpdate()->firstOrFail();
+            if (Schema::hasTable('inbound_reply_ownerships')) {
+                DB::table('inbound_reply_ownerships')->where('workspace_id', $workspaceId)->where('conversation_id', $conversation->id)->delete();
+            }
 
             foreach (['internal_notes', 'inbox_notes', 'inbox_assignments', 'inbox_label_conversation', 'widget_push_subscriptions', 'messages'] as $table) {
                 DB::table($table)->where('conversation_id', $conversation->id)->delete();

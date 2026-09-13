@@ -76,13 +76,14 @@ class SyncEmailAccountJob implements ShouldBeUnique, ShouldQueue
         }
 
         try {
+            $initialImport = empty($account->meta_json['last_synced_at']);
             $items = match ($account->provider) {
                 'microsoft_365' => $microsoft->syncInbox($account),
                 'gmail' => $google->syncInbox($account),
                 default => $generic->messages($account),
             };
             foreach ($items as $item) {
-                $this->ingest($account, $item);
+                $this->ingest($account, $item, $initialImport);
             }
         } catch (Throwable $e) {
             $meta = $account->meta_json ?? [];
@@ -94,7 +95,7 @@ class SyncEmailAccountJob implements ShouldBeUnique, ShouldQueue
         }
     }
 
-    private function ingest(ChannelAccount $account, array $item): void
+    private function ingest(ChannelAccount $account, array $item, bool $initialImport = false): void
     {
         $providerId = trim((string) ($item['id'] ?? ''));
         if ($providerId === '') {
@@ -157,6 +158,9 @@ class SyncEmailAccountJob implements ShouldBeUnique, ShouldQueue
                 'internet_message_id' => (string) ($item['internetMessageId'] ?? ''),
                 'provider_thread_id' => (string) ($item['conversationId'] ?? ''),
                 'has_attachments' => (bool) ($item['hasAttachments'] ?? false),
+                'from_address' => $address,
+                'history_import' => $initialImport || empty($item['receivedDateTime']),
+                'mail_headers' => collect($item['internetMessageHeaders'] ?? [])->mapWithKeys(fn ($header) => [strtolower((string) ($header['name'] ?? '')) => substr((string) ($header['value'] ?? ''), 0, 2000)])->only(['auto-submitted', 'precedence', 'list-id', 'list-unsubscribe', 'content-type', 'x-auto-response-suppress'])->all(),
             ],
             'status' => 'delivered',
             'provider_message_id' => $providerId,

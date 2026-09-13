@@ -57,6 +57,7 @@ class GenericMailboxClient
             $sender = $this->senderFromHeader($from);
             $body = $this->messageBody($imap, (int) $uid);
             $messages[] = [
+                'internetMessageHeaders' => $this->automationHeaders((string) imap_fetchheader($imap, (int) $uid, FT_UID)),
                 'id' => 'imap:'.$account->id.':'.$uid,
                 'internetMessageId' => trim((string) ($overview->message_id ?? 'imap-'.$account->id.'-'.$uid), '<>'),
                 'conversationId' => trim((string) ($overview->references ?? $overview->in_reply_to ?? $overview->message_id ?? $uid), '<>'),
@@ -288,6 +289,21 @@ class GenericMailboxClient
         }
 
         return $imap;
+    }
+
+    /** @return list<array{name: string, value: string}> */
+    public function automationHeaders(string $raw): array
+    {
+        $raw = preg_replace('/\r?\n[ \t]+/', ' ', $raw) ?? '';
+        $headers = [];
+        foreach (preg_split('/\r?\n/', $raw) ?: [] as $line) {
+            if (str_contains($line, ':')) {
+                [$name, $value] = explode(':', $line, 2);
+                $headers[] = ['name' => strtolower(trim($name)), 'value' => trim($value)];
+            }
+        }
+
+        return $headers;
     }
 
     private function mailer(ChannelAccount $account): mixed
