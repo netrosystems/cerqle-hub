@@ -9,11 +9,13 @@ use App\Modules\Inbox\Services\ConversationHandoverService;
 use App\Modules\Inbox\Services\TypingPresence;
 use App\Modules\Inbox\Services\WebchatDriver;
 use App\Modules\Inbox\Services\WebchatPresence;
+use App\Modules\Inbox\Services\WidgetAiAvailability;
 use App\Modules\Inbox\Services\WidgetPayloadBuilder;
 use App\Modules\Inbox\Services\WidgetVisitorPushService;
 use App\Modules\Shared\Models\Conversation;
 use App\Modules\Shared\Models\Message;
 use App\Services\Media\AttachmentService;
+use App\Services\PusherPublicConfig;
 use App\Services\StorageManager;
 use App\Support\WebchatVisitorToken;
 use Illuminate\Http\JsonResponse;
@@ -183,6 +185,7 @@ class ChatWidgetPublicController extends Controller
 
         return response()->json(array_filter([
             'token' => $issuedToken,
+            'ai_availability' => app(WidgetAiAvailability::class)->publicState($widget),
             'message' => $messagePayloadData,
             'handover' => $this->handoverState($conversation->fresh(), $widget),
             'handoff' => $this->payloads->handoff($widget, $conversation->refresh()),
@@ -198,7 +201,7 @@ class ChatWidgetPublicController extends Controller
 
         $widget = $this->resolveWidget($data['key']);
         $this->assertDomainAllowed($widget, $request);
-        abort_unless($widget->hasEnabledAiChatbot(), 422, 'Human handover is available when the AI chatbot is enabled.');
+        // Human support remains available even when AI is off or outside hours.
 
         $payload = $this->authVisitor($request, $widget);
         abort_if(empty($payload['c']), 409, 'Send a message before requesting a human agent.');
@@ -210,7 +213,7 @@ class ChatWidgetPublicController extends Controller
             ->firstOrFail();
 
         abort_if(
-            $conversation->messages()->where('direction', 'in')->count() < 2,
+            app(WidgetAiAvailability::class)->available($widget) && $conversation->messages()->where('direction', 'in')->count() < 2,
             422,
             'Human handover becomes available after two messages.'
         );
@@ -246,6 +249,7 @@ class ChatWidgetPublicController extends Controller
         if (empty($payload['c'])) {
             return response()->json([
                 'messages' => [],
+                'ai_availability' => app(WidgetAiAvailability::class)->publicState($widget),
                 'online' => $this->isOnline($widget),
                 'handover' => $this->handoverState(null, $widget),
                 'handoff' => ['enabled' => false, 'eligible' => false, 'status' => 'bot'],
@@ -269,6 +273,7 @@ class ChatWidgetPublicController extends Controller
 
         return response()->json([
             'messages' => $messages,
+            'ai_availability' => app(WidgetAiAvailability::class)->publicState($widget),
             'online' => $this->isOnline($widget),
             'handover' => $this->handoverState($conversation, $widget),
             'handoff' => $this->payloads->handoff($widget, $conversation),
@@ -420,7 +425,7 @@ class ChatWidgetPublicController extends Controller
         $widget = $this->resolveWidget($widgetKey);
         $this->assertDomainAllowed($widget, $request);
 
-        $cfg = app(\App\Services\PusherPublicConfig::class)->widget();
+        $cfg = app(PusherPublicConfig::class)->widget();
 
         return response()->json([
             'key' => $cfg['key'] ?? '',
@@ -538,7 +543,7 @@ class ChatWidgetPublicController extends Controller
     private function handoverState(?Conversation $conversation, ChatWidget $widget): array
     {
         return [
-            'available' => $widget->hasEnabledAiChatbot(),
+            'available' => true,
             'requested' => $conversation?->assigned_to === 'human' && $conversation->handover_at !== null,
             'visitor_message_count' => $conversation
                 ? $conversation->messages()->where('direction', 'in')->count()

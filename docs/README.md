@@ -32,6 +32,8 @@ Deployed four-node verification: [`automation-production-qa-2026-09-13.md`](auto
 
 Grouped inbox AI setup QA: [`grouped-ai-automation-qa-2026-09-13.md`](grouped-ai-automation-qa-2026-09-13.md).
 
+Website chatbot AI availability QA: [`website-ai-availability-qa-2026-09-13.md`](website-ai-availability-qa-2026-09-13.md).
+
 Decision records explain durable choices and their rationale. A newer record may supersede an older one; do not edit history to imply a decision was always different.
 
 - [`decisions/README.md`](decisions/README.md) — format and maintenance rules
@@ -41,6 +43,7 @@ Decision records explain durable choices and their rationale. A newer record may
 - [`decisions/2026-09-13-whatsapp-first-automations.md`](decisions/2026-09-13-whatsapp-first-automations.md)
 - [`decisions/2026-09-13-send-only-automation-palette.md`](decisions/2026-09-13-send-only-automation-palette.md)
 - [`decisions/2026-09-13-grouped-inbox-ai-automation.md`](decisions/2026-09-13-grouped-inbox-ai-automation.md)
+- [`decisions/2026-09-13-website-ai-availability.md`](decisions/2026-09-13-website-ai-availability.md)
 
 ## Maintenance rule
 

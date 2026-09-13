@@ -5,16 +5,19 @@ namespace App\Listeners;
 use App\Events\MessageReceived;
 use App\Events\MessageSent;
 use App\Modules\Inbox\Jobs\GenerateGroupedAiReply;
+use App\Modules\Inbox\Models\ChatWidget;
 use App\Modules\Inbox\Models\InboundReplyOwnership;
 use App\Modules\Inbox\Services\AiAutomationSettings;
 use App\Modules\Inbox\Services\AiReplyEligibility;
 use App\Modules\Inbox\Services\ConversationHandoverService;
+use App\Modules\Inbox\Services\WidgetAiAvailability;
 use App\Modules\Shared\Models\Conversation;
 use App\Modules\Shared\Models\Message;
 use App\Modules\Shared\Services\ChannelManager;
 use App\Modules\Whatsapp\Models\WhatsappAutoReply;
 use App\Services\ClientAccessService;
 use Carbon\Carbon;
+use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Log;
 
 /**
@@ -133,6 +136,19 @@ class AutoReplyListener
         }
 
         // ── 3. AI chatbot (only if one is linked to this channel account) ─────
+        if ($message->channel === 'webchat') {
+            $widget = ChatWidget::where('workspace_id', $conversation->workspace_id)->where('channel_account_id', $channelAccount->id)->first();
+            $availability = app(WidgetAiAvailability::class);
+            if (! $widget || ! $availability->available($widget) || ! $availability->available($widget, CarbonImmutable::parse($message->created_at))) {
+                $this->ownership($message, 'ai', 'skipped');
+
+                return;
+            }
+            $this->ownership($message, 'ai', 'queued', $widget->ai_revision);
+            GenerateGroupedAiReply::dispatch($message->id, $conversation->workspace_id, $channelAccount->id, (int) $widget->ai_chatbot_id, null, $widget->id, $widget->ai_revision)->onQueue('ai');
+
+            return;
+        }
         $settings = app(AiAutomationSettings::class);
         $group = $settings->group($message->channel);
         $setting = $group ? $settings->find($conversation->workspace_id, $group) : null;

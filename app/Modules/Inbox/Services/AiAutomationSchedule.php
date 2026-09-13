@@ -41,4 +41,27 @@ class AiAutomationSchedule
 
         return (int) $hour * 60 + (int) $minute;
     }
+
+    /**
+     * Multiple windows use the same wall-clock and overnight rules as grouped hours.
+     *
+     * @param  list<array{enabled: bool, all_day: bool, windows: list<array{start: string, end: string}>}>  $hours
+     */
+    public function activeWindows(array $hours, string $timezone, ?CarbonImmutable $at = null): bool
+    {
+        foreach ($hours as $day => $entry) {
+            if (! $entry['enabled']) {
+                continue;
+            }
+            foreach ($entry['all_day'] ? [['start' => '00:00', 'end' => '00:00']] : $entry['windows'] as $window) {
+                $single = array_fill(0, 7, ['enabled' => false, 'all_day' => false, 'start' => '00:00', 'end' => '00:00']);
+                $single[$day] = ['enabled' => true, 'all_day' => $entry['all_day'], ...$window];
+                if ($this->active($single, $timezone, $at)) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
 }

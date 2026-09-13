@@ -8,12 +8,15 @@ use App\Modules\AI\Exceptions\AiRateLimitException;
 use App\Modules\AI\Exceptions\AiRequestInProgressException;
 use App\Modules\AI\Models\AiChatbot;
 use App\Modules\AI\Services\ChatbotRunner;
+use App\Modules\Inbox\Models\ChatWidget;
 use App\Modules\Inbox\Models\InboundReplyOwnership;
 use App\Modules\Inbox\Services\AiAutomationSettings;
 use App\Modules\Inbox\Services\AiReplyEligibility;
+use App\Modules\Inbox\Services\WidgetAiAvailability;
 use App\Modules\Shared\Models\Message;
 use App\Modules\Shared\Services\ChannelManager;
 use App\Services\ClientAccessService;
+use Carbon\CarbonImmutable;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -29,8 +32,14 @@ class GenerateGroupedAiReply implements ShouldQueue
 
     public int $timeout = 120;
 
-    public function __construct(public int $messageId, public int $workspaceId, public int $accountId, public int $chatbotId, public ?int $revision)
+    public ?int $widgetId = null;
+
+    public ?int $widgetRevision = null;
+
+    public function __construct(public int $messageId, public int $workspaceId, public int $accountId, public int $chatbotId, public ?int $revision, ?int $widgetId = null, ?int $widgetRevision = null)
     {
+        $this->widgetId = $widgetId;
+        $this->widgetRevision = $widgetRevision;
         $retryAfter = (int) config('queue.connections.'.config('queue.default').'.retry_after', 180);
         if ($retryAfter <= 10) {
             throw new \RuntimeException('AI queue retry_after must exceed ten seconds.');
@@ -163,6 +172,13 @@ class GenerateGroupedAiReply implements ShouldQueue
             return false;
         }
         $settings = app(AiAutomationSettings::class);
+        if ($message->channel === 'webchat') {
+            $widget = ChatWidget::where('workspace_id', $this->workspaceId)->where('channel_account_id', $this->accountId)->whereKey($this->widgetId)->first();
+            $availability = app(WidgetAiAvailability::class);
+
+            return $widget && $widget->ai_revision === $this->widgetRevision && (int) $widget->ai_chatbot_id === $this->chatbotId
+                && $availability->available($widget) && $availability->available($widget, CarbonImmutable::parse($message->created_at));
+        }
         $group = $settings->group($message->channel);
         $setting = $group ? $settings->find($this->workspaceId, $group) : null;
 

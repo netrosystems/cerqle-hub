@@ -79,6 +79,7 @@ Primary Plum:    #3E2A49   Brand Lilac:    #8F5FA7   Cool Accent:  #45B6D6   Cor
 - **Automations navigation (2026-09-13)**: Temporarily comment out the workflow Automations link in the Automations group. Keep Smart Bots and Knowledge Bases visible. Routes, stored workflows, execution, AI Automation setup cards and automation reports remain unchanged; restore the link by uncommenting its shared navigation entry.
 
 ### 4.2 Viewport-Pinned Layout (`InboxLayout`)
+- Website widget AI Answering uses compact Off/Permanent/Scheduled radios, conditional chatbot selection and expandable scrollable hours. Each day supports enable/all-day, up to five removable intervals and weekday copying. Keep errors inline, setup help expandable and grid children shrinkable on narrow screens. Display configured mode and effective active/inactive availability without conflating AI with human presence.
 - **Used For**: Omni-Channel Inbox and Master Email Inbox.
 - **Structure**: `h-screen` pinned column flexbox layout.
   - Left: 3-column navigation / conversation list.

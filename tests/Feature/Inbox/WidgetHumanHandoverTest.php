@@ -95,7 +95,7 @@ class WidgetHumanHandoverTest extends TestCase
             ->assertJsonPath('handover.requested', true);
     }
 
-    public function test_handover_is_not_available_without_an_enabled_ai_chatbot(): void
+    public function test_handover_remains_available_when_ai_is_off(): void
     {
         ['workspace' => $workspace] = $this->createSubscribedWorkspaceContext();
         $account = ChannelAccount::create([
@@ -117,10 +117,14 @@ class WidgetHumanHandoverTest extends TestCase
             'visitor_id' => 'normal-device',
         ])->assertOk()
             ->assertJsonPath('config.ai_enabled', false)
-            ->assertJsonPath('handover.available', false);
+            ->assertJsonPath('handover.available', true);
+
+        $this->withHeaders(['X-Widget-Token' => $session->json('token')])
+            ->postJson(route('widget.send'), ['key' => $widget->widget_key, 'message' => 'Help'])
+            ->assertOk();
 
         $this->withHeaders(['X-Widget-Token' => $session->json('token')])
             ->postJson(route('widget.handover'), ['key' => $widget->widget_key])
-            ->assertStatus(422);
+            ->assertOk();
     }
 }
