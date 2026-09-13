@@ -65,6 +65,8 @@ The complete implementation contract remains in [`WHATSAPP_COEXISTENCE.md`](WHAT
 
 ## Operational cautions
 
+- 2026-09-13 admin-only notification availability deployed as `v1.0.96`, production main `9c00ef05347f` (tree-equivalent to validated dev `3ab287b`). Deployment script exited 0; all four Supervisor workers RUNNING. Live Team administrator editor and scheduled hours inspected and cancelled without saving; availability rows remained zero. Staff write restrictions verified by automated tests, not a production staff session. No real alert delivery tests performed. This release added no schema changes.
+
 - Deploy only from GitHub `main` with `bash scripts/deploy-production.sh` in the production checkout.
 - Do not run deployment under `umask 077`; a prior run created unreadable cache/build files, causing PHP-FPM HTTP 500 responses and Supervisor worker BACKOFF. Use the normal `0022` deployment umask and protect logs separately.
 - Deployment logs can contain sensitive derived webhook-verification URLs. Do not print or publish full logs.

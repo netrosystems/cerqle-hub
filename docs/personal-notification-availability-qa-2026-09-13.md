@@ -20,7 +20,9 @@ Automated regression checkpoint: 891 backend tests/3692 assertions, 149 frontend
 
 ## Outstanding verification
 
-### Admin-only ownership correction (local, not deployed)
+### Admin-only ownership correction
+
+Production checkpoint: approved deployment on 2026-09-13, `v1.0.96`, main `9c00ef05347f`, tree-equivalent to validated dev `3ab287b`. Deployment script exited 0 without manual recovery. Live observed: Team administrator Manage controls opened a teammate's Always/Scheduled/Paused editor; scheduled timezone and weekday 09:00–17:00 controls loaded. Cancelled without saving. Six browser/API routes present; database availability rows zero; four Supervisor workers RUNNING. No schema changes, customer schedule changes or real alerts. Staff production browser verification remains not tested. Checkpoint retained locally, outside the deployed commit.
 
 The user superseded personal editing: only client administrators manage schedules. Automated/mocked authorization tests verify admin save, staff read-only browser/Sanctum access, staff write 403, foreign/unassigned target 404, independent workspaces and revision conflicts. Frontend tests verify hidden staff Manage controls, read-only defaults, selected admin editor and summary refresh. Regression: 895 backend tests/3720 assertions, 155 frontend tests/30 files; build, focused Pint/controller PHPStan and route-cache rebuilding passed.
 

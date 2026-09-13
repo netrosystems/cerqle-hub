@@ -4,7 +4,7 @@ import { Button, Modal, PasswordInput } from '@/Components/ui';
 import { Head, router, useForm, usePage } from '@inertiajs/react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Users, Pencil, Trash2, UserPlus, Mail, X } from 'lucide-react';
+import { Users, Pencil, Trash2, UserPlus, Mail, X, Clock3 } from 'lucide-react';
 
 const STATUS_ACTIVE    = 'active';
 const WORKSPACE_ROLE_ADMIN = 'administrator';
@@ -245,18 +245,27 @@ export default function TeamIndex({ users = [], client = {}, invitations = [], w
                                             {u.email}
                                         </td>
                                         <td className="px-4 py-3 text-sm text-neutral-600 dark:text-neutral-300">
-                                            <div className="flex flex-wrap gap-1.5">
+                                            <div className="space-y-2">
                                                 {(u.workspace_assignments || []).map((assignment) => (
-                                                    <span key={assignment.workspace_id} className="inline-flex rounded-full bg-neutral-100 px-2 py-0.5 text-xs dark:bg-neutral-700">
-                                                        {assignment.name} · {assignment.role === WORKSPACE_ROLE_ADMIN ? 'Admin' : 'Staff'}
-                                                        {assignment.availability && <span className="ml-2"><NotificationAvailabilitySummary availability={assignment.availability} showHours /></span>}
+                                                    <div key={assignment.workspace_id} className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+                                                        <span className="min-w-0 break-words text-sm font-medium text-neutral-800 dark:text-neutral-200">{assignment.name}</span>
+                                                        <span className="rounded bg-neutral-100 px-1.5 py-0.5 text-[11px] text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400">
+                                                            {t(assignment.role === WORKSPACE_ROLE_ADMIN ? 'team.role_admin' : 'team.role_staff', { defaultValue: assignment.role === WORKSPACE_ROLE_ADMIN ? 'Admin' : 'Staff' })}
+                                                        </span>
                                                         {canManageAvailability && workspaces.some((workspace) => Number(workspace.id) === Number(assignment.workspace_id)) && (
-                                                            <button type="button" className="ml-2 shrink-0 text-brand-600 underline" onClick={() => setAvailabilityEditor({ member: u, assignment })}
+                                                            <button type="button" className="inline-flex shrink-0 items-center gap-1.5 rounded-soft px-2 py-1 text-xs text-neutral-600 hover:bg-neutral-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/30 dark:text-neutral-300 dark:hover:bg-neutral-700" onClick={() => setAvailabilityEditor({ member: u, assignment })}
                                                                 aria-label={t('team.manage_notification_availability', { defaultValue: 'Manage availability for {{name}} in {{workspace}}', name: u.name, workspace: assignment.name })}>
-                                                                {t('team.notification_availability', { defaultValue: 'Availability' })}
+                                                                <Clock3 size={13} aria-hidden="true" />
+                                                                {t(`settings.availability.${{ always: 'Always', scheduled: 'Scheduled', paused: 'Paused' }[assignment.availability?.mode] ?? 'Availability'}`, { defaultValue: { always: 'Always', scheduled: 'Scheduled', paused: 'Paused' }[assignment.availability?.mode] ?? 'Availability' })}
                                                             </button>
                                                         )}
-                                                    </span>
+                                                        {!canManageAvailability && assignment.availability && (
+                                                            <details className="text-xs">
+                                                                <summary className="cursor-pointer rounded-soft px-2 py-1 focus-visible:ring-2 focus-visible:ring-brand-500/30">{t('team.notification_availability', { defaultValue: 'Availability' })}</summary>
+                                                                <div className="py-2"><NotificationAvailabilitySummary availability={assignment.availability} showHours /></div>
+                                                            </details>
+                                                        )}
+                                                    </div>
                                                 ))}
                                             </div>
                                         </td>

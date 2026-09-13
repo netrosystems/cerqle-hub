@@ -1,4 +1,5 @@
-import { Head, useForm, router } from '@inertiajs/react';
+import { Head, Link, useForm, router, usePage } from '@inertiajs/react';
+import { contactProfileReturnUrl } from '@/Utils/contactProfileNavigation';
 import ClientLayout from '@/Layouts/ClientLayout';
 import { ArrowLeft, MessageSquare, Phone, Mail, Globe, Camera, Trash2, Upload } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
@@ -147,6 +148,8 @@ function AvatarUploader({ contact }) {
 
 export default function ContactShow({ contact, staticSegments = [] }) {
     const { t } = useTranslation();
+    const { url } = usePage();
+    const returnUrl = contactProfileReturnUrl(new URL(url, window.location.origin).search, route('client.contacts.index'));
     const { data, setData, put, processing, errors } = useForm({
         first_name: contact.first_name ?? '',
         last_name: contact.last_name ?? '',
@@ -174,9 +177,9 @@ export default function ContactShow({ contact, staticSegments = [] }) {
             <Head title={`${contact.first_name ?? ''} ${contact.last_name ?? ''} · ${t('contacts_page.contact_alt')}`} />
             <div className="max-w-3xl space-y-6">
                 <div className="flex items-center gap-3">
-                    <a href={route('client.contacts.index')} className="text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-200 transition">
+                    <Link href={returnUrl} aria-label={t('common.back', { defaultValue: 'Back' })} className="text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-200 transition">
                         <ArrowLeft className="h-5 w-5" />
-                    </a>
+                    </Link>
                     <h2 className="text-xl font-semibold text-neutral-900 dark:text-neutral-100">
                         {contact.first_name || contact.last_name ? `${contact.first_name ?? ''} ${contact.last_name ?? ''}`.trim() : t('contacts_page.unknown_contact')}
                     </h2>

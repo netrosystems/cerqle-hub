@@ -2782,7 +2782,7 @@
         "tab_orders": "ऑर्डर",
         "no_messages_yet": "अभी तक कोई संदेश नहीं",
         "no_messages_desc": "बातचीत शुरू होने पर संदेश यहाँ दिखाई देंगे।",
-        "note_placeholder": "एक आंतरिक नोट जोड़ें… साथियों को @mention करें",
+        "note_placeholder": "एक आंतरिक नोट जोड़ें…",
         "no_internal_notes": "कोई आंतरिक नोट नहीं",
         "no_internal_notes_desc": "केवल अपनी टीम को दिखने वाले नोट जोड़ें।",
         "you": "आप",

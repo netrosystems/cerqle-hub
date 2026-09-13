@@ -72,6 +72,7 @@ Primary Plum:    #3E2A49   Brand Lilac:    #8F5FA7   Cool Accent:  #45B6D6   Cor
 ## 4. Page Layout Archetypes
 
 ### 4.1 Standard Page Layout (`ClientLayout`)
+- Contact profiles opened from the inbox carry an explicit same-origin inbox return URL (including filters). The profile back control returns there after refresh; direct/list entry falls back to Contact List. Reject external or non-inbox return targets.
 - **Used For**: Dashboard, Settings, Team Management, Contacts Directory, Billing, Reports.
 - **Structure**: Centered content container (`max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8`). Includes page header with breadcrumb navigation and right-aligned action buttons.
 - **Account navigation**: The profile dropdown stays concise with Profile, Settings, and Log Out. Security and session-management destinations live in the sidebar Account group, with `2FA Authentication` directly below Settings and Sessions immediately after it.
@@ -139,6 +140,8 @@ Messaging Setup, the inbox, Website Widgets, WA Chatbot, and Social pages use th
 
 ### 5.5 Action Feedback & Toasts
 
+- Inbox Notes uses a plain internal-note placeholder, labelled Add note button and neutral bordered note cards. No teammate-mention hints or mention picker; retain author and timestamp.
+
 - Notification availability editing is administrator-only: Settings honors the server `can_edit` flag, hides Manage for staff and explains that their administrator sets the schedule. Team client administrators get an availability action for each existing member/workspace assignment. Mount only the selected editor, fetch its member-scoped state before opening the shared compact schedule dialog, retain revision errors inline and refresh only the Team `users` summary after saving. Read-only schedules expose no enabled editing inputs.
 - Settings → Notifications begins with a compact My availability card, read-only for staff with their configured hours visible. Administrator-only focus-trapped editors use Always/Scheduled/Paused and expandable Monday-first hours (one window/day, all-day, overnight, timezone and Copy Monday to weekdays; default weekdays 09:00–17:00). JSON saves carry revision and inline errors. Hide the selected Team editor's redundant card while its dialog is open. Client and Inbox layouts retain unread updates while suppressing silent notifications and inactive scoped work popups (including handover, pending customer reply and workspace export ready); billing is not availability-gated. Refresh on schedule boundaries, focus, workspace changes, cross-tab saves and every 60 seconds without a boundary. Failed fetches fail closed for work popups. Schedule availability does not imply team presence or AI availability.
 - AI Provider Settings groups balance/reset date and selectable provider modes into one compact card. A native expandable “Credit costs” guide groups actions by server-configured rates, keeping pricing guidance consistent with enforcement. Shadow mode is explicitly disclosed; API provider cards remain below the overview.
@@ -152,6 +155,8 @@ Messaging Setup, the inbox, Website Widgets, WA Chatbot, and Social pages use th
 ---
 
 ## 6. Table & Pagination Standards
+
+Team workspace access uses one compact line per assignment: plain workspace name, muted role badge and clock-labelled availability mode action. Do not combine identity, timezone, alert status and weekly hours into a long pill. Administrators open the existing schedule dialog; staff expand read-only availability details. Keep focus rings and wrapping for long names; availability never implies online presence.
 
 1. **Table Container**: Encapsulated in `Card` surface with `overflow-x-auto`.
 2. **Column Headers**: Styled in `text-xs font-semibold uppercase tracking-wider text-neutral-500` with subtle border-b.
