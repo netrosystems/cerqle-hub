@@ -2858,7 +2858,7 @@
         "tab_orders": "Orders",
         "no_messages_yet": "No messages yet",
         "no_messages_desc": "Messages will appear here once the conversation begins.",
-        "note_placeholder": "Add an internal note… @mention teammates",
+        "note_placeholder": "Add an internal note…",
         "no_internal_notes": "No internal notes",
         "no_internal_notes_desc": "Add notes visible only to your team.",
         "you": "You",

@@ -214,6 +214,9 @@ it('fetches only the selected team schedule, auto-opens it and reloads only user
     axios.patch.mockResolvedValue({ data: settings({ workspace_id: 2, member_id: 8, revision: 13 }) })
     render(<TeamIndex {...teamProps} />)
     expect(axios.get).not.toHaveBeenCalled()
+    expect(screen.getByRole('button', { name: 'Manage availability for Member in Second' })).toHaveTextContent('Always')
+    expect(screen.queryByText(/Receiving alerts/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/UTC/)).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Manage availability for Member in Second' }))
     await screen.findByRole('dialog')
     expect(axios.get).toHaveBeenCalledOnce()
@@ -230,6 +233,8 @@ it('does not offer team schedule management to staff', () => {
     page.props.auth.user.client_role = 'staff'
     render(<TeamIndex {...teamProps} />)
     expect(screen.queryByRole('button', { name: /Manage availability for/ })).not.toBeInTheDocument()
+    expect(screen.getAllByText('Availability')).toHaveLength(2)
+    expect(screen.getAllByText('Availability')[0].closest('details')).not.toHaveAttribute('open')
     expect(axios.get).not.toHaveBeenCalled()
 })
 

@@ -1,5 +1,6 @@
 import { Head, Link, router, usePage } from '@inertiajs/react';
 import InboxLayout from '@/Layouts/InboxLayout';
+import { contactProfileUrl } from '@/Utils/contactProfileNavigation';
 import EmptyState from '@/Components/EmptyState';
 import NewConversationModal from '@/Components/Inbox/NewConversationModal';
 import ConversationStatusBadge from '@/Components/Inbox/ConversationStatusBadge';
@@ -112,7 +113,7 @@ function ConversationCard({ conv, isFlashing, isActive, userTz }) {
         e.preventDefault();
         e.stopPropagation();
         if (conv.contact?.id) {
-            router.visit(route('client.contacts.show', conv.contact.uuid));
+            router.visit(contactProfileUrl(route('client.contacts.show', conv.contact.uuid)));
         }
     };
 

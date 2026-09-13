@@ -2858,7 +2858,7 @@
         "tab_orders": "Commandes",
         "no_messages_yet": "Aucun message pour le moment",
         "no_messages_desc": "Les messages apparaîtront ici dès le début de la conversation.",
-        "note_placeholder": "Ajouter une note interne… @mentionnez des coéquipiers",
+        "note_placeholder": "Ajouter une note interne…",
         "no_internal_notes": "Aucune note interne",
         "no_internal_notes_desc": "Ajoutez des notes visibles uniquement par votre équipe.",
         "you": "Vous",

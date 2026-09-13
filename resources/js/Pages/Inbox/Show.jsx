@@ -1,5 +1,6 @@
 import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
 import InboxLayout from '@/Layouts/InboxLayout';
+import { contactProfileUrl } from '@/Utils/contactProfileNavigation';
 import InstagramAttachments, { instagramAttachments } from '@/Components/Inbox/InstagramAttachments';
 import EmptyState from '@/Components/EmptyState';
 import NewConversationModal from '@/Components/Inbox/NewConversationModal';
@@ -838,7 +839,7 @@ function ConversationCard({ conv, isActive, userTz }) {
         e.preventDefault();
         e.stopPropagation();
         if (conv.contact?.id) {
-            router.visit(route('client.contacts.show', conv.contact.uuid));
+            router.visit(contactProfileUrl(route('client.contacts.show', conv.contact.uuid)));
         }
     };
 
@@ -2107,20 +2108,21 @@ export default function InboxShow({
                             <form onSubmit={postNote} className="flex gap-2 mb-3">
                                 <textarea value={noteBody} onChange={e => setNoteBody(e.target.value)}
                                     placeholder={t('inbox.note_placeholder')}
+                                    aria-label={t('inbox.note_placeholder')}
                                     rows={2}
                                     className="flex-1 rounded-xl border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-brand-500"
                                 />
                                 <button type="submit" disabled={notePosting || !noteBody.trim()}
-                                    className="self-end rounded-xl bg-amber-500 p-2.5 text-white hover:bg-amber-600 disabled:opacity-50 transition">
-                                    <Send className="h-4 w-4" />
+                                    className="self-end shrink-0 rounded-soft bg-brand-600 px-3 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-50 transition focus-visible:ring-2 focus-visible:ring-brand-500/30">
+                                    {t('inbox.add_note', { defaultValue: 'Add note' })}
                                 </button>
                             </form>
                             {notes.length === 0 ? (
                                 <div className="py-6"><EmptyState icon={<StickyNote className="h-7 w-7" />} title={t('inbox.no_internal_notes')} description={t('inbox.no_internal_notes_desc')} /></div>
                             ) : notes.map(note => (
-                                <div key={note.id} className="rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 p-3 text-sm">
+                                <div key={note.id} className="rounded-soft-lg bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 p-3 text-sm">
                                     <div className="flex items-center gap-2 mb-1">
-                                        <span className="font-semibold text-amber-800 dark:text-amber-300">{note.user?.name ?? t('inbox.you')}</span>
+                                        <span className="font-medium text-neutral-800 dark:text-neutral-200">{note.user?.name ?? t('inbox.you')}</span>
                                         <span className="text-xs text-neutral-400">{formatInTz(note.created_at, userTz)}</span>
                                     </div>
                                     <p className="text-neutral-700 dark:text-neutral-300 whitespace-pre-wrap">{note.body}</p>
@@ -2353,7 +2355,7 @@ export default function InboxShow({
                                 <span className="truncate">{conversation.contact.email}</span>
                             </p>
                         )}
-                        <Link href={route('client.contacts.show', conversation.contact?.uuid ?? '')} className="text-xs text-brand-600 hover:underline dark:text-brand-400">
+                        <Link href={contactProfileUrl(route('client.contacts.show', conversation.contact?.uuid ?? ''))} className="text-xs text-brand-600 hover:underline dark:text-brand-400">
                             {t('inbox.view_full_profile')}
                         </Link>
                     </div>
