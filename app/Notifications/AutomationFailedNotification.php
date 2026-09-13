@@ -5,20 +5,26 @@ namespace App\Notifications;
 use App\Models\NotificationPreference;
 use App\Modules\Automation\Models\AutomationRun;
 use App\Notifications\Channels\OneSignalChannel;
+use App\Notifications\Concerns\RespectsWorkspaceAvailability;
+use App\Notifications\Contracts\WorkspaceWorkNotification;
+use App\Services\NotificationDeliveryPolicy;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Messages\BroadcastMessage;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
 
-class AutomationFailedNotification extends Notification implements ShouldQueue
+class AutomationFailedNotification extends Notification implements ShouldQueue, WorkspaceWorkNotification
 {
     use Queueable;
+    use RespectsWorkspaceAvailability;
 
     public function __construct(
         public readonly AutomationRun $run,
         public readonly string $errorMessage,
-    ) {}
+    ) {
+        $this->captureNotificationSource($run->automation?->workspace_id);
+    }
 
     public function via(object $notifiable): array
     {
@@ -32,14 +38,15 @@ class AutomationFailedNotification extends Notification implements ShouldQueue
             $channels[] = OneSignalChannel::class;
         }
 
-        return $channels;
+        return $this->availabilityChannels($notifiable, $channels);
     }
 
     public function toArray(object $notifiable): array
     {
         return [
             'type' => 'automation_failed',
-            'workspace_id' => $this->run->automation?->workspace_id,
+            'silent' => app(NotificationDeliveryPolicy::class)->silent($notifiable, $this),
+            'workspace_id' => $this->notificationWorkspaceId(),
             'run_id' => $this->run->id,
             'automation' => $this->run->automation?->name,
             'error' => $this->errorMessage,
@@ -48,17 +55,17 @@ class AutomationFailedNotification extends Notification implements ShouldQueue
 
     public function toBroadcast(object $notifiable): BroadcastMessage
     {
-        return new BroadcastMessage($this->toArray($notifiable));
+        return new BroadcastMessage($this->availabilityBroadcastData($notifiable));
     }
 
     public function toMail(object $notifiable): MailMessage
     {
         $name = $this->run->automation?->name ?? 'Unknown';
 
-        return (new MailMessage)
+        return $this->availabilityMail((new MailMessage)
             ->subject("Automation \"{$name}\" failed")
             ->line('An automation run failed with the following error:')
-            ->line($this->errorMessage);
+            ->line($this->errorMessage), $notifiable);
     }
 
     public function toOneSignal(object $notifiable): array

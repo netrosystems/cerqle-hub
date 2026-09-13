@@ -2,6 +2,7 @@
 
 namespace App\Notifications\Channels;
 
+use App\Services\NotificationDeliveryPolicy;
 use App\Services\WebPushService;
 use Illuminate\Notifications\Notification;
 
@@ -15,11 +16,17 @@ class WebPushChannel
             return;
         }
 
+        if (! app(NotificationDeliveryPolicy::class)->allows($notifiable, $notification, self::class)) {
+            return;
+        }
+
         $data = $notification->toWebPush($notifiable);
         $title = $data['title'] ?? 'Notification';
         $body = $data['body'] ?? '';
         $url = $data['url'] ?? null;
 
-        $this->service->sendToUser($notifiable->id, $title, $body, $url);
+        if (app(NotificationDeliveryPolicy::class)->allows($notifiable, $notification, self::class)) {
+            $this->service->sendToUser($notifiable->id, $title, $body, $url);
+        }
     }
 }

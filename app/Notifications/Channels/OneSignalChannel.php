@@ -3,6 +3,7 @@
 namespace App\Notifications\Channels;
 
 use App\Models\User;
+use App\Services\NotificationDeliveryPolicy;
 use App\Services\OneSignalService;
 use App\Services\UserPushTokenService;
 use Illuminate\Notifications\Notification;
@@ -36,6 +37,10 @@ class OneSignalChannel
             return;
         }
 
+        if (! app(NotificationDeliveryPolicy::class)->allows($notifiable, $notification, self::class)) {
+            return;
+        }
+
         $data = $notification->toOneSignal($notifiable);
         $title = $data['title'] ?? 'Notification';
         $body = $data['body'] ?? '';
@@ -44,7 +49,14 @@ class OneSignalChannel
 
         $tokens = $this->pushTokens->activeTokensFor($notifiable);
         if ($tokens !== []) {
+            if (! app(NotificationDeliveryPolicy::class)->allows($notifiable, $notification, self::class)) {
+                return;
+            }
             $this->service->sendToSubscriptionIds($tokens, $title, $body, $url, $conversationId, Arr::except($data, ['title', 'body', 'url']));
+        }
+
+        if (! app(NotificationDeliveryPolicy::class)->allows($notifiable, $notification, self::class)) {
+            return;
         }
 
         $this->service->sendToExternalId(

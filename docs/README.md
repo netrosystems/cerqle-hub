@@ -34,6 +34,8 @@ Grouped inbox AI setup QA: [`grouped-ai-automation-qa-2026-09-13.md`](grouped-ai
 
 Website chatbot AI availability QA: [`website-ai-availability-qa-2026-09-13.md`](website-ai-availability-qa-2026-09-13.md).
 
+Personal notification availability QA: [`personal-notification-availability-qa-2026-09-13.md`](personal-notification-availability-qa-2026-09-13.md).
+
 Decision records explain durable choices and their rationale. A newer record may supersede an older one; do not edit history to imply a decision was always different.
 
 - [`decisions/README.md`](decisions/README.md) — format and maintenance rules

@@ -21,6 +21,7 @@ use App\Http\Controllers\Api\V1\SocialPostApiController;
 use App\Http\Controllers\Api\V1\SubscriptionApiController;
 use App\Http\Controllers\Api\V1\TokenController;
 use App\Http\Controllers\Api\V1\WorkspaceApiController;
+use App\Http\Controllers\Client\NotificationAvailabilityController;
 use Illuminate\Broadcasting\BroadcastController;
 use Illuminate\Support\Facades\Route;
 
@@ -54,6 +55,11 @@ Route::prefix('v1/auth')->middleware(['auth:sanctum', 'throttle:api'])->group(fu
 Route::post('v1/broadcasting/auth', [BroadcastController::class, 'authenticate'])
     ->middleware(['auth:sanctum', 'throttle:api'])
     ->name('api.v1.broadcasting.auth');
+
+Route::prefix('v1')->middleware(['auth:sanctum', 'throttle:api', 'demo', 'client.access'])->group(function () {
+    Route::get('/notification-availability', [NotificationAvailabilityController::class, 'show']);
+    Route::patch('/notification-availability', [NotificationAvailabilityController::class, 'update']);
+});
 
 // ─── Mobile Inbox API (agent-facing: full conversation + inbox actions) ───────
 // `demo` blocks writes (POST/PATCH/DELETE) in demo mode while GET reads pass,

@@ -10,6 +10,7 @@ import ReleaseBadge from '@/Components/ReleaseBadge';
 import ChannelPlanUsage from '@/Components/ChannelPlanUsage';
 import useClientNav from '@/Layouts/useClientNav';
 import { belongsToWorkspace } from '@/lib/workspaceNotifications';
+import useNotificationAvailability from '@/hooks/useNotificationAvailability';
 import { ChannelBrandIcon } from '@/Components/BrandIcons';
 import {
     LayoutDashboard,
@@ -93,6 +94,7 @@ export default function ClientLayout({ header, children, title }) {
     const { auth, clientAccess, impersonation, current_workspace_usage, unreadNotificationsCount, branding, onesignal } = usePage().props;
     const logoUrl = branding?.logo_url;
     const workspaceId = usePage().props.currentWorkspace?.id;
+    const { shouldAlert } = useNotificationAvailability(workspaceId);
     const [unreadCount, setUnreadCount] = useState(unreadNotificationsCount ?? 0);
     const clientNavGroups = useClientNav();
 
@@ -112,6 +114,7 @@ export default function ClientLayout({ header, children, title }) {
             .notification((notification) => {
                 if (!belongsToWorkspace(notification, workspaceId)) return;
                 setUnreadCount(prev => prev + 1);
+                if (!shouldAlert(notification)) return;
                 const msg = notification.snippet ?? notification.name ?? notification.automation ?? notification.error ?? t('ui.notif_new');
                 const title = {
                     new_message:          t('ui.notif_new_message'),
@@ -136,7 +139,7 @@ export default function ClientLayout({ header, children, title }) {
         return () => {
             window.Echo.leave(`App.Models.User.${auth.user.id}`);
         };
-    }, [auth?.user?.id, workspaceId]);
+    }, [auth?.user?.id, workspaceId, shouldAlert]);
 
     const returnToAdmin = () => {
         router.post(impersonation?.returnUrl ?? route('admin.impersonation.stop'));

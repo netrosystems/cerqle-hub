@@ -6,11 +6,12 @@ use App\Http\Controllers\Controller;
 use App\Models\Invitation;
 use App\Models\User;
 use App\Models\Workspace;
+use App\Services\NotificationAvailability;
 use App\Services\WorkspaceMembershipService;
 use Illuminate\Auth\Events\Registered;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -44,6 +45,7 @@ class TeamController extends Controller
                 'workspace_assignments' => $u->workspaces->map(fn (Workspace $workspace) => [
                     'workspace_id' => $workspace->id,
                     'name' => $workspace->name,
+                    'availability' => app(NotificationAvailability::class)->state($u, $workspace->id),
                     'is_owner' => (int) $workspace->owner_id === (int) $u->id,
                     'role' => (int) $workspace->owner_id === (int) $u->id || $workspace->pivot->role === 'owner'
                         ? 'administrator'
