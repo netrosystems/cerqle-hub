@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { DialogTitle } from '@headlessui/react'
 import { useTranslation } from 'react-i18next'
 import axios from 'axios'
@@ -34,15 +34,19 @@ export function NotificationAvailabilitySummary({ availability, showHours = fals
     )
 }
 
-export default function NotificationAvailabilityCard({ workspaceId, workspaceName }) {
+export default function NotificationAvailabilityCard({ workspaceId, workspaceName, memberId = null, getUrl = AVAILABILITY_URL, patchUrl = getUrl, autoOpen = false, onClose, onSaved, title }) {
     const { t } = useTranslation()
     const text = (label) => t(`settings.availability.${label}`, { defaultValue: label })
-    const { availability, loading, error, refresh } = useNotificationAvailability(workspaceId)
+    const { availability, loading, error, refresh } = useNotificationAvailability(workspaceId, getUrl, memberId)
+    const canEdit = availability?.can_edit === true && !error
+    const heading = title ?? text('My availability')
+    const opened = useRef(false)
     const [draft, setDraft] = useState(null)
     const [errors, setErrors] = useState([])
     const [saving, setSaving] = useState(false)
     const [hoursOpen, setHoursOpen] = useState(false)
     const begin = () => {
+        if (!canEdit) return
         setDraft({
             mode: availability.mode,
             timezone: availability.revision === 0 ? (Intl.DateTimeFormat().resolvedOptions().timeZone || availability.timezone) : availability.timezone,
@@ -56,6 +60,12 @@ export default function NotificationAvailabilityCard({ workspaceId, workspaceNam
         setErrors([])
         setHoursOpen(false)
     }
+    useEffect(() => {
+        if (autoOpen && canEdit && !opened.current) {
+            opened.current = true
+            begin()
+        }
+    }, [autoOpen, canEdit, availability]) // Open once after the selected endpoint has loaded.
     const update = (key, value) => setDraft((previous) => ({ ...previous, [key]: value }))
     const updateDay = (index, patch) =>
         update(
@@ -63,18 +73,25 @@ export default function NotificationAvailabilityCard({ workspaceId, workspaceNam
             draft.weekly_hours.map((day, i) => (i === index ? { ...day, ...patch } : day)),
         )
     const close = () => {
-        if (!saving) setDraft(null)
+        if (!saving) {
+            setDraft(null)
+            onClose?.()
+        }
     }
     const submit = async (event) => {
         event.preventDefault()
+        if (!canEdit) return
         setErrors([])
         setSaving(true)
         try {
-            const { data } = await axios.patch(AVAILABILITY_URL, draft, availabilityRequestOptions())
+            const { data } = await axios.patch(patchUrl, draft, availabilityRequestOptions())
             if (Number(data.workspace_id) !== Number(workspaceId))
                 throw new Error(text('Workspace changed. Reload availability.'))
+            if (memberId != null && Number(data.member_id) !== Number(memberId))
+                throw new Error(text('Member changed. Reload availability.'))
             notifyAvailabilityChanged(workspaceId)
             setDraft(null)
+            onSaved?.(data)
         } catch (failure) {
             const conflict = failure.response?.status === 409 || !!failure.response?.data?.errors?.revision
             setErrors(
@@ -93,16 +110,16 @@ export default function NotificationAvailabilityCard({ workspaceId, workspaceNam
     return (
         <>
             <section
-                aria-label={text('My availability')}
-                className="flex flex-wrap items-center justify-between gap-3 rounded-soft-lg border border-neutral-200 bg-white px-4 py-3 dark:border-neutral-800 dark:bg-neutral-900"
+                aria-label={heading}
+                className={`${autoOpen && draft ? 'hidden' : 'flex'} flex-wrap items-center justify-between gap-3 rounded-soft-lg border border-neutral-200 bg-white px-4 py-3 dark:border-neutral-800 dark:bg-neutral-900`}
             >
                 <div className="min-w-0">
                     <h2 className="text-sm font-semibold text-neutral-900 dark:text-neutral-100">
-                        {text('My availability')}
+                        {heading}
                     </h2>
                     {workspaceName && <p className="text-xs text-neutral-500">{workspaceName}</p>}
                     {availability ? (
-                        <NotificationAvailabilitySummary availability={availability} />
+                        <NotificationAvailabilitySummary availability={availability} showHours={!canEdit} />
                     ) : (
                         <p className="text-xs text-neutral-500">
                             {text(loading ? 'Loading availability…' : 'Availability unavailable')}
@@ -117,18 +134,20 @@ export default function NotificationAvailabilityCard({ workspaceId, workspaceNam
                         </p>
                     )}
                     <p className="mt-1 text-xs text-neutral-500">{text('Controls your notifications, not conversation assignments or team online status.')}</p>
+                    {availability && !canEdit && <p className="mt-1 text-xs text-neutral-500">{text('Your administrator sets your notification schedule.')}</p>}
                 </div>
-                <Button variant="outline" disabled={!availability || saving} onClick={begin}>
+                {canEdit && <Button variant="outline" disabled={saving} onClick={begin}>
                     {text('Manage availability')}
-                </Button>
+                </Button>}
+                {autoOpen && !draft && <Button variant="ghost" onClick={close}>{text('Cancel')}</Button>}
             </section>
             <Modal show={!!draft} onClose={close} closeable={!saving} maxWidth="lg">
                 {draft && (
                     <form onSubmit={submit}>
-                        <DialogTitle className="sr-only">{text('My availability')}</DialogTitle>
-                        <Modal.Header title={text('My availability')} onClose={close} showClose={!saving} />
+                        <DialogTitle className="sr-only">{heading}</DialogTitle>
+                        <Modal.Header title={heading} onClose={close} showClose={!saving} />
                         <Modal.Body className="max-h-[65vh] overflow-y-auto space-y-4">
-                            <fieldset disabled={saving}>
+                            <fieldset disabled={saving || !canEdit}>
                                 <legend className="mb-2 text-xs text-neutral-500">
                                     {text('When should work notifications alert you?')}
                                 </legend>
@@ -285,7 +304,7 @@ export default function NotificationAvailabilityCard({ workspaceId, workspaceNam
                             <Button variant="ghost" disabled={saving} onClick={close}>
                                 {text('Cancel')}
                             </Button>
-                            <Button type="submit" disabled={saving}>
+                            <Button type="submit" disabled={saving || !canEdit}>
                                 {text(saving ? 'Saving…' : 'Save changes')}
                             </Button>
                         </Modal.Footer>

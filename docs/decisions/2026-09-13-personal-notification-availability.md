@@ -1,7 +1,7 @@
 # Personal notification availability
 
 Date: 2026-09-13
-Status: Accepted
+Status: Superseded by [admin-managed availability](2026-09-13-admin-managed-notification-availability.md)
 
 ## Context
 

@@ -54,6 +54,8 @@ Route::middleware(['client.access'])->group(function () {
     Route::post('/team', [TeamController::class, 'store'])->name('team.store');
     Route::put('/team/{member}', [TeamController::class, 'update'])->name('team.update');
     Route::delete('/team/{member}', [TeamController::class, 'destroy'])->name('team.destroy');
+    Route::get('/team/{member}/workspaces/{workspace}/notification-availability', [NotificationAvailabilityController::class, 'showMember'])->name('team.notification-availability.show');
+    Route::patch('/team/{member}/workspaces/{workspace}/notification-availability', [NotificationAvailabilityController::class, 'updateMember'])->name('team.notification-availability.update');
 
     // Audit log (client admins only)
     Route::get('/audit-log', [ClientAuditLogController::class, 'index'])->name('audit-log.index');

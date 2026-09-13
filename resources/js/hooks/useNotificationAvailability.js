@@ -44,7 +44,7 @@ export function notifyAvailabilityChanged(workspaceId) {
     }
 }
 
-export default function useNotificationAvailability(workspaceId) {
+export default function useNotificationAvailability(workspaceId, url = AVAILABILITY_URL, memberId = null) {
     const [state, setState] = useState({ availability: null, loading: true, error: null })
     const current = useRef(null)
     const refreshRef = useRef(async () => {})
@@ -67,9 +67,10 @@ export default function useNotificationAvailability(workspaceId) {
             }
             const request = ++sequence
             try {
-                const { data } = await axios.get(AVAILABILITY_URL, availabilityRequestOptions())
+                const { data } = await axios.get(url, availabilityRequestOptions())
                 if (disposed || request !== sequence) return
                 if (Number(data.workspace_id) !== Number(workspaceId)) throw new Error('Workspace changed.')
+                if (memberId != null && Number(data.member_id) !== Number(memberId)) throw new Error('Member changed.')
                 current.current = data
                 setState({ availability: data, loading: false, error: null })
                 clearTimeout(timer)
@@ -118,7 +119,7 @@ export default function useNotificationAvailability(workspaceId) {
             window.removeEventListener(CHANGED, changed)
             window.removeEventListener('storage', storage)
         }
-    }, [workspaceId])
+    }, [workspaceId, url, memberId])
 
     return { ...state, refresh, shouldAlert }
 }
