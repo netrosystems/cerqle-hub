@@ -10,6 +10,7 @@ use App\Http\Controllers\Client\BillingController;
 use App\Http\Controllers\Client\DashboardController as ClientDashboardController;
 use App\Http\Controllers\Client\InvitationController;
 use App\Http\Controllers\Client\MediaController;
+use App\Http\Controllers\Client\NotificationAvailabilityController;
 use App\Http\Controllers\Client\NotificationController;
 use App\Http\Controllers\Client\OnboardingController;
 use App\Http\Controllers\Client\SearchController;
@@ -61,6 +62,8 @@ Route::middleware(['client.access'])->group(function () {
     Route::get('/settings', [ClientSettingsController::class, 'index'])->name('settings.index');
     Route::put('/settings', [ClientSettingsController::class, 'update'])->name('settings.update');
     Route::get('/settings/notifications', [ClientSettingsController::class, 'notifications'])->name('settings.notifications');
+    Route::get('/settings/notification-availability', [NotificationAvailabilityController::class, 'show'])->name('settings.notification-availability.show');
+    Route::patch('/settings/notification-availability', [NotificationAvailabilityController::class, 'update'])->name('settings.notification-availability.update');
     Route::get('/settings/data-export', [DataExportController::class, 'index'])->name('settings.data-export');
     Route::post('/settings/data-export', [DataExportController::class, 'store'])->name('settings.data-export.store');
 

@@ -5,30 +5,37 @@ namespace App\Notifications;
 use App\Models\User;
 use App\Modules\Shared\Models\Conversation;
 use App\Notifications\Channels\OneSignalChannel;
+use App\Notifications\Concerns\RespectsWorkspaceAvailability;
+use App\Notifications\Contracts\WorkspaceWorkNotification;
+use App\Services\NotificationDeliveryPolicy;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Messages\BroadcastMessage;
 use Illuminate\Notifications\Notification;
 
-class ConversationAssignedNotification extends Notification implements ShouldQueue
+class ConversationAssignedNotification extends Notification implements ShouldQueue, WorkspaceWorkNotification
 {
     use Queueable;
+    use RespectsWorkspaceAvailability;
 
     public function __construct(
         public readonly Conversation $conversation,
         public readonly ?User $assignedBy,
-    ) {}
+    ) {
+        $this->captureNotificationSource((int) $conversation->workspace_id);
+    }
 
     public function via(object $notifiable): array
     {
-        return ['database', 'broadcast', OneSignalChannel::class];
+        return $this->availabilityChannels($notifiable, ['database', 'broadcast', OneSignalChannel::class]);
     }
 
     public function toArray(object $notifiable): array
     {
         return [
             'type' => 'conversation_assigned',
-            'workspace_id' => $this->conversation->workspace_id,
+            'silent' => app(NotificationDeliveryPolicy::class)->silent($notifiable, $this),
+            'workspace_id' => $this->notificationWorkspaceId(),
             'conversation_id' => $this->conversation->id,
             'assigned_by' => $this->assignedBy?->name,
             'contact_name' => $this->conversation->contact?->name ?? 'Unknown',
@@ -38,7 +45,7 @@ class ConversationAssignedNotification extends Notification implements ShouldQue
 
     public function toBroadcast(object $notifiable): BroadcastMessage
     {
-        return new BroadcastMessage($this->toArray($notifiable));
+        return new BroadcastMessage($this->availabilityBroadcastData($notifiable));
     }
 
     public function toOneSignal(object $notifiable): array

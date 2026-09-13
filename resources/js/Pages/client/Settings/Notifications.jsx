@@ -4,6 +4,7 @@ import ClientLayout from '@/Layouts/ClientLayout';
 import { Bell, Mail, Smartphone, CheckCircle } from 'lucide-react';
 import { subscribeToPush, unsubscribeFromPush } from '@/push';
 import { useTranslation } from 'react-i18next';
+import NotificationAvailabilityCard from '@/Components/NotificationAvailabilityCard';
 
 // Channels that are intentionally not offered for a given event.
 // New-message emails are too noisy (one per inbound message), so email is removed.
@@ -28,7 +29,7 @@ const KEEP_PUSH_AFTER_LOGOUT_KEY = 'cerqle_keep_push_after_logout';
 
 export default function NotificationSettings({ preferences = {} }) {
     const { t } = useTranslation();
-    const { onesignal } = usePage().props;
+    const { onesignal, currentWorkspace } = usePage().props;
     const { data, setData, post, processing, transform } = useForm({ preferences: [] });
     const [pushError, setPushError] = useState('');
     const [keepAfterLogout, setKeepAfterLogout] = useState(false);
@@ -146,6 +147,7 @@ export default function NotificationSettings({ preferences = {} }) {
             <Head title={t('settings.notifications_title')} />
 
             <div className="max-w-2xl mx-auto space-y-6">
+                <NotificationAvailabilityCard key={currentWorkspace?.id} workspaceId={currentWorkspace?.id} workspaceName={currentWorkspace?.name} />
                 <div>
                     <h1 className="text-xl font-semibold text-neutral-900 dark:text-neutral-100 flex items-center gap-2">
                         <Bell className="h-5 w-5" />

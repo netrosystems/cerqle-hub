@@ -7,6 +7,7 @@ import UpgradeModal from '@/Components/UpgradeModal';
 import ReleaseBadge from '@/Components/ReleaseBadge';
 import useClientNav from '@/Layouts/useClientNav';
 import { belongsToWorkspace } from '@/lib/workspaceNotifications';
+import useNotificationAvailability from '@/hooks/useNotificationAvailability';
 
 export default function InboxLayout({ children }) {
     const { t } = useTranslation();
@@ -14,6 +15,7 @@ export default function InboxLayout({ children }) {
     const { auth, impersonation, current_workspace_usage, unreadNotificationsCount, branding, demo_mode } = usePage().props;
     const logoUrl = branding?.logo_url;
     const workspaceId = usePage().props.currentWorkspace?.id;
+    const { shouldAlert } = useNotificationAvailability(workspaceId);
     const [unreadCount, setUnreadCount] = useState(unreadNotificationsCount ?? 0);
     const clientNavGroups = useClientNav();
 
@@ -27,6 +29,7 @@ export default function InboxLayout({ children }) {
             .notification((notification) => {
                 if (!belongsToWorkspace(notification, workspaceId)) return;
                 setUnreadCount(prev => prev + 1);
+                if (!shouldAlert(notification)) return;
                 const msg = notification.snippet ?? notification.name ?? notification.automation ?? notification.error ?? 'New notification';
                 const title = {
                     new_message: 'New message',
@@ -42,7 +45,7 @@ export default function InboxLayout({ children }) {
                 });
             });
         return () => { window.Echo.leave(`App.Models.User.${auth.user.id}`); };
-    }, [auth?.user?.id, workspaceId]);
+    }, [auth?.user?.id, workspaceId, shouldAlert]);
 
     const returnToAdmin = () => {
         router.post(impersonation?.returnUrl ?? route('admin.impersonation.stop'));

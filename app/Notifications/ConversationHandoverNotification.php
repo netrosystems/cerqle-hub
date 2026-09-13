@@ -4,22 +4,28 @@ namespace App\Notifications;
 
 use App\Modules\Shared\Models\Conversation;
 use App\Notifications\Channels\OneSignalChannel;
+use App\Notifications\Concerns\RespectsWorkspaceAvailability;
+use App\Notifications\Contracts\WorkspaceWorkNotification;
+use App\Services\NotificationDeliveryPolicy;
 use Illuminate\Bus\Queueable;
 use Illuminate\Notifications\Messages\BroadcastMessage;
 use Illuminate\Notifications\Notification;
 
-class ConversationHandoverNotification extends Notification
+class ConversationHandoverNotification extends Notification implements WorkspaceWorkNotification
 {
     use Queueable;
+    use RespectsWorkspaceAvailability;
 
     public function __construct(
         public readonly Conversation $conversation,
         public readonly string $reason = 'user_request',
-    ) {}
+    ) {
+        $this->captureNotificationSource((int) $conversation->workspace_id);
+    }
 
     public function via(object $notifiable): array
     {
-        return ['database', 'broadcast', OneSignalChannel::class];
+        return $this->availabilityChannels($notifiable, ['database', 'broadcast', OneSignalChannel::class]);
     }
 
     public function toArray(object $notifiable): array
@@ -29,7 +35,8 @@ class ConversationHandoverNotification extends Notification
 
         return [
             'type' => 'handover',
-            'workspace_id' => $this->conversation->workspace_id,
+            'silent' => app(NotificationDeliveryPolicy::class)->silent($notifiable, $this),
+            'workspace_id' => $this->notificationWorkspaceId(),
             'conversation_id' => $this->conversation->id,
             'contact_name' => $name ?: ($contact?->phone_e164 ?? 'Unknown'),
             'reason' => $this->reason,
@@ -39,7 +46,7 @@ class ConversationHandoverNotification extends Notification
 
     public function toBroadcast(object $notifiable): BroadcastMessage
     {
-        return new BroadcastMessage($this->toArray($notifiable));
+        return new BroadcastMessage($this->availabilityBroadcastData($notifiable));
     }
 
     public function toOneSignal(object $notifiable): array

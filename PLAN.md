@@ -41,6 +41,7 @@ journey
 - **Workspace Management**: Authorized owners and client administrators can rename a workspace or permanently delete it after typing its exact name. Deletion is atomic, removes workspace-scoped records, selects a safe fallback workspace, and cannot remove the client's only workspace.
 - **Client lifecycle**: Super Admin client deletion requires exact-name confirmation, permanently purges identity and operational records, anonymizes retained finance/audit rows, and releases user emails for reuse.
 - **Role-Based Team Access**: Client administrators can invite team members, assign granular roles (Admin, Agent, Viewer), and inspect audit logs (`TeamController`, `ClientAuditLogController`).
+- **Personal notification availability (2026-09-13)**: Each member configures Always/Scheduled/Paused separately per workspace in Notification Settings; administrators view read-only summaries. One window/day, all-day, overnight and timezone controls silence work emails/push/popups outside hours while retaining history/unread updates. Event and delivery must both be available; no catch-up. Security/billing bypass; existing preferences remain authoritative. No routing, assignment, presence or AI behavior changes.
 - **Session Management**: View and revoke active browser sessions remotely (`SessionController`).
 - **Resilient Verification Email**: Account creation succeeds even when SMTP or fallback notification delivery is rejected; failures are logged for follow-up and transactional messages include branded HTML plus a readable plain-text part.
 

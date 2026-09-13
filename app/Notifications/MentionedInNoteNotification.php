@@ -7,21 +7,27 @@ use App\Models\User;
 use App\Modules\Shared\Models\Conversation;
 use App\Notifications\Channels\OneSignalChannel;
 use App\Notifications\Channels\WebPushChannel;
+use App\Notifications\Concerns\RespectsWorkspaceAvailability;
+use App\Notifications\Contracts\WorkspaceWorkNotification;
+use App\Services\NotificationDeliveryPolicy;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Messages\BroadcastMessage;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
 
-class MentionedInNoteNotification extends Notification implements ShouldQueue
+class MentionedInNoteNotification extends Notification implements ShouldQueue, WorkspaceWorkNotification
 {
     use Queueable;
+    use RespectsWorkspaceAvailability;
 
     public function __construct(
         public readonly User $mentionedBy,
         public readonly Conversation $conversation,
         public readonly string $noteBody,
-    ) {}
+    ) {
+        $this->captureNotificationSource((int) $conversation->workspace_id);
+    }
 
     public function via(object $notifiable): array
     {
@@ -41,14 +47,15 @@ class MentionedInNoteNotification extends Notification implements ShouldQueue
             $channels[] = OneSignalChannel::class;
         }
 
-        return $channels;
+        return $this->availabilityChannels($notifiable, $channels);
     }
 
     public function toArray(object $notifiable): array
     {
         return [
             'type' => 'mention',
-            'workspace_id' => $this->conversation->workspace_id,
+            'silent' => app(NotificationDeliveryPolicy::class)->silent($notifiable, $this),
+            'workspace_id' => $this->notificationWorkspaceId(),
             'conversation_id' => $this->conversation->id,
             'mentioned_by' => $this->mentionedBy->name,
             'snippet' => mb_substr($this->noteBody, 0, 120),
@@ -58,16 +65,16 @@ class MentionedInNoteNotification extends Notification implements ShouldQueue
 
     public function toBroadcast(object $notifiable): BroadcastMessage
     {
-        return new BroadcastMessage($this->toArray($notifiable));
+        return new BroadcastMessage($this->availabilityBroadcastData($notifiable));
     }
 
     public function toMail(object $notifiable): MailMessage
     {
-        return (new MailMessage)
+        return $this->availabilityMail((new MailMessage)
             ->subject($this->mentionedBy->name.' mentioned you in a note')
             ->line($this->mentionedBy->name.' mentioned you in a conversation note.')
             ->line('"'.mb_substr($this->noteBody, 0, 200).'"')
-            ->action('View Conversation', route('client.inbox.show', $this->conversation));
+            ->action('View Conversation', route('client.inbox.show', $this->conversation)), $notifiable);
     }
 
     public function toWebPush(object $notifiable): array

@@ -7,20 +7,27 @@ use App\Modules\Shared\Models\Conversation;
 use App\Modules\Shared\Models\Message;
 use App\Notifications\Channels\OneSignalChannel;
 use App\Notifications\Channels\WebPushChannel;
+use App\Notifications\Concerns\RespectsWorkspaceAvailability;
+use App\Notifications\Contracts\WorkspaceWorkNotification;
+use App\Services\NotificationDeliveryPolicy;
+use Carbon\CarbonImmutable;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Messages\BroadcastMessage;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
 
-class NewMessageNotification extends Notification implements ShouldQueue
+class NewMessageNotification extends Notification implements ShouldQueue, WorkspaceWorkNotification
 {
     use Queueable;
+    use RespectsWorkspaceAvailability;
 
     public function __construct(
         public readonly Message $message,
         public readonly Conversation $conversation,
-    ) {}
+    ) {
+        $this->captureNotificationSource((int) $conversation->workspace_id, $message->created_at ? CarbonImmutable::instance($message->created_at) : null);
+    }
 
     public function via(object $notifiable): array
     {
@@ -44,20 +51,21 @@ class NewMessageNotification extends Notification implements ShouldQueue
             $channels[] = OneSignalChannel::class;
         }
 
-        return $channels;
+        return $this->availabilityChannels($notifiable, $channels);
     }
 
     public function toArray(object $notifiable): array
     {
         return [
             'type' => 'new_message',
+            'silent' => app(NotificationDeliveryPolicy::class)->silent($notifiable, $this),
             'message_id' => $this->message->id,
             'conversation_id' => $this->conversation->id,
             'contact_name' => $this->conversation->contact?->name ?? 'Unknown',
             'snippet' => mb_substr((string) $this->message->body, 0, 120),
             'channel' => $this->message->channel,
             'conversation_uuid' => $this->conversation->uuid,
-            'workspace_id' => $this->conversation->workspace_id,
+            'workspace_id' => $this->notificationWorkspaceId(),
             'screen' => $this->isEmail() ? 'master_email_inbox' : 'omni_channel_inbox',
             'url' => $this->destinationUrl(),
         ];
@@ -65,7 +73,7 @@ class NewMessageNotification extends Notification implements ShouldQueue
 
     public function toBroadcast(object $notifiable): BroadcastMessage
     {
-        return new BroadcastMessage($this->toArray($notifiable));
+        return new BroadcastMessage($this->availabilityBroadcastData($notifiable));
     }
 
     /**
@@ -77,10 +85,10 @@ class NewMessageNotification extends Notification implements ShouldQueue
      */
     public function toMail(object $notifiable): MailMessage
     {
-        return (new MailMessage)
+        return $this->availabilityMail((new MailMessage)
             ->subject('New message from '.($this->conversation->contact?->name ?? 'a contact'))
             ->line('You have a new message in your inbox.')
-            ->action('View Conversation', route('client.inbox.show', $this->conversation));
+            ->action('View Conversation', route('client.inbox.show', $this->conversation)), $notifiable);
     }
 
     public function toWebPush(object $notifiable): array
@@ -107,7 +115,7 @@ class NewMessageNotification extends Notification implements ShouldQueue
             // for the same conversation.
             'conversation_id' => $this->conversation->id,
             'conversation_uuid' => $this->conversation->uuid,
-            'workspace_id' => $this->conversation->workspace_id,
+            'workspace_id' => $this->notificationWorkspaceId(),
             'channel' => $this->message->channel,
             'screen' => $this->isEmail() ? 'master_email_inbox' : 'omni_channel_inbox',
             'account_id' => $this->conversation->channel_account_id,

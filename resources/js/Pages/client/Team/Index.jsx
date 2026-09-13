@@ -1,4 +1,5 @@
 import ClientLayout from '@/Layouts/ClientLayout';
+import { NotificationAvailabilitySummary } from '@/Components/NotificationAvailabilityCard';
 import { Button, Modal, PasswordInput } from '@/Components/ui';
 import { Head, router, useForm, usePage } from '@inertiajs/react';
 import { useState } from 'react';
@@ -246,6 +247,7 @@ export default function TeamIndex({ users = [], client = {}, invitations = [], w
                                                 {(u.workspace_assignments || []).map((assignment) => (
                                                     <span key={assignment.workspace_id} className="inline-flex rounded-full bg-neutral-100 px-2 py-0.5 text-xs dark:bg-neutral-700">
                                                         {assignment.name} · {assignment.role === WORKSPACE_ROLE_ADMIN ? 'Admin' : 'Staff'}
+                                                        {assignment.availability && <span className="ml-2"><NotificationAvailabilitySummary availability={assignment.availability} showHours /></span>}
                                                     </span>
                                                 ))}
                                             </div>
