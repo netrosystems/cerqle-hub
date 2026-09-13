@@ -2,6 +2,8 @@
 
 Date: 2026-09-13. Baseline: `7aef101` on `spiderman`; results below describe the implementation working tree, not a production release.
 
+Post-audit revision: the user subsequently requested a SEND-only creation palette. Only Send WhatsApp, Send Template, Send Media and Quick Replies are now available for new nodes; all other categories are hidden without changing stored workflows/runtime handlers. The ten-node disposition and configuration examples below describe the earlier safety implementation, not the current creation UI. See [SEND-only palette decision](decisions/2026-09-13-send-only-automation-palette.md). Revised frontend suite: 134 tests passed across 27 files; Vite build passed. Browser acceptance remains pending.
+
 ## Verdict and evidence boundaries
 
 The reduced feature is implemented locally. **Production signoff is pending.** No client automation was activated, no customer messages were sent, and no production deployment/provider submission was performed.
