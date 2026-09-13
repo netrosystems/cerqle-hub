@@ -207,7 +207,7 @@ Short-lived YouTube, TikTok, and LinkedIn access tokens are renewed from their e
 
 YouTube OAuth requests `https://www.googleapis.com/auth/youtube.force-ssl`, the narrowest single scope that covers Cerqle's authenticated channel lookup, video upload and processing checks, custom thumbnails, playlist placement, metadata updates, and explicit remote deletion. Cerqle does not request the broader `https://www.googleapis.com/auth/youtube` account-management scope.
 | `broadcast` | SMS and WhatsApp campaign preparation, paced dispatch, retries and finalisation | Low (4) | campaign preparation, pump and send jobs |
-| `automation` | XYFlow visual workflow step evaluation & execution | High (1) | `ExecuteAutomationStepJob`, `ResumeDelayedAutomationJob` |
+ | `automation` | XYFlow workflow execution, delayed continuation and reply timeout | High (1) | `ExecuteAutomationRunJob` |
 | `ecommerce` | Store catalog, order, and customer syncing | Low (4) | `SyncStoreOrdersJob`, `ProcessShopifyWebhookJob` |
 
 Production provisions dedicated `broadcast` workers so failures or sustained
@@ -404,9 +404,17 @@ Cerqle Hub includes health and readiness endpoints protected by `HEALTHZ_TOKEN`:
 
 ### Adding an Automation Node Type
 - [ ] Define node type and category in `resources/js/Pages/Automation/Builder.jsx`.
-- [ ] Implement backend execution logic in `app/Modules/Automation/Services/AutomationRunner.php`.
+- [ ] Implement backend execution logic in `app/Modules/Automation/Services/AutomationEngine.php` and shared `WorkflowValidator` rules.
 - [ ] Add translation keys for node label and description in `resources/js/locales/`.
 - [ ] Verify node serialization and execution flow with a feature test.
+### Automation execution boundary (2026-09-13)
+
+New inbound runs capture `workflow_snapshot`, `conversation_id`, `channel_account_id` and `trigger_message_id`. Snapshots are immutable execution inputs; live workflow status, subscription, chat ownership, human assignment, consent and connection state remain safety checks. Trigger creation uses a chat-scoped cache lock and a unique automation/message database key. Reply consumption locks the waiting run and writes a durable unique automation/message receipt before queueing continuation. One pending/running/waiting interaction per automation/chat prevents overlapping greetings. Reply receipts persist across multiple questions.
+
+`automation_step_claims` uniquely claims run/node attempts before side effects. Duplicate claims fail closed for delivery review instead of resending ambiguous requests; this is not an exactly-once provider guarantee. Queue overlap protection serializes a run. `wake_at` and delayed job `expectedWake` prevent obsolete jobs from advancing resumed runs. Migration cancels unsnapshotted legacy waiting/running runs; pending legacy runs snapshot before first execution. Workspace purge removes claims and reply receipts.
+
+Builder activation/preview share `WorkflowValidator`; draft saving applies structural checks only. Status-only pause remains available for legacy flows. Template choices expose WABA identity, not credentials, and are sender-matched during validation and sending. Free-form sends reuse `Conversation::isWhatsappWindowOpen`, excluding imported history and future provider timestamps. See `docs/decisions/2026-09-13-whatsapp-first-automations.md` and `docs/automation-sqa.md`.
+
 ### Local analytics compatibility (2026-09-07)
 
 `AnalyticsService::campaignDeliveryOverTime` groups recipient timestamps by hour using SQLite `strftime` locally and MySQL `DATE_FORMAT` in production. Both return the same `YYYY-MM-DD HH:00` buckets; authorization and campaign scoping remain in the callers.

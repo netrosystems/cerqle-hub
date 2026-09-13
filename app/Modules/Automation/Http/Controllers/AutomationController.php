@@ -8,15 +8,16 @@ use App\Modules\AI\Models\AiChatbot;
 use App\Modules\Automation\Models\Automation;
 use App\Modules\Automation\Models\AutomationRun;
 use App\Modules\Automation\Services\AutomationEngine;
+use App\Modules\Automation\Services\WorkflowValidator;
 use App\Modules\Broadcasting\Models\Campaign;
 use App\Modules\Ecommerce\Models\EcommerceStore;
 use App\Modules\Integrations\Models\IntegrationConfig;
+use App\Modules\Shared\Models\ChannelAccount;
 use App\Modules\Whatsapp\Models\WhatsappTemplate;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
-use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -67,21 +68,25 @@ class AutomationController extends Controller
      * Reference data the builder needs to populate node config dropdowns
      * (templates, campaigns, chatbots, sub-flows, agents, stores) plus a map of
      * which optional integrations are connected.
+     *
+     * @return array<string, mixed>
      */
     private function builderResources(int $workspaceId, int $currentAutomationId): array
     {
         return [
+            'whatsapp_accounts' => ChannelAccount::where('workspace_id', $workspaceId)->where('channel', 'whatsapp')->where('status', 'active')->get(['id', 'display_name', 'business_account_id', 'phone_number_id']),
             // All templates (approved first) so the builder can list existing ones and
             // surface their body variables; non-approved are shown but flagged in the UI.
             'templates' => WhatsappTemplate::where('workspace_id', $workspaceId)
                 ->orderByRaw("CASE WHEN status = 'APPROVED' THEN 0 ELSE 1 END")
                 ->orderBy('name')
-                ->get(['name', 'language', 'status', 'components'])
+                ->get(['name', 'language', 'status', 'components', 'waba_id'])
                 ->map(fn ($t) => [
                     'name' => $t->name,
                     'language' => $t->language,
                     'status' => $t->status,
                     'components' => $t->components,
+                    'waba_id' => $t->waba_id,
                 ])
                 ->values(),
             'campaigns' => Campaign::where('workspace_id', $workspaceId)
@@ -111,30 +116,25 @@ class AutomationController extends Controller
             'trigger_config' => ['nullable', 'array'],
             'nodes' => ['nullable', 'array'],
             'edges' => ['nullable', 'array'],
+            'nodes.*' => ['array'],
+            'nodes.*.id' => ['required', 'string', 'max:64'],
+            'nodes.*.type' => ['required', 'string'],
+            'nodes.*.data' => ['nullable', 'array'],
+            'edges.*' => ['array'],
+            'edges.*.source' => ['required', 'string'],
+            'edges.*.target' => ['required', 'string'],
+            'trigger_config.channel_account_id' => ['nullable', 'integer', 'min:1'],
+            'trigger_config.keywords' => ['nullable', 'array'],
+            'trigger_config.keywords.*' => ['string', 'min:1', 'max:100'],
         ]);
 
         if (isset($validated['nodes'])) {
             $validated['nodes'] = $this->normaliseNodes($validated['nodes'], $validated['trigger_type'] ?? $automation->trigger_type);
         }
 
-        if (($validated['status'] ?? null) === 'active') {
-            $nodes = collect($validated['nodes'] ?? $automation->nodes ?? []);
-            $edges = collect($validated['edges'] ?? $automation->edges ?? []);
-            $trigger = $nodes->first(fn (array $node) => $this->isTriggerNode($node));
-            $triggerType = $validated['trigger_type'] ?? $automation->trigger_type;
-
-            if (! $triggerType || ! $trigger) {
-                throw ValidationException::withMessages([
-                    'status' => 'Choose a trigger and save the workflow before activating it.',
-                ]);
-            }
-
-            $hasEntryEdge = $edges->contains(fn (array $edge) => ($edge['source'] ?? null) === ($trigger['id'] ?? null));
-            if (! $hasEntryEdge) {
-                throw ValidationException::withMessages([
-                    'status' => 'Connect the trigger to at least one action before activating it.',
-                ]);
-            }
+        $workflow = array_merge($automation->only(['nodes', 'edges', 'trigger_type', 'trigger_config']), $validated);
+        if (! (count($validated) === 1 && ($validated['status'] ?? '') === 'paused')) {
+            app(WorkflowValidator::class)->validate($this->workspaceId($request), $workflow, ($validated['status'] ?? $automation->status) === 'active');
         }
 
         $automation->update($validated);
@@ -179,18 +179,28 @@ class AutomationController extends Controller
         $validated = $request->validate([
             'nodes' => ['nullable', 'array'],
             'edges' => ['nullable', 'array'],
+            'nodes.*' => ['array'],
+            'nodes.*.id' => ['required', 'string', 'max:64'],
+            'nodes.*.type' => ['required', 'string'],
+            'nodes.*.data' => ['nullable', 'array'],
+            'edges.*' => ['array'],
+            'edges.*.source' => ['required', 'string'],
+            'edges.*.target' => ['required', 'string'],
             'trigger_type' => ['nullable', 'string', 'max:64'],
             'trigger_config' => ['nullable', 'array'],
             'sample_message' => ['nullable', 'string', 'max:1000'],
+            'sample_answer' => ['nullable', 'string', 'max:1000'],
         ]);
 
         $nodes = $validated['nodes'] ?? $automation->nodes ?? [];
         $edges = $validated['edges'] ?? $automation->edges ?? [];
+        app(WorkflowValidator::class)->validate($this->workspaceId($request), array_merge($automation->only(['trigger_type', 'trigger_config']), $validated, compact('nodes', 'edges')), true);
         if (array_key_exists('trigger_type', $validated)) {
             $automation->trigger_type = $validated['trigger_type']; // in-memory only, never persisted
         }
 
         $context = [];
+        $context['_sample_answer'] = $validated['sample_answer'] ?? '[sample reply]';
         if (! empty($validated['sample_message'])) {
             $context['message_body'] = $validated['sample_message'];
         }
@@ -203,6 +213,9 @@ class AutomationController extends Controller
         abort_unless((int) $automation->workspace_id === $this->workspaceId($request), 403);
     }
 
+    /** @param list<array<string, mixed>> $nodes
+     * @return list<array<string, mixed>>
+     */
     private function normaliseNodes(array $nodes, ?string $triggerType): array
     {
         return array_map(function (array $node) use ($triggerType): array {
@@ -217,6 +230,7 @@ class AutomationController extends Controller
         }, $nodes);
     }
 
+    /** @param array<string, mixed> $node */
     private function isTriggerNode(array $node): bool
     {
         return in_array($node['type'] ?? '', ['trigger', 'triggerNode'], true)

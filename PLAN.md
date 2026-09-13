@@ -143,13 +143,11 @@ onboarding remains the only mode shown while rollout is disabled.
 
 #### Capabilities
 - **Drag-and-Drop Node Canvas**: Interactive node-graph builder powered by **XYFlow / React Flow** (`/app/automations/builder/{id}`).
-- **Comprehensive Node Catalog**:
-  - **Triggers**: `contact.created`, `message.received`, `tag.added`, `order.placed`, `cart.abandoned`, `webhook.received`.
-  - **Send**: Send WhatsApp message, send template, send email, push notification.
-  - **Logic**: Condition branch (If/Else), Time delay (Wait X hours/days), Random A/B split.
-  - **Contact**: Add tag, remove tag, update custom field, assign agent.
-  - **Integrations**: Fire external webhook, execute AI prompt, sync CRM lead.
-- **Execution Engine**: Asynchronous step execution via `ExecuteAutomationStepJob` with run logs and telemetry.
+- **Initial catalog (2026-09-13)**: WhatsApp Message Received scoped to an explicit workspace-owned WABA/phone channel, with optional keywords. Ten actions: reply text, approved template, image/video/document media, Quick Replies, Ask Question, Condition, Wait, Add Tag, Remove Tag, Assign Agent. Other triggers/actions remain legacy-readable/executable but are hidden from creation and blocked from new activation; no stored flow is silently rewritten.
+- **Support interactions**: Quick Replies wait for a valid choice (`context.choice` and stable `context.choice_id`, `btn_1`–`btn_3`). Questions wait for a nonempty textual reply to the same chat/account, saving a configured variable. Question timeout is configurable from 1–168 hours, default 24; menu timeout is 24 hours. A consumed reply does not start the same automation again. Human assignment ends the run.
+- **Validation and preview**: Shared graph/configuration validation blocks cycles, dangling/unreachable nodes, ambiguous edges, incomplete conditions and terminal waits/questions/menus. Drafts may be incomplete. Activate saves and validates the reviewed canvas atomically. Preview accepts sample message/answer and has no sends, writes, AI charges or external calls; it does not prove delivery.
+- **Follow-ups**: Runs pin workflow version, original conversation and sending account. Every send rechecks account/phone availability, consent and human takeover; workers recheck subscription/workflow status. Non-template sends require an open WhatsApp service window. Initial templates support positional body parameters and static headers/buttons only; templates requiring media/dynamic headers, dynamic buttons or voice calling fail closed until a dedicated parameter UI is added.
+- **Execution Engine**: `ExecuteAutomationRunJob` uses per-run overlap protection, durable delayed wakeups, stale-wakeup guards, unique inbound/reply receipts and per-node attempt claims. Ambiguous crashed sends require delivery review, never automatic replay. Migration cancels unsnapshotted legacy waiting/running runs for review. Provider end-to-end signoff remains required; see [`docs/automation-sqa.md`](docs/automation-sqa.md).
 
 ---
 

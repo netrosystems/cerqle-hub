@@ -24,12 +24,15 @@ Use this index to load only the context relevant to the task.
 
 Mobile team handoff: [`mobile-inbox-api.md`](mobile-inbox-api.md) covers email bulk resolve and whole-chat deletion, including rollout status and response contracts.
 
+Automation QA and release gate: [`automation-sqa.md`](automation-sqa.md).
+
 Decision records explain durable choices and their rationale. A newer record may supersede an older one; do not edit history to imply a decision was always different.
 
 - [`decisions/README.md`](decisions/README.md) — format and maintenance rules
 - [`decisions/2026-09-07-branch-promotion-and-production-history.md`](decisions/2026-09-07-branch-promotion-and-production-history.md)
 - [`decisions/2026-09-09-whatsapp-coexistence-pilot.md`](decisions/2026-09-09-whatsapp-coexistence-pilot.md)
 - [`decisions/2026-09-09-whatsapp-campaign-sender-binding.md`](decisions/2026-09-09-whatsapp-campaign-sender-binding.md)
+- [`decisions/2026-09-13-whatsapp-first-automations.md`](decisions/2026-09-13-whatsapp-first-automations.md)
 
 ## Maintenance rule
 

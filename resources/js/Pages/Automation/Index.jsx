@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { legacyAutomation } from '@/Utils/automationRelease';
 
 const STATUS_COLORS = {
     active: 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300',
@@ -82,6 +83,7 @@ export default function AutomationIndex({ automations }) {
                 </div>
 
                 {flash.success && <div className="rounded-lg bg-green-50 dark:bg-green-900/30 text-green-800 dark:text-green-200 px-4 py-2 text-sm">{flash.success}</div>}
+                {Object.entries(props.errors ?? {}).map(([key, message]) => <p role="alert" key={key} className="text-sm text-red-700">{message}</p>)}
 
                 {automations.length === 0 ? (
                     <div className="rounded-xl border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900">
@@ -104,6 +106,7 @@ export default function AutomationIndex({ automations }) {
                                     className="group flex flex-col rounded-xl border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 p-5 transition hover:border-brand-300 hover:shadow-md dark:hover:border-brand-600"
                                 >
                                     {/* Header */}
+                                    {legacyAutomation(automation.nodes, automation.trigger_type) && <p className="text-xs text-amber-700 mb-2">{t('automation.legacy_warning', 'Legacy workflow: review deferred nodes before activation.')}</p>}
                                     <div className="flex items-start justify-between gap-3">
                                         <div className="flex min-w-0 items-center gap-2.5">
                                             <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-brand-50 dark:bg-brand-900/30">

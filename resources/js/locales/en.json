@@ -3010,6 +3010,11 @@
         "": ""
     },
     "automation": {
+        "preview": "Preview",
+        "preview_title": "Workflow preview",
+        "answer_field": "Question answer (context.answer)",
+        "choice_field": "Menu choice (context.choice)",
+        "choice_id_field": "Menu button ID (btn_1 / btn_2 / btn_3)",
         "title": "Automations",
         "subtitle": "Build event-driven workflows with a visual drag-and-drop builder.",
         "new_automation": "New Automation",

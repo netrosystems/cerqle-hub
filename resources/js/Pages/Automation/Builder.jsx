@@ -1,6 +1,7 @@
 import { Head, router, usePage } from '@inertiajs/react';
 import ClientLayout from '@/Layouts/ClientLayout';
-import { useCallback, useContext, useState, createContext } from 'react';
+import { useCallback, useContext, useState, useEffect, createContext } from 'react';
+import { automationReleaseNodes, legacyAutomation } from '@/Utils/automationRelease';
 import {
     ArrowLeft, Save, Play, Pause, Copy, Check, RefreshCw,
     X, Zap, Mail, Phone, Clock, GitBranch,
@@ -103,6 +104,9 @@ const CONDITION_FIELDS = [
     { value: 'contact.tag',       labelKey: 'automation.cond_field_contact_tag' },
     { value: 'message.body',      labelKey: 'automation.cond_field_message_body' },
     { value: 'context.key',       labelKey: 'automation.cond_field_context_key' },
+    { value: 'context.answer',    labelKey: 'automation.answer_field' },
+    { value: 'context.choice',    labelKey: 'automation.choice_field' },
+    { value: 'context.choice_id', labelKey: 'automation.choice_id_field' },
 ];
 
 const CONDITION_OPERATORS = [
@@ -124,8 +128,10 @@ const UPDATE_FIELDS = [
 /* ─── Resources (builder reference data from the controller) ───── */
 function useResources() {
     const { props } = usePage();
-    return props.resources ?? {};
+    const accountId = useContext(SenderContext);
+    return { ...(props.resources ?? {}), selected_account_id: accountId };
 }
+const SenderContext = createContext(null);
 
 /* ─── Node icon helper ───────────────────────────────────────── */
 function NodeIcon({ nodeType, size = 14 }) {
@@ -362,14 +368,14 @@ const FIELD_COMPONENTS = {
     google_forms: GoogleFormsFields,
 };
 
-function ConfigPanel({ node, onClose, onChange }) {
+function ConfigPanel({ node, onClose, onChange, error }) {
     const { t } = useTranslation();
     if (!node) return null;
     const { nodeType } = node.data;
     const def = NODE_DEFS[nodeType];
     const defLabel = def ? t(def.labelKey) : nodeType;
     const d = node.data;
-    const set = (key, val) => onChange(node.id, { ...d, [key]: val, configured: true });
+    const set = (key, val) => onChange(node.id, { [key]: val, configured: true });
     const Fields = FIELD_COMPONENTS[nodeType];
 
     return (
@@ -396,6 +402,7 @@ function ConfigPanel({ node, onClose, onChange }) {
 
             {/* Fields */}
             <div style={{ flex: 1, overflowY: 'auto', padding: 16, paddingBottom: 64 }} className="space-y-4">
+                {error && <p role="alert" className="text-xs text-red-700">{error}</p>}
                 {/* Label */}
                 <Field label={t('automation.node_label_optional')}>
                     <input className={inputCls} value={d.label ?? ''} onChange={e => set('label', e.target.value)} placeholder={defLabel} />
@@ -427,6 +434,7 @@ function Field({ label, children }) {
    trigger_type / trigger_config remain the saved source of truth. */
 function TriggerConfigPanel({ automation, onTypeChange, onConfigChange, webhookUrl, copied, onCopy, onGenerateToken, generatingToken, onClose }) {
     const { t } = useTranslation();
+    const resources = useResources();
     const triggerType = automation.trigger_type ?? '';
     const orderTokens = triggerType === 'cart.abandoned'
         ? ['{{context.cart_total}}', '{{context.recovery_url}}', '{{context.order_currency}}']
@@ -458,7 +466,13 @@ function TriggerConfigPanel({ automation, onTypeChange, onConfigChange, webhookU
                 <Field label={t('automation.trigger')}>
                     <select className={selectCls} value={triggerType} onChange={e => onTypeChange(e.target.value)}>
                         <option value="">{t('automation.select_trigger')}</option>
-                        {TRIGGER_TYPES.map(tr => <option key={tr.value} value={tr.value}>{t(tr.labelKey)}</option>)}
+                        {TRIGGER_TYPES.filter(tr => tr.value === 'message.received' || tr.value === triggerType).map(tr => <option key={tr.value} value={tr.value}>{t(tr.labelKey)}</option>)}
+                    </select>
+                </Field>
+                <Field label={t('automation.sender_label', 'WhatsApp account (WABA / phone)')}>
+                    <select className={selectCls} value={automation.trigger_config?.channel_account_id ?? ''} onChange={e => onConfigChange({ channel_account_id: Number(e.target.value) || null })}>
+                        <option value="">{t('automation.select_sender', 'Select sending account…')}</option>
+                        {(resources.whatsapp_accounts ?? []).map(a => <option key={a.id} value={a.id}>{a.display_name} · WABA {a.business_account_id} · {a.phone_number_id}</option>)}
                     </select>
                 </Field>
 
@@ -526,9 +540,7 @@ function ChannelSelect({ d, set, imageOnlyHint = false }) {
             <Field label={t('automation.field_channel')}>
                 <select className={selectCls} value={ch} onChange={e => set('channel', e.target.value)}>
                     <option value="whatsapp">WhatsApp</option>
-                    <option value="messenger">Messenger</option>
-                    <option value="instagram">Instagram</option>
-                    <option value="sms">SMS</option>
+                    {ch !== 'whatsapp' && <option value={ch}>{ch} (legacy)</option>}
                 </select>
             </Field>
             {(ch === 'messenger' || ch === 'instagram') && (
@@ -606,7 +618,9 @@ function templateBodyVarCount(components) {
 
 function TemplateFields({ d, set }) {
     const { t } = useTranslation();
-    const { templates = [] } = useResources();
+    const resources = useResources();
+    const account = resources.whatsapp_accounts?.find(a => Number(a.id) === Number(resources.selected_account_id));
+    const templates = (resources.templates ?? []).filter(tpl => tpl.status === 'APPROVED' && tpl.waba_id === account?.business_account_id);
     const tpl = templates.find(x => x.name === d.template_name && x.language === d.language)
         || templates.find(x => x.name === d.template_name);
     const varCount = tpl ? templateBodyVarCount(tpl.components) : 0;
@@ -639,7 +653,7 @@ function TemplateFields({ d, set }) {
                         ))}
                     </select>
                 ) : (
-                    <input className={inputCls} value={d.template_name ?? ''} onChange={e => set('template_name', e.target.value)} placeholder="my_template_name" />
+                    <p className="text-xs text-amber-700">{t('automation.sender_template_hint', 'Select a sender in the trigger. Only its approved templates are available.')}</p>
                 )}
             </Field>
 
@@ -696,7 +710,7 @@ function MediaFields({ d, set }) {
                     <option value="image">{t('automation.media_image')}</option>
                     <option value="video">{t('automation.media_video')}</option>
                     <option value="document">{t('automation.media_document')}</option>
-                    <option value="audio">{t('automation.media_audio')}</option>
+                    {d.media_type === 'audio' && <option value="audio">Audio (legacy)</option>}
                 </select>
             </Field>
             <MediaUpload
@@ -836,6 +850,7 @@ function AskQuestionFields({ d, set }) {
             <div style={{ background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: 8, padding: '8px 10px', fontSize: 10, color: '#9a3412' }}>
                 {t('automation.ask_question_hint', { var: `{{context.${d.variable || 'answer'}}}` })}
             </div>
+            <Field label={t('automation.reply_timeout', 'Reply timeout (hours, 1–168)')}><input className={inputCls} type="number" min="1" max="168" value={d.timeout_hours ?? 24} onChange={e => set('timeout_hours', Number(e.target.value))} /></Field>
         </>
     );
 }
@@ -866,11 +881,12 @@ function ConditionFields({ d, set }) {
     return (
         <>
             <Field label={t('automation.field_check_field_required')}>
-                <select className={selectCls} value={d.field ?? ''} onChange={e => set('field', e.target.value)}>
+                <select className={selectCls} value={CONDITION_FIELDS.some(f => f.value === d.field) ? d.field : (d.field?.startsWith('context.') ? 'context.key' : '')} onChange={e => set('field', e.target.value)}>
                     <option value="">{t('automation.select_field')}</option>
                     {CONDITION_FIELDS.map(f => <option key={f.value} value={f.value}>{t(f.labelKey)}</option>)}
                 </select>
             </Field>
+            {d.field?.startsWith('context.') && !['context.answer', 'context.choice', 'context.choice_id'].includes(d.field) && <Field label={t('automation.context_variable', 'Context variable')}><input className={inputCls} value={d.field.slice(8)} onChange={e => set('field', `context.${e.target.value}`)} /></Field>}
             <Field label={t('automation.field_operator')}>
                 <select className={selectCls} value={d.operator ?? 'equals'} onChange={e => set('operator', e.target.value)}>
                     {CONDITION_OPERATORS.map(o => <option key={o.value} value={o.value}>{t(o.labelKey)}</option>)}
@@ -1374,7 +1390,7 @@ function TestResultModal({ result, loading, onClose, onRerun }) {
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                         <span style={{ display: 'flex', width: 30, height: 30, borderRadius: 8, background: '#eef2ff', color: '#6366f1', alignItems: 'center', justifyContent: 'center' }}><FlaskConical size={16} /></span>
                         <div>
-                            <div style={{ fontSize: 14, fontWeight: 700, color: '#111827' }}>{t('automation.test_title')}</div>
+                            <div style={{ fontSize: 14, fontWeight: 700, color: '#111827' }}>{t('automation.preview_title', 'Workflow preview')}</div>
                             <div style={{ fontSize: 11, color: '#6b7280' }}>{t('automation.test_subtitle')}</div>
                         </div>
                     </div>
@@ -1490,6 +1506,21 @@ function AutomationBuilderInner({ automation: initial }) {
     const [testing, setTesting] = useState(false);
     const [testResult, setTestResult] = useState(null);
     const [showTest, setShowTest] = useState(false);
+    const [sampleMessage, setSampleMessage] = useState('Hi');
+    const [sampleAnswer, setSampleAnswer] = useState('sales');
+    const [validationErrors, setValidationErrors] = useState({});
+    const canvasState = JSON.stringify({ nodes: serializeNodes(nodes), edges: edges.map(({ id, source, target, sourceHandle, targetHandle }) => ({ id, source, target, sourceHandle, targetHandle })), trigger_type: automation.trigger_type, trigger_config: automation.trigger_config, name: automation.name });
+    const [savedState, setSavedState] = useState(canvasState);
+    const dirty = canvasState !== savedState;
+    const legacy = legacyAutomation(serializeNodes(nodes), automation.trigger_type);
+    useEffect(() => {
+        const warn = e => { if (dirty) { e.preventDefault(); e.returnValue = ''; } };
+        window.addEventListener('beforeunload', warn);
+        const unsubscribe = router.on('before', event => {
+            if (dirty && event.detail.visit.method === 'get' && !window.confirm('Discard unsaved automation changes?')) return false;
+        });
+        return () => { window.removeEventListener('beforeunload', warn); unsubscribe(); };
+    }, [dirty]);
     const [confirmDelete, setConfirmDelete] = useState(null);
 
     const webhookUrl = automation.trigger_token
@@ -1561,8 +1592,8 @@ function AutomationBuilderInner({ automation: initial }) {
     }, [screenToFlowPosition, setNodes]);
 
     const updateNodeData = (nodeId, newData) => {
-        setNodes(nds => nds.map(n => n.id === nodeId ? { ...n, data: newData } : n));
-        setSelectedNode(prev => prev?.id === nodeId ? { ...prev, data: newData } : prev);
+        setNodes(nds => nds.map(n => n.id === nodeId ? { ...n, data: { ...n.data, ...newData } } : n));
+        setSelectedNode(prev => prev?.id === nodeId ? { ...prev, data: { ...prev.data, ...newData } } : prev);
     };
 
     // Routes through deleteElements so it hits onBeforeDelete (the confirmation gate); ReactFlow
@@ -1586,7 +1617,7 @@ function AutomationBuilderInner({ automation: initial }) {
     const setTriggerConfig = (patch) =>
         setAutomation(a => ({ ...a, trigger_config: { ...(a.trigger_config ?? {}), ...patch } }));
 
-    const save = () => {
+    const save = (status) => {
         setSaving(true);
         router.put(route('client.automations.update', automation.uuid), {
             nodes: serializeNodes(nodes),
@@ -1594,14 +1625,18 @@ function AutomationBuilderInner({ automation: initial }) {
             trigger_type: automation.trigger_type,
             trigger_config: automation.trigger_config,
             name: automation.name,
+            ...(typeof status === 'string' ? { status } : {}),
         }, {
             preserveScroll: true,
             onFinish: () => setSaving(false),
+            onError: errors => setValidationErrors(errors),
+            onSuccess: () => { setSavedState(canvasState); setValidationErrors({}); if (typeof status === 'string') setAutomation(a => ({ ...a, status })); },
         });
     };
 
     const toggleStatus = () => {
         const newStatus = automation.status === 'active' ? 'paused' : 'active';
+        if (newStatus === 'active') { save(newStatus); return; }
         router.put(route('client.automations.update', automation.uuid), { status: newStatus }, {
             preserveScroll: true,
             onSuccess: () => setAutomation(a => ({ ...a, status: newStatus })),
@@ -1618,9 +1653,11 @@ function AutomationBuilderInner({ automation: initial }) {
             edges: edges.map(e => ({ id: e.id, source: e.source, target: e.target, sourceHandle: e.sourceHandle })),
             trigger_type: automation.trigger_type,
             trigger_config: automation.trigger_config,
+            sample_message: sampleMessage,
+            sample_answer: sampleAnswer,
         })
             .then(res => setTestResult(res.data))
-            .catch(err => setTestResult({ ok: false, error: err.response?.data?.error || err.response?.data?.message || t('automation.test_failed'), steps: [] }))
+            .catch(err => { setValidationErrors(err.response?.data?.errors ?? {}); setTestResult({ ok: false, error: Object.values(err.response?.data?.errors ?? {}).flat().join(' ') || err.response?.data?.message || t('automation.test_failed'), steps: [] }); })
             .finally(() => setTesting(false));
     };
 
@@ -1628,17 +1665,22 @@ function AutomationBuilderInner({ automation: initial }) {
     const grouped = CATEGORY_ORDER.map(cat => ({
         cat,
         items: Object.entries(NODE_DEFS).filter(([type, def]) =>
-            def.category === cat && (q === '' || type.includes(q) || t(def.labelKey).toLowerCase().includes(q))
+            automationReleaseNodes.includes(type) && def.category === cat && (q === '' || type.includes(q) || t(def.labelKey).toLowerCase().includes(q))
         ),
     })).filter(g => g.items.length > 0);
 
     return (
-        <NodeActionsContext.Provider value={{ onConfigure: configureNode, onDelete: deleteNode }}>
+        <SenderContext.Provider value={automation.trigger_config?.channel_account_id}><NodeActionsContext.Provider value={{ onConfigure: configureNode, onDelete: deleteNode }}>
         <div style={{ display: 'flex', height: 'calc(100vh - 130px)', borderRadius: 16, overflow: 'hidden', border: '1px solid #e5e7eb', boxShadow: '0 4px 24px rgba(0,0,0,0.07)' }}>
             {/* ── Sidebar ── */}
             <div style={{ width: 234, display: 'flex', flexDirection: 'column', background: '#fafafa', borderRight: '1px solid #e5e7eb', overflowY: 'auto' }}>
                 {/* Node palette */}
                 <div style={{ padding: 12, flex: 1 }}>
+                    {legacy && <p role="alert" className="text-xs text-amber-700 mb-3">{t('automation.legacy_warning', 'Legacy workflow: review deferred nodes before activation.')}</p>}
+                    <p className="text-xs mb-2">{dirty ? t('automation.unsaved', 'Unsaved changes') : t('automation.saved', 'Saved workflow')}</p>
+                    {Object.entries(validationErrors).map(([key, message]) => <p role="alert" key={key} className="text-xs text-red-700">{key}: {message}</p>)}
+                    <label className="text-xs">{t('automation.preview_message', 'Preview message')}<input className={inputCls} value={sampleMessage} onChange={e => setSampleMessage(e.target.value)} /></label>
+                    <label className="text-xs">{t('automation.preview_answer', 'Preview answer')}<input className={inputCls} value={sampleAnswer} onChange={e => setSampleAnswer(e.target.value)} /></label>
                     <div style={{ fontSize: 10, fontWeight: 700, color: '#9ca3af', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 4 }}>{t('automation.add_node')}</div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 9, color: '#94a3b8', marginBottom: 8 }}>
                         <GripVertical size={10} /> {t('automation.drag_node_hint')}
@@ -1722,7 +1764,7 @@ function AutomationBuilderInner({ automation: initial }) {
                                 color: '#4f46e5', border: '1px solid #e0e7ff', cursor: testing ? 'not-allowed' : 'pointer',
                                 opacity: testing ? 0.7 : 1, transition: 'all 0.15s',
                             }}>
-                                {testing ? <Loader2 size={13} className="animate-spin" /> : <FlaskConical size={13} />} {t('automation.test')}
+                                {testing ? <Loader2 size={13} className="animate-spin" /> : <FlaskConical size={13} />} {t('automation.preview', 'Preview')}
                             </button>
                             <button onClick={save} disabled={saving} style={{
                                 display: 'flex', alignItems: 'center', gap: 6, borderRadius: 8,
@@ -1763,6 +1805,7 @@ function AutomationBuilderInner({ automation: initial }) {
                                 node={selectedNode}
                                 onClose={() => setSelectedNode(null)}
                                 onChange={updateNodeData}
+                                error={validationErrors[`nodes.${selectedNode.id}`]}
                             />
                             <button
                                 onClick={() => deleteNode(selectedNode.id)}
@@ -1804,7 +1847,7 @@ function AutomationBuilderInner({ automation: initial }) {
             {showTest && <TestResultModal result={testResult} loading={testing} onClose={() => setShowTest(false)} onRerun={runTest} />}
             {confirmDelete && <ConfirmDeleteModal target={confirmDelete} onCancel={() => resolveDelete(false)} onConfirm={() => resolveDelete(true)} />}
         </div>
-        </NodeActionsContext.Provider>
+        </NodeActionsContext.Provider></SenderContext.Provider>
     );
 }
 

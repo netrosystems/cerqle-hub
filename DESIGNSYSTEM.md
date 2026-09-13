@@ -88,6 +88,7 @@ Primary Plum:    #3E2A49   Brand Lilac:    #8F5FA7   Cool Accent:  #45B6D6   Cor
 ### 4.3 Infinite Canvas Layout (`AutomationBuilder`)
 - **Used For**: XYFlow Visual Workflow Automation Engine.
 - **Structure**: Full-screen interactive canvas with drag-and-drop node sidebar, mini-map, zoom controls, and floating step inspector panel.
+- **Initial Automations release (2026-09-13)**: Show only ten WhatsApp support/follow-up actions; preserve legacy nodes with a warning. Trigger selects the exact WABA/phone account; template choices belong to that sender. Show saved/unsaved state, node-specific validation errors and navigation-loss warnings. Activation saves the reviewed canvas; Preview is explicitly simulation-only with sample message/answer. Run history shows waiting reason, next-check time and accessible pagination.
 
 ---
 

@@ -1,6 +1,6 @@
 # Cerqle Hub current status
 
-Status date: **2026-09-11**. This file is a checkpoint, not permanent proof. Recheck Git, production and external-provider state before acting.
+Status date: **2026-09-13**. This file is a checkpoint, not permanent proof. Recheck Git, production and external-provider state before acting.
 
 ## Git and release state
 
@@ -12,6 +12,9 @@ Status date: **2026-09-11**. This file is a checkpoint, not permanent proof. Rec
 - PHPStan has a known historical backlog of 578 findings. This number is stale until rerun; do not add suppressions merely to claim a green result.
 
 ## Recently implemented
+
+- 2026-09-13 local implementation: WhatsApp-first Automations palette, shared validation, run snapshots/chat binding, reply deduplication/timeouts, durable attempt claims, sender/window/consent/takeover guards, preview inputs and run pagination. Not deployed; live designated-phone and concurrent Redis-worker checks remain release gates. Migration cancels legacy waiting/running runs without snapshots. See `docs/automation-sqa.md` for test evidence and limitations.
+- Validation for the local Automations implementation: 837 backend tests / 3384 assertions, 110 frontend tests / 27 files, Vite build, focused Pint and local route-cache rebuild passed. Local prerequisite WhatsApp metadata and automation migrations applied. PHPStan remains failing on the repository backlog; no suppressions added. No worker was started and no live send performed.
 
 - 2026-09-13 deployment verified: `bash scripts/deploy-production.sh` completed with exit 0 through the open Termius connection. Production is release `v1.0.90`, code commit `a621ce5631e4`. All two general/two dedicated broadcast workers are RUNNING; mobile email bulk-resolve and whole-chat DELETE routes are registered. Chrome confirms the email bulk-resolve button, opened-chat delete action, and recovery of both previously broken WhatsApp image previews. No live conversations were resolved/deleted during verification. This operational checkpoint is documentation-only and does not require another application deployment.
 - 2026-09-13 release validation supersedes the local-PHP blockers below: found MAMP PHP 8.3.30 and ran all 86 focused Inbox/mobile conversation/email tests successfully (521 assertions), including the five new action/media regressions. Existing filesystem configuration emits deprecations. 107 frontend tests and Vite build passed; focused Pint and route-cache rebuild passed. A broader name-filtered test run had one unrelated admin SupportTicket redirect failure. Focused controller PHPStan reported 23 findings; not claimed clean. Release approved by user; deployment remains unverified because this session lacks a verified SSH connection and native Termius control.
