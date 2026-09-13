@@ -76,6 +76,7 @@ Primary Plum:    #3E2A49   Brand Lilac:    #8F5FA7   Cool Accent:  #45B6D6   Cor
 - **Structure**: Centered content container (`max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8`). Includes page header with breadcrumb navigation and right-aligned action buttons.
 - **Account navigation**: The profile dropdown stays concise with Profile, Settings, and Log Out. Security and session-management destinations live in the sidebar Account group, with `2FA Authentication` directly below Settings and Sessions immediately after it.
 - **Client sidebar ordering**: Setup appears immediately before Campaigns so clients configure channels before creating campaigns. Reports contains reporting destinations only; SMS Campaigns remains exclusively in the Campaigns group.
+- **Automations navigation (2026-09-13)**: Temporarily comment out the workflow Automations link in the Automations group. Keep Smart Bots and Knowledge Bases visible. Routes, stored workflows, execution, AI Automation setup cards and automation reports remain unchanged; restore the link by uncommenting its shared navigation entry.
 
 ### 4.2 Viewport-Pinned Layout (`InboxLayout`)
 - **Used For**: Omni-Channel Inbox and Master Email Inbox.

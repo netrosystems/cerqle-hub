@@ -58,3 +58,11 @@ Provider reference checks: Microsoft [reply documentation](https://learn.microso
 - Exhaustive screen-reader navigation and every narrow scheduled-editor breakpoint; card/dialog were visually checked at mobile width, default expanded schedule at desktop.
 
 Release verdict: locally implemented and regression-tested, **not production/provider signed off**. Do not claim 100% delivery or deploy based on green tests alone.
+
+## Subsequent approved production deployment — live observed
+
+2026-09-13: user explicitly approved deployment. Production `v1.0.93` at main `cddcbc730937`, with the same tree as validated `a42d51f` on spiderman/dev. Fresh private database backup: 38,455,973 compressed bytes, gzip integrity passed; no restore test performed. Both new migrations report Ran; PATCH route registered and handback column present.
+
+The documented script exited 1 at the general-worker startup check, before release recording, and restored the application. Supervisor logs showed clean exit-status-0 process cycling; the root cause was not established. Workers then settled. After verifying general workers stable, completed the remaining broadcast cycle, release recording, application-up and webhook-registration steps manually. Final two general workers had over two minutes uptime; two broadcast workers over one minute. General worker arguments include `ai`; Redis retry_after is 90 seconds and grouped job timeout computes to 80 seconds. This verifies process availability, not real job delivery or crash recovery.
+
+Production browser checks: Email Setup and Channel Setup render the compact card; both Manage dialogs expose Off/On/Scheduled and enabled chatbot options. Scheduled without a bot disables Save; messaging Edit hours exposes weekday 09:00–17:00, disabled weekend, timezone, all-day and copy-weekdays controls in a scrollable dialog. All drafts cancelled; no settings saved. Database settings row count remains zero, preserving legacy assignments. No customer messages sent. Real provider delivery and concurrent queue gates above remain pending. This checkpoint is local documentation, not in the deployed commit.
