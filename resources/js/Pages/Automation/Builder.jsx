@@ -52,7 +52,7 @@ const TRIGGER_TYPES = [
 ];
 
 // Categories rendered (in order) in the node palette — mirrors the product node list.
-const CATEGORY_ORDER = ['send', 'listen', 'logic', 'contact', 'engage', 'commerce', 'integrations'];
+const CATEGORY_ORDER = ['send'];
 
 const NODE_DEFS = {
     // ── SEND ──────────────────────────────────────────────────────────────
@@ -1569,6 +1569,7 @@ function AutomationBuilderInner({ automation: initial }) {
     };
 
     const addNode = (type, position) => {
+        if (!automationReleaseNodes.includes(type)) return;
         const n = makeNode(type, nodes.length, position);
         setNodes(nds => [...nds, n]);
     };
@@ -1586,7 +1587,7 @@ function AutomationBuilderInner({ automation: initial }) {
     const onDrop = useCallback((e) => {
         e.preventDefault();
         const type = e.dataTransfer.getData('application/automation-node');
-        if (!type || !NODE_DEFS[type]) return;
+        if (!type || !NODE_DEFS[type] || !automationReleaseNodes.includes(type)) return;
         const position = screenToFlowPosition({ x: e.clientX, y: e.clientY });
         setNodes(nds => [...nds, makeNode(type, nds.length, position)]);
     }, [screenToFlowPosition, setNodes]);
@@ -1679,8 +1680,11 @@ function AutomationBuilderInner({ automation: initial }) {
                     {legacy && <p role="alert" className="text-xs text-amber-700 mb-3">{t('automation.legacy_warning', 'Legacy workflow: review deferred nodes before activation.')}</p>}
                     <p className="text-xs mb-2">{dirty ? t('automation.unsaved', 'Unsaved changes') : t('automation.saved', 'Saved workflow')}</p>
                     {Object.entries(validationErrors).map(([key, message]) => <p role="alert" key={key} className="text-xs text-red-700">{key}: {message}</p>)}
-                    <label className="text-xs">{t('automation.preview_message', 'Preview message')}<input className={inputCls} value={sampleMessage} onChange={e => setSampleMessage(e.target.value)} /></label>
-                    <label className="text-xs">{t('automation.preview_answer', 'Preview answer')}<input className={inputCls} value={sampleAnswer} onChange={e => setSampleAnswer(e.target.value)} /></label>
+                    <details className="text-xs mb-3">
+                        <summary className="cursor-pointer">{t('automation.preview_options')}</summary>
+                        <label className="block mt-2">{t('automation.preview_message', 'Preview message')}<input className={inputCls} value={sampleMessage} onChange={e => setSampleMessage(e.target.value)} /></label>
+                        <label className="block mt-2">{t('automation.preview_answer', 'Preview answer')}<input className={inputCls} value={sampleAnswer} onChange={e => setSampleAnswer(e.target.value)} /></label>
+                    </details>
                     <div style={{ fontSize: 10, fontWeight: 700, color: '#9ca3af', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 4 }}>{t('automation.add_node')}</div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 9, color: '#94a3b8', marginBottom: 8 }}>
                         <GripVertical size={10} /> {t('automation.drag_node_hint')}

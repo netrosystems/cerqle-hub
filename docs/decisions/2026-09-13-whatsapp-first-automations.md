@@ -3,6 +3,8 @@
 Date: 2026-09-13
 Status: Accepted for implementation; provider release gate pending
 
+Creation-palette decision superseded by [SEND-only creation palette](2026-09-13-send-only-automation-palette.md). Runtime safety decisions below remain in effect.
+
 ## Context
 
 The initial palette exposed many provider-dependent capabilities while continuation, sender identity and preview semantics were insufficiently explicit. The user selected WhatsApp-first support plus follow-ups.

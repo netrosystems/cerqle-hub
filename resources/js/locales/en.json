@@ -3155,7 +3155,8 @@
         "available_tokens_heading": "Available Tokens",
         "available_tokens_hint": "Use these in message nodes. Requires a connected store under E-Commerce.",
         "add_node": "Add Node",
-        "drag_node_hint": "Drag onto the canvas",
+        "drag_node_hint": "Click or drag onto the canvas",
+        "preview_options": "Preview options",
         "search_nodes": "Search nodes…",
         "category_all": "All",
         "category_channel": "Channel",
@@ -3301,7 +3302,7 @@
         "field_campaign_required": "Campaign *",
         "select_campaign": "Select a campaign…",
         "saving": "Saving…",
-        "canvas_hint": "Drag nodes from the panel · Click a node to configure · Drag to connect handles · Delete key removes selected",
+        "canvas_hint": "Click or drag to add a node · Click a node to configure · Drag between handles to connect",
         "delete_node": "Delete Node",
         "category_${cat}": "Category ${Cat}",
         "status_${automation": {
