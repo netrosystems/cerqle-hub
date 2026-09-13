@@ -20,4 +20,12 @@ Automated regression checkpoint: 891 backend tests/3692 assertions, 149 frontend
 
 ## Outstanding verification
 
+### Admin-only ownership correction (local, not deployed)
+
+The user superseded personal editing: only client administrators manage schedules. Automated/mocked authorization tests verify admin save, staff read-only browser/Sanctum access, staff write 403, foreign/unassigned target 404, independent workspaces and revision conflicts. Frontend tests verify hidden staff Manage controls, read-only defaults, selected admin editor and summary refresh. Regression: 895 backend tests/3720 assertions, 155 frontend tests/30 files; build, focused Pint/controller PHPStan and route-cache rebuilding passed.
+
+Live observed local Chrome: Team admin selected a teammate, saved Paused, saw row update and reopened persisted mode; restored Always. No alerts sent; impersonation ended. Staff UI was tested with mocks, not a real staff browser session. Existing production checkpoints below describe the earlier self-edit release, not this correction.
+
+Approved production deployment observed on 2026-09-13: `v1.0.95`, main `668fac4aef14`, tree-equivalent to validated `3c31108`. Fresh private database backup passed gzip integrity; migration marked Ran. Script stopped at worker startup (exit 1), restored the site, and workers stabilized; remaining broadcast refresh/release/webhook finalization completed (exit 0). Final four workers RUNNING for over one minute. Production card showed Always; three-mode dialog and default weekly hours inspected then cancelled without saving. Database availability rows: zero. No test alerts sent. This checkpoint is local documentation, not included in the deployed commit.
+
 Designated real OneSignal/native push and SMTP recipient tests, including provider failure/retry behavior, remain not tested. Parallel workers, interrupt/recovery and exhaustive accessibility are not signed off. Existing global static-analysis backlog is not resolved by this feature.

@@ -1,5 +1,5 @@
 import ClientLayout from '@/Layouts/ClientLayout';
-import { NotificationAvailabilitySummary } from '@/Components/NotificationAvailabilityCard';
+import NotificationAvailabilityCard, { NotificationAvailabilitySummary } from '@/Components/NotificationAvailabilityCard';
 import { Button, Modal, PasswordInput } from '@/Components/ui';
 import { Head, router, useForm, usePage } from '@inertiajs/react';
 import { useState } from 'react';
@@ -74,7 +74,9 @@ function WorkspaceAssignments({ workspaces = [], value = [], onChange, error, lo
 
 export default function TeamIndex({ users = [], client = {}, invitations = [], workspaces = [] }) {
     const { t } = useTranslation();
-    const { flash = {} } = usePage().props;
+    const { flash = {}, auth } = usePage().props;
+    const canManageAvailability = auth?.user?.client_role === 'administrator';
+    const [availabilityEditor, setAvailabilityEditor] = useState(null);
     const [addOpen, setAddOpen]         = useState(false);
     const [inviteOpen, setInviteOpen]   = useState(false);
     const [editOpen, setEditOpen]       = useState(false);
@@ -248,6 +250,12 @@ export default function TeamIndex({ users = [], client = {}, invitations = [], w
                                                     <span key={assignment.workspace_id} className="inline-flex rounded-full bg-neutral-100 px-2 py-0.5 text-xs dark:bg-neutral-700">
                                                         {assignment.name} · {assignment.role === WORKSPACE_ROLE_ADMIN ? 'Admin' : 'Staff'}
                                                         {assignment.availability && <span className="ml-2"><NotificationAvailabilitySummary availability={assignment.availability} showHours /></span>}
+                                                        {canManageAvailability && workspaces.some((workspace) => Number(workspace.id) === Number(assignment.workspace_id)) && (
+                                                            <button type="button" className="ml-2 shrink-0 text-brand-600 underline" onClick={() => setAvailabilityEditor({ member: u, assignment })}
+                                                                aria-label={t('team.manage_notification_availability', { defaultValue: 'Manage availability for {{name}} in {{workspace}}', name: u.name, workspace: assignment.name })}>
+                                                                {t('team.notification_availability', { defaultValue: 'Availability' })}
+                                                            </button>
+                                                        )}
                                                     </span>
                                                 ))}
                                             </div>
@@ -295,6 +303,23 @@ export default function TeamIndex({ users = [], client = {}, invitations = [], w
                         </div>
                     )}
                 </div>
+
+                {availabilityEditor && canManageAvailability && (
+                    <NotificationAvailabilityCard
+                        key={`${availabilityEditor.member.id}:${availabilityEditor.assignment.workspace_id}`}
+                        memberId={availabilityEditor.member.id}
+                        workspaceId={availabilityEditor.assignment.workspace_id}
+                        workspaceName={availabilityEditor.assignment.name}
+                        title={t('team.member_notification_availability', { defaultValue: '{{name}} · Notification availability', name: availabilityEditor.member.name })}
+                        getUrl={`/app/team/${availabilityEditor.member.id}/workspaces/${availabilityEditor.assignment.workspace_id}/notification-availability`}
+                        autoOpen
+                        onClose={() => setAvailabilityEditor(null)}
+                        onSaved={() => {
+                            setAvailabilityEditor(null);
+                            router.reload({ only: ['users'], preserveScroll: true });
+                        }}
+                    />
+                )}
 
                 {/* Pending invitations */}
                 {invitations.length > 0 && (
