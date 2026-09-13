@@ -80,6 +80,8 @@ class WorkspaceDeletionService
     private function deleteDependentRecords(int $workspaceId): void
     {
         $this->deleteWhereIn('automation_run_logs', 'run_id', 'automation_runs', 'id', 'automation_id', 'automations', $workspaceId);
+        $this->deleteWhereIn('automation_step_claims', 'run_id', 'automation_runs', 'id', 'automation_id', 'automations', $workspaceId);
+        $this->deleteWhereIn('automation_reply_receipts', 'run_id', 'automation_runs', 'id', 'automation_id', 'automations', $workspaceId);
         $this->deleteWhereIn('automation_runs', 'automation_id', 'automations', 'id', 'workspace_id', null, $workspaceId);
 
         $this->deleteWhereIn('campaign_recipients', 'campaign_id', 'campaigns', 'id', 'workspace_id', null, $workspaceId);

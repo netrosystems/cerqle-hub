@@ -51,7 +51,7 @@ class WhatsappDriver implements ChannelDriverInterface
         // Generation/queueing may have started before an agent took over. Do
         // not rely on the relationship cached when the message was created.
         // This cannot retract a provider request that was already in flight.
-        if ($message->sent_by === 'bot') {
+        if (in_array($message->sent_by, ['bot', 'automation'], true)) {
             $current = Conversation::whereKey($message->conversation_id)
                 ->where('workspace_id', $conversation->workspace_id)->first();
             if (! $current || $current->assigned_to === 'human') {
@@ -65,7 +65,7 @@ class WhatsappDriver implements ChannelDriverInterface
             'image' => $client->sendMedia($phone, 'image', $payload['media_id'] ?? '', $payload['caption'] ?? null, null, $payload['link'] ?? null),
             'video' => $client->sendMedia($phone, 'video', $payload['media_id'] ?? '', $payload['caption'] ?? null, null, $payload['link'] ?? null),
             'document' => $client->sendMedia($phone, 'document', $payload['media_id'] ?? '', $payload['caption'] ?? null, $payload['filename'] ?? null, $payload['link'] ?? null),
-            'audio' => $client->sendMedia($phone, 'audio', $payload['media_id'] ?? ''),
+            'audio' => $client->sendMedia($phone, 'audio', $payload['media_id'] ?? '', null, null, $payload['link'] ?? null),
             'location' => $client->sendLocation(
                 $phone,
                 (float) ($payload['location']['latitude'] ?? 0),

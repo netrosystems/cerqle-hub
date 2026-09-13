@@ -35,13 +35,15 @@ class AutomationTriggerListener
         $messageBody = $event->message->body ?? '';
 
         // Resume any runs parked on an "Ask question" node awaiting this contact's reply.
-        $this->engine->resumeAwaitingReplies($workspaceId, $contactId, $messageBody);
+        $consumed = $this->engine->resumeAwaitingReplies($workspaceId, $contactId, $messageBody, $event->message->conversation_id, $event->message->id, data_get($event->message->payload, 'interactive.button_reply.id'));
 
         $this->fireWithConfig('message.received', $workspaceId, $contactId, [
             'message_id' => $event->message->id,
             'message_channel' => $event->message->channel,
             'message_body' => $messageBody,
-        ], $messageBody);
+            'conversation_id' => $event->message->conversation_id,
+            'channel_account_id' => $event->message->conversation->channel_account_id,
+        ], $messageBody, $consumed);
     }
 
     public function handleContactCreated(ContactCreated $event): void
@@ -130,8 +132,10 @@ class AutomationTriggerListener
     /**
      * Like fire(), but respects trigger_config.keywords for message.received automations.
      * If keywords are set, the message body must contain at least one keyword (case-insensitive).
+     *
+     * @param  list<int>  $consumed
      */
-    private function fireWithConfig(string $triggerType, int $workspaceId, int $contactId, array $context, string $messageBody = ''): void
+    private function fireWithConfig(string $triggerType, int $workspaceId, int $contactId, array $context, string $messageBody = '', array $consumed = []): void
     {
         if (! $this->access->allowsWorkspaceWrite($workspaceId)) {
             return;
@@ -144,6 +148,16 @@ class AutomationTriggerListener
         $bodyLower = mb_strtolower($messageBody);
 
         foreach ($automations as $automation) {
+            if (in_array($automation->id, $consumed, true)) {
+                continue;
+            }
+            $accountId = $automation->trigger_config['channel_account_id'] ?? null;
+            if ($accountId && ((int) $accountId !== (int) ($context['channel_account_id'] ?? 0) || ($context['message_channel'] ?? '') !== 'whatsapp')) {
+                continue;
+            }
+            if ($accountId && AutomationRun::where('automation_id', $automation->id)->where('conversation_id', $context['conversation_id'])->whereIn('status', ['pending', 'running', 'waiting'])->exists()) {
+                continue;
+            }
             $keywords = $automation->trigger_config['keywords'] ?? [];
 
             if (! empty($keywords)) {

@@ -24,7 +24,12 @@ use App\Modules\Shared\Models\ContactTag;
 use App\Modules\Shared\Models\Conversation;
 use App\Modules\Shared\Models\Message;
 use App\Modules\Shared\Services\ChannelManager;
+use App\Modules\Whatsapp\Models\WhatsappTemplate;
+use App\Modules\Whatsapp\Services\CloudApiClient;
+use App\Services\ClientAccessService;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
@@ -58,52 +63,144 @@ class AutomationEngine
 
     public function triggerForContact(Automation $automation, int $contactId, array $context = []): void
     {
+        Cache::lock('automation-trigger:'.$automation->id.':'.($context['conversation_id'] ?? $contactId), 10)->block(5, function () use ($automation, $contactId, $context): void {
+            $this->createRun($automation, $contactId, $context);
+        });
+    }
+
+    /** @param array<string, mixed> $context */
+    private function createRun(Automation $automation, int $contactId, array $context): void
+    {
         if (! $automation->isActive()) {
             return;
         }
+        if (! Contact::where('workspace_id', $automation->workspace_id)->whereKey($contactId)->exists()) {
+            return;
+        }
+        if (data_get($automation->trigger_config, 'channel_account_id')) {
+            if ((int) data_get($automation->trigger_config, 'channel_account_id') !== (int) ($context['channel_account_id'] ?? 0) || empty($context['conversation_id'])) {
+                return;
+            }
+            if (AutomationRun::where('automation_id', $automation->id)->where('conversation_id', $context['conversation_id'])->whereIn('status', ['pending', 'running', 'waiting'])->exists()) {
+                return;
+            }
+        }
 
-        $run = AutomationRun::create([
+        $messageId = $context['message_id'] ?? null;
+        if ($messageId && AutomationRun::where('automation_id', $automation->id)->where('trigger_message_id', $messageId)->exists()) {
+            return;
+        }
+        $attributes = [
             'automation_id' => $automation->id,
             'contact_id' => $contactId,
             'status' => 'pending',
             'context' => $context,
             'started_at' => now(),
-        ]);
+        ];
+        $run = $messageId ? AutomationRun::firstOrCreate(['automation_id' => $automation->id, 'trigger_message_id' => $messageId], $attributes) : AutomationRun::create($attributes);
 
-        dispatch(new ExecuteAutomationRunJob($run->id))->onQueue('automation');
+        if ($run->wasRecentlyCreated) {
+            dispatch(new ExecuteAutomationRunJob($run->id))->onQueue('automation');
+        }
     }
 
     /**
      * Resume runs that are parked on an "Ask question" node, waiting for this
      * contact's next inbound message. The reply body is stored in the configured
      * context variable and the run continues from the node after the question.
+     *
+     * @return list<int>
      */
-    public function resumeAwaitingReplies(int $workspaceId, int $contactId, string $messageBody): void
+    public function resumeAwaitingReplies(int $workspaceId, int $contactId, string $messageBody, ?int $conversationId = null, ?int $messageId = null, ?string $choiceId = null): array
     {
+        $consumed = [];
+        if ($messageId) {
+            $consumed = DB::table('automation_reply_receipts')->join('automations', 'automations.id', '=', 'automation_reply_receipts.automation_id')->where('automations.workspace_id', $workspaceId)->where('message_id', $messageId)->pluck('automation_reply_receipts.automation_id')->all();
+        }
         $runs = AutomationRun::where('contact_id', $contactId)
             ->where('status', 'waiting')
             ->whereHas('automation', fn ($q) => $q->where('workspace_id', $workspaceId))
             ->get();
 
         foreach ($runs as $run) {
+            if ($conversationId && (int) $run->conversation_id !== $conversationId) {
+                continue;
+            }
+            if ($conversationId && $run->automation->status !== 'active') {
+                continue;
+            }
             $context = $run->context ?? [];
             if (empty($context['_awaiting_reply'])) {
                 continue; // a plain wait/delay — not waiting for a reply
             }
+            if ($run->wake_at?->isPast()) {
+                $run->update(['status' => 'cancelled', 'error' => 'Reply timeout expired.', 'completed_at' => now()]);
+
+                continue;
+            }
 
             $var = $context['_reply_var'] ?? 'answer';
+            $consumed[] = $run->automation_id;
+            if (trim($messageBody) === '') {
+                continue;
+            }
+            $allowed = $context['_reply_choices'] ?? [];
+            $choiceMap = $context['_reply_choice_ids'] ?? [];
+            if ($choiceId && $choiceMap) {
+                if (! isset($choiceMap[$choiceId])) {
+                    continue;
+                }
+                $messageBody = $choiceMap[$choiceId];
+                $context['choice_id'] = substr($choiceId, strrpos($choiceId, ':') + 1);
+            }
+            if ($allowed && ! in_array($messageBody, $allowed, true)) {
+                continue;
+            }
             $context[$var] = $messageBody;
-            unset($context['_awaiting_reply'], $context['_reply_var']);
-            $run->update(['context' => $context]);
+            $context['message_body'] = $messageBody;
+            $context['_consumed_message_id'] = $messageId;
+            unset($context['_awaiting_reply'], $context['_reply_var'], $context['_reply_choices'], $context['_reply_choice_ids']);
+            $changed = DB::transaction(function () use ($run, $context, $messageId): bool {
+                $locked = AutomationRun::whereKey($run->id)->lockForUpdate()->first();
+                if (! $locked || $locked->status !== 'waiting' || ! data_get($locked->context, '_awaiting_reply')) {
+                    return false;
+                }
+                if ($messageId && ! DB::table('automation_reply_receipts')->insertOrIgnore(['run_id' => $run->id, 'automation_id' => $run->automation_id, 'message_id' => $messageId, 'created_at' => now(), 'updated_at' => now()])) {
+                    return false;
+                }
+                $locked->update(['context' => $context, 'status' => 'pending', 'wake_at' => null]);
+
+                return true;
+            });
+            if (! $changed) {
+                continue;
+            }
 
             dispatch(new ExecuteAutomationRunJob($run->id))->onQueue('automation');
         }
+
+        return array_values(array_unique($consumed));
     }
 
     public function executeRun(AutomationRun $run): void
     {
+        if (in_array($run->status, ['completed', 'cancelled', 'failed'], true)) {
+            return;
+        }
         $run->update(['status' => 'running']);
         $automation = $run->automation;
+        if (! $run->workflow_snapshot && ! $run->current_node_id) {
+            $run->update(['workflow_snapshot' => $automation->only(['nodes', 'edges', 'trigger_type', 'trigger_config', 'updated_at'])]);
+        }
+        if ($run->workflow_snapshot) {
+            $automation = clone $automation;
+            $automation->fill($run->workflow_snapshot);
+            $run->setRelation('automation', $automation);
+        } elseif ($run->status === 'running' && $run->current_node_id) {
+            $run->update(['status' => 'cancelled', 'error' => 'Legacy run has no pinned workflow; review before restarting.', 'completed_at' => now()]);
+
+            return;
+        }
 
         $nodes = collect($automation->nodes ?? []);
         $edges = collect($automation->edges ?? []);
@@ -132,6 +229,14 @@ class AutomationEngine
         $maxSteps = 100;
 
         while ($currentId && $maxSteps-- > 0) {
+            if ($run->conversation_id) {
+                $chat = Conversation::where('workspace_id', $automation->workspace_id)->where('channel_account_id', $run->channel_account_id)->where('contact_id', $run->contact_id)->find($run->conversation_id);
+                if (! $chat || $chat->assigned_to === 'human' || ! Automation::whereKey($run->automation_id)->where('status', 'active')->exists() || ! app(ClientAccessService::class)->allowsWorkspaceWrite($automation->workspace_id)) {
+                    $run->update(['status' => 'cancelled', 'error' => 'Chat unavailable, human takeover, workflow pause, or subscription restriction.', 'completed_at' => now()]);
+
+                    return;
+                }
+            }
             if (in_array($currentId, $visited)) {
                 break; // cycle guard
             }
@@ -146,9 +251,20 @@ class AutomationEngine
             // can read the correct node ID when looking up outgoing edges.
             $run->update(['current_node_id' => $currentId]);
 
+            // A claimed step is never blindly resent after an ambiguous crash.
+            if (! DB::table('automation_step_claims')->insertOrIgnore(['run_id' => $run->id, 'node_id' => $currentId, 'created_at' => now(), 'updated_at' => now()])) {
+                $run->update(['status' => 'failed', 'error' => 'Step already attempted; review delivery before retrying.', 'completed_at' => now()]);
+
+                return;
+            }
+
             $result = $this->executeNode($node, $run, $context);
             $context = array_merge($context, $result['context_update'] ?? []);
-            $run->update(['context' => $context]);
+            // Waiting handlers persist their routing context with the wait state.
+            // Do not overwrite an answer consumed concurrently after that transition.
+            if (($result['status'] ?? '') !== 'waiting') {
+                $run->update(['context' => $context]);
+            }
 
             AutomationRunLog::create([
                 'run_id' => $run->id,
@@ -172,6 +288,9 @@ class AutomationEngine
             // Wait node suspends the run; wakeup job will continue from the stored next node
             if (($result['status'] ?? '') === 'waiting') {
                 return;
+            }
+            if (($node['type'] ?? '') === 'assign_agent') {
+                break;
             }
 
             // Condition branching
@@ -203,6 +322,10 @@ class AutomationEngine
      */
     public function testRun(Automation $automation, array $nodes, array $edges, array $context = []): array
     {
+        $validation = app(WorkflowValidator::class)->errors($nodes, $edges);
+        if ($validation) {
+            return ['ok' => false, 'error' => implode(' ', $validation), 'steps' => []];
+        }
         $nodesC = collect($nodes);
         $edgesC = collect($edges);
 
@@ -274,7 +397,8 @@ class AutomationEngine
         }
 
         return [
-            'ok' => true,
+            'ok' => ! collect($steps)->contains(fn ($step) => $step['result'] === 'error'),
+            ...(collect($steps)->first(fn ($step) => $step['result'] === 'error') ? ['error' => collect($steps)->first(fn ($step) => $step['result'] === 'error')['message']] : []),
             'steps' => $steps,
             'context' => $context,
             'contact' => [
@@ -359,10 +483,10 @@ class AutomationEngine
                 ? $err('Media link is required.')
                 : $ok('Would send '.($data['media_type'] ?? 'image').': '.$this->snippet($render($data['link']), 50)),
             'send_sequence' => $ok('Would send '.count($this->parseSteps($data['steps'] ?? [])).' sequence step(s).'),
-            'quick_replies' => $ok('Would send buttons: '.(implode(' · ', array_slice($this->toList($data['buttons'] ?? []), 0, 3)) ?: '—')),
+            'quick_replies' => $ok('Would send buttons and wait for a choice (simulated).', ['context_update' => ['choice' => $context['_sample_answer'] ?? '[sample reply]', 'choice_id' => 'btn_'.((array_search($context['_sample_answer'] ?? '', $this->toList($data['buttons'] ?? []), true) ?: 0) + 1), 'message_body' => $context['_sample_answer'] ?? '[sample reply]']]),
             'list_message' => $ok('Would send a list with '.count($this->parseRows($data['rows'] ?? [])).' item(s).'),
             'ask_question' => $ok('Would ask: "'.$this->snippet($render($data['question'] ?? '')).'" → saved to {{context.'.(($data['variable'] ?? '') ?: 'answer').'}}',
-                ['context_update' => [(($data['variable'] ?? '') ?: 'answer') => '[sample reply]']]),
+                ['context_update' => [(($data['variable'] ?? '') ?: 'answer') => $context['_sample_answer'] ?? '[sample reply]', 'message_body' => $context['_sample_answer'] ?? '[sample reply]']]),
             'wait' => $ok('Would wait '.((int) ($data['amount'] ?? 1)).' '.($data['unit'] ?? 'minutes').' (skipped in test).'),
             'webhook' => ($data['url'] ?? '') === ''
                 ? $err('Webhook URL missing.')
@@ -622,6 +746,7 @@ class AutomationEngine
         $template = str_replace('{{contact.name}}', $contact->full_name, $template);
 
         // Context tokens: {{context.key}}
+        $template = str_replace('{{message.body}}', (string) ($context['message_body'] ?? ''), $template);
         $template = preg_replace_callback('/\{\{context\.(\w+)\}\}/', function ($matches) use ($context) {
             return (string) ($context[$matches[1]] ?? '');
         }, $template);
@@ -664,15 +789,19 @@ class AutomationEngine
         $edges = collect($automation->edges ?? []);
         $nextEdge = $edges->first(fn ($e) => $e['source'] === $run->current_node_id);
         $nextNodeId = $nextEdge['target'] ?? null;
+        if (! $nextNodeId) {
+            return ['status' => 'error', 'message' => 'Wait requires a next step.'];
+        }
 
         // Persist the resume cursor and mark the run as waiting
         $run->update([
             'status' => 'waiting',
             'resume_node_id' => $nextNodeId,
+            'wake_at' => now()->addMinutes($delay),
         ]);
 
         // Schedule the wakeup
-        dispatch(new ExecuteAutomationRunJob($run->id))
+        dispatch(new ExecuteAutomationRunJob($run->id, $run->wake_at?->timestamp))
             ->delay(now()->addMinutes($delay))
             ->onQueue('automation');
 
@@ -998,7 +1127,29 @@ class AutomationEngine
             return ['status' => 'error', 'message' => 'Body and at least one button are required.'];
         }
 
-        return $this->sendWhatsappPayload($run, 'interactive', $body, ['interactive' => $this->buttonInteractive($body, $buttons)]);
+        $interactive = $this->buttonInteractive($body, $buttons);
+        $choiceMap = [];
+        $edge = null;
+        if ($run->conversation_id) {
+            $edge = collect($run->automation->edges ?? [])->first(fn ($e) => $e['source'] === $run->current_node_id);
+            if (! $edge) {
+                return ['status' => 'error', 'message' => 'Menu requires a next step.'];
+            }
+            foreach ($interactive['action']['buttons'] as &$button) {
+                $button['reply']['id'] = $run->id.':'.$run->current_node_id.':'.$button['reply']['id'];
+                $choiceMap[$button['reply']['id']] = $button['reply']['title'];
+            }
+            unset($button);
+        }
+        $send = $this->sendWhatsappPayload($run, 'interactive', $body, ['interactive' => $interactive]);
+        if ($run->conversation_id && ($send['status'] ?? '') === 'ok') {
+            $run->update(['status' => 'waiting', 'resume_node_id' => $edge['target'], 'wake_at' => now()->addHours(24), 'context' => array_merge($context, ['_awaiting_reply' => true, '_reply_var' => 'choice', '_reply_choices' => $buttons, '_reply_choice_ids' => $choiceMap])]);
+            ExecuteAutomationRunJob::dispatch($run->id, $run->wake_at?->timestamp)->delay($run->wake_at)->onQueue('automation');
+
+            return ['status' => 'waiting', 'message' => 'Menu sent; waiting for a choice.', 'context_update' => ['_awaiting_reply' => true, '_reply_var' => 'choice', '_reply_choices' => $buttons, '_reply_choice_ids' => $choiceMap]];
+        }
+
+        return $send;
     }
 
     /**
@@ -1041,6 +1192,10 @@ class AutomationEngine
             return ['status' => 'error', 'message' => 'Question text is required.'];
         }
 
+        $nextEdge = collect($run->automation->edges ?? [])->first(fn ($e) => $e['source'] === $run->current_node_id);
+        if (! $nextEdge) {
+            return ['status' => 'error', 'message' => 'Question requires a next step.'];
+        }
         $send = $this->sendTextViaChannel($run, $data['channel'] ?? 'whatsapp', $question, 'automation');
         if (($send['status'] ?? '') !== 'ok') {
             // Could not deliver the question (e.g. no open Messenger/Instagram thread) — do not park.
@@ -1049,9 +1204,9 @@ class AutomationEngine
 
         // Park the run until the contact's next inbound message (see resumeAwaitingReplies()).
         $var = ($data['variable'] ?? '') ?: 'answer';
-        $edges = collect($run->automation->edges ?? []);
-        $nextEdge = $edges->first(fn ($e) => $e['source'] === $run->current_node_id);
-        $run->update(['status' => 'waiting', 'resume_node_id' => $nextEdge['target'] ?? null]);
+        $timeout = max(1, min(168, (int) ($data['timeout_hours'] ?? 24)));
+        $run->update(['status' => 'waiting', 'resume_node_id' => $nextEdge['target'], 'wake_at' => now()->addHours($timeout), 'context' => array_merge($context, ['_awaiting_reply' => true, '_reply_var' => $var])]);
+        ExecuteAutomationRunJob::dispatch($run->id, $run->wake_at?->timestamp)->delay($run->wake_at)->onQueue('automation');
 
         return [
             'status' => 'waiting',
@@ -1110,6 +1265,7 @@ class AutomationEngine
         $workspaceId = $run->automation->workspace_id;
         $conversation = Conversation::where('workspace_id', $workspaceId)
             ->where('contact_id', $run->contact_id)
+            ->when($run->conversation_id, fn ($q) => $q->whereKey($run->conversation_id))
             ->orderByDesc('last_message_at')
             ->first();
 
@@ -1703,6 +1859,46 @@ class AutomationEngine
         }
 
         $target = $this->resolveChannelTarget($run->automation->workspace_id, $contact, $channel);
+        if ($run->conversation_id) {
+            $conversation = Conversation::where('workspace_id', $run->automation->workspace_id)->where('contact_id', $contact->id)->where('channel_account_id', $run->channel_account_id)->find($run->conversation_id);
+            $account = $conversation?->channelAccount;
+            if (! $conversation || ! $account || $account->status !== 'active' || $account->channel !== 'whatsapp' || $conversation->assigned_to === 'human' || ! $contact->opt_in_whatsapp) {
+                return ['status' => 'error', 'message' => 'Automation stopped: chat, consent, sender, or human takeover changed.'];
+            }
+            if ($type !== 'template' && ! $conversation->isWhatsappWindowOpen()) {
+                return ['status' => 'error', 'message' => 'WhatsApp service window closed; use an approved template.'];
+            }
+            if ($type === 'text' && trim($body ?? '') === '') {
+                return ['status' => 'error', 'message' => 'Rendered message is empty.'];
+            }
+            if ($type === 'template') {
+                $template = WhatsappTemplate::where('workspace_id', $run->automation->workspace_id)->where('waba_id', $account->business_account_id)->where('status', 'APPROVED')->where('name', data_get($payload, 'template.name'))->where('language', data_get($payload, 'template.language'))->first();
+                if (! $template) {
+                    return ['status' => 'error', 'message' => 'Selected template is no longer approved for this sender.'];
+                }
+                $bodyDefinition = [];
+                foreach ($template->components ?? [] as $component) {
+                    if (strtoupper($component['type'] ?? '') === 'BODY') {
+                        $bodyDefinition = $component;
+                        break;
+                    }
+                }
+                preg_match_all('/\{\{\s*(\d+)\s*\}\}/', $bodyDefinition['text'] ?? '', $matches);
+                $parameters = data_get($payload, 'template.components.0.parameters', []);
+                if (! is_array($parameters) || count($parameters) !== count(array_unique($matches[1]))) {
+                    return ['status' => 'error', 'message' => 'Template parameters are missing or no longer match its definition.'];
+                }
+                foreach ($parameters as $parameter) {
+                    if (! is_array($parameter) || ! is_string($parameter['text'] ?? null) || trim($parameter['text']) === '') {
+                        return ['status' => 'error', 'message' => 'Template parameters must contain nonempty text.'];
+                    }
+                }
+            }
+            if (! CloudApiClient::forPhoneNumber($account->phone_number_id, $run->automation->workspace_id)) {
+                return ['status' => 'error', 'message' => 'Selected WhatsApp phone is disconnected or credentials are unavailable.'];
+            }
+            $target = ['conversation' => $conversation, 'account' => $account, 'error' => null, 'soft' => false];
+        }
         if ($target['error']) {
             return ['status' => $target['soft'] ? 'skipped' : 'error', 'message' => $target['error']];
         }
@@ -1724,6 +1920,9 @@ class AutomationEngine
 
         try {
             $messageId = $this->channelManager->driver($channel)->send($message);
+            if (trim($messageId) === '') {
+                throw new \RuntimeException('Provider returned no message ID; delivery requires review.');
+            }
             $message->update(['status' => 'sent', 'provider_message_id' => $messageId]);
         } catch (\Throwable $e) {
             $message->update(['status' => 'failed', 'error_json' => ['message' => $e->getMessage()]]);

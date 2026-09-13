@@ -42,7 +42,7 @@ class AutomationTestSimulationTest extends TestCase
             ['id' => 'n1', 'type' => 'send_whatsapp', 'data' => ['nodeType' => 'send_whatsapp', 'body' => 'Hi {{contact.first_name}} ({{contact.email}})!']],
             ['id' => 'n2', 'type' => 'condition', 'data' => ['nodeType' => 'condition', 'field' => 'contact.email', 'operator' => 'exists']],
             ['id' => 'yes', 'type' => 'add_tag', 'data' => ['nodeType' => 'add_tag', 'tag' => 'has-email']],
-            ['id' => 'no', 'type' => 'send_email', 'data' => ['nodeType' => 'send_email', 'subject' => 'Hello']],
+            ['id' => 'no', 'type' => 'send_whatsapp', 'data' => ['nodeType' => 'send_whatsapp', 'body' => 'Hello']],
         ];
         $edges = [
             ['source' => 'trigger-1', 'target' => 'n1'],

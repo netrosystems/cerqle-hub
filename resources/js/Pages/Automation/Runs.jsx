@@ -8,6 +8,7 @@ const STATUS_ICONS = {
     failed:    <XCircle className="h-4 w-4 text-red-500" />,
     running:   <Clock className="h-4 w-4 text-blue-500" />,
     pending:   <Clock className="h-4 w-4 text-yellow-500" />,
+    waiting:   <Clock className="h-4 w-4 text-amber-500" />,
     cancelled: <SkipForward className="h-4 w-4 text-neutral-400" />,
 };
 
@@ -36,6 +37,8 @@ export default function AutomationRuns({ automation, runs }) {
                             <div className="flex items-center gap-3">
                                 {STATUS_ICONS[run.status]}
                                 <span className="font-medium text-neutral-900 dark:text-neutral-100 text-sm">{t('automation.run_number', { id: run.id })}</span>
+                                <span className="text-xs">{run.status} {run.wake_at ? `· next check ${run.wake_at}` : ''}</span>
+                                {run.status === 'waiting' && <span className="text-xs">{run.context?._awaiting_reply ? t('automation.waiting_reply', 'Waiting for reply') : t('automation.waiting_delay', 'Scheduled delay')} · {run.resume_node_id}</span>}
                                 <span className="text-xs text-neutral-400">{run.started_at}</span>
                                 {run.error && <span className="ml-auto text-xs text-red-600 dark:text-red-400">{run.error}</span>}
                             </div>
@@ -57,6 +60,7 @@ export default function AutomationRuns({ automation, runs }) {
                         </div>
                     )}
                 </div>
+                <nav aria-label="Run history pages" className="flex gap-2">{runs.links?.map((link, i) => link.url ? <Link key={i} href={link.url} className={link.active ? 'font-bold' : ''}>{link.label.replace(/&laquo;|&raquo;|<[^>]+>/g, '')}</Link> : <span key={i} className="opacity-40">{link.label.replace(/&laquo;|&raquo;|<[^>]+>/g, '')}</span>)}</nav>
             </div>
         </ClientLayout>
     );
