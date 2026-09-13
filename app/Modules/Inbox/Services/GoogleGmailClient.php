@@ -121,7 +121,7 @@ class GoogleGmailClient
                 $attParts .= "--{$boundary}\r\n"
                     ."Content-Type: {$mimeType}; name=\"".addslashes($filename)."\"\r\n"
                     ."Content-Transfer-Encoding: base64\r\n"
-                    ."Content-Disposition: attachment; filename=\"".addslashes($filename)."\"\r\n\r\n"
+                    .'Content-Disposition: attachment; filename="'.addslashes($filename)."\"\r\n\r\n"
                     .$encodedFile;
             }
 
@@ -237,6 +237,7 @@ class GoogleGmailClient
             'internetMessageId' => trim((string) $headers->get('message-id', ''), '<>'),
             'conversationId' => (string) ($message['threadId'] ?? $message['id']),
             'subject' => $this->decodeHeader((string) $headers->get('subject', '(no subject)')),
+            'internetMessageHeaders' => data_get($message, 'payload.headers', []),
             'from' => ['emailAddress' => ['address' => $fromEmail, 'name' => $fromName]],
             'receivedDateTime' => $internalDate > 0 ? date(DATE_ATOM, intdiv($internalDate, 1000)) : now()->toIso8601String(),
             'bodyPreview' => (string) ($message['snippet'] ?? ''),

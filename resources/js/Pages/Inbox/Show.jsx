@@ -740,6 +740,7 @@ function MessageBubble({ msg, conversationId }) {
                 )}
 
                 <div className="px-3 py-2.5">
+                    {msg.status === 'failed' && p.ai_automation && <p role="status" className="mb-2 text-xs">AI reply failed: {msg.error_json?.message ?? 'Review delivery before replying manually.'}</p>}
                     {igAttachments.length > 0 && <InstagramAttachments attachments={igAttachments} />}
                     {/* IMAGE */}
                     {mediaType === 'image' && (

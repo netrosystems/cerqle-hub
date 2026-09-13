@@ -1,5 +1,6 @@
 import { Head, router, useForm } from '@inertiajs/react';
 import ClientLayout from '@/Layouts/ClientLayout';
+import AiAutomationCard from '@/Components/Inbox/AiAutomationCard';
 import Modal from '@/Components/ui/Modal';
 import { Mail, RefreshCw, Trash2, ShieldCheck, Server, AlertTriangle, AtSign } from 'lucide-react';
 import { useState } from 'react';
@@ -46,7 +47,7 @@ function ProviderCard({ icon: Icon, iconClass, iconWrapClass, title, count, desc
     );
 }
 
-export default function EmailSetup({ accounts, googleEnabled, microsoftEnabled, imapExtensionAvailable }) {
+export default function EmailSetup({ accounts, googleEnabled, microsoftEnabled, imapExtensionAvailable, aiAutomation }) {
     const [showGenericSetup, setShowGenericSetup] = useState(false);
     const form = useForm({ email: '', display_name: '', imap_host: '', imap_port: 993, imap_encryption: 'ssl', smtp_host: '', smtp_port: 465, smtp_encryption: 'ssl', username: '', password: '', verify_tls: true });
     const providerCount = provider => accounts.filter(account => account.provider === provider).length;
@@ -62,6 +63,7 @@ export default function EmailSetup({ accounts, googleEnabled, microsoftEnabled, 
     };
     return <ClientLayout title="Email Setup"><Head title="Email Setup" /><div className="space-y-6">
         <div><h1 className="text-xl font-bold text-neutral-900 dark:text-white">Email Setup</h1><p className="mt-0.5 text-sm text-neutral-500 dark:text-neutral-400">Connect mailboxes to the Master Email Inbox.</p></div>
+        {aiAutomation && <AiAutomationCard settings={aiAutomation} group="email" />}
         {accounts.length > 0 && <section className="space-y-3">
             <div className="flex flex-wrap items-end justify-between gap-2">
                 <div><h2 className="text-base font-semibold text-neutral-900 dark:text-white">Connected mailboxes</h2><p className="text-xs text-neutral-500">All mailboxes sync independently into one Master Email Inbox.</p></div>

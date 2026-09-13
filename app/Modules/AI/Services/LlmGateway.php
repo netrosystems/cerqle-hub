@@ -71,7 +71,7 @@ class LlmGateway
                     }
                     $providerName = LlmManager::activeByokProvider($workspaceId);
                     if (! $providerName) {
-                        throw new \RuntimeException('Cerqle credits are exhausted. Reconnect your fallback provider.');
+                        throw new AiCreditsExhaustedException;
                     }
                     $provider = LlmManager::forWorkspaceByok($workspaceId);
                     $source = 'byok';

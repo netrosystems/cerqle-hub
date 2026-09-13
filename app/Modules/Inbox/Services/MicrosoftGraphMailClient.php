@@ -67,7 +67,7 @@ class MicrosoftGraphMailClient
     {
         $meta = $account->meta_json ?? [];
         $url = $meta['delta_link'] ?? 'https://graph.microsoft.com/v1.0/me/mailFolders/inbox/messages/delta?'.http_build_query([
-            '$select' => 'id,internetMessageId,conversationId,subject,from,toRecipients,receivedDateTime,sentDateTime,bodyPreview,body,isRead,hasAttachments',
+            '$select' => 'id,internetMessageId,conversationId,subject,from,toRecipients,receivedDateTime,sentDateTime,bodyPreview,body,isRead,hasAttachments,internetMessageHeaders',
             '$top' => 50,
         ]);
         $messages = [];
@@ -101,11 +101,15 @@ class MicrosoftGraphMailClient
         return $messages;
     }
 
-    public function sendReply(ChannelAccount $account, string $messageId, string $body): string
+    public function sendReply(ChannelAccount $account, string $messageId, string $body, ?string $recipient = null): string
     {
+        $payload = ['comment' => $body];
+        if ($recipient !== null) {
+            $payload['message'] = ['toRecipients' => [['emailAddress' => ['address' => $recipient]]], 'ccRecipients' => [], 'bccRecipients' => []];
+        }
         $response = $this->request($account)->post(
             'https://graph.microsoft.com/v1.0/me/messages/'.rawurlencode($messageId).'/reply',
-            ['comment' => $body],
+            $payload,
         );
         if (! $response->successful()) {
             throw new RuntimeException($response->json('error.message') ?: 'Microsoft rejected the email reply.');

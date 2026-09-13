@@ -4,8 +4,10 @@ namespace App\Listeners;
 
 use App\Events\MessageReceived;
 use App\Events\MessageSent;
-use App\Modules\AI\Models\AiChatbot;
-use App\Modules\AI\Services\ChatbotRunner;
+use App\Modules\Inbox\Jobs\GenerateGroupedAiReply;
+use App\Modules\Inbox\Models\InboundReplyOwnership;
+use App\Modules\Inbox\Services\AiAutomationSettings;
+use App\Modules\Inbox\Services\AiReplyEligibility;
 use App\Modules\Inbox\Services\ConversationHandoverService;
 use App\Modules\Shared\Models\Conversation;
 use App\Modules\Shared\Models\Message;
@@ -13,7 +15,6 @@ use App\Modules\Shared\Services\ChannelManager;
 use App\Modules\Whatsapp\Models\WhatsappAutoReply;
 use App\Services\ClientAccessService;
 use Carbon\Carbon;
-use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 
 /**
@@ -29,7 +30,6 @@ const HANDOVER_PHRASES = [
 class AutoReplyListener
 {
     public function __construct(
-        private readonly ChatbotRunner $runner,
         private readonly ChannelManager $channelManager,
         private readonly ConversationHandoverService $handoverService,
         private readonly ClientAccessService $access,
@@ -40,14 +40,23 @@ class AutoReplyListener
         $msgId = $event->message->id ?? null;
 
         // Deduplication: ensure we never auto-reply twice for the same inbound message.
-        // Using an atomic cache lock prevents races when webhooks are delivered in parallel.
-        if ($msgId && ! Cache::add("auto_reply_lock:{$msgId}", 1, 60)) {
+        // Durable unique ownership prevents races and late redelivery.
+        $conversation = $event->message->conversation;
+        if (! $msgId || ! $conversation || $event->message->direction !== 'in') {
+            return;
+        }
+        if (! InboundReplyOwnership::insertOrIgnore([
+            'message_id' => $msgId, 'workspace_id' => $conversation->workspace_id,
+            'conversation_id' => $conversation->id, 'channel_account_id' => $conversation->channel_account_id,
+            'owner' => 'routing', 'status' => 'claimed', 'created_at' => now(), 'updated_at' => now(),
+        ])) {
             return;
         }
 
         try {
             $this->process($event);
         } catch (\Throwable $e) {
+            InboundReplyOwnership::where('workspace_id', $conversation->workspace_id)->where('message_id', $msgId)->update(['status' => 'failed', 'reason' => 'Inbound routing failed; review required.']);
             Log::error('AutoReplyListener unhandled exception', [
                 'message_id' => $msgId,
                 'error' => $e->getMessage(),
@@ -67,15 +76,43 @@ class AutoReplyListener
 
         $conversation = $message->conversation;
         if (! $conversation || ! $this->access->allowsWorkspaceWrite($conversation->workspace_id)) {
+            if ($conversation) {
+                $this->ownership($message, 'human', 'skipped');
+            }
+
             return;
         }
-        $channelAccount = $conversation?->channelAccount;
+        $channelAccount = $conversation->channelAccount;
 
-        if (! $channelAccount) {
+        if (! $channelAccount || (int) $channelAccount->workspace_id !== (int) $conversation->workspace_id) {
+            $this->ownership($message, 'human', 'skipped');
+
             return;
         }
 
-        if (($conversation->assigned_to ?? 'bot') === 'human') {
+        $eligibility = app(AiReplyEligibility::class);
+        if ($eligibility->humanOwned($conversation, $message->channel) || ($message->channel === 'email' && $eligibility->suppressed($message)) || $message->origin === 'whatsapp_history') {
+            $this->ownership($message, 'human', 'skipped');
+
+            return;
+        }
+
+        foreach (HANDOVER_PHRASES as $phrase) {
+            if (str_contains(strtolower($message->body ?? ''), $phrase)) {
+                $this->triggerHandover($conversation, 'user_request');
+                $this->ownership($message, 'human', 'completed');
+
+                return;
+            }
+        }
+        if (app(AutomationTriggerListener::class)->routeMessage($event)) {
+            $this->ownership($message, 'workflow', 'completed');
+
+            return;
+        }
+        if ($eligibility->suppressed($message)) {
+            $this->ownership($message, 'ai', 'skipped');
+
             return;
         }
 
@@ -89,77 +126,36 @@ class AutoReplyListener
         );
 
         if ($autoReply) {
+            $this->ownership($message, 'rule', 'sending');
             $this->dispatchAutoReply($autoReply, $message, $conversation);
 
             return;
         }
 
-        // ── 2. Handover phrase detection ─────────────────────────────────────
-        $body = strtolower($message->body ?? '');
-        foreach (HANDOVER_PHRASES as $phrase) {
-            if (str_contains($body, $phrase)) {
-                $this->triggerHandover($conversation, 'user_request');
-
-                return;
-            }
-        }
-
         // ── 3. AI chatbot (only if one is linked to this channel account) ─────
-        $chatbotId = $channelAccount->meta_json['ai_chatbot_id'] ?? null;
+        $settings = app(AiAutomationSettings::class);
+        $group = $settings->group($message->channel);
+        $setting = $group ? $settings->find($conversation->workspace_id, $group) : null;
+        if ($setting && (! $settings->available($setting) || ! $setting->activated_at || $message->sent_at < $setting->activated_at)) {
+            $this->ownership($message, 'ai', 'skipped');
+
+            return;
+        }
+        $chatbotId = $setting ? $setting->chatbot_id : ($channelAccount->meta_json['ai_chatbot_id'] ?? null);
         if (! $chatbotId) {
+            $this->ownership($message, 'ai', 'skipped');
+
             return;
         }
 
-        $chatbot = AiChatbot::find($chatbotId);
-        if (! $chatbot || ! $chatbot->enabled) {
-            return;
-        }
+        $this->ownership($message, 'ai', 'queued', $setting?->revision);
+        GenerateGroupedAiReply::dispatch($message->id, $conversation->workspace_id, $channelAccount->id, (int) $chatbotId, $setting?->revision)->onQueue('ai');
+    }
 
-        if ($chatbot->workspace_id !== $conversation->workspace_id) {
-            return;
-        }
-
-        try {
-            $reply = $this->runner->run($chatbot, $message);
-            if ($reply === null) {
-                return;
-            }
-
-            $botMessage = Message::create([
-                'conversation_id' => $conversation->id,
-                'direction' => 'out',
-                'channel' => $message->channel,
-                'type' => 'text',
-                'body' => $reply,
-                'payload' => [],
-                'status' => 'queued',
-                'sent_by' => 'bot',
-                'sent_at' => now(),
-            ]);
-
-            try {
-                $driver = $this->channelManager->driver($message->channel);
-                $providerId = $driver->send($botMessage);
-                $botMessage->update(['status' => 'sent', 'provider_message_id' => $providerId]);
-            } catch (\Throwable $sendErr) {
-                $botMessage->update(['status' => 'failed', 'error_json' => ['message' => $sendErr->getMessage()]]);
-                Log::warning('AutoReplyListener AI chatbot send failed', [
-                    'message_id' => $botMessage->id,
-                    'channel' => $message->channel,
-                    'error' => $sendErr->getMessage(),
-                ]);
-            }
-
-            $conversation->update(['last_message_at' => now()]);
-            $botMessage->load('conversation');
-            MessageSent::dispatch($botMessage);
-        } catch (\Throwable $e) {
-            Log::error('AutoReplyListener AI chatbot run failed', [
-                'message_id' => $message->id,
-                'chatbot_id' => $chatbotId,
-                'error' => $e->getMessage(),
-            ]);
-        }
+    private function ownership(Message $message, string $owner, string $status, ?int $revision = null): void
+    {
+        InboundReplyOwnership::where('workspace_id', $message->conversation->workspace_id)->where('message_id', $message->id)
+            ->update(['owner' => $owner, 'status' => $status, 'settings_revision' => $revision]);
     }
 
     private function findMatchingAutoReply(
@@ -235,7 +231,7 @@ class AutoReplyListener
                 'channel' => $inbound->channel,
                 'type' => $type,
                 'body' => $body,
-                'payload' => $msgPayload ?? [],
+                'payload' => array_merge($msgPayload ?? [], ['reply_to_message_id' => $inbound->id]),
                 'status' => 'queued',
                 'sent_by' => 'bot',
                 'sent_at' => now(),
@@ -245,8 +241,10 @@ class AutoReplyListener
                 $driver = $this->channelManager->driver($inbound->channel);
                 $providerId = $driver->send($botMessage);
                 $botMessage->update(['status' => 'sent', 'provider_message_id' => $providerId]);
+                InboundReplyOwnership::where('workspace_id', $conversation->workspace_id)->where('message_id', $inbound->id)->update(['status' => 'completed', 'outbound_message_id' => $botMessage->id]);
             } catch (\Throwable $sendErr) {
                 $botMessage->update(['status' => 'failed', 'error_json' => ['message' => $sendErr->getMessage()]]);
+                InboundReplyOwnership::where('workspace_id', $conversation->workspace_id)->where('message_id', $inbound->id)->update(['status' => 'delivery_review', 'outbound_message_id' => $botMessage->id]);
                 Log::warning('AutoReplyListener auto-reply send failed', [
                     'rule_id' => $rule->id,
                     'error' => $sendErr->getMessage(),

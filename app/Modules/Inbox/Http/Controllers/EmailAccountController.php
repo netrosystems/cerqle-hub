@@ -6,6 +6,7 @@ use App\Events\MessageSent;
 use App\Http\Controllers\Controller;
 use App\Models\Workspace;
 use App\Modules\Inbox\Jobs\SyncEmailAccountJob;
+use App\Modules\Inbox\Services\AiAutomationSettings;
 use App\Modules\Inbox\Services\GenericMailboxClient;
 use App\Modules\Inbox\Services\GoogleGmailClient;
 use App\Modules\Inbox\Services\MicrosoftGraphMailClient;
@@ -36,6 +37,7 @@ class EmailAccountController extends Controller
         $microsoft = IntegrationConfig::forProvider('oauth_microsoft_365');
 
         return Inertia::render('Inbox/EmailSetup', [
+            'aiAutomation' => app(AiAutomationSettings::class)->page($workspaceId, 'email'),
             'mailboxUsage' => app(EmailAccountLimitService::class)->usage(Workspace::findOrFail($workspaceId)),
             'accounts' => ChannelAccount::where('workspace_id', $workspaceId)
                 ->where('channel', 'email')->latest()->get()

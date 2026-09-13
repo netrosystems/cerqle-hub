@@ -356,6 +356,7 @@ function MessageBlock({ message, contact, mailbox, timezone = 'Asia/Dhaka' }) {
 
             {/* Email Body Content */}
             <div className="p-4 sm:p-6">
+                {message.status === 'failed' && message.payload?.ai_automation && <p role="status" className="mb-2 rounded-soft bg-coral-50 p-2 text-xs text-coral-700 dark:bg-coral-950/30 dark:text-coral-300">AI reply failed: {message.error_json?.message ?? 'Review delivery before replying manually.'}</p>}
                 {body && (
                     <div className="whitespace-pre-wrap break-words text-sm leading-relaxed text-neutral-800 dark:text-neutral-200">
                         {body}

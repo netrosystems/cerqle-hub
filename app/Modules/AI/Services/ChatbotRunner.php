@@ -20,6 +20,9 @@ class ChatbotRunner
 
         $conversation = $inboundMessage->conversation;
         $body = $inboundMessage->body ?? '';
+        if ($inboundMessage->channel === 'email') {
+            $body = 'Subject: '.strip_tags((string) ($inboundMessage->payload['subject'] ?? ''))."\n\n".strip_tags($body);
+        }
         $workspaceId = $conversation->workspace_id;
 
         // 1. Embed the user query
@@ -54,7 +57,7 @@ class ChatbotRunner
         $history = [];
         $recentMessages = $conversation->messages()
             ->whereIn('type', ['text', 'template'])
-            ->where('id', '!=', $inboundMessage->id)
+            ->when($inboundMessage->id, fn ($query) => $query->where('id', '<', $inboundMessage->id))
             ->latest('id')
             ->take(20)
             ->get()

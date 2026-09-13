@@ -4,6 +4,7 @@ namespace App\Modules\Inbox\Services;
 
 use App\Modules\Shared\Contracts\ChannelDriverInterface;
 use App\Modules\Shared\Models\Message;
+use App\Services\StorageManager;
 use Illuminate\Http\Request;
 use RuntimeException;
 
@@ -23,7 +24,9 @@ class EmailDriver implements ChannelDriverInterface
         if (! $account || ! $conversation?->contact?->email) {
             throw new RuntimeException('This email conversation has no connected mailbox or recipient address.');
         }
-        $inbound = $conversation->messages()->where('direction', 'in')->latest('id')->first();
+        $inboundQuery = $conversation->messages()->where('direction', 'in');
+        $anchor = $message->payload['reply_to_message_id'] ?? null;
+        $inbound = $anchor ? $inboundQuery->findOrFail($anchor) : $inboundQuery->latest('id')->first();
         if ($inbound) {
             $subject = (string) ($inbound->payload['subject'] ?? 'Message');
             if (! str_starts_with(strtolower($subject), 're:')) {
@@ -37,7 +40,7 @@ class EmailDriver implements ChannelDriverInterface
         $attachments = [];
         $payload = is_array($message->payload) ? $message->payload : [];
         if (! empty($payload['path'])) {
-            $disk = app(\App\Services\StorageManager::class)->disk();
+            $disk = app(StorageManager::class)->disk();
             if ($disk->exists($payload['path'])) {
                 $attachments[] = [
                     'raw_bytes' => $disk->get($payload['path']),
@@ -54,7 +57,7 @@ class EmailDriver implements ChannelDriverInterface
 
         return match ($account->provider) {
             'microsoft_365' => $inbound?->provider_message_id && empty($attachments)
-                ? $this->microsoft->sendReply($account, (string) $inbound->provider_message_id, $body)
+                ? ($anchor ? $this->microsoft->sendReply($account, (string) $inbound->provider_message_id, $body, $conversation->contact->email) : $this->microsoft->sendReply($account, (string) $inbound->provider_message_id, $body))
                 : $this->microsoft->sendMessage($account, $conversation->contact->email, $subject, $body, [], [], $attachments),
             'gmail' => $this->google->send(
                 $account,
