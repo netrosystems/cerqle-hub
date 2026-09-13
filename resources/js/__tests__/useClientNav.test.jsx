@@ -7,6 +7,17 @@ vi.mock('react-i18next', () => ({
 }));
 
 describe('client navigation organization', () => {
+    it('hides the workflow link while retaining Smart Bots and Knowledge Bases', () => {
+        const { result } = renderHook(() => useClientNav());
+        const automationTools = result.current.find((group) => group.label === 'nav.group_automations');
+
+        expect(automationTools.items.map((item) => item.label)).toEqual([
+            'nav.chatbots',
+            'nav.knowledge_bases',
+        ]);
+        expect(result.current.flatMap((group) => group.items).some((item) => item.activePattern === 'client.automations.*')).toBe(false);
+    });
+
     it('uses the requested group order and keeps ecommerce out of the sidebar', () => {
         const { result } = renderHook(() => useClientNav());
         const groups = result.current;
