@@ -3,7 +3,7 @@ import ClientLayout from '@/Layouts/ClientLayout';
 import { Plus, Pencil, Trash2, Check, Bot, MessageCircle, Globe, Power } from 'lucide-react';
 import InstallCard from './Partials/InstallCard';
 
-export default function ChatWidgetIndex({ widgets = [], embedBase }) {
+export default function ChatWidgetIndex({ widgets = [], embedBase, aiAvailability = {} }) {
     const flash = usePage().props.flash ?? {};
 
     const remove = (id) => {
@@ -49,7 +49,7 @@ export default function ChatWidgetIndex({ widgets = [], embedBase }) {
                                             <p className="truncate font-semibold text-sm text-neutral-900 dark:text-neutral-100">{w.name || w.title || 'Website chat'}</p>
                                             <div className="mt-1 flex flex-wrap gap-1.5">
                                                 <Badge on={w.enabled} icon={<Power className="h-3 w-3" />}>{w.enabled ? 'Live' : 'Off'}</Badge>
-                                                {w.ai_enabled && <Badge tone="violet" icon={<Bot className="h-3 w-3" />}>AI on</Badge>}
+                                                <Badge tone="violet" icon={<Bot className="h-3 w-3" />}>AI {w.ai_mode || (w.ai_enabled ? 'permanent' : 'off')}{w.ai_mode !== 'off' ? ` · ${aiAvailability[w.id]?.active ? 'active' : 'inactive'}` : ''}</Badge>
                                                 {w.allowed_domains?.length > 0 && <Badge tone="amber" icon={<Globe className="h-3 w-3" />}>{w.allowed_domains.length} domain{w.allowed_domains.length > 1 ? 's' : ''}</Badge>}
                                             </div>
                                         </div>

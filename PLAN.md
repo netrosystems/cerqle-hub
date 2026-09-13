@@ -88,6 +88,7 @@ journey
 - **Lightweight Script Loader**: Embed script (`/widgets/chat/{widgetKey}.js`) dynamically injects the Cerqle Chat Launcher onto client websites.
 - **Visitor Session Isolation**: Each visitor is assigned a secure cryptographic session token. Unauthenticated visitors stay anonymous; authenticated user profiles are verified via server-side HMAC validation.
 - **AI-to-Human Handoff**: Auto-engages visitors with knowledge base answers, offering a smooth handoff to live agents after 2 failed turns or explicit user request.
+- **Website AI availability (2026-09-13)**: Per-widget Off/Permanent/Scheduled. Scheduled supports up to five non-overlapping windows/day, all-day, overnight, weekday copy and IANA timezone; unsaved default weekdays 09:00–17:00. AI requires receipt and send inside active hours. Off retains bot/hours and does not hide the widget or disable workflows/manual support. Human requests remain available outside hours; no catch-up replies. Existing enabled AI migrates to Permanent. Provider and concurrent-worker signoff remain separate from automated checks.
 - **Custom Branding**: Configurable colors, greeting messages, avatar launcher icon, and pre-chat capture forms.
   - Custom launcher icons are included in every active paid plan, regardless of plan name or the separate white-label flag (2026-09-07). Free/no-plan/expired clients retain the default launcher. Paid classification uses the plan's configured monthly/yearly prices, including legacy monthly price fallback; quota and other explicit feature limits are unchanged.
 

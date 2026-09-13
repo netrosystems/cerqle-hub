@@ -5,6 +5,7 @@ namespace App\Modules\Inbox\Models;
 use App\Models\User;
 use App\Models\Workspace;
 use App\Modules\AI\Models\AiChatbot;
+use App\Modules\Inbox\Services\WidgetAiAvailability;
 use App\Modules\Shared\Models\ChannelAccount;
 use App\Services\PusherPublicConfig;
 use App\Services\StorageManager;
@@ -36,6 +37,7 @@ class ChatWidget extends Model
         'primary_color', 'position', 'launcher_text', 'footer_company_name',
         'launcher_logo_path', 'launcher_logo_disk',
         'ai_enabled', 'ai_chatbot_id', 'require_prechat', 'prechat_fields',
+        'ai_mode', 'ai_timezone', 'ai_weekly_hours', 'ai_revision',
         'offline_message', 'allowed_domains', 'working_hours_json', 'enabled',
         'identity_verification', 'identity_secret',
     ];
@@ -48,6 +50,8 @@ class ChatWidget extends Model
     {
         return [
             'ai_enabled' => 'boolean',
+            'ai_weekly_hours' => 'array',
+            'ai_revision' => 'integer',
             'require_prechat' => 'boolean',
             'enabled' => 'boolean',
             'identity_verification' => 'boolean',
@@ -60,6 +64,10 @@ class ChatWidget extends Model
     protected static function booted(): void
     {
         static::creating(function (self $model) {
+            if (! $model->ai_mode) {
+                $model->ai_mode = $model->ai_enabled ? 'permanent' : 'off';
+            }
+            $model->ai_revision ??= 1;
             if (empty($model->widget_key)) {
                 $model->widget_key = Str::random(32);
             }
@@ -123,7 +131,7 @@ class ChatWidget extends Model
             return false;
         }
 
-        $chatbotId = $this->channelAccount?->meta_json['ai_chatbot_id'] ?? $this->ai_chatbot_id;
+        $chatbotId = $this->ai_chatbot_id;
 
         return $chatbotId
             && AiChatbot::query()
@@ -192,7 +200,8 @@ class ChatWidget extends Model
             // The product icon remains the default for every free widget.
             // A custom launcher mark is exposed for any active paid plan.
             'launcher_logo_url' => $launcherLogoUrl,
-            'ai_enabled' => $this->hasEnabledAiChatbot(),
+            'ai_enabled' => app(WidgetAiAvailability::class)->available($this),
+            'ai_availability' => app(WidgetAiAvailability::class)->publicState($this),
             'available_team' => $this->availableTeam(),
             'require_prechat' => (bool) $this->require_prechat,
             'prechat_fields' => $this->prechat_fields ?: ['name', 'email'],

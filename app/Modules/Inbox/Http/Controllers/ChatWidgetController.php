@@ -7,6 +7,7 @@ use App\Models\Workspace;
 use App\Modules\AI\Models\AiChatbot;
 use App\Modules\Inbox\Models\ChatWidget;
 use App\Modules\Inbox\Services\ChatWidgetAvatarProcessor;
+use App\Modules\Inbox\Services\WidgetAiAvailability;
 use App\Modules\Shared\Models\ChannelAccount;
 use App\Services\ChannelPlanLimitService;
 use App\Services\StorageManager;
@@ -22,8 +23,8 @@ use Inertia\Response;
 /**
  * Workspace-scoped CRUD for website live-chat widgets. Each widget owns one
  * `webchat` channel_account so its conversations land in the omnichannel inbox;
- * the AI toggle simply writes ai_chatbot_id into that account's meta_json, which
- * the existing AutoReplyListener reads to auto-answer.
+ * AI availability is widget-owned and revisioned; channel metadata is retained
+ * for compatibility, never used to bypass widget availability.
  */
 class ChatWidgetController extends Controller
 {
@@ -38,6 +39,7 @@ class ChatWidgetController extends Controller
 
         return Inertia::render('Chat/Widgets/Index', [
             'widgets' => $widgets,
+            'aiAvailability' => $widgets->mapWithKeys(fn ($widget) => [$widget->id => app(WidgetAiAvailability::class)->publicState($widget)]),
             'embedBase' => rtrim(url('/'), '/'),
         ]);
     }
@@ -46,6 +48,7 @@ class ChatWidgetController extends Controller
     {
         return Inertia::render('Chat/Widgets/Create', [
             'chatbots' => $this->chatbots($request),
+            'aiTimezone' => config('app.timezone', 'UTC'),
             'canUseCustomLauncherLogo' => $this->canUseCustomLauncherLogo($request),
         ]);
     }
@@ -56,6 +59,7 @@ class ChatWidgetController extends Controller
 
         return Inertia::render('Chat/Widgets/Edit', [
             'widget' => $chatWidget,
+            'aiTimezone' => config('app.timezone', 'UTC'),
             'chatbots' => $this->chatbots($request),
             'embedBase' => rtrim(url('/'), '/'),
             // Server-side only (the model hides identity_secret); shown to the
@@ -95,16 +99,21 @@ class ChatWidgetController extends Controller
     public function update(Request $request, ChatWidget $chatWidget): RedirectResponse
     {
         $this->assertOwner($request, $chatWidget);
-        $data = $this->validated($request);
-        $data = $this->applyLauncherLogo($request, $data, $chatWidget);
-        $data = $this->applyAvatar($request, $data, $chatWidget);
-
-        $chatWidget->update($data);
-
-        $chatWidget->channelAccount?->update([
-            'display_name' => $data['name'] ?: 'Website chat',
-            'meta_json' => $this->metaFor($data),
-        ]);
+        DB::transaction(function () use ($request, $chatWidget) {
+            $locked = ChatWidget::where('workspace_id', $this->workspaceId($request))->whereKey($chatWidget->id)->lockForUpdate()->firstOrFail();
+            if ($request->has('ai_revision') && (int) $request->input('ai_revision') !== $locked->ai_revision) {
+                throw ValidationException::withMessages(['ai_revision' => 'This widget changed. Reload before saving.']);
+            }
+            $data = $this->validated($request, $locked);
+            $data = $this->applyLauncherLogo($request, $data, $locked);
+            $data = $this->applyAvatar($request, $data, $locked);
+            $data['ai_revision'] = $locked->ai_revision + 1;
+            $locked->update($data);
+            $locked->channelAccount?->update([
+                'display_name' => $data['name'] ?: 'Website chat',
+                'meta_json' => array_merge($locked->channelAccount->meta_json ?? [], ['ai_chatbot_id' => $data['ai_enabled'] ? $data['ai_chatbot_id'] : null]),
+            ]);
+        });
 
         return back()->with('success', 'Widget updated.');
     }
@@ -126,7 +135,7 @@ class ChatWidgetController extends Controller
     // ── helpers ──────────────────────────────────────────────────────────────
 
     /** @return array<string, mixed> */
-    private function validated(Request $request): array
+    private function validated(Request $request, ?ChatWidget $widget = null): array
     {
         $data = $request->validate([
             'name' => ['nullable', 'string', 'max:128'],
@@ -143,6 +152,10 @@ class ChatWidgetController extends Controller
             'launcher_logo' => ['nullable', 'image', 'mimes:png', 'extensions:png', 'max:2048'],
             'remove_launcher_logo' => ['nullable', 'boolean'],
             'ai_chatbot_id' => ['nullable', 'integer'],
+            'ai_mode' => ['sometimes', 'required', 'in:off,permanent,scheduled'],
+            'ai_timezone' => ['sometimes', 'required', 'timezone:all'],
+            'ai_weekly_hours' => ['sometimes', 'array'],
+            'ai_revision' => ['sometimes', 'integer', 'min:1'],
             'prechat_fields' => ['nullable', 'array'],
             'offline_message' => ['nullable', 'string', 'max:512'],
             'allowed_domains' => ['nullable', 'array'],
@@ -150,7 +163,18 @@ class ChatWidgetController extends Controller
         ]);
 
         // Coerce booleans explicitly (Inertia may omit unchecked toggles).
-        $data['ai_enabled'] = $request->boolean('ai_enabled');
+        $data['ai_mode'] = $data['ai_mode'] ?? ($request->boolean('ai_enabled') ? 'permanent' : 'off');
+        $data['ai_enabled'] = $data['ai_mode'] !== 'off';
+        $data['ai_chatbot_id'] = array_key_exists('ai_chatbot_id', $data) ? $data['ai_chatbot_id'] : $widget?->ai_chatbot_id;
+        if ($data['ai_chatbot_id'] && ! AiChatbot::where('workspace_id', $this->workspaceId($request))->whereKey($data['ai_chatbot_id'])->when($data['ai_enabled'], fn ($q) => $q->where('enabled', true))->exists()) {
+            throw ValidationException::withMessages(['ai_chatbot_id' => 'Select an enabled chatbot from this workspace.']);
+        }
+        if ($data['ai_enabled'] && ! $data['ai_chatbot_id']) {
+            throw ValidationException::withMessages(['ai_chatbot_id' => 'Select a chatbot.']);
+        }
+        $data['ai_timezone'] = $data['ai_timezone'] ?? $widget?->ai_timezone ?? config('app.timezone', 'UTC');
+        $data['ai_weekly_hours'] = app(WidgetAiAvailability::class)->validateHours($data['ai_weekly_hours'] ?? $widget?->ai_weekly_hours ?? app(WidgetAiAvailability::class)->defaults(), $data['ai_timezone'], $data['ai_mode'] === 'scheduled');
+        unset($data['ai_revision']);
         $data['require_prechat'] = $request->boolean('require_prechat');
         $data['identity_verification'] = $request->boolean('identity_verification');
         $data['enabled'] = $request->has('enabled') ? $request->boolean('enabled') : true;
@@ -277,8 +301,7 @@ class ChatWidgetController extends Controller
 
     /**
      * The webchat channel_account's meta_json. ai_chatbot_id is only set when AI
-     * is enabled — that single field is what AutoReplyListener keys off to
-     * auto-answer this widget's conversations.
+     * is enabled for compatibility. Website reply eligibility is widget-owned.
      *
      * @param  array<string, mixed>  $data
      * @return array<string, mixed>

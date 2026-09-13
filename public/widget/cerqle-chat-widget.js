@@ -353,6 +353,12 @@
   }
 
   function updateStatus() {
+    if (CFG.ai_availability) {
+      var presenceDot = root.querySelector('.wb-launcher-online');
+      if (presenceDot) { presenceDot.style.display = 'none'; }
+      statusEl.textContent = CFG.ai_availability.active ? 'AI assistant available' : 'AI assistant unavailable · Leave a message for our team';
+      return;
+    }
     var teamHtml = renderTeamAvatars();
     if (teamHtml) {
       statusEl.innerHTML = teamHtml;
@@ -489,7 +495,7 @@
       optimisticRow.setAttribute('data-wb-pending-body', text);
       optimisticRow.setAttribute('data-wb-client-message-id', clientMessageId);
     }
-    if (handoff.status !== 'connected') {
+    if (handoff.status !== 'connected' && (!CFG.ai_availability || CFG.ai_availability.active)) {
       renderAgentTyping({ is_typing: true, name: CFG.agent_name || 'Support' });
     }
 
@@ -511,6 +517,7 @@
     }
 
     doSend(0).then(function (data) {
+      if (data && data.ai_availability) { CFG.ai_availability = data.ai_availability; updateStatus(); if (!CFG.ai_availability.active) renderAgentTyping({ is_typing: false }); }
       if (optimisticRow && optimisticRow.parentNode) optimisticRow.parentNode.removeChild(optimisticRow);
       if (data && data.message) addMessage(data.message);
       if (data) applyHandoff(data.handoff);
@@ -859,6 +866,7 @@
     if (!token) return Promise.resolve();
     return get('/widget/v1/messages?key=' + encodeURIComponent(KEY) + '&after=' + lastId + '&active=' + (pageCanReportPresence() ? '1' : '0')).then(function (data) {
       if (!data) return;
+      if (data.ai_availability) { CFG.ai_availability = data.ai_availability; updateStatus(); }
       if (data.online !== undefined && data.online !== online) { online = !!data.online; updateStatus(); }
       if (data.config) applyConfigUpdates(data.config);
       if (data.handover) applyHandover(data.handover);
@@ -1206,6 +1214,7 @@
 
   function applyConfigUpdates(config) {
     if (!config) return;
+    if (config.ai_availability) { CFG.ai_availability = config.ai_availability; updateStatus(); }
     if (config.title !== undefined) {
       var t = root.querySelector('.wb-title');
       if (t) t.textContent = config.title;

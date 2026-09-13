@@ -5,7 +5,7 @@ import ChatWidgetForm from './Partials/ChatWidgetForm';
 import InstallCard from './Partials/InstallCard';
 import IdentityCard from './Partials/IdentityCard';
 
-export default function ChatWidgetEdit({ widget, chatbots = [], embedBase, identitySecret, canUseCustomLauncherLogo = false }) {
+export default function ChatWidgetEdit({ widget, chatbots = [], aiTimezone, embedBase, identitySecret, canUseCustomLauncherLogo = false }) {
     const flash = usePage().props.flash ?? {};
 
     const submit = (payload) => {
@@ -44,7 +44,7 @@ export default function ChatWidgetEdit({ widget, chatbots = [], embedBase, ident
 
                 <IdentityCard embedBase={embedBase} widgetKey={widget.widget_key} identitySecret={identitySecret} verification={widget.identity_verification} />
 
-                <ChatWidgetForm widget={widget} chatbots={chatbots} canUseCustomLauncherLogo={canUseCustomLauncherLogo} submitLabel="Save changes" onSubmit={submit} />
+                <ChatWidgetForm widget={widget} chatbots={chatbots} aiTimezone={aiTimezone} canUseCustomLauncherLogo={canUseCustomLauncherLogo} submitLabel="Save changes" onSubmit={submit} />
             </div>
         </ClientLayout>
     );

@@ -3,7 +3,7 @@ import ClientLayout from '@/Layouts/ClientLayout';
 import { ArrowLeft } from 'lucide-react';
 import ChatWidgetForm from './Partials/ChatWidgetForm';
 
-export default function ChatWidgetCreate({ chatbots = [], canUseCustomLauncherLogo = false }) {
+export default function ChatWidgetCreate({ chatbots = [], aiTimezone, canUseCustomLauncherLogo = false }) {
     const submit = (payload) => {
         router.post(route('client.inbox.chat-widgets.store'), payload, { forceFormData: true });
     };
@@ -22,7 +22,7 @@ export default function ChatWidgetCreate({ chatbots = [], canUseCustomLauncherLo
                     </p>
                 </div>
 
-                <ChatWidgetForm chatbots={chatbots} canUseCustomLauncherLogo={canUseCustomLauncherLogo} submitLabel="Create widget" onSubmit={submit} />
+                <ChatWidgetForm chatbots={chatbots} aiTimezone={aiTimezone} canUseCustomLauncherLogo={canUseCustomLauncherLogo} submitLabel="Create widget" onSubmit={submit} />
             </div>
         </ClientLayout>
     );

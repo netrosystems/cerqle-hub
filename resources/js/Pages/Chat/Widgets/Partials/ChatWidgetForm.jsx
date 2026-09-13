@@ -1,4 +1,5 @@
-import { useForm } from '@inertiajs/react';
+import { useForm, usePage } from '@inertiajs/react';
+import WidgetAiAnswering, { defaultWidgetHours } from '@/Components/Inbox/WidgetAiAnswering';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Bot, Lock, MessageCircle, Send, Sparkles } from 'lucide-react';
@@ -44,8 +45,9 @@ function Card({ title, icon, children }) {
     );
 }
 
-export default function ChatWidgetForm({ widget = null, chatbots = [], canUseCustomLauncherLogo = false, submitLabel, onSubmit }) {
+export default function ChatWidgetForm({ widget = null, chatbots = [], aiTimezone = 'UTC', canUseCustomLauncherLogo = false, submitLabel, onSubmit }) {
     const { t } = useTranslation();
+    const pageErrors = usePage().props.errors ?? {};
 
     const { data, setData, processing, errors } = useForm({
         name: widget?.name ?? '',
@@ -64,6 +66,10 @@ export default function ChatWidgetForm({ widget = null, chatbots = [], canUseCus
         launcher_logo_url: widget?.launcher_logo_url ?? null,
         enabled: widget?.enabled ?? true,
         ai_enabled: widget?.ai_enabled ?? false,
+        ai_mode: widget?.ai_mode ?? (widget?.ai_enabled ? 'permanent' : 'off'),
+        ai_timezone: widget?.ai_timezone ?? aiTimezone,
+        ai_weekly_hours: widget?.ai_weekly_hours ?? defaultWidgetHours(),
+        ai_revision: widget?.ai_revision ?? 1,
         ai_chatbot_id: widget?.ai_chatbot_id ?? '',
         require_prechat: widget?.require_prechat ?? false,
         prechat_fields: widget?.prechat_fields ?? ['name', 'email'],
@@ -86,16 +92,16 @@ export default function ChatWidgetForm({ widget = null, chatbots = [], canUseCus
         e.preventDefault();
         const payload = {
             ...data,
-            ai_chatbot_id: data.ai_enabled && data.ai_chatbot_id ? data.ai_chatbot_id : null,
+            ai_chatbot_id: data.ai_chatbot_id || null,
             allowed_domains: domainsText.split(/[\n,]/).map((d) => d.trim()).filter(Boolean),
         };
         onSubmit(payload);
     };
 
     return (
-        <form onSubmit={submit} className="grid gap-6 lg:grid-cols-[1fr_360px]">
+        <form onSubmit={submit} className="grid min-w-0 gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
             {/* ── Left: settings ── */}
-            <div className="space-y-6">
+            <div className="min-w-0 space-y-6">
                 <Card title="Appearance" icon={<MessageCircle className="h-4 w-4 text-brand-500" />}>
                     <div className="grid gap-4 sm:grid-cols-2">
                         <Field label="Widget name" hint="Internal label — customers don't see this.">
@@ -226,26 +232,7 @@ export default function ChatWidgetForm({ widget = null, chatbots = [], canUseCus
                 </Card>
 
                 <Card title="AI answering" icon={<Bot className="h-4 w-4 text-brand-500" />}>
-                    <Toggle
-                        checked={data.ai_enabled}
-                        onChange={(v) => setData('ai_enabled', v)}
-                        label="Let an AI chatbot answer first"
-                        description="Off = messages go straight to your live agents. On = the AI replies instantly, then hands off to a human when needed."
-                    />
-                    {data.ai_enabled && (
-                        chatbots.length > 0 ? (
-                            <Field label="Chatbot">
-                                <select className={inputCls} value={data.ai_chatbot_id ?? ''} onChange={(e) => setData('ai_chatbot_id', e.target.value)}>
-                                    <option value="">Select a chatbot…</option>
-                                    {chatbots.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
-                                </select>
-                            </Field>
-                        ) : (
-                            <p className="rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
-                                No enabled chatbots yet. Create one under <b>AI → Chatbots</b> first, then pick it here.
-                            </p>
-                        )
-                    )}
+                    <WidgetAiAnswering data={data} setData={setData} chatbots={chatbots} errors={{ ...errors, ...pageErrors }} />
                 </Card>
 
                 <Card title="Visitor experience" icon={<Sparkles className="h-4 w-4 text-brand-500" />}>
@@ -279,7 +266,7 @@ export default function ChatWidgetForm({ widget = null, chatbots = [], canUseCus
             </div>
 
             {/* ── Right: live preview ── */}
-            <div className="lg:sticky lg:top-6 h-fit space-y-4">
+            <div className="min-w-0 lg:sticky lg:top-6 h-fit space-y-4">
                 <div className="rounded-2xl border border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-900/50 p-4">
                     <p className="mb-3 text-xs font-medium uppercase tracking-wide text-neutral-400">Live preview</p>
                     <WidgetPreview data={data} avatarPreview={avatarPreview} />
