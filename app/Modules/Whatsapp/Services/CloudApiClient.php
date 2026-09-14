@@ -203,13 +203,22 @@ class CloudApiClient
         return $resp->json('contacts', []);
     }
 
-    /** Request a display name change for a phone number. */
+    /**
+     * Request a display name change for a phone number.
+     *
+     * @return array{success: bool, status: int, response: mixed}
+     */
     public function requestDisplayNameChange(string $phoneNumberId, string $newName): array
     {
         return static::requestDisplayNameChangeDirect($phoneNumberId, $newName, $this->accessToken);
     }
 
-    /** Static variant — uses a bare token directly (bypasses factory). */
+    /**
+     * Static variant — uses a bare token directly (bypasses factory).
+     * Response retains the provider's decoded JSON verbatim (or [] for no JSON).
+     *
+     * @return array{success: bool, status: int, response: mixed}
+     */
     public static function requestDisplayNameChangeDirect(string $phoneNumberId, string $newName, string $token): array
     {
         $resp = Http::withToken($token)
@@ -236,6 +245,8 @@ class CloudApiClient
     /**
      * Edit an existing template on Meta. Name and language cannot be changed —
      * only category and components are editable. Editing resets the template to PENDING.
+     *
+     * @param  array{category?: string, components?: list<array<string, mixed>>}  $template
      */
     public function editTemplate(string $metaTemplateId, array $template): Response
     {

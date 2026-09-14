@@ -4,6 +4,8 @@ Status date: **2026-09-13**. This file is a checkpoint, not permanent proof. Rec
 
 ## Git and release state
 
+- 2026-09-15 final release approval: user requested promotion to `main` and will deploy themselves. Remaining Cloud API array contracts and nullable-request handling are corrected; focused PHPStan for CloudApiClient, LicenseManager and CoexistenceRollout passes, 8 focused payload/license/sender tests pass (26 assertions), focused Pint and diff checks pass. Earlier combined validation remains 158 frontend tests and successful Vite build. Repository-wide PHPStan is not claimed green; no live coexistence validation or production deployment performed. Production `.env` was not inspected or copied.
+
 - 2026-09-15 promotion validation: current `origin/dev` incorporated into `spiderman`; 36 focused license/coexistence/sender tests passed (137 assertions), all 158 frontend tests passed, Vite asset build and focused Pint/diff checks passed, routes cached and cleared successfully. Focused PHPStan is not green: four pre-existing iterable/nullsafe findings remain; removed one obsolete `new static` baseline occurrence confirmed absent after sender delegation. No new suppressions, version bump, global coexistence rollout or production deployment.
 
 - The `spiderman`, `dev` and `main` trees were verified identical before this documentation checkpoint on 2026-09-11. Recheck remote refs before relying on that statement.

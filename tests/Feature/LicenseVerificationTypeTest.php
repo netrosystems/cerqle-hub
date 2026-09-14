@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Services\License\LicenseManager;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
 
@@ -50,6 +51,24 @@ class LicenseVerificationTypeTest extends TestCase
         foreach (['production', 'staging', 'testing'] as $environment) {
             $this->app['env'] = $environment;
             $this->assertTrue(app(LicenseManager::class)->enabled());
+        }
+    }
+
+    public function test_server_ip_supports_present_missing_and_unbound_requests(): void
+    {
+        $method = new \ReflectionMethod(LicenseManager::class, 'serverIp');
+        $license = app(LicenseManager::class);
+        request()->server->set('SERVER_ADDR', '192.0.2.1');
+        $this->assertSame('192.0.2.1', $method->invoke($license));
+        request()->server->remove('SERVER_ADDR');
+        $fallback = $method->invoke($license);
+        $this->assertIsString($fallback);
+        $this->assertNotSame('', $fallback);
+        $this->app->offsetUnset('request');
+        try {
+            $this->assertSame($fallback, $method->invoke($license));
+        } finally {
+            $this->app->instance('request', Request::create('/'));
         }
     }
 
