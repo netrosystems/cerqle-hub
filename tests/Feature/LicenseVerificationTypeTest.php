@@ -41,6 +41,18 @@ class LicenseVerificationTypeTest extends TestCase
         $this->assertSame(['envato', 'non_envato'], $license->verifyTypes());
     }
 
+    public function test_license_opt_out_is_local_only(): void
+    {
+        config(['license.verify' => false]);
+        $this->app['env'] = 'local';
+        $this->assertFalse(app(LicenseManager::class)->enabled());
+
+        foreach (['production', 'staging', 'testing'] as $environment) {
+            $this->app['env'] = $environment;
+            $this->assertTrue(app(LicenseManager::class)->enabled());
+        }
+    }
+
     public function test_license_manager_sends_the_selected_activation_type(): void
     {
         Http::fake([

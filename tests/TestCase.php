@@ -17,6 +17,24 @@ use Illuminate\Foundation\Testing\TestCase as BaseTestCase;
 
 abstract class TestCase extends BaseTestCase
 {
+    public function createApplication()
+    {
+        // Artisan's child process may inherit .env values through putenv;
+        // set all environment sources before any application/database boot.
+        foreach (['APP_ENV' => 'testing', 'DB_CONNECTION' => 'sqlite', 'DB_DATABASE' => ':memory:'] as $key => $value) {
+            putenv($key.'='.$value);
+            $_ENV[$key] = $_SERVER[$key] = $value;
+        }
+
+        $app = parent::createApplication();
+        if ($app['config']->get('database.default') !== 'sqlite'
+            || $app['config']->get('database.connections.sqlite.database') !== ':memory:') {
+            throw new \RuntimeException('Tests require isolated SQLite :memory:; clear cached configuration first.');
+        }
+
+        return $app;
+    }
+
     protected function setUp(): void
     {
         parent::setUp();

@@ -4,7 +4,7 @@ import AiAutomationCard from '@/Components/Inbox/AiAutomationCard';
 import {
     Check, Copy, Link2, AlertTriangle,
     Phone, Inbox, Webhook, FileText,
-    Trash2, RefreshCw, Bot, ChevronDown, ExternalLink,
+    Trash2, RefreshCw, Bot, ChevronDown,
     Edit3, Clock, ShieldCheck, ShieldAlert, Wifi, WifiOff, X,
 } from 'lucide-react';
 import { useState, useCallback, useEffect, useRef } from 'react';
@@ -1365,36 +1365,9 @@ export default function ChannelSetup({
                 </ChannelCard>
             </div>
 
-            {/* Row 2 — guide + resources (only shown when no channels connected) */}
-            {(wabas.length === 0 && instagramAccounts.length === 0 && messengerAccounts.length === 0) && (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {/* Setup guide */}
-                <div className="md:col-span-2 rounded-2xl border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 shadow-sm overflow-hidden">
-                    <div className="px-5 py-4 border-b border-neutral-100 dark:border-neutral-800">
-                        <h4 className="text-sm font-semibold text-neutral-800 dark:text-neutral-200">{t('inbox.getting_started')}</h4>
-                        <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-0.5">{t('inbox.getting_started_subtitle')}</p>
-                    </div>
-                    <div className="p-5 grid grid-cols-3 gap-4">
-                        {[
-                            { step: 1, title: t('inbox.step1_title'), desc: t('inbox.step1_desc') },
-                            { step: 2, title: t('inbox.step2_title'), desc: t('inbox.step2_desc') },
-                            { step: 3, title: t('inbox.step3_title'), desc: t('inbox.step3_desc') },
-                        ].map(({ step, title, desc }) => (
-                            <div key={step} className="flex flex-col gap-2">
-                                <div className="w-7 h-7 rounded-full bg-brand-600 text-white text-xs font-bold flex items-center justify-center shrink-0">{step}</div>
-                                <div>
-                                    <p className="text-xs font-semibold text-neutral-700 dark:text-neutral-300">{title}</p>
-                                    <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-0.5 leading-relaxed">{desc}</p>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                </div>
-
-                {/* Sidebar: webhook + resources */}
-                <div className="space-y-4">
-                    {metaWebhookUrl && (
-                        <div className="rounded-2xl border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 shadow-sm p-4 space-y-3">
+            {/* Webhook configuration remains available before connecting a channel. */}
+            {(wabas.length === 0 && instagramAccounts.length === 0 && messengerAccounts.length === 0 && metaWebhookUrl) && (
+                        <div className="max-w-md rounded-2xl border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 shadow-sm p-4 space-y-3">
                             <p className="text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider flex items-center gap-1.5">
                                 <Webhook className="h-3 w-3" /> {t('inbox.meta_webhook')}
                             </p>
@@ -1403,24 +1376,6 @@ export default function ChannelSetup({
                             </p>
                             <CodeField label={t('inbox.webhook_url')} value={metaWebhookUrl} icon={Link2} />
                         </div>
-                    )}
-                    <div className="rounded-2xl border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 shadow-sm p-4">
-                        <h4 className="text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider mb-3">{t('inbox.resources')}</h4>
-                        <div className="space-y-2">
-                            {[
-                                { label: 'WhatsApp Business API', href: 'https://developers.facebook.com/docs/whatsapp' },
-                                { label: 'Meta Webhooks guide', href: 'https://developers.facebook.com/docs/graph-api/webhooks' },
-                                { label: 'Instagram Messaging API', href: 'https://developers.facebook.com/docs/messenger-platform/instagram' },
-                            ].map(({ label, href }) => (
-                                <a key={label} href={href} target="_blank" rel="noopener noreferrer"
-                                    className="flex items-center gap-2 text-xs text-brand-600 dark:text-brand-400 hover:underline">
-                                    <ExternalLink className="h-3 w-3 shrink-0" /> {label}
-                                </a>
-                            ))}
-                        </div>
-                    </div>
-                </div>
-            </div>
             )}
 
             {/* Connect WhatsApp drawer */}

@@ -97,7 +97,7 @@ journey
 
 ### Feature 4: WhatsApp Cloud API & Template Manager (`app/Modules/Whatsapp`)
 
-Coexistence implementation is in preparation (2026-09-09), not released. Initial
+Coexistence has a deployed guarded pilot, not a globally validated release. Initial
 safety work prevents an OAuth interaction longer than 15 seconds from losing its
 session selection, rejects cancelled/mismatched signup completion, and separates
 non-live webhook fields from live ingestion. Remaining implementation and live

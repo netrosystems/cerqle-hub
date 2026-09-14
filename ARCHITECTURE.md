@@ -60,6 +60,7 @@ flowchart TD
 Website AI availability belongs to `chat_widgets`: `ai_mode`, `ai_timezone`, `ai_weekly_hours` and `ai_revision`, separate from team `working_hours_json` and grouped inbox AI settings. Existing CRUD validates tenant-owned enabled bots, schedules and revision conflicts; updates lock the widget and increment its revision atomically with account metadata. Webchat routing resolves the originating widget and pins widget ID/revision/bot in the shared AI job; availability is rechecked at receipt, generation and send. Old unpinned webchat jobs fail closed. Weekly interval validation detects overnight/Sunday wrap overlaps. Shared schedule evaluation supports multiple windows without changing grouped one-window behavior. Public config and visitor send/poll responses expose mode/active only, not private hours or bot identity; polling refreshes availability and suppresses misleading AI typing. No external calls are made outside eligible hours.
 
 Grouped inbox AI uses `workspace_ai_automation_settings` (unique workspace/group, optimistic revision, activation timestamp) and `inbound_reply_ownerships` (unique inbound message, workspace/conversation/account and durable attempt state). Both MessageReceived listener entry points delegate to the same ownership pipeline; registration order cannot result in both a workflow and AI reply. Human ownership/request → waiting/matched workflow → reply rule → AI. `GenerateGroupedAiReply` runs on `ai`, uses a shared per-conversation overlap lock and atomic queued→generating claim, and never retries an ambiguous sending attempt. Retried interrupted attempts become delivery-review entries. Settings changes cancel older revisions; legacy account links are honored only without a group row. Job timeout is capped at 120 seconds and ten seconds below connection retry_after; overlap expiry is 180 seconds. Production release checks must verify actual worker/connection timing. Workspace/conversation deletion purges reply receipts. Migration does not rewrite workflows, bots or account metadata.
+Local development may explicitly set `LICENSE_VERIFY=false` to use an unactivated demo. `LicenseManager` ignores this opt-out outside `APP_ENV=local`; production continues to require license verification. Never copy production license files or credentials into a demo.
 
 1. **Strict Dual Authentication Boundaries**: 
    - Browser web sessions use Laravel session cookies with CSRF token verification.
@@ -253,6 +254,12 @@ can be edited or deleted independently.
 ## 5. Integrations & External Service Contracts
 
 ### WhatsApp coexistence guarded pilot (updated 2026-09-11)
+
+Connection onboarding requires both an enabled rollout flag and explicit workspace
+allowlist membership; an empty allowlist grants no access. Workspace-default sends
+delegate to the explicit phone factory, retaining ownership, active-WABA and
+Business-app-disconnection checks. PHPUnit forces SQLite `:memory:` and the testing
+environment so inherited local database variables cannot target persistent data.
 
 The implementation was deployed in release v1.0.82 and rollout was last recorded
 as enabled only for one allowlisted pilot workspace. Meta onboarding remains
