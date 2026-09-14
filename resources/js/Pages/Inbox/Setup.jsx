@@ -617,8 +617,8 @@ export function ConnectWhatsAppForm({ onClose, metaConfigIdWhatsapp, metaAppId }
                         <fieldset disabled={waSubmitting} className="space-y-2 text-xs">
                             <legend className="mb-2 font-semibold">{t('inbox.choose_connection', 'Choose how to connect')}</legend>
                             {[
-                                ['coexistence', t('inbox.keep_business_app', 'Keep WhatsApp Business app')],
-                                ['cloud_api', t('inbox.cloud_api_only', 'Cloud API only')],
+                                ['coexistence', t('inbox.keep_business_app', 'WhatsApp Business App')],
+                                ['cloud_api', t('inbox.cloud_api_only', 'Connect WABA')],
                             ].map(([value, label]) => (
                                 <label key={value} className={`flex gap-2 rounded-lg border p-3 ${mode === value ? 'border-brand-500 bg-brand-50 dark:bg-brand-950' : 'border-neutral-200 dark:border-neutral-700'}`}>
                                     <input type="radio" name="wa-connection-mode" value={value} checked={mode === value}
