@@ -16,6 +16,11 @@ explicitly cycles the Cerqle Supervisor groups. The cache-backed Laravel restart
 signal is used only when Supervisor is unavailable, avoiding a double-restart
 race while still providing a fallback. A missing dedicated campaign worker now
 stops release finalization.
+After builds, migrations and caches finish, deployment leaves maintenance mode
+before cycling/checking workers. The installed Laravel paused-worker path checks
+`--max-time` with a default zero start time, causing repeated graceful exits while
+the app is down. Release recording still happens only after worker validation.
+If those checks fail, the site remains online but the release is not finalized.
 Supervisor's immediate `start` result is treated as advisory because a worker can
 exit on Laravel's restart signal during the cycle. Deployment waits up to forty-five
 seconds and requires every expected process in both worker groups to settle in

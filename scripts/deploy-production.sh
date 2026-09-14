@@ -92,6 +92,12 @@ fi
 # process loads the newly deployed PHP source and configuration. Do not also
 # broadcast Laravel's cache-backed restart signal: combining both restart
 # mechanisms can make freshly started workers exit during the health check.
+# Build, migrations and caches are complete. Leave maintenance before checking
+# workers: Laravel's paused-worker path passes a zero start time to the max-time
+# check, causing workers configured with --max-time to exit repeatedly while down.
+php artisan up
+APP_IS_DOWN=0
+
 SUPERVISOR=()
 if command -v supervisorctl >/dev/null 2>&1; then
     if supervisorctl status >/dev/null 2>&1; then
@@ -158,8 +164,6 @@ else
 fi
 
 php artisan app:release
-php artisan up
-APP_IS_DOWN=0
 trap - EXIT
 
 # Reconcile Meta's external webhook state after the application is reachable.

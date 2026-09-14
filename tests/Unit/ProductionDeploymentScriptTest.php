@@ -6,6 +6,18 @@ use PHPUnit\Framework\TestCase;
 
 class ProductionDeploymentScriptTest extends TestCase
 {
+    public function test_workers_are_checked_online_only_after_migrations_and_caches(): void
+    {
+        $script = file_get_contents(dirname(__DIR__, 2).'/scripts/deploy-production.sh');
+        $this->assertIsString($script);
+        $up = strpos($script, "php artisan up\nAPP_IS_DOWN=0");
+        $this->assertNotFalse($up);
+        $this->assertLessThan($up, strpos($script, 'php artisan migrate --force'));
+        $this->assertLessThan($up, strpos($script, "php artisan optimize\n"));
+        $this->assertGreaterThan($up, strpos($script, 'SUPERVISOR=()'));
+        $this->assertGreaterThan(strpos($script, 'wait_for_supervisor_group "$BROADCAST_PROGRAM" 2'), strpos($script, "php artisan app:release\n"));
+    }
+
     public function test_deployment_explicitly_reloads_and_requires_campaign_workers(): void
     {
         $script = file_get_contents(dirname(__DIR__, 2).'/scripts/deploy-production.sh');
