@@ -2517,7 +2517,7 @@ parameters:
 		-
 			message: '#^Unsafe usage of new static\(\)\.$#'
 			identifier: new.static
-			count: 2
+			count: 1
 			path: app/Modules/Whatsapp/Services/CloudApiClient.php
 
 		-

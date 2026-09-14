@@ -4,6 +4,8 @@ Status date: **2026-09-13**. This file is a checkpoint, not permanent proof. Rec
 
 ## Git and release state
 
+- 2026-09-15 promotion validation: current `origin/dev` incorporated into `spiderman`; 36 focused license/coexistence/sender tests passed (137 assertions), all 158 frontend tests passed, Vite asset build and focused Pint/diff checks passed, routes cached and cleared successfully. Focused PHPStan is not green: four pre-existing iterable/nullsafe findings remain; removed one obsolete `new static` baseline occurrence confirmed absent after sender delegation. No new suppressions, version bump, global coexistence rollout or production deployment.
+
 - The `spiderman`, `dev` and `main` trees were verified identical before this documentation checkpoint on 2026-09-11. Recheck remote refs before relying on that statement.
 - Branch SHAs can differ because validated commits are replayed onto `main` to preserve linear production history without force-pushing. Tree equality, not matching SHA text, is the content check.
 - Current `main` includes the duplicate automation-listener fix, real campaign CSV uploads, guarded WhatsApp campaigns and TikTok site-verification file.
