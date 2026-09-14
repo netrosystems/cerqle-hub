@@ -46,6 +46,9 @@ Status date: **2026-09-13**. This file is a checkpoint, not permanent proof. Rec
 
 ## WhatsApp coexistence pilot
 
+- 2026-09-15: User reports Meta permissions approved; live permission, phone and webhook verification remains pending. Local connection work hardens allowlist and disconnected-sender handling. No global rollout or deployment authorized/performed. Local test isolation was corrected after inherited environment variables let earlier tests replace the demo database with fixtures; demo is reseeded, not restored from a backup.
+- Validation for this checkpoint: 32 focused coexistence/sender tests passed (127 assertions), including an invalid inherited database path; 13 signup frontend tests passed; focused Pint and diff checks passed. Vite asset build succeeded; `npm run build` postbuild failed because `php` is not on PATH. No release-version command was retried and no application version was bumped. Local demo retains 149 contacts and the selected login after isolated tests.
+
 - The guarded coexistence implementation exists and production rollout was last documented as limited to one dedicated pilot workspace through `WHATSAPP_COEXISTENCE_ENABLED=true` and a nonempty `WHATSAPP_COEXISTENCE_WORKSPACES` allowlist.
 - History/contact import remains off: `WHATSAPP_COEXISTENCE_IMPORT_ENABLED=false`. Do not call `smb_app_data` or consent to history sharing for this pilot.
 - Meta onboarding last failed with error `2655111`: the partner app lacked required advanced WhatsApp management/messaging permissions.

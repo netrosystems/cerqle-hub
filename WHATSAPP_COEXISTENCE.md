@@ -9,6 +9,13 @@ details below supersede the earlier preparation notes.
 
 ## Current pilot checkpoint
 
+2026-09-15: User reports required Meta permissions are now approved. This is not
+yet independently provider-validated. Connection rollout now fails closed for an
+empty workspace allowlist. Workspace-default Cloud API sends use the same phone
+ownership, active-WABA and Business-app-disconnection checks as explicit sends.
+Local PHPUnit forces an isolated in-memory database even when parent environment
+variables contain the local database path. History/contact import remains off.
+
 - Separate begin/store routes and a compact two-mode connection drawer are wired.
   Number entry occurs only in Meta. Selecting coexistence prepares a bound session;
   the explicit Continue click opens Meta. The server checks any returned phone ID
@@ -17,7 +24,7 @@ details below supersede the earlier preparation notes.
   expandable and history/contact import stays off.
 - `WHATSAPP_COEXISTENCE_ENABLED` defaults false. Set the comma-separated
   `WHATSAPP_COEXISTENCE_WORKSPACES` allowlist to the pilot workspace before enabling;
-  an empty list allows all workspaces and must not be used for this pilot.
+  an empty list disables onboarding for every workspace.
 - History/contact import remains off and is not requested. Those webhook fields
   are acknowledged without importing their contents. The isolated history store
   is not a complete or exposed import feature.

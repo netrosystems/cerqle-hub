@@ -35,8 +35,8 @@ $d = static function (string $b): string {
 
 return [
 
-    // Master kill-switch. Licensing is only active when this is true AND a
-    // product id + api key + server URL are configured.
+    // Local development opt-out only. Non-local environments ignore false;
+    // licensing also requires product id + api key + server URL.
     'verify' => filter_var(env('LICENSE_VERIFY', true), FILTER_VALIDATE_BOOL),
 
     'server_url' => rtrim((string) (env('LICENSE_SERVER_URL') ?: $d('RlVccQ0MKR8wQBcAcVteHx1lEBk4GT8=')), '/'),

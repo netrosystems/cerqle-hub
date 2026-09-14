@@ -1,6 +1,6 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { ConnectWhatsAppForm } from '@/Pages/Inbox/Setup';
+import ChannelSetup, { ConnectWhatsAppForm } from '@/Pages/Inbox/Setup';
 
 vi.mock('@/Layouts/ClientLayout', () => ({ default: ({ children }) => children }));
 const page = vi.hoisted(() => ({ props: {} }));
@@ -11,6 +11,13 @@ vi.mock('sonner', () => ({ toast: { success: vi.fn(), warning: vi.fn() } }));
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); delete window.__fbSdkReady; page.props = {}; });
 
 describe('WhatsApp connection-only form', () => {
+    it('omits generic setup guides and resources while retaining connection controls', () => {
+        vi.stubGlobal('route', (name) => name);
+        render(<ChannelSetup wabas={[]} instagramAccounts={[]} messengerAccounts={[]} channelAccountsByWaba={{}} chatbots={[{ id: 1 }]} />);
+        expect(screen.queryByText('inbox.getting_started')).not.toBeInTheDocument();
+        expect(screen.queryByText('inbox.resources')).not.toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'inbox.connect_whatsapp' })).toBeInTheDocument();
+    });
     it('prepares coexistence without a phone field and opens Meta on the next click', async () => {
         page.props = { whatsappCoexistenceEnabled: true };
         document.head.innerHTML = '<meta name="csrf-token" content="test" />';

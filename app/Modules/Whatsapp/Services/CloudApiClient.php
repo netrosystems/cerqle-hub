@@ -21,33 +21,11 @@ class CloudApiClient
 
     public static function forWorkspace(int $workspaceId): ?static
     {
-        $waba = WhatsappBusinessAccount::where('workspace_id', $workspaceId)
-            ->where('status', 'active')
-            ->with('phoneNumbers')
-            ->first();
-
-        if (! $waba) {
-            Log::warning('CloudApiClient: no active WABA for workspace', ['workspace_id' => $workspaceId]);
-
-            return null;
-        }
-
-        $token = $waba->accessToken() ?? WhatsappBusinessAccount::resolveAccessTokenForWorkspace($workspaceId);
         $phoneNumberId = WhatsappBusinessAccount::defaultPhoneNumberIdForWorkspace($workspaceId) ?? '';
 
-        if (! $token || $phoneNumberId === '') {
-            Log::warning('CloudApiClient: missing credentials', [
-                'workspace_id' => $workspaceId,
-                'waba_id' => $waba->waba_id,
-                'token_empty' => empty($token),
-                'phone_number_id' => $phoneNumberId ?: 'EMPTY',
-                'phone_count' => $waba->phoneNumbers->count(),
-            ]);
-
-            return null;
-        }
-
-        return new static($phoneNumberId, $token, $workspaceId);
+        // Never bypass phone ownership, WABA state or Business-app offboarding
+        // checks when legacy callers ask for the workspace's default sender.
+        return $phoneNumberId !== '' ? static::forPhoneNumber($phoneNumberId, $workspaceId) : null;
     }
 
     public static function forPhoneNumber(string $phoneNumberId, int $workspaceId): ?static

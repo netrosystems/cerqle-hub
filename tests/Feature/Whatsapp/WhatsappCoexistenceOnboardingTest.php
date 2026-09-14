@@ -28,6 +28,7 @@ class WhatsappCoexistenceOnboardingTest extends TestCase
         config(['whatsapp.coexistence_enabled' => true]);
         Http::preventStrayRequests();
         $context = $this->createSubscribedWorkspaceContext();
+        config(['whatsapp.coexistence_workspaces' => (string) $context['workspace']->id]);
         $this->actingAs($context['user']);
         IntegrationConfig::create([
             'provider' => 'meta_app', 'label' => 'Meta', 'mode' => 'live', 'enabled' => true,
@@ -38,6 +39,15 @@ class WhatsappCoexistenceOnboardingTest extends TestCase
     private function attempt(): string
     {
         return $this->postJson('/test/coexistence/begin', [])->assertOk()->json('attempt_id');
+    }
+
+    public function test_empty_or_foreign_allowlist_rejects_before_provider_calls(): void
+    {
+        foreach (['', '999999999'] as $allowlist) {
+            config(['whatsapp.coexistence_workspaces' => $allowlist]);
+            $this->postJson('/test/coexistence/begin', [])->assertNotFound();
+        }
+        Http::assertNothingSent();
     }
 
     private function fakeMeta(array $phone = [], array $debug = [], array $extraPhones = []): void
@@ -156,6 +166,7 @@ class WhatsappCoexistenceOnboardingTest extends TestCase
     {
         $id = $this->attempt();
         $context = $this->createSubscribedWorkspaceContext();
+        config(['whatsapp.coexistence_workspaces' => config('whatsapp.coexistence_workspaces').','.$context['workspace']->id]);
         $this->actingAs($context['user']);
         $this->finish($id)->assertConflict();
         Http::assertNothingSent();
