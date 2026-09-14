@@ -375,7 +375,8 @@ class LicenseManager
 
     private function serverIp(): string
     {
-        $ip = request()?->server('SERVER_ADDR');
+        $request = app()->bound('request') ? request() : null;
+        $ip = $request?->server('SERVER_ADDR');
         if (! $ip) {
             $host = @gethostname();
             $ip = $host ? @gethostbyname($host) : null;

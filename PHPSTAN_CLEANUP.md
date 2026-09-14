@@ -8,6 +8,10 @@ The original count included incomplete Laravel schema/type information as well a
 
 ## Completed
 
+- License server IP resolution now explicitly permits an unbound request and retains the hostname/loopback fallback. License enforcement and production configuration are unchanged; tests cover configured server address, missing address and no request binding.
+
+- 2026-09-15: Cloud API display-name methods declare their exact result envelope (`success`, HTTP `status`, decoded provider `response`). Template editing declares optional category and a list of heterogeneous component objects. Runtime/provider behavior is unchanged; focused payload regressions cover success, rejection, non-JSON fallback and immutable-field filtering.
+
 - Added module migration discovery alongside the main migrations.
 - Enabled analysis of Laravel `casts()` methods, so JSON and date fields use their actual runtime types.
 - Added related-model/declaring-model contracts to 112 direct relationship declarations, plus previously untyped automation, social, and conversation relations.
