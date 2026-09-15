@@ -3,18 +3,23 @@
 namespace App\Modules\Social\Http\Controllers;
 
 use App\Http\Controllers\Controller;
+use App\Models\Workspace;
 use App\Modules\Integrations\Services\MetaPageDiscoveryService;
 use App\Modules\Social\Models\SocialAccount;
+use App\Modules\Social\Models\XPublishAttempt;
 use App\Modules\Social\Services\Drivers\FacebookDriver;
 use App\Modules\Social\Services\Drivers\InstagramSocialDriver;
 use App\Modules\Social\Services\Drivers\LinkedInDriver;
 use App\Modules\Social\Services\Drivers\TikTokDriver;
+use App\Modules\Social\Services\Drivers\XDriver;
 use App\Modules\Social\Services\Drivers\YoutubeDriver;
 use App\Modules\Social\Services\OAuth\OAuthManager;
 use App\Modules\Social\Services\SocialAccessTokenService;
+use App\Services\ChannelPlanLimitService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Session;
 use Illuminate\Validation\ValidationException;
@@ -36,6 +41,7 @@ class SocialAccountController extends Controller
             'linkedin' => new LinkedInDriver,
             'youtube' => new YoutubeDriver,
             'tiktok' => new TikTokDriver,
+            'twitter' => new XDriver,
         ];
     }
 
@@ -91,7 +97,7 @@ class SocialAccountController extends Controller
 
     public function connect(Request $request, string $network): RedirectResponse
     {
-        $validNetworks = ['facebook', 'instagram', 'linkedin', 'youtube', 'tiktok'];
+        $validNetworks = ['facebook', 'instagram', 'linkedin', 'youtube', 'tiktok', 'twitter'];
         abort_unless(in_array($network, $validNetworks, true), 404);
 
         Session::put('social_oauth_workspace', $this->workspaceId($request));
@@ -123,8 +129,24 @@ class SocialAccountController extends Controller
         $code = $request->query('code');
         $state = $request->query('state');
         $error = $request->query('error');
+        if ($network === 'twitter' && (! is_string($state) || ! preg_match('/^[a-f0-9]{64}$/', $state))) {
+            return redirect()->route('client.social.accounts.index')->with('error', 'Invalid X connection state. Please reconnect.');
+        }
         $wid = Session::get('social_oauth_workspace', $this->workspaceId($request));
-        $stored = Session::pull('social_oauth_state', []);
+        $stored = $network === 'twitter'
+            ? Session::pull('social_oauth_attempts.'.(string) $state, [])
+            : Session::pull('social_oauth_state', []);
+
+        if ($network === 'twitter') {
+            $wid = (int) ($stored['workspace_id'] ?? 0);
+            $workspace = Workspace::find($wid);
+            if (! $workspace || ! $workspace->isAccessibleBy($request->user())
+                || (int) ($stored['user_id'] ?? 0) !== (int) $request->user()->id
+                || ($stored['network'] ?? '') !== 'twitter'
+                || (int) ($stored['expires_at'] ?? 0) <= now()->timestamp) {
+                return redirect()->route('client.social.accounts.index')->with('error', 'X connection expired or workspace access changed. Please reconnect.');
+            }
+        }
 
         if ($error || ! $code) {
             return redirect()->route('client.social.accounts.index')->with('error', 'OAuth failed: '.($error ?? 'No code received'));
@@ -309,25 +331,39 @@ class SocialAccountController extends Controller
         }
 
         $identity = ['workspace_id' => $wid, 'network' => $network, 'account_id' => $accountInfo['account_id']];
-        $existing = SocialAccount::where($identity)->first();
+        $existing = SocialAccount::withoutGlobalScope('connected')->where($identity)->first();
 
-        SocialAccount::updateOrCreate(
-            $identity,
-            [
-                'name' => $accountInfo['name'],
-                'picture_url' => $accountInfo['picture_url'],
-                'access_token' => $tokens['access_token'],
-                // Google commonly omits refresh_token on a repeat consent. Keep
-                // the existing token instead of turning a reconnect into a
-                // connection that expires one hour later.
-                'refresh_token' => $tokens['refresh_token'] ?? $existing?->refresh_token,
-                'token_expires_at' => isset($tokens['expires_in']) ? now()->addSeconds((int) $tokens['expires_in']) : null,
-                'scopes' => isset($tokens['scope'])
-                    ? preg_split('/[ ,]+/', (string) $tokens['scope'], -1, PREG_SPLIT_NO_EMPTY)
-                    : $existing?->scopes,
-                'active' => true,
-            ]
-        );
+        $values = [
+            'name' => $accountInfo['name'],
+            'picture_url' => $accountInfo['picture_url'],
+            'access_token' => $tokens['access_token'],
+            // Google commonly omits refresh_token on a repeat consent. Keep
+            // the existing token instead of turning a reconnect into a
+            // connection that expires one hour later.
+            'refresh_token' => $tokens['refresh_token'] ?? $existing?->refresh_token,
+            'token_expires_at' => isset($tokens['expires_in']) ? now()->addSeconds((int) $tokens['expires_in']) : null,
+            'scopes' => isset($tokens['scope'])
+                ? preg_split('/[ ,]+/', (string) $tokens['scope'], -1, PREG_SPLIT_NO_EMPTY)
+                : $existing?->scopes,
+            'active' => true,
+            'disconnected_at' => null,
+            'meta' => $network === 'twitter'
+                ? array_merge((array) $existing?->meta, ['oauth_client_id' => $stored['client_id'], 'username' => $accountInfo['username'] ?? null])
+                : $existing?->meta,
+        ];
+        if ($network === 'twitter' && $existing?->disconnected_at) {
+            DB::transaction(function () use ($workspace, $existing, $values): void {
+                $limits = app(ChannelPlanLimitService::class);
+                $usage = $limits->usage($workspace, 'social_accounts', true);
+                $current = SocialAccount::withoutGlobalScope('connected')->findOrFail($existing->id);
+                if ($current->disconnected_at) {
+                    $limits->ensureCapacity($usage);
+                }
+                $current->update($values);
+            });
+        } else {
+            SocialAccount::updateOrCreate($identity, $values);
+        }
 
         return redirect()->route('client.social.accounts.index')->with('success', ucfirst($network).' account connected.');
     }
@@ -336,7 +372,17 @@ class SocialAccountController extends Controller
     {
         abort_unless((int) $account->workspace_id === $this->workspaceId($request), 403);
         $network = $account->network;
-        $account->delete();
+        if ($network === 'twitter') {
+            $account->update(['active' => false, 'access_token' => '', 'refresh_token' => null, 'disconnected_at' => now()]);
+            XPublishAttempt::where('social_account_id', $account->id)
+                ->where('workspace_id', $account->workspace_id)->whereIn('status', ['pending', 'uploading', 'processing', 'ready'])
+                ->update(['status' => 'failed', 'error' => 'X account disconnected. Reconnect and explicitly retry.']);
+            XPublishAttempt::where('social_account_id', $account->id)
+                ->where('workspace_id', $account->workspace_id)->where('status', 'creating')
+                ->update(['status' => 'unknown', 'error' => 'Disconnected during posting. Verify delivery before retrying.']);
+        } else {
+            $account->delete();
+        }
 
         $message = $network === 'linkedin'
             ? 'LinkedIn account disconnected from Cerqle. Your LinkedIn browser session remains signed in; choose “Sign out to use another account” when reconnecting.'

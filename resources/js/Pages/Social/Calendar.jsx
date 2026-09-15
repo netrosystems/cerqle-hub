@@ -7,6 +7,8 @@ import { useTranslation } from 'react-i18next';
 import { SocialBrandIcon } from '@/Components/BrandIcons';
 
 const STATUS_COLORS = {
+    unknown: 'bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300',
+    review: 'bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300',
     scheduled:  'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300',
     published:  'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300',
     publishing: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-300',
@@ -15,6 +17,8 @@ const STATUS_COLORS = {
 };
 
 const STATUS_OPTIONS = [
+    { value: 'unknown', labelKey: 'social.status_unknown' },
+    { value: 'review', labelKey: 'social.status_review' },
     { value: '',           labelKey: 'social.status_all' },
     { value: 'scheduled',  labelKey: 'social.status_scheduled' },
     { value: 'published',  labelKey: 'social.status_published' },
@@ -24,6 +28,7 @@ const STATUS_OPTIONS = [
 ];
 
 const NETWORK_ICONS = {
+    twitter: '𝕏',
     facebook:  '📘',
     instagram: '📷',
     linkedin:  '💼',
@@ -228,7 +233,7 @@ export default function SocialCalendar({ posts, month, accounts = [], filters = 
                     >
                         <option value="">{t('social.all_networks')}</option>
                         {networks.map(n => (
-                            <option key={n} value={n}>{NETWORK_ICONS[n] ?? ''} {n.charAt(0).toUpperCase() + n.slice(1)}</option>
+                            <option key={n} value={n}>{NETWORK_ICONS[n] ?? ''} {n === 'twitter' ? 'X' : n.charAt(0).toUpperCase() + n.slice(1)}</option>
                         ))}
                     </select>
 

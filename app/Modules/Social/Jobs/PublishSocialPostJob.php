@@ -7,6 +7,7 @@ use App\Modules\Social\Services\SocialPublisher;
 use App\Services\ClientAccessService;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
+use Illuminate\Queue\Middleware\WithoutOverlapping;
 
 class PublishSocialPostJob implements ShouldQueue
 {
@@ -20,13 +21,19 @@ class PublishSocialPostJob implements ShouldQueue
 
     public function __construct(public readonly int $postId) {}
 
+    public function middleware(): array
+    {
+        return [(new WithoutOverlapping('social-post:'.$this->postId))
+            ->shared()->releaseAfter(10)->expireAfter(1900)];
+    }
+
     public function handle(SocialPublisher $publisher): void
     {
         $access = app(ClientAccessService::class);
         $post = SocialPost::find($this->postId);
 
         // Post deleted or already fully published — nothing to do.
-        if (! $post || $post->status === 'published') {
+        if (! $post || in_array($post->status, ['published', 'draft', 'scheduled'], true)) {
             return;
         }
 

@@ -3,6 +3,7 @@
 namespace App\Modules\Social\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class SocialPostAccount extends Model
 {
@@ -20,7 +21,8 @@ class SocialPostAccount extends Model
         return $this->belongsTo(SocialPost::class, 'post_id');
     }
 
-    public function account()
+    /** @return BelongsTo<SocialAccount, $this> */
+    public function account(): BelongsTo
     {
         return $this->belongsTo(SocialAccount::class, 'social_account_id');
     }

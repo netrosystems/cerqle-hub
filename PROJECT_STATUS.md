@@ -4,6 +4,8 @@ Status date: **2026-09-13**. This file is a checkpoint, not permanent proof. Rec
 
 ## Git and release state
 
+- 2026-09-15 X publishing implemented for development: shared admin OAuth app, PKCE client authorization, native text/image/video uploads, existing social limits only, and explicit uncertain-outcome review. Additive migration required. Focused Social/Integration checks pass; real X authorization, delivery and responsive-client checks remain a release gate. See `docs/x-integration-qa-2026-09-15.md`. No production deployment or X application submission performed.
+
 - 2026-09-15 fresh deployment of the label release exited 1 at worker checks. Supervisor confirms graceful exit status 0 while maintenance was active; workers became stable after the exit trap brought the site up. Installed Laravel Worker::pauseWorker invokes max-time checking with startTime=0, incompatible with health-checking --max-time workers while down. Deployment ordering now brings the app online after migration/cache completion, before worker cycles; release recording remains after all worker checks. Fresh validation/deployment pending.
 
 - 2026-09-15 final release approval: user requested promotion to `main` and will deploy themselves. Remaining Cloud API array contracts and nullable-request handling are corrected; focused PHPStan for CloudApiClient, LicenseManager and CoexistenceRollout passes, 8 focused payload/license/sender tests pass (26 assertions), focused Pint and diff checks pass. Earlier combined validation remains 158 frontend tests and successful Vite build. Repository-wide PHPStan is not claimed green; no live coexistence validation or production deployment performed. Production `.env` was not inspected or copied.

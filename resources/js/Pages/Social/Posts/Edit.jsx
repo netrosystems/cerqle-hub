@@ -11,7 +11,9 @@ import { useTranslation } from 'react-i18next';
 import { useState } from 'react';
 import { browserTz, tzLocalToUtcIso, formatInTz } from '@/Utils/datetime';
 
-const CHAR_LIMITS = { tiktok: 2200, linkedin: 3000, facebook: 63206, instagram: 2200, youtube: 5000 };
+import { xWeightedLength } from '@/Components/Social/xText';
+
+const CHAR_LIMITS = { twitter: 280, tiktok: 2200, linkedin: 3000, facebook: 63206, instagram: 2200, youtube: 5000 };
 
 /** Convert a UTC datetime string to a `datetime-local` value in the given timezone. */
 function toLocalDatetime(utcStr, tz) {
@@ -74,6 +76,7 @@ export default function EditPost({ post, accounts, storageUsage }) {
     const selectedNetworks = [...new Set(selectedAccounts.map(a => a.network))];
     const requiresDirectVideo = selectedNetworks.some(network => ['youtube', 'tiktok'].includes(network));
     const hasYoutube = selectedNetworks.includes('youtube');
+    const xMediaOnly = selectedNetworks.length === 1 && selectedNetworks[0] === 'twitter' && (data.platform_payloads?.twitter?.customize ? data.platform_payloads.twitter.media_ids : data.media_ids)?.some(Boolean);
     const isYoutubeOnly = selectedNetworks.length === 1 && hasYoutube;
     const minCharLimit = selectedNetworks.length > 0
         ? Math.min(...selectedNetworks.map(n => CHAR_LIMITS[n] ?? 5000))
@@ -185,8 +188,8 @@ export default function EditPost({ post, accounts, storageUsage }) {
                         <div>
                             <div className="flex items-center justify-between mb-1">
                                 <label className="text-xs font-medium text-neutral-500 dark:text-neutral-400">{isYoutubeOnly ? t('social.youtube_description') : t('social.post_content')}</label>
-                                <span className={`text-xs ${data.body.length > minCharLimit ? 'text-red-500 font-medium' : 'text-neutral-400'}`}>
-                                    {data.body.length} / {minCharLimit}
+                                <span className={`text-xs ${(selectedNetworks.includes('twitter') ? xWeightedLength(data.body) : data.body.length) > minCharLimit ? 'text-red-500 font-medium' : 'text-neutral-400'}`}>
+                                    {selectedNetworks.includes('twitter') ? xWeightedLength(data.body) : data.body.length} / {minCharLimit}{selectedNetworks.includes('twitter') && ` · ${t('social.x_weighted')}`}
                                 </span>
                             </div>
                             <textarea
@@ -305,7 +308,7 @@ export default function EditPost({ post, accounts, storageUsage }) {
                     <div className="flex items-center gap-3">
                         <button
                             type="submit"
-                            disabled={processing || (isYoutubeOnly ? !data.title.trim() : !data.body.trim()) || data.target_accounts.length === 0}
+                            disabled={processing || (isYoutubeOnly ? !data.title.trim() : !data.body.trim() && !xMediaOnly) || data.target_accounts.length === 0}
                             className="inline-flex items-center gap-2 rounded-lg bg-brand-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-60 transition"
                         >
                             <Send className="h-4 w-4" />

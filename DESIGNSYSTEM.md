@@ -72,6 +72,7 @@ Primary Plum:    #3E2A49   Brand Lilac:    #8F5FA7   Cool Accent:  #45B6D6   Cor
 ## 4. Page Layout Archetypes
 
 ### 4.1 Standard Page Layout (`ClientLayout`)
+- X appears beside other networks in Social Accounts, composer, calendar and history. Keep no-link guidance and weighted counts compact; upload mode selects text, images or video. Show actionable destination errors and an explicit duplicate-risk review for unknown delivery. Do not add X quota, surcharge or credits controls to client pages. Admin X setup uses the existing encrypted integration form, expandable instructions and a clearly labelled configuration-only test; no irrelevant webhook rotation button.
 - Contact profiles opened from the inbox carry an explicit same-origin inbox return URL (including filters). The profile back control returns there after refresh; direct/list entry falls back to Contact List. Reject external or non-inbox return targets.
 - **Used For**: Dashboard, Settings, Team Management, Contacts Directory, Billing, Reports.
 - **Structure**: Centered content container (`max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8`). Includes page header with breadcrumb navigation and right-aligned action buttons.

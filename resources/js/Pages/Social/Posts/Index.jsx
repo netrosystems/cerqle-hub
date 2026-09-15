@@ -12,6 +12,9 @@ import {
 import { browserTz, formatInTz } from '@/Utils/datetime';
 
 const STATUS_META = {
+    unknown: { labelKey: 'social.status_unknown', cls: 'bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300', icon: <Clock className="h-3 w-3" /> },
+    review: { labelKey: 'social.status_review', cls: 'bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300', icon: <Eye className="h-3 w-3" /> },
+    processing: { labelKey: 'social.status_processing', cls: 'bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300', icon: <Clock className="h-3 w-3" /> },
     draft:      { labelKey: 'social.status_draft',      cls: 'bg-neutral-100 text-neutral-600 dark:bg-neutral-700 dark:text-neutral-300', icon: <Pencil className="h-3 w-3" /> },
     scheduled:  { labelKey: 'social.status_scheduled',  cls: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300',         icon: <Clock className="h-3 w-3" /> },
     publishing: { labelKey: 'social.status_publishing', cls: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-300', icon: <Send className="h-3 w-3" /> },
@@ -19,8 +22,8 @@ const STATUS_META = {
     failed:     { labelKey: 'social.status_failed',     cls: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300',             icon: <XCircle className="h-3 w-3" /> },
 };
 
-const NETWORKS = ['facebook', 'instagram', 'linkedin', 'youtube', 'tiktok'];
-const NETWORK_LABELS = { facebook: 'Facebook', instagram: 'Instagram', linkedin: 'LinkedIn', youtube: 'YouTube', tiktok: 'TikTok' };
+const NETWORKS = ['twitter', 'facebook', 'instagram', 'linkedin', 'youtube', 'tiktok'];
+const NETWORK_LABELS = { twitter: 'X', facebook: 'Facebook', instagram: 'Instagram', linkedin: 'LinkedIn', youtube: 'YouTube', tiktok: 'TikTok' };
 
 function StatusBadge({ status }) {
     const { t } = useTranslation();
@@ -30,6 +33,27 @@ function StatusBadge({ status }) {
             {meta.icon} {meta.labelKey ? t(meta.labelKey) : status}
         </span>
     );
+}
+
+function XReviewControls({ post, account, result }) {
+    const { t } = useTranslation();
+    const [busy, setBusy] = useState(false);
+    const submit = data => {
+        setBusy(true);
+        router.post(route('client.social.posts.x.review', [post.id, account.id]), data, { preserveScroll: true, onFinish: () => setBusy(false) });
+    };
+    const record = () => {
+        const id = window.prompt(t('social.x_record_prompt'));
+        if (id?.trim()) submit({ action: 'record', platform_post_id: id.trim() });
+    };
+    const retry = () => {
+        if (window.confirm(t('social.x_duplicate_warning'))) submit({ action: 'retry', confirm_duplicate_risk: true });
+    };
+    return <div className="flex flex-wrap items-center gap-2">
+        {result.status === 'unknown' && <span className="text-amber-700 dark:text-amber-300">{t('social.x_unknown_warning')}</span>}
+        <button type="button" disabled={busy} onClick={record} className="rounded-soft border border-neutral-300 px-2 py-1 focus:ring-2 focus:ring-brand-500/30 dark:border-neutral-600">{t('social.x_record')}</button>
+        <button type="button" disabled={busy} onClick={retry} className="rounded-soft border border-amber-300 px-2 py-1 text-amber-700 focus:ring-2 focus:ring-brand-500/30 dark:border-amber-700 dark:text-amber-300">{t('social.x_retry')}</button>
+    </div>;
 }
 
 function AccountPill({ acct }) {
@@ -294,9 +318,10 @@ function PostDetailModal({ post, accountMap, userTz, onClose, onDelete, onEditFa
                                             <div className="flex items-center justify-between">
                                                 <span className="text-neutral-600 dark:text-neutral-400">{acct?.name ?? t('social.account_number', { id: accountId })}</span>
                                                 <div className="flex items-center gap-2">
-                                                    <span className={result.status === 'published' ? 'text-green-600 font-medium' : 'text-red-500 font-medium'}>
-                                                        {result.status === 'published' ? t('social.result_published') : t('social.result_failed')}
+                                                    <span className={result.status === 'published' ? 'text-green-600 font-medium' : result.status === 'failed' ? 'text-red-500 font-medium' : 'text-amber-600 font-medium'}>
+                                                        {t(`social.status_${result.status}`, { defaultValue: result.status })}
                                                     </span>
+                                                    {acct?.network === 'twitter' && ['unknown', 'failed'].includes(result.status) && <XReviewControls post={post} account={acct} result={result} />}
                                                     {result.status === 'published' && acct?.network === 'facebook' && (
                                                         <>
                                                             <button type="button" onClick={() => onEditFacebook(post, acct, result)}
@@ -397,7 +422,8 @@ function PostCard({ post, accountMap, userTz, onView, onDelete, onRemoveLocal, o
     const canDelete = ['draft', 'scheduled', 'failed'].includes(post.status) && !hasPublishedTarget;
     const canRemoveLocal = post.status !== 'publishing' && (post.status === 'published' || hasPublishedTarget);
     const canEdit   = ['draft', 'scheduled', 'failed'].includes(post.status) && !hasPublishedTarget;
-    const canPublishNow = ['draft', 'scheduled', 'failed'].includes(post.status);
+    const needsXReview = Object.entries(post.publish_results ?? {}).some(([id, result]) => accountMap[id]?.network === 'twitter' && ['unknown', 'failed'].includes(result.status));
+    const canPublishNow = ['draft', 'scheduled', 'failed'].includes(post.status) && !needsXReview;
     const canCancel = post.status === 'scheduled';
     const mediaUrls = (post.media_urls ?? []).filter(Boolean);
     const prefersVideo = targets.some((id) => ['youtube', 'tiktok'].includes(accountMap[id]?.network));

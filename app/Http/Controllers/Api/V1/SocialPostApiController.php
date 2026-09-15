@@ -6,6 +6,7 @@ use App\Modules\Social\Jobs\PublishSocialPostJob;
 use App\Modules\Social\Models\SocialAccount;
 use App\Modules\Social\Models\SocialPost;
 use App\Modules\Social\Services\SocialMediaLifecycleService;
+use App\Modules\Social\Services\XContentValidator;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -91,7 +92,7 @@ class SocialPostApiController extends WorkspaceScopedController
         $accounts = SocialAccount::where('workspace_id', $wsId)
             ->whereIn('id', $validated['account_ids'])
             ->where('active', true)
-            ->get(['id', 'network']);
+            ->get(['id', 'network', 'workspace_id']);
 
         if ($accounts->count() !== count($validated['account_ids'])) {
             return response()->json(['error' => 'One or more account_ids are invalid.'], 422);
@@ -101,6 +102,9 @@ class SocialPostApiController extends WorkspaceScopedController
         $mediaUrls = array_values(array_filter($validated['media_urls'] ?? []));
         $validated['media_urls'] = $mediaUrls;
         $this->validateContent($networks, $validated, $mediaUrls, $accounts);
+        if ($networks->contains('twitter') && ! data_get($validated, 'platform_payloads.twitter.customize', false)) {
+            $validated['platform_payloads']['twitter']['media_ids'] = $validated['media_ids'] ?? [];
+        }
 
         $mediaIds = collect($validated['media_ids'] ?? [])
             ->push(data_get($validated, 'youtube_options.thumbnail_media_id'))
@@ -137,6 +141,12 @@ class SocialPostApiController extends WorkspaceScopedController
         ], 201);
     }
 
+    /**
+     * @param  Collection<int|string, string>  $networks
+     * @param  array<string, mixed>  $validated
+     * @param  list<string>  $mediaUrls
+     * @param  Collection<int, SocialAccount>  $accounts
+     */
     private function validateContent(Collection $networks, array $validated, array $mediaUrls, Collection $accounts): void
     {
         $errors = [];
@@ -149,6 +159,12 @@ class SocialPostApiController extends WorkspaceScopedController
         $limits = ['tiktok' => 2200, 'linkedin' => 3000, 'facebook' => 63206, 'instagram' => 2200, 'youtube' => 5000];
         $effectiveVideos = [];
         foreach ($networks as $network) {
+            if ($network === 'twitter') {
+                $validator = app(XContentValidator::class);
+                $validator->assertPayload($validator->effectivePayload(array_merge($validated, ['status' => 'publishing'])), (int) $accounts->firstWhere('network', 'twitter')->workspace_id);
+
+                continue;
+            }
             $override = (array) ($payloads[$network] ?? []);
             $customize = (bool) ($override['customize'] ?? false);
             $title = trim((string) ($customize ? ($override['title'] ?? '') : ($validated['title'] ?? '')));

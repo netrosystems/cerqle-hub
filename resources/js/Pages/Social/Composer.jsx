@@ -12,11 +12,13 @@ import { DatePicker, Tooltip } from '@/Components/ui';
 import { browserTz, tzLocalToUtcIso, formatInTz } from '@/Utils/datetime';
 import { toast } from 'sonner';
 
-const CHAR_LIMITS = { tiktok: 2200, linkedin: 3000, facebook: 63206, instagram: 2200, youtube: 5000 };
+import { xWeightedLength } from '@/Components/Social/xText';
+
+const CHAR_LIMITS = { twitter: 280, tiktok: 2200, linkedin: 3000, facebook: 63206, instagram: 2200, youtube: 5000 };
 
 const NETWORK_LABELS = {
     facebook: 'Facebook', instagram: 'Instagram',
-    linkedin: 'LinkedIn',   tiktok: 'TikTok',     youtube: 'YouTube',
+    twitter: 'X', linkedin: 'LinkedIn',   tiktok: 'TikTok',     youtube: 'YouTube',
 };
 
 /* ── per-network preview cards ─────────────────────────────── */
@@ -91,6 +93,15 @@ function InstagramPreview({ body, mediaUrls, accountName, pictureUrl }) {
             </div>
         </div>
     );
+}
+
+function XPreview({ body, mediaUrls, accountName, pictureUrl }) {
+    const { t } = useTranslation();
+    return <div className="rounded-soft-lg border border-neutral-200 bg-white p-4 dark:border-neutral-700 dark:bg-neutral-900">
+        <div className="mb-3 flex items-center gap-2"><Avatar name={accountName} pictureUrl={pictureUrl} /><SocialBrandIcon network="twitter" className="h-5 w-5" /><span className="text-sm font-semibold">{accountName ?? t('social.preview_your_profile')}</span></div>
+        <p className="mb-3 whitespace-pre-wrap break-words text-sm">{body || t('social.preview_post_placeholder')}</p>
+        {mediaUrls?.map(url => /\.(mp4|mov|webm)(\?|$)/i.test(url) ? <video key={url} src={url} controls className="mt-2 max-h-52 w-full rounded-soft" /> : <img key={url} src={url} alt="" className="mt-2 max-h-52 w-full rounded-soft object-contain" />)}
+    </div>;
 }
 
 function LinkedInPreview({ body, mediaUrls, accountName, pictureUrl }) {
@@ -169,6 +180,7 @@ function YouTubePreview({ accountName, title, youtubeOptions }) {
 const PREVIEW_COMPONENTS = {
     facebook:  FacebookPreview,
     instagram: InstagramPreview,
+    twitter:   XPreview,
     linkedin:  LinkedInPreview,
     tiktok:    TikTokPreview,
     youtube:   YouTubePreview,
@@ -202,6 +214,7 @@ export default function SocialComposer({ accounts, storageUsage }) {
     const selectedNetworks  = [...new Set(selectedAccounts.map(a => a.network))];
     const requiresDirectVideo = selectedNetworks.some(network => ['youtube', 'tiktok'].includes(network));
     const hasYoutube = selectedNetworks.includes('youtube');
+    const xMediaOnly = selectedNetworks.length === 1 && selectedNetworks[0] === 'twitter' && (data.platform_payloads?.twitter?.customize ? data.platform_payloads.twitter.media_ids : data.media_ids)?.some(Boolean);
     const isYoutubeOnly = selectedNetworks.length === 1 && hasYoutube;
     const minCharLimit = selectedNetworks.length > 0 ? Math.min(...selectedNetworks.map(n => CHAR_LIMITS[n] ?? 5000)) : 5000;
 
@@ -342,8 +355,8 @@ export default function SocialComposer({ accounts, storageUsage }) {
                         <div>
                             <div className="flex items-center justify-between mb-1">
                                 <label className="text-xs font-medium text-neutral-500 dark:text-neutral-400">{isYoutubeOnly ? t('social.youtube_description') : t('social.post_content')}</label>
-                                <span className={`text-xs ${data.body.length > minCharLimit ? 'text-red-500' : 'text-neutral-400'}`}>
-                                    {data.body.length} / {minCharLimit}
+                                <span className={`text-xs ${(selectedNetworks.includes('twitter') ? xWeightedLength(data.body) : data.body.length) > minCharLimit ? 'text-red-500' : 'text-neutral-400'}`}>
+                                    {selectedNetworks.includes('twitter') ? xWeightedLength(data.body) : data.body.length} / {minCharLimit}{selectedNetworks.includes('twitter') && ` · ${t('social.x_weighted')}`}
                                 </span>
                             </div>
                             <textarea
@@ -459,7 +472,7 @@ export default function SocialComposer({ accounts, storageUsage }) {
 
                         {(
                             <div className="flex gap-2 pt-1">
-                                <button type="submit" disabled={processing || (isYoutubeOnly ? !data.title.trim() : !data.body.trim())} className="flex items-center gap-1.5 rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-60 transition">
+                                <button type="submit" disabled={processing || (isYoutubeOnly ? !data.title.trim() : !data.body.trim() && !xMediaOnly)} className="flex items-center gap-1.5 rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-60 transition">
                                     <Send className="h-4 w-4" />
                                     {data.scheduled_at
                                         ? (processing ? t('social.scheduling') : t('social.schedule'))

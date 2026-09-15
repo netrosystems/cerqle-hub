@@ -9,6 +9,11 @@ class SocialAccount extends Model
 {
     use EnforcesChannelPlanLimit;
 
+    protected static function booted(): void
+    {
+        static::addGlobalScope('connected', fn ($query) => $query->whereNull('social_media_accounts.disconnected_at'));
+    }
+
     protected function channelPlanLimitKey(): string
     {
         return 'social_accounts';
@@ -16,7 +21,7 @@ class SocialAccount extends Model
 
     protected $table = 'social_media_accounts';
 
-    protected $fillable = ['workspace_id', 'network', 'account_id', 'name', 'picture_url', 'access_token', 'refresh_token', 'token_expires_at', 'scopes', 'meta', 'active'];
+    protected $fillable = ['workspace_id', 'network', 'account_id', 'name', 'picture_url', 'access_token', 'refresh_token', 'token_expires_at', 'scopes', 'meta', 'active', 'disconnected_at'];
 
     protected $hidden = ['access_token', 'refresh_token'];
 
@@ -27,6 +32,7 @@ class SocialAccount extends Model
             'meta' => 'array',
             'active' => 'boolean',
             'token_expires_at' => 'datetime',
+            'disconnected_at' => 'datetime',
             'access_token' => 'encrypted',
             'refresh_token' => 'encrypted',
         ];

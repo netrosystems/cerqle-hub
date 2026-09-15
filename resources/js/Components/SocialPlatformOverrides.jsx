@@ -1,12 +1,15 @@
 import { useEffect, useMemo, useState } from 'react';
 import { SocialBrandIcon } from '@/Components/BrandIcons';
+import XMediaSelection from '@/Components/Social/XMediaSelection';
 import MediaUpload from '@/Components/MediaUpload';
 import YouTubeVideoSettings, { DEFAULT_YOUTUBE_OPTIONS } from '@/Components/YouTubeVideoSettings';
 import Tooltip from '@/Components/ui/Tooltip';
+import { useTranslation } from 'react-i18next';
+import { xWeightedLength } from '@/Components/Social/xText';
 import { Info } from 'lucide-react';
 
-const LABELS = { youtube: 'YouTube', tiktok: 'TikTok', instagram: 'Instagram', facebook: 'Facebook', linkedin: 'LinkedIn' };
-const LIMITS = { youtube: 5000, tiktok: 2200, instagram: 2200, facebook: 63206, linkedin: 3000 };
+const LABELS = { twitter: 'X', youtube: 'YouTube', tiktok: 'TikTok', instagram: 'Instagram', facebook: 'Facebook', linkedin: 'LinkedIn' };
+const LIMITS = { twitter: 280, youtube: 5000, tiktok: 2200, instagram: 2200, facebook: 63206, linkedin: 3000 };
 const PLATFORM_GUIDANCE = {
     youtube: 'YouTube requires one compatible video. You can set its title, description, visibility, category, tags, thumbnail, audience, and other video-specific options below.',
     tiktok: 'TikTok privacy and interaction choices come from the connected creator account. Complete the required publishing consent before publishing.',
@@ -34,6 +37,7 @@ function initialPayload(network) {
 }
 
 export default function SocialPlatformOverrides({ networks, accounts, value = {}, onChange, errors = {}, storageUsage, onStorageChange }) {
+    const { t } = useTranslation();
     const [active, setActive] = useState(networks[0] ?? null);
     const [creatorOptions, setCreatorOptions] = useState({});
 
@@ -98,7 +102,7 @@ export default function SocialPlatformOverrides({ networks, accounts, value = {}
                     <input type="checkbox" checked={Boolean(payload.customize)} onChange={event => updatePayload({ customize: event.target.checked })} />
                     Customize content for {LABELS[active]}
                 </label>
-                <Tooltip content={PLATFORM_GUIDANCE[active]} position="bottom" wrap>
+                <Tooltip content={active === 'twitter' ? t('social.x_guidance') : PLATFORM_GUIDANCE[active]} position="bottom" wrap>
                     <button
                         type="button"
                         aria-label={`${LABELS[active]} publishing instructions`}
@@ -109,6 +113,7 @@ export default function SocialPlatformOverrides({ networks, accounts, value = {}
                 </Tooltip>
             </div>
 
+            {active === 'twitter' && <p className="text-xs text-neutral-500">{t('social.x_guidance')}</p>}
             {payload.customize && (
                 <div className="space-y-3 rounded-soft border border-neutral-200 bg-white p-3 dark:border-neutral-700 dark:bg-neutral-900">
                     <div>
@@ -116,23 +121,24 @@ export default function SocialPlatformOverrides({ networks, accounts, value = {}
                         <input value={payload.title ?? ''} maxLength={active === 'youtube' ? 100 : 256} onChange={event => updatePayload({ title: event.target.value })} className="w-full rounded-soft border border-neutral-300 bg-white px-3 py-2 text-sm dark:border-neutral-600 dark:bg-neutral-800" />
                     </div>
                     <div>
-                        <div className="mb-1 flex justify-between"><label className="text-xs font-medium text-neutral-600 dark:text-neutral-300">{active === 'youtube' ? 'Description' : 'Caption'}</label><span className="text-xs text-neutral-400">{(payload.body ?? '').length} / {LIMITS[active]}</span></div>
-                        <textarea value={payload.body ?? ''} maxLength={LIMITS[active]} rows={4} onChange={event => updatePayload({ body: event.target.value })} className="w-full resize-none rounded-soft border border-neutral-300 bg-white px-3 py-2 text-sm dark:border-neutral-600 dark:bg-neutral-800" />
+                        <div className="mb-1 flex justify-between"><label className="text-xs font-medium text-neutral-600 dark:text-neutral-300">{active === 'youtube' ? 'Description' : 'Caption'}</label><span className="text-xs text-neutral-400">{active === 'twitter' ? xWeightedLength(payload.body ?? '') : (payload.body ?? '').length} / {LIMITS[active]}</span></div>
+                        <textarea value={payload.body ?? ''} maxLength={active === 'twitter' ? undefined : LIMITS[active]} rows={4} onChange={event => updatePayload({ body: event.target.value })} className="w-full resize-none rounded-soft border border-neutral-300 bg-white px-3 py-2 text-sm dark:border-neutral-600 dark:bg-neutral-800" />
                     </div>
-                    <MediaUpload
+                    {active === 'twitter' && <XMediaSelection payload={payload} onChange={updatePayload} onStorageChange={onStorageChange} />}
+                    {active !== 'twitter' && <MediaUpload
                         value={payload.media_urls?.[0] ?? ''}
                         onChange={url => updatePayload({ media_urls: url ? [url] : [], media_ids: url ? payload.media_ids : [] })}
                         onUploaded={upload => {
                             updatePayload({ media_urls: [upload.url], media_ids: [upload.media_id] });
                             onStorageChange?.(upload.storage);
                         }}
-                        accept={isVideo ? 'video/mp4,video/webm,video/quicktime' : 'image/*,video/*'}
+                        accept={active === 'twitter' ? (payload.options?.media_type === 'video' ? 'video/mp4' : 'image/jpeg,image/png,image/webp') : isVideo ? 'video/mp4,video/webm,video/quicktime' : 'image/*,video/*'}
                         collection={isVideo ? 'social-video' : 'social'}
                         maxSizeMb={25}
                         videoMaxSizeMb={500}
                         limitType="socialImageMb"
                         remainingBytes={storageUsage?.remaining_bytes ?? null}
-                    />
+                    />}
                 </div>
             )}
 
@@ -181,6 +187,9 @@ export default function SocialPlatformOverrides({ networks, accounts, value = {}
                 </div>
             )}
 
+            {active === 'twitter' && ['body', 'media_ids', 'media_urls'].map(key => errors[key] && (
+                <p key={key} role="alert" className="text-xs text-coral-600">{errors[key]}</p>
+            ))}
             {Object.entries(errors).filter(([key]) => key.startsWith(`platform_payloads.${active}`)).map(([key, message]) => <p key={key} className="text-xs text-coral-600">{message}</p>)}
         </section>
     );

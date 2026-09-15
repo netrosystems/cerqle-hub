@@ -2,6 +2,7 @@
 
 use App\Modules\Social\Http\Controllers\SocialAccountController;
 use App\Modules\Social\Http\Controllers\SocialPostController;
+use App\Modules\Social\Http\Controllers\XReviewController;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware(['web', 'client-app'])->prefix('app/social')->name('client.social.')->group(function () {
@@ -24,6 +25,8 @@ Route::middleware(['web', 'client-app'])->prefix('app/social')->name('client.soc
     Route::put('/posts/{post}/youtube/{account}', [SocialPostController::class, 'updatePublishedYoutube'])->name('posts.youtube.update');
     Route::delete('/posts/{post}/youtube/{account}', [SocialPostController::class, 'deletePublishedYoutube'])->name('posts.youtube.destroy');
     Route::post('/posts/{post}/publish-now', [SocialPostController::class, 'publishNow'])->name('posts.publish-now');
+    Route::post('/posts/{post}/x/{account}/review', [XReviewController::class, 'review'])
+        ->middleware('client.access:write')->name('posts.x.review');
     Route::post('/posts/{post}/cancel', [SocialPostController::class, 'cancel'])->name('posts.cancel');
     Route::post('/ai-generate', [SocialPostController::class, 'aiGenerate'])->name('ai-generate');
     Route::get('/calendar', [SocialPostController::class, 'calendar'])->name('calendar');

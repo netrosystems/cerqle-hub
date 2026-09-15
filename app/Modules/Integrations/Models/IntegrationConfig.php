@@ -10,6 +10,7 @@ class IntegrationConfig extends Model
     public const PROVIDERS = [
         'meta_app',
         'oauth_linkedin',
+        'oauth_twitter',
         'oauth_google_signin',
         'oauth_youtube',
         'oauth_tiktok',
@@ -44,6 +45,7 @@ class IntegrationConfig extends Model
     public const LABELS = [
         'meta_app' => 'Meta App (WhatsApp / Instagram / Messenger / Facebook)',
         'oauth_linkedin' => 'LinkedIn OAuth',
+        'oauth_twitter' => 'X OAuth',
         'oauth_google_signin' => 'Google Sign-In',
         'oauth_youtube' => 'YouTube OAuth',
         'oauth_tiktok' => 'TikTok OAuth',
@@ -67,6 +69,7 @@ class IntegrationConfig extends Model
     public const CATEGORIES = [
         'meta_app' => 'Meta',
         'oauth_linkedin' => 'Social OAuth',
+        'oauth_twitter' => 'Social OAuth',
         'oauth_google_signin' => 'Authentication',
         'oauth_youtube' => 'Social OAuth',
         'oauth_tiktok' => 'Social OAuth',
@@ -88,6 +91,10 @@ class IntegrationConfig extends Model
 
     // Field definitions per provider (used to build dynamic forms)
     public const FIELDS = [
+        'oauth_twitter' => [
+            ['key' => 'client_id', 'label' => 'OAuth 2.0 Client ID', 'type' => 'text', 'required' => true],
+            ['key' => 'client_secret', 'label' => 'OAuth 2.0 Client Secret', 'type' => 'password', 'required' => true],
+        ],
         'meta_app' => [
             ['key' => 'app_id',              'label' => 'App ID',                               'type' => 'text',     'required' => true],
             ['key' => 'app_secret',          'label' => 'App Secret',                           'type' => 'password', 'required' => true],
