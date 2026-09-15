@@ -1,13 +1,20 @@
 # WhatsApp coexistence implementation checkpoint
 
-Status updated: 2026-09-11. The new-messages-only implementation was deployed in
+Status updated: 2026-09-15. Client-wide availability supersedes the workspace pilot:
+`WHATSAPP_COEXISTENCE_ENABLED=true` enables onboarding for every client. The old
+`WHATSAPP_COEXISTENCE_WORKSPACES` value is ignored; no environment rewrite is needed.
+Both UI modes are always visible; a disabled global switch disables Business App
+with an explanation. History import, account isolation, phone verification and
+subscription safeguards are unchanged. See the 2026-09-15 client-wide decision.
+
+Historical checkpoint: The new-messages-only implementation was deployed in
 release v1.0.82 and rollout was last recorded as limited to one allowlisted pilot
 workspace. Meta onboarding remains blocked by Advanced Access error 2655111; the
 dedicated phone has not connected and end-to-end coexistence is not validated.
 `PROJECT_STATUS.md` is the current operational checkpoint. The implementation
 details below supersede the earlier preparation notes.
 
-## Current pilot checkpoint
+## Historical pilot checkpoint (availability superseded on 2026-09-15)
 
 2026-09-15: User reports required Meta permissions are now approved. This is not
 yet independently provider-validated. Connection rollout now fails closed for an
@@ -47,7 +54,7 @@ variables contain the local database path. History/contact import remains off.
   96 tests in 22 files; Vite builds. PHPStan remains
   non-green at 578 findings, with none reported in new coexistence classes.
 
-### Remaining provider-validation steps
+### Remaining provider-validation steps (historical pilot; see current decision)
 
 1. Resolve the Meta Advanced Access eligibility/review blocker for the partner app.
 2. Reconfirm the allowlist and import-disabled production configuration; register

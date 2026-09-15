@@ -4,6 +4,8 @@ Status date: **2026-09-13**. This file is a checkpoint, not permanent proof. Rec
 
 ## Git and release state
 
+- 2026-09-15 owner approved client-wide WhatsApp connection modes: workspace allowlist retired; global onboarding switch retained. All clients see Connect WABA and WhatsApp Business App; global-off Business App is visibly disabled. Actor/workspace-bound onboarding, channel quotas, verified phone ownership and import-disabled behavior remain. See `docs/coexistence-client-wide-qa-2026-09-15.md`. Implemented for dev; no production deployment or real phone onboarding performed in this change.
+
 - 2026-09-15 X publishing implemented for development: shared admin OAuth app, PKCE client authorization, native text/image/video uploads, existing social limits only, and explicit uncertain-outcome review. Additive migration required. Focused Social/Integration checks pass; real X authorization, delivery and responsive-client checks remain a release gate. See `docs/x-integration-qa-2026-09-15.md`. No production deployment or X application submission performed.
 
 - 2026-09-15 fresh deployment of the label release exited 1 at worker checks. Supervisor confirms graceful exit status 0 while maintenance was active; workers became stable after the exit trap brought the site up. Installed Laravel Worker::pauseWorker invokes max-time checking with startTime=0, incompatible with health-checking --max-time workers while down. Deployment ordering now brings the app online after migration/cache completion, before worker cycles; release recording remains after all worker checks. Fresh validation/deployment pending.

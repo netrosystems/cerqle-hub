@@ -2,9 +2,8 @@
 
 return [
 
-    // Enable only after the callback handlers and provider review are verified.
+    // Installation-wide onboarding switch; available to every client when enabled.
     'coexistence_enabled' => env('WHATSAPP_COEXISTENCE_ENABLED', false),
-    'coexistence_workspaces' => env('WHATSAPP_COEXISTENCE_WORKSPACES', ''),
     'coexistence_import_enabled' => env('WHATSAPP_COEXISTENCE_IMPORT_ENABLED', false),
     'coexistence_graph_version' => 'v26.0',
 
