@@ -4,10 +4,12 @@ namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
 use App\Models\MagicLink;
+use App\Models\SystemSetting;
 use App\Models\User;
+use App\Services\ClientLoginService;
+use App\Services\Mail\MailService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -28,7 +30,7 @@ class MagicLinkController extends Controller
     public function send(Request $request): RedirectResponse
     {
         // Only allow when enabled in system settings
-        if (! \App\Models\SystemSetting::get('magic_link_enabled', false)) {
+        if (! SystemSetting::get('magic_link_enabled', false)) {
             return back()->withErrors(['email' => 'Magic link login is not enabled.']);
         }
 
@@ -48,7 +50,7 @@ class MagicLinkController extends Controller
 
             $url = route('auth.magic-link.verify', ['token' => $link->token]);
 
-            app(\App\Services\Mail\MailService::class)->sendWithTemplate('magic_link', $request->email, [
+            app(MailService::class)->sendWithTemplate('magic_link', $request->email, [
                 'app_name' => config('app.name'),
                 'magic_link_url' => $url,
                 'expires_minutes' => 15,
@@ -75,10 +77,13 @@ class MagicLinkController extends Controller
             return redirect()->route('login')->withErrors(['email' => 'No account found for this magic link.']);
         }
 
-        $link->update(['used_at' => now()]);
+        if (! MagicLink::whereKey($link->id)->whereNull('used_at')->where('expires_at', '>', now())->update(['used_at' => now()])) {
+            return redirect()->route('login')->withErrors(['email' => 'This magic link is invalid or has expired.']);
+        }
 
-        Auth::login($user, true);
-        $request->session()->regenerate();
+        if ($challenge = app(ClientLoginService::class)->login($request, $user, true)) {
+            return redirect()->to($challenge);
+        }
 
         return redirect()->intended(route('client.dashboard'));
     }

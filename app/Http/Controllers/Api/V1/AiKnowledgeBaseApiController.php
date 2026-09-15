@@ -92,6 +92,7 @@ class AiKnowledgeBaseApiController extends WorkspaceScopedController
                 default => ['nullable', 'string', 'max:512'],
             },
             'title' => ['nullable', 'string', 'max:256'],
+            'file' => ['required_if:source_type,file', 'nullable', 'file', 'max:20480', 'mimes:'.self::SUPPORTED_FILE_MIMES],
         ]);
 
         if ($request->hasFile('file')) {

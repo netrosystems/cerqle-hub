@@ -485,6 +485,11 @@ class ChatWidgetPublicController extends Controller
         }
 
         $identityKind = (string) ($data['identity_kind'] ?? '');
+        if ($identityKind === 'logged_in' && ! $widget->identity_verification) {
+            // Display claims are not proof of identity and cannot restore another transcript.
+            unset($identity['external_id']);
+            $identity['identity_kind'] = 'prechat';
+        }
         if ($identityKind !== 'logged_in') {
             unset($identity['external_id']);
         }
@@ -494,7 +499,7 @@ class ChatWidgetPublicController extends Controller
             $provided = (string) ($data['user_hash'] ?? '');
             $expected = hash_hmac('sha256', $signedValue, (string) $widget->identity_secret);
 
-            if ($signedValue === '' || $provided === '' || ! hash_equals($expected, $provided)) {
+            if (! filled($widget->identity_secret) || $signedValue === '' || $provided === '' || ! hash_equals($expected, $provided)) {
                 return [];
             }
         }

@@ -4,10 +4,12 @@ namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Auth\LoginRequest;
+use App\Services\ClientLoginService;
 use App\Services\GoogleSignInConfigurator;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
@@ -63,12 +65,14 @@ class AuthenticatedSessionController extends Controller
 
     public function store(LoginRequest $request): RedirectResponse
     {
+        $request->ensureIsNotRateLimited();
         // This page serves both audiences. Try the admin guard first: if the
         // credentials match an admin account, sign them in there and send them
         // to the admin panel. A non-admin email simply falls through to the
         // client (web) guard below. When the same email exists in both tables,
         // admin wins.
         if ($this->attemptAdmin($request)) {
+            RateLimiter::clear($request->throttleKey());
             $request->session()->regenerate();
 
             return $this->redirectAdminAfterLogin($request);
@@ -81,12 +85,8 @@ class AuthenticatedSessionController extends Controller
 
         $user = Auth::user();
 
-        // If 2FA is enabled, log out and redirect to the 2FA challenge
-        if ($user && $user->hasTwoFactorEnabled()) {
-            $request->session()->put('2fa_user_id', $user->getAuthIdentifier());
-            Auth::logout();
-
-            return redirect()->route('auth.two-factor.challenge');
+        if ($user && ($challenge = app(ClientLoginService::class)->login($request, $user, $request->boolean('remember')))) {
+            return redirect()->to($challenge);
         }
 
         $request->session()->regenerate();
@@ -114,6 +114,7 @@ class AuthenticatedSessionController extends Controller
 
         if (! $admin->isActive()) {
             Auth::guard('admin')->logout();
+            RateLimiter::hit($request->throttleKey());
 
             throw ValidationException::withMessages([
                 'email' => __('Your account is inactive.'),

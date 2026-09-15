@@ -36,7 +36,7 @@ class AttachmentService
     {
         $originalName = $file->getClientOriginalName();
         $rawMime = $file->getMimeType() ?? 'application/octet-stream';
-        $extension = strtolower($file->getClientOriginalExtension() ?: pathinfo($originalName, PATHINFO_EXTENSION));
+        $extension = SafeUploadName::extension($file);
         $sizeBytes = (int) $file->getSize();
 
         $isHeic = $this->isHeic($file);

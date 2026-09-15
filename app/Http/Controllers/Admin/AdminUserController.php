@@ -59,6 +59,8 @@ class AdminUserController extends Controller
             'role_ids.*' => ['exists:roles,id'],
         ]);
 
+        $this->assertRoleAuthority($request, $valid['role_ids'] ?? []);
+
         $admin = AdminUser::create([
             'name' => $valid['name'],
             'email' => $valid['email'],
@@ -75,6 +77,7 @@ class AdminUserController extends Controller
 
     public function update(Request $request, AdminUser $adminUser): RedirectResponse
     {
+        $this->assertTargetAuthority($request, $adminUser);
         $valid = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'email', Rule::unique('admin_users')->ignore($adminUser->id)],
@@ -82,6 +85,8 @@ class AdminUserController extends Controller
             'role_ids' => ['array'],
             'role_ids.*' => ['exists:roles,id'],
         ]);
+
+        $this->assertRoleAuthority($request, $valid['role_ids'] ?? []);
 
         $adminUser->update([
             'name' => $valid['name'],
@@ -96,24 +101,27 @@ class AdminUserController extends Controller
 
     public function destroy(Request $request, AdminUser $adminUser): RedirectResponse
     {
+        $this->assertTargetAuthority($request, $adminUser);
         $current = $request->user('admin');
         if ($current && $current->id === $adminUser->id) {
             return redirect()->route('admin.admins.index')->with('error', __('You cannot delete yourself.'));
         }
 
         if ($adminUser->isSuperAdmin()) {
-            $superAdminCount = AdminUser::whereHas('roles', fn ($q) => $q->where('key', \App\Models\Role::KEY_SUPER_ADMIN))->count();
+            $superAdminCount = AdminUser::whereHas('roles', fn ($q) => $q->where('key', Role::KEY_SUPER_ADMIN))->count();
             if ($superAdminCount <= 1) {
                 return redirect()->route('admin.admins.index')->with('error', __('Cannot delete the last Super Admin.'));
             }
         }
 
         $adminUser->delete();
+
         return redirect()->route('admin.admins.index')->with('success', __('Admin deleted.'));
     }
 
     public function toggleStatus(Request $request, AdminUser $adminUser): RedirectResponse
     {
+        $this->assertTargetAuthority($request, $adminUser);
         $current = $request->user('admin');
         if ($current && $current->id === $adminUser->id) {
             return redirect()->route('admin.admins.index')->with('error', __('You cannot deactivate yourself.'));
@@ -124,5 +132,27 @@ class AdminUserController extends Controller
         ]);
 
         return redirect()->route('admin.admins.index')->with('success', __('Status updated.'));
+    }
+
+    private function assertTargetAuthority(Request $request, AdminUser $target): void
+    {
+        $actor = $request->user('admin');
+        abort_unless($actor && ($actor->isSuperAdmin() || (! $target->isSuperAdmin()
+            && empty(array_diff($target->permissionKeys(), $actor->permissionKeys())))), 403);
+    }
+
+    /** @param array<int, int|string> $roleIds */
+    private function assertRoleAuthority(Request $request, array $roleIds): void
+    {
+        $actor = $request->user('admin');
+        abort_unless($actor !== null, 403);
+        if ($actor->isSuperAdmin()) {
+            return;
+        }
+        foreach (Role::with('permissions')->whereIn('id', $roleIds)->get() as $role) {
+            abort_if($role->key === Role::KEY_SUPER_ADMIN
+                || ! empty(array_diff($role->permissions->pluck('key')->all(), $actor->permissionKeys())), 403,
+                'You cannot grant permissions beyond your own authority.');
+        }
     }
 }

@@ -89,7 +89,7 @@ class NotificationAvailabilityTest extends TestCase
     {
         $this->getJson('/api/v1/notification-availability')->assertUnauthorized();
         $ctx = $this->createSubscribedWorkspaceContext();
-        Sanctum::actingAs($ctx['user']);
+        Sanctum::actingAs($ctx['user'], ['*']);
         $this->getJson('/api/v1/notification-availability')->assertOk()->assertJsonPath('workspace_id', $ctx['workspace']->id);
         $this->patchJson('/api/v1/notification-availability', $this->payload())->assertOk();
         $ctx['user']->update(['status' => 'inactive']);

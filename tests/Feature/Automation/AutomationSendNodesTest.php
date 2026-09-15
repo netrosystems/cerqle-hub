@@ -8,6 +8,7 @@ use App\Modules\Automation\Models\Automation;
 use App\Modules\Automation\Models\AutomationRun;
 use App\Modules\Automation\Services\AutomationEngine;
 use App\Modules\Shared\Models\Contact;
+use App\Services\PublicUrlGuard;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Mail;
@@ -110,6 +111,7 @@ class AutomationSendNodesTest extends TestCase
 
     public function test_webhook_node_calls_url(): void
     {
+        $this->mock(PublicUrlGuard::class)->shouldReceive('destination')->with('https://example.com/hook')->andReturn(['host' => 'example.com', 'port' => 443, 'ip' => '93.184.216.34']);
         Http::fake(['https://example.com/hook' => Http::response(['ok' => true], 200)]);
 
         $workspace = $this->ctx['workspace'];

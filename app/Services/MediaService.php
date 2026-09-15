@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Media;
 use App\Models\User;
+use App\Services\Media\SafeUploadName;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
@@ -19,7 +20,7 @@ class MediaService
         string $collection = 'default',
         ?string $disk = null
     ): Media {
-        $ext = $file->getClientOriginalExtension();
+        $ext = SafeUploadName::extension($file);
         $filename = $file->getClientOriginalName();
 
         // Resolve disk from StorageManager unless caller explicitly passes one

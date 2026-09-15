@@ -4,6 +4,7 @@ namespace App\Http\Middleware;
 
 use Closure;
 use Illuminate\Http\Request;
+use Laravel\Sanctum\TransientToken;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
@@ -18,6 +19,11 @@ class CheckApiAbility
 
         if (! $token) {
             return response()->json(['error' => 'Unauthenticated.'], 401);
+        }
+
+        // Stateful first-party browser requests remain CSRF-protected.
+        if ($token instanceof TransientToken) {
+            return $next($request);
         }
 
         // Wildcard '*' tokens (e.g. tokens created without explicit abilities) pass everything

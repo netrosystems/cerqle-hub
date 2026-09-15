@@ -37,7 +37,7 @@ class ResolveOpenEmailTest extends TestCase
         $unchanged = [$makeThread($first, 'pending'), $makeThread($first, 'snoozed'), $makeThread($first, 'resolved'), $makeThread($foreign), $makeThread($chat)];
         $url = '/api/v1/mobile/email/resolve-open';
         $this->postJson($url)->assertUnauthorized();
-        Sanctum::actingAs($user);
+        Sanctum::actingAs($user, ['*']);
         $this->postJson($url, ['account_id' => 0])->assertUnprocessable();
         $this->postJson($url, ['account_id' => $foreign->id])->assertNotFound();
         $this->postJson($url, ['account_id' => $chat->id])->assertNotFound();

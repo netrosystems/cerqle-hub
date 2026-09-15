@@ -3,6 +3,7 @@
 namespace App\Modules\Ecommerce\Http\Controllers;
 
 use App\Http\Controllers\Controller;
+use App\Models\User;
 use App\Modules\Ecommerce\Models\EcommerceStore;
 use App\Modules\Ecommerce\Services\OAuth\EcommerceOAuthManager;
 use App\Modules\Ecommerce\Services\StoreConnector;
@@ -10,6 +11,7 @@ use App\Modules\Ecommerce\Services\StoreUrlGuard;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Session;
 use Illuminate\Support\Str;
@@ -46,7 +48,7 @@ class EcommerceOAuthController extends Controller
             }
 
             $state = Str::random(40);
-            Session::put('ecom_oauth', ['state' => $state, 'shop' => $shop, 'workspace' => $wid]);
+            Session::put('ecom_oauth', ['state' => $state, 'shop' => $shop, 'workspace' => $wid, 'user' => $request->user()->id, 'expires_at' => now()->addMinutes(10)->timestamp]);
 
             try {
                 $url = $this->oauth->shopifyAuthUrl($shop, $state, route('client.ecommerce.oauth.shopify.callback'));
@@ -63,16 +65,26 @@ class EcommerceOAuthController extends Controller
                 return redirect($this->index())->with('error', $error);
             }
 
-            // Reserve a pending store; its uuid is the Woo `user_id` round-tripped
-            // back to our server-to-server callback (no session there).
+            // A store UUID is public identity, not callback authorization.
             $store = EcommerceStore::firstOrCreate(
                 ['workspace_id' => $wid, 'platform' => 'woocommerce', 'domain' => $storeUrl],
                 ['name' => 'WooCommerce Store', 'status' => 'pending'],
             );
 
+            $attemptToken = Str::random(64);
+            DB::table('ecommerce_oauth_attempts')->insert([
+                'token_hash' => hash('sha256', $attemptToken),
+                'user_id' => $request->user()->id,
+                'workspace_id' => $wid,
+                'store_id' => $store->id,
+                'expires_at' => now()->addMinutes(10),
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+
             $url = $this->oauth->wooAuthUrl(
                 $storeUrl,
-                $store->uuid,
+                $attemptToken,
                 route('webhooks.ecommerce.woo_auth'),
                 route('client.ecommerce.oauth.woocommerce.return'),
             );
@@ -93,6 +105,11 @@ class EcommerceOAuthController extends Controller
 
         if (empty($stored['state']) || ! hash_equals($stored['state'], $state) || ($stored['shop'] ?? null) !== $shop) {
             return redirect($this->index())->with('error', 'Invalid OAuth state. Please try connecting again.');
+        }
+        if (($stored['user'] ?? null) !== $request->user()->id
+            || ($stored['expires_at'] ?? 0) <= now()->timestamp
+            || ! $request->user()->canAccessWorkspace((int) ($stored['workspace'] ?? 0))) {
+            return redirect($this->index())->with('error', 'OAuth access expired. Please connect again.');
         }
         if ($error = StoreUrlGuard::validate('shopify', $shop)) {
             return redirect($this->index())->with('error', $error);
@@ -150,15 +167,27 @@ class EcommerceOAuthController extends Controller
      */
     public function woocommerceCallback(Request $request): JsonResponse
     {
-        $store = EcommerceStore::where('uuid', (string) $request->input('user_id'))
-            ->where('platform', 'woocommerce')
-            ->first();
+        $attempt = DB::transaction(function () use ($request) {
+            $query = DB::table('ecommerce_oauth_attempts');
+            $attempt = (clone $query)->where('token_hash', hash('sha256', (string) $request->input('user_id')))
+                ->whereNull('consumed_at')->where('expires_at', '>', now())->lockForUpdate()->first();
+            if (! $attempt) {
+                return null;
+            }
+            $query->where('id', $attempt->id)->update(['consumed_at' => now(), 'updated_at' => now()]);
+
+            return $attempt;
+        });
+        $actor = $attempt ? User::find($attempt->user_id) : null;
+        $store = $attempt && $actor?->canAuthenticate() && $actor->canAccessWorkspace((int) $attempt->workspace_id)
+            ? EcommerceStore::whereKey($attempt->store_id)->where('workspace_id', $attempt->workspace_id)->where('platform', 'woocommerce')->first()
+            : null;
 
         $key = (string) $request->input('consumer_key', '');
         $secret = (string) $request->input('consumer_secret', '');
 
         if (! $store || $key === '' || $secret === '') {
-            Log::warning('ecommerce.oauth.woo.invalid_callback', ['user_id' => $request->input('user_id')]);
+            Log::warning('ecommerce.oauth.woo.invalid_callback');
 
             return response()->json(['status' => 'error'], 400);
         }

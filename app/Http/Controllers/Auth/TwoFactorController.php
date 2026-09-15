@@ -3,6 +3,8 @@
 namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
+use App\Models\User;
+use App\Services\SecondFactorService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -106,7 +108,7 @@ class TwoFactorController extends Controller
      */
     public function challenge(Request $request): Response|RedirectResponse
     {
-        if (! $request->session()->has('2fa_user_id')) {
+        if (! $request->session()->has('2fa_user_id') || $request->session()->get('2fa_expires_at', 0) <= now()->timestamp) {
             return redirect()->route('login');
         }
 
@@ -119,34 +121,25 @@ class TwoFactorController extends Controller
     public function verify(Request $request): RedirectResponse
     {
         $request->validate([
-            'code' => ['required', 'string'],
+            'code' => ['required', 'string', 'max:32'],
         ]);
 
-        $userId = $request->session()->get('2fa_user_id');
-        $user = \App\Models\User::findOrFail($userId);
-        $code = $request->input('code');
+        if ($request->session()->get('2fa_expires_at', 0) <= now()->timestamp) {
+            $request->session()->forget(['2fa_user_id', '2fa_expires_at', '2fa_remember']);
 
-        $valid = false;
-
-        if (strlen($code) === 6 && ctype_digit($code)) {
-            $valid = $this->google2fa->verifyKey($user->two_factor_secret, $code);
-        } else {
-            // Recovery code
-            $codes = $user->two_factor_recovery_codes ?? [];
-            $index = array_search($code, $codes, true);
-            if ($index !== false) {
-                $valid = true;
-                unset($codes[$index]);
-                $user->update(['two_factor_recovery_codes' => array_values($codes)]);
-            }
+            return redirect()->route('login')->withErrors(['email' => 'Please sign in again.']);
         }
+        $userId = $request->session()->get('2fa_user_id');
+        $user = User::find($userId);
+        $code = $request->input('code');
+        $valid = $user && app(SecondFactorService::class)->verify($user, $code);
 
         if (! $valid) {
             return back()->withErrors(['code' => 'Invalid code.']);
         }
 
-        auth()->login($user);
-        $request->session()->forget('2fa_user_id');
+        auth()->login($user, $request->session()->get('2fa_remember', false));
+        $request->session()->forget(['2fa_user_id', '2fa_expires_at', '2fa_remember']);
         $request->session()->regenerate();
 
         return redirect()->intended(route('client.dashboard'));

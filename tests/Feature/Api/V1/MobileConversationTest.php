@@ -42,7 +42,7 @@ class MobileConversationTest extends TestCase
             'status' => 'open',
         ]);
 
-        Sanctum::actingAs($user);
+        Sanctum::actingAs($user, ['*']);
 
         $response = $this->getJson('/api/v1/mobile/conversations');
 
@@ -81,7 +81,7 @@ class MobileConversationTest extends TestCase
             ]);
         }
 
-        Sanctum::actingAs($user);
+        Sanctum::actingAs($user, ['*']);
 
         $response = $this->getJson("/api/v1/mobile/conversations/{$conversation->uuid}");
 
@@ -122,7 +122,7 @@ class MobileConversationTest extends TestCase
             'webchat_last_seen_at' => now()->subMinutes(5),
         ]);
 
-        Sanctum::actingAs($user);
+        Sanctum::actingAs($user, ['*']);
 
         // Standard index
         $res = $this->getJson('/api/v1/mobile/conversations');
@@ -161,7 +161,7 @@ class MobileConversationTest extends TestCase
             'webchat_last_seen_at' => now(),
         ]);
 
-        Sanctum::actingAs($user);
+        Sanctum::actingAs($user, ['*']);
 
         $setupRes = $this->getJson('/api/v1/mobile/inbox/setup');
         $setupRes->assertOk()
@@ -197,7 +197,7 @@ class MobileConversationTest extends TestCase
             'webchat_last_seen_at' => now(),
         ]);
 
-        Sanctum::actingAs($user);
+        Sanctum::actingAs($user, ['*']);
 
         $response = $this->postJson("/api/v1/mobile/conversations/{$conversation->uuid}/open-widget");
         $response->assertOk()
@@ -241,7 +241,7 @@ class MobileConversationTest extends TestCase
             'sent_at' => now(),
         ]);
 
-        Sanctum::actingAs($user);
+        Sanctum::actingAs($user, ['*']);
 
         $response = $this->postJson("/api/v1/mobile/conversations/{$conversation->uuid}/read");
         $response->assertOk()
@@ -264,7 +264,7 @@ class MobileConversationTest extends TestCase
             'email' => 'old@example.com',
         ]);
 
-        Sanctum::actingAs($user);
+        Sanctum::actingAs($user, ['*']);
 
         $response = $this->patchJson("/api/v1/mobile/contacts/{$contact->id}", [
             'name' => 'John Doe',
@@ -301,7 +301,7 @@ class MobileConversationTest extends TestCase
             'status' => 'open',
         ]);
 
-        Sanctum::actingAs($user);
+        Sanctum::actingAs($user, ['*']);
 
         $response = $this->patchJson("/api/v1/mobile/conversations/{$conversation->uuid}/contact", [
             'name' => 'Jane Smith',
@@ -343,7 +343,7 @@ class MobileConversationTest extends TestCase
             'status' => 'open',
         ]);
 
-        Sanctum::actingAs($user);
+        Sanctum::actingAs($user, ['*']);
 
         $pdf = UploadedFile::fake()->create('report.pdf', 300, 'application/pdf');
 
@@ -389,7 +389,7 @@ class MobileConversationTest extends TestCase
             'status' => 'open',
         ]);
 
-        Sanctum::actingAs($user);
+        Sanctum::actingAs($user, ['*']);
 
         $pdf = UploadedFile::fake()->create('invoice.pdf', 200, 'application/pdf');
 
@@ -442,7 +442,7 @@ class MobileConversationTest extends TestCase
             'webchat_last_seen_at' => now(),
         ]);
 
-        Sanctum::actingAs($user);
+        Sanctum::actingAs($user, ['*']);
 
         $response = $this->getJson('/api/v1/mobile/conversations');
 
@@ -503,7 +503,7 @@ class MobileConversationTest extends TestCase
             'last_message_at' => now()->subMinute(),
         ]);
 
-        Sanctum::actingAs($user);
+        Sanctum::actingAs($user, ['*']);
 
         $response = $this->getJson('/api/v1/mobile/conversations?folder=all&page=1');
 

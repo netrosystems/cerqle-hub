@@ -17,6 +17,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\URL;
 use Laravel\Sanctum\HasApiTokens;
@@ -28,6 +29,11 @@ class User extends Authenticatable implements MustVerifyEmail
     protected static function booted(): void
     {
         static::saved(function (User $user) {
+            if ($user->wasChanged('status') && $user->status === self::STATUS_INACTIVE) {
+                $user->tokens()->delete();
+                DB::table('sessions')->where('user_id', $user->id)->delete();
+                $user->forceFill(['remember_token' => null])->saveQuietly();
+            }
             if (! $user->client_id) {
                 return;
             }
@@ -72,7 +78,19 @@ class User extends Authenticatable implements MustVerifyEmail
     protected $hidden = [
         'password',
         'remember_token',
+        'two_factor_secret',
+        'two_factor_recovery_codes',
     ];
+
+    public function canAuthenticate(): bool
+    {
+        // Re-read persisted state, including database defaults and deactivation
+        // after a session/token was hydrated.
+        return self::whereKey($this->id)->where('status', self::STATUS_ACTIVE)
+            ->where(fn ($query) => $query->whereNull('client_id')
+                ->orWhereHas('client', fn ($client) => $client->where('status', Client::STATUS_ACTIVE)))
+            ->exists();
+    }
 
     /**
      * Resolve the stored avatar path to a public URL (null when unset).
