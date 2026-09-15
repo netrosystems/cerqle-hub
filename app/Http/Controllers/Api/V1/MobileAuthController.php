@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\V1;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Services\OneSignalService;
+use App\Services\SecondFactorService;
 use App\Services\StorageManager;
 use App\Services\UserPushTokenService;
 use App\Support\Demo;
@@ -35,6 +36,7 @@ class MobileAuthController extends Controller
             'device_name' => ['nullable', 'string', 'max:255'],
             'device_id' => ['nullable', 'string', 'max:255'],
             'push_token' => ['nullable', 'string', 'max:255'],
+            'two_factor_code' => ['nullable', 'string', 'max:32'],
         ]);
 
         $email = Str::lower(trim($validated['email']));
@@ -56,11 +58,20 @@ class MobileAuthController extends Controller
             ]);
         }
 
-        RateLimiter::clear($throttleKey);
-
-        if ($user->status !== 'active') {
+        if (! $user->canAuthenticate()) {
             return response()->json(['message' => 'Account is not active.'], 403);
         }
+
+        if ($user->hasTwoFactorEnabled()) {
+            if (empty($validated['two_factor_code'])) {
+                return response()->json(['code' => 'two_factor_required', 'message' => 'Enter your authenticator or recovery code.'], 202);
+            }
+            if (! app(SecondFactorService::class)->verify($user, $validated['two_factor_code'])) {
+                RateLimiter::hit($throttleKey, 60);
+                throw ValidationException::withMessages(['two_factor_code' => 'Invalid verification code.']);
+            }
+        }
+        RateLimiter::clear($throttleKey);
 
         $deviceName = $validated['device_name'] ?? 'ChatAgent Mobile';
         $token = $user->createToken($deviceName, ['*'])->plainTextToken;
@@ -156,6 +167,7 @@ class MobileAuthController extends Controller
     /**
      * Shared serialisation for the agent profile.
      */
+    /** @return array<string, mixed> */
     private function userPayload(User $user, bool $withWorkspace = false): array
     {
         $payload = [

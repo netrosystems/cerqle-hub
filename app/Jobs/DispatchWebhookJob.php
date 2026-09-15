@@ -4,6 +4,7 @@ namespace App\Jobs;
 
 use App\Models\WebhookDelivery;
 use App\Models\WebhookEndpoint;
+use App\Services\PublicHttpClient;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -17,6 +18,7 @@ class DispatchWebhookJob implements ShouldQueue
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     public int $tries = 5;
+
     public int $maxExceptions = 5;
 
     private static array $backoff = [60, 300, 3600, 86400, 86400]; // 1m, 5m, 1h, 1d, 1d
@@ -44,14 +46,14 @@ class DispatchWebhookJob implements ShouldQueue
         ]);
 
         try {
-            $response = Http::timeout(10)
+            $request = Http::timeout(10)
                 ->withHeaders([
                     'Content-Type' => 'application/json',
                     'X-Webhook-Event' => $this->event,
                     'X-Webhook-Signature' => $signature,
-                    'User-Agent' => config('app.name') . ' Webhooks/1.0',
-                ])
-                ->post($this->endpoint->url, $payloadJson);
+                    'User-Agent' => config('app.name').' Webhooks/1.0',
+                ]);
+            $response = app(PublicHttpClient::class)->send($request, 'POST', $this->endpoint->url, ['body' => $payloadJson]);
 
             $delivery->update([
                 'response_status' => $response->status(),

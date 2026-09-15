@@ -9,6 +9,7 @@
         "php": "^8.2",
         "barryvdh/laravel-dompdf": "^3.1",
         "dedoc/scramble": "^0.13.22",
+        "firebase/php-jwt": "^7.0",
         "giggsey/libphonenumber-for-php": "^9.0",
         "inertiajs/inertia-laravel": "^2.0",
         "laravel/framework": "^12.0",
@@ -94,6 +95,7 @@
         }
     },
     "config": {
+        "platform": {"php": "8.2.0"},
         "optimize-autoloader": true,
         "preferred-install": "dist",
         "sort-packages": true,

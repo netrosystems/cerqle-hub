@@ -14,6 +14,7 @@ use App\Services\Billing\PayPalGateway;
 use App\Services\Billing\StripeGateway;
 use App\Services\WebhookDispatchService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Bus;
 use Inertia\Testing\AssertableInertia as Assert;
 use Tests\TestCase;
@@ -64,6 +65,7 @@ class DeveloperToolsAddonTest extends TestCase
         ]);
 
         $this->actingAs($user)->get(route('client.api-tokens.index'))->assertOk();
+        Auth::forgetGuards();
         $this->withToken($token)->getJson('/api/v1/tokens')->assertOk();
     }
 

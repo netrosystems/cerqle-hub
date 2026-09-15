@@ -187,8 +187,10 @@ class AppServiceProvider extends ServiceProvider
             }
         }
 
-        if (config('http.verify_ssl') === false) {
+        if (config('http.verify_ssl') === false && ! $this->app->environment('production')) {
             Http::globalOptions(['verify' => false]);
+        } elseif ($this->app->environment('production')) {
+            Http::globalOptions(['verify' => true]);
         }
     }
 }

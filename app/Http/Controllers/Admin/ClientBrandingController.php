@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Client;
+use App\Services\Media\SafeUploadName;
 use App\Services\StorageManager;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -26,7 +27,7 @@ class ClientBrandingController extends Controller
         if ($request->hasFile('logo')) {
             $file = $request->file('logo');
             $disk = $this->storage->diskName();
-            $path = $this->storage->prefixedPath('client-logos/'.Str::uuid().'.'.$file->getClientOriginalExtension());
+            $path = $this->storage->prefixedPath('client-logos/'.Str::uuid().'.'.SafeUploadName::extension($file));
             $this->storage->disk()->putFileAs(dirname($path), $file, basename($path));
             $validated['logo_path'] = $path;
             $validated['logo_disk'] = $disk;

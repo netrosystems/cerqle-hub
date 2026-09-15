@@ -26,7 +26,7 @@ class AiKbDocument extends Model
         return 'uuid';
     }
 
-    protected $fillable = ['kb_id', 'source_type', 'source_ref', 'title', 'status', 'error_message', 'tokens', 'last_indexed_at'];
+    protected $fillable = ['kb_id', 'source_type', 'source_ref', 'title', 'status', 'error_message', 'tokens', 'last_indexed_at', 'crawl_root_id', 'sitemap_depth'];
 
     protected function casts(): array
     {

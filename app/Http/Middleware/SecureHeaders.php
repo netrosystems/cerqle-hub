@@ -6,16 +6,21 @@ use App\Modules\Integrations\Services\CredentialResolver;
 use App\Services\OneSignalService;
 use Closure;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Vite;
 use Symfony\Component\HttpFoundation\Response;
 
 class SecureHeaders
 {
     public function handle(Request $request, Closure $next): Response
     {
+        Vite::useCspNonce();
         $response = $next($request);
 
         $response->headers->set('X-Frame-Options', 'SAMEORIGIN');
         $response->headers->set('X-Content-Type-Options', 'nosniff');
+        if ($request->isSecure() && app()->environment('production')) {
+            $response->headers->set('Strict-Transport-Security', 'max-age=31536000');
+        }
         $response->headers->set('X-XSS-Protection', '1; mode=block');
         $response->headers->set('Referrer-Policy', 'strict-origin-when-cross-origin');
         $response->headers->set('Permissions-Policy', 'geolocation=(), microphone=(self), camera=()');
@@ -41,7 +46,8 @@ class SecureHeaders
     private function buildCsp(): ?string
     {
         $unsafeEval = config('app.env') !== 'production' ? " 'unsafe-eval'" : '';
-        $scriptSrc = "'self' 'unsafe-inline'".$unsafeEval.$this->viteDevSources().$this->thirdPartyScriptSources();
+        $nonce = Vite::cspNonce();
+        $scriptSrc = "'self' 'nonce-{$nonce}'".$unsafeEval.$this->viteDevSources().$this->thirdPartyScriptSources();
         $styleSrc = "'self' 'unsafe-inline' https://fonts.bunny.net https://fonts.googleapis.com".$this->viteDevSources().$this->thirdPartyStyleSources();
         $fontSrc = "'self' data: https://fonts.bunny.net https://fonts.gstatic.com https://fonts.googleapis.com";
 
@@ -49,6 +55,9 @@ class SecureHeaders
 
         $directives = array_filter([
             "default-src 'self'",
+            "object-src 'none'",
+            "base-uri 'self'",
+            "form-action 'self'",
             'script-src '.$scriptSrc,
             'script-src-elem '.$scriptSrc,
             'style-src '.$styleSrc,

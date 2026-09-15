@@ -18,7 +18,7 @@ class StoreConnector
     public function __construct(private readonly StoreConnectionTester $tester) {}
 
     /**
-     * @param  array<string, string>  $credentials  Platform credentials (already obtained, e.g. from OAuth).
+     * @param  array<string, string|null>  $credentials  Platform credentials (already obtained, e.g. from OAuth).
      * @return array{ok: bool, message: string, store: ?EcommerceStore}
      */
     public function connect(int $workspaceId, string $platform, string $rawDomain, array $credentials, ?string $name = null): array
@@ -48,11 +48,12 @@ class StoreConnector
             'name' => $name ?: ($store->name ?: ucfirst($platform).' Store'),
             'credentials' => $merged,
             'webhook_secret' => $store->webhook_secret ?: Str::random(40),
-        ])->save();
+        ]);
 
-        $result = $this->tester->test($store);
+        $result = $this->tester->test($store, persist: false);
 
         if ($result['ok']) {
+            $store->save();
             if (! ($store->external_meta['webhooks_registered'] ?? false)) {
                 RegisterStoreWebhooksJob::dispatch($store->id);
             }

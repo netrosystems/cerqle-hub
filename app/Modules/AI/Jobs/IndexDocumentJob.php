@@ -8,14 +8,18 @@ use App\Modules\AI\Services\EmbeddingStore;
 use App\Modules\AI\Services\Llm\LlmManager;
 use App\Modules\AI\Services\LlmGateway;
 use App\Modules\AI\Services\ProviderErrorPresenter;
+use App\Services\PublicHttpClient;
+use App\Services\PublicUrlGuard;
 use App\Services\StorageManager;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Validation\ValidationException;
 use League\HTMLToMarkdown\HtmlConverter;
 use Smalot\PdfParser\Parser;
 
@@ -186,10 +190,11 @@ class IndexDocumentJob implements ShouldQueue
         if (empty($url)) {
             return '';
         }
-        $resp = Http::withHeaders([
+        $request = Http::withHeaders([
             'User-Agent' => 'CerqleKnowledgeIndexer/1.0 (+https://cerqle.ai)',
             'Accept' => 'text/html,application/xhtml+xml,application/xml;q=0.9,text/plain;q=0.8,*/*;q=0.7',
-        ])->retry(2, 500)->timeout(30)->get($url);
+        ])->timeout(30);
+        $resp = app(PublicHttpClient::class)->send($request, 'GET', $url, followRedirects: true);
         if (! $resp->successful()) {
             throw new \RuntimeException('URL indexing failed: '.$url.' returned HTTP '.$resp->status().'.');
         }
@@ -336,16 +341,23 @@ class IndexDocumentJob implements ShouldQueue
         if (empty($sitemapUrl)) {
             return '';
         }
-        $resp = Http::withHeaders([
+        if ($doc->sitemap_depth >= 3) {
+            throw new \RuntimeException('Sitemap indexing failed: maximum nesting depth reached.');
+        }
+        $request = Http::withHeaders([
             'User-Agent' => 'CerqleKnowledgeIndexer/1.0 (+https://cerqle.ai)',
             'Accept' => 'application/xml,text/xml,text/plain;q=0.9,*/*;q=0.7',
-        ])->retry(2, 500)->timeout(20)->get($sitemapUrl);
+        ])->timeout(20);
+        $resp = app(PublicHttpClient::class)->send($request, 'GET', $sitemapUrl, followRedirects: true);
         if (! $resp->successful()) {
             throw new \RuntimeException('Sitemap indexing failed: '.$sitemapUrl.' returned HTTP '.$resp->status().'.');
         }
 
         try {
-            $xml = simplexml_load_string($resp->body());
+            if (stripos($resp->body(), '<!DOCTYPE') !== false || stripos($resp->body(), '<!ENTITY') !== false) {
+                throw new \RuntimeException('Sitemap indexing failed: XML entities are not allowed.');
+            }
+            $xml = simplexml_load_string($resp->body(), \SimpleXMLElement::class, LIBXML_NONET);
             if ($xml === false) {
                 throw new \RuntimeException('Unparseable sitemap XML');
             }
@@ -367,16 +379,36 @@ class IndexDocumentJob implements ShouldQueue
             }
 
             foreach (array_slice(array_keys($locs), 0, 200) as $loc) {
-                $child = AiKbDocument::create([
-                    'kb_id' => $doc->kb_id,
-                    'title' => $loc,
-                    'source_type' => $childType,
-                    'source_ref' => $loc,
-                    'status' => 'pending',
-                ]);
-                static::dispatch($child->id)->onQueue('ai');
+                if ($loc === $sitemapUrl) {
+                    continue;
+                }
+                app(PublicUrlGuard::class)->destination($loc);
+                $rootId = $doc->crawl_root_id ?: $doc->id;
+                $child = DB::transaction(function () use ($doc, $loc, $rootId, $childType) {
+                    $root = AiKbDocument::where('kb_id', $doc->kb_id)->lockForUpdate()->find($rootId);
+                    if (! $root || AiKbDocument::where('crawl_root_id', $rootId)->count() >= 200
+                        || AiKbDocument::where('kb_id', $doc->kb_id)->where('source_ref', $loc)->exists()) {
+                        return null;
+                    }
+
+                    return AiKbDocument::create([
+                        'kb_id' => $doc->kb_id,
+                        'title' => $loc,
+                        'source_type' => $childType,
+                        'source_ref' => $loc,
+                        'status' => 'pending',
+                        'crawl_root_id' => $rootId,
+                        'sitemap_depth' => $doc->sitemap_depth + 1,
+                    ]);
+                });
+                if ($child) {
+                    static::dispatch($child->id)->onQueue('ai');
+                }
             }
         } catch (\Throwable $exception) {
+            if ($exception instanceof ValidationException) {
+                throw new \RuntimeException('Sitemap indexing failed: a child URL is not a permitted public destination.');
+            }
             if (str_contains(strtolower($exception->getMessage()), 'sitemap indexing failed')) {
                 throw $exception;
             }

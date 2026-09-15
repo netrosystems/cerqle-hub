@@ -4,6 +4,18 @@ Deployed and route registration verified on 2026-09-13 in release `v1.0.90` (pro
 
 These endpoints require a Sanctum bearer token and `Accept: application/json`. JSON requests also send `Content-Type: application/json`. Scope is the user's mobile-selected workspace, persisted via `POST /api/v1/mobile/workspaces/{workspace}/select`. Subscription and demo write restrictions still apply.
 
+## Login hardening contract (2026-09-15, not yet deployed)
+
+Mobile login tokens retain full-agent `*` access. Restricted developer API tokens cannot use `/api/v1/mobile/*`, `/api/v1/auth/{me,profile,logout}`, broadcasting authorization, notification availability, or token management; those return 403 for insufficient scope. Existing full-access mobile tokens continue to work. Inactive users/clients are rejected even with an existing token.
+
+`POST /api/v1/auth/login` keeps the existing 200 token/user response for accounts without confirmed 2FA. With confirmed 2FA and no `two_factor_code`, it returns HTTP 202 without a token:
+
+```json
+{"code":"two_factor_required","message":"Enter your authenticator or recovery code."}
+```
+
+The native client must show a code input, then repeat the original email/password/device/push fields with `two_factor_code` (authenticator OTP or recovery code). Only a successful 200 response permits storing a token or entering the app. Invalid codes return 422 and count toward the existing login throttle. Recovery codes are single-use. Do not automatically retry missing codes or treat HTTP 202 as authenticated success. The backend is tested; native settings/login UI and real-device end-to-end verification remain release requirements for 2FA-enabled users.
+
 ## Resolve all open email threads
 
 `POST /api/v1/mobile/email/resolve-open`

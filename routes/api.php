@@ -40,7 +40,7 @@ Route::prefix('v1/auth')->middleware(['throttle:mobile-login'])->group(function 
     Route::post('/login', [MobileAuthController::class, 'login']);
 });
 
-Route::prefix('v1/auth')->middleware(['auth:sanctum', 'throttle:api'])->group(function () {
+Route::prefix('v1/auth')->middleware(['auth:sanctum', 'throttle:api', 'api.ability:*'])->group(function () {
     Route::post('/logout', [MobileAuthController::class, 'logout']);
     Route::get('/me', [MobileAuthController::class, 'me']);
     Route::post('/profile', [MobileAuthController::class, 'updateProfile'])->middleware('demo');
@@ -53,10 +53,10 @@ Route::prefix('v1/auth')->middleware(['auth:sanctum', 'throttle:api'])->group(fu
 // callbacks registered in BroadcastChannelsServiceProvider, so a token can
 // authorize only workspaces and conversations its user can access.
 Route::post('v1/broadcasting/auth', [BroadcastController::class, 'authenticate'])
-    ->middleware(['auth:sanctum', 'throttle:api'])
+    ->middleware(['auth:sanctum', 'throttle:api', 'api.ability:*'])
     ->name('api.v1.broadcasting.auth');
 
-Route::prefix('v1')->middleware(['auth:sanctum', 'throttle:api', 'demo', 'client.access'])->group(function () {
+Route::prefix('v1')->middleware(['auth:sanctum', 'throttle:api', 'demo', 'client.access', 'api.ability:*'])->group(function () {
     Route::get('/notification-availability', [NotificationAvailabilityController::class, 'show']);
     Route::patch('/notification-availability', [NotificationAvailabilityController::class, 'update']);
 });
@@ -64,7 +64,7 @@ Route::prefix('v1')->middleware(['auth:sanctum', 'throttle:api', 'demo', 'client
 // ─── Mobile Inbox API (agent-facing: full conversation + inbox actions) ───────
 // `demo` blocks writes (POST/PATCH/DELETE) in demo mode while GET reads pass,
 // keeping the mobile app a consistent read-only showcase like the web app.
-Route::prefix('v1/mobile')->middleware(['auth:sanctum', 'throttle:api', 'demo', 'client.access'])->group(function () {
+Route::prefix('v1/mobile')->middleware(['auth:sanctum', 'throttle:api', 'demo', 'client.access', 'api.ability:*'])->group(function () {
     // Workspace context
     Route::post('/workspaces/{workspace}/select', [WorkspaceApiController::class, 'select'])
         ->name('api.v1.mobile.workspaces.select');
@@ -120,20 +120,20 @@ Route::prefix('v1')->middleware(['auth:sanctum', 'throttle:api', 'demo'])->group
 
     // ─── Account ─────────────────────────────────────────────────────────────
     Route::get('/me', [MeController::class, 'show']);
-    Route::patch('/me', [MeController::class, 'update']);
+    Route::patch('/me', [MeController::class, 'update'])->middleware('api.ability:*');
     Route::get('/workspaces', [WorkspaceApiController::class, 'index']);
     Route::get('/subscription', [SubscriptionApiController::class, 'show']);
     Route::get('/usage', [SubscriptionApiController::class, 'usage']);
-    Route::get('/audit-log', [AuditLogApiController::class, 'index']);
-    Route::get('/notifications', [NotificationApiController::class, 'index']);
-    Route::post('/notifications/{notification}/read', [NotificationApiController::class, 'markRead']);
+    Route::get('/audit-log', [AuditLogApiController::class, 'index'])->middleware('api.ability:*');
+    Route::get('/notifications', [NotificationApiController::class, 'index'])->middleware('api.ability:*');
+    Route::post('/notifications/{notification}/read', [NotificationApiController::class, 'markRead'])->middleware('api.ability:*');
 
     // Paid external developer API. Mobile auth and mobile inbox routes above
     // remain available without this add-on.
     Route::middleware(['client.access', 'addon:developer_tools'])->group(function () {
-        Route::get('/tokens', [TokenController::class, 'index']);
-        Route::post('/tokens', [TokenController::class, 'store']);
-        Route::delete('/tokens/{tokenId}', [TokenController::class, 'destroy']);
+        Route::get('/tokens', [TokenController::class, 'index'])->middleware('api.ability:*');
+        Route::post('/tokens', [TokenController::class, 'store'])->middleware('api.ability:*');
+        Route::delete('/tokens/{tokenId}', [TokenController::class, 'destroy'])->middleware('api.ability:*');
         Route::get('/token-scopes', [TokenController::class, 'scopes']);
 
         // ─── Contacts (contacts:read / contacts:write) ────────────────────────────

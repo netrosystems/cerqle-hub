@@ -13,7 +13,7 @@
 @endphp
 <html lang="{{ str_replace('_', '-', $locale) }}" dir="{{ $htmlDir }}">
     <head>
-        <script>
+        <script nonce="{{ Vite::cspNonce() }}">
             (function() {
                 var server = @json($serverTheme);
                 var stored = localStorage.getItem('theme');
@@ -68,7 +68,7 @@
         @php($oneSignalExternalId = auth('web')->check() ? 'user:'.auth('web')->id() : null)
         @if($oneSignalAppId)
         <script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
-        <script>
+        <script nonce="{{ Vite::cspNonce() }}">
             window.OneSignalDeferred = window.OneSignalDeferred || [];
 
             OneSignalDeferred.push(async function (OneSignal) {
@@ -203,7 +203,7 @@
              while the integration table is unavailable during first-run setup. --}}
         @php($metaAppId = rescue(fn () => \App\Modules\Integrations\Services\CredentialResolver::system()->meta()?->appId(), null, false))
         @if($metaAppId)
-        <script>
+        <script nonce="{{ Vite::cspNonce() }}">
             window.fbAsyncInit = function() {
                 FB.init({
                     appId: '{{ e($metaAppId) }}',
@@ -225,7 +225,7 @@
         @endif
 
         <!-- Scripts -->
-        @routes
+        @routes(null, Vite::cspNonce())
         @viteReactRefresh
         @vite(['resources/js/app.jsx', 'resources/js/Pages/' . (isset($page['component']) ? $page['component'] : 'Dashboard') . '.jsx'])
         @inertiaHead

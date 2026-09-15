@@ -4,6 +4,7 @@ use App\Http\Controllers\Admin\Auth\AdminLoginController;
 use App\Http\Controllers\Admin\ImpersonationController;
 use App\Http\Controllers\Install\InstallController;
 use App\Http\Controllers\LicenseController;
+use App\Http\Middleware\AuthenticateActiveAccount;
 use App\Http\Middleware\BroadcastingAuthDebug;
 use App\Http\Middleware\CheckApiAbility;
 use App\Http\Middleware\EnforceLimit;
@@ -120,6 +121,7 @@ return Application::configure(basePath: dirname(__DIR__))
         }
     )
     ->withMiddleware(function (Middleware $middleware) {
+        $middleware->statefulApi();
         $middleware->web(append: [
             // Runs before the DB-querying middleware below so a fresh deploy is
             // redirected to /install without touching the (empty) database.
@@ -133,6 +135,7 @@ return Application::configure(basePath: dirname(__DIR__))
             BroadcastingAuthDebug::class,
         ]);
         $middleware->alias([
+            'auth' => AuthenticateActiveAccount::class,
             'demo' => EnsureNotDemoMode::class,
             'admin' => EnsureAdminRole::class,
             'admin.super' => EnsureSuperAdmin::class,

@@ -16,6 +16,7 @@ use App\Modules\Shared\Models\Contact;
 use App\Modules\Shared\Models\Conversation;
 use App\Modules\Shared\Models\Message;
 use App\Modules\Whatsapp\Services\WhatsappDriver;
+use App\Services\PublicUrlGuard;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
 use Mockery;
@@ -485,6 +486,7 @@ class AutomationNodeBehaviourTest extends TestCase
 
     public function test_webhook_sends_decoded_json_body_and_headers(): void
     {
+        $this->mock(PublicUrlGuard::class)->shouldReceive('destination')->with('https://example.com/hook')->andReturn(['host' => 'example.com', 'port' => 443, 'ip' => '93.184.216.34']);
         Http::fake(['example.com/*' => Http::response(['ok' => true], 200)]);
 
         $run = $this->runSingleNode('webhook', [

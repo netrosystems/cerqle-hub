@@ -41,7 +41,7 @@ Route::middleware('guest')->group(function () {
 
     // 2FA challenge (shown after login when 2FA is enabled)
     Route::get('two-factor-challenge', [TwoFactorController::class, 'challenge'])->name('auth.two-factor.challenge');
-    Route::post('two-factor-challenge', [TwoFactorController::class, 'verify'])->name('auth.two-factor.verify');
+    Route::post('two-factor-challenge', [TwoFactorController::class, 'verify'])->middleware('throttle:5,1')->name('auth.two-factor.verify');
 
     Route::post('auth/google/signup', [SocialLoginController::class, 'signup'])->name('auth.google.signup');
 });
@@ -79,7 +79,7 @@ Route::get('auth/{provider}/redirect', [SocialLoginController::class, 'redirect'
 Route::get('auth/{provider}/callback', [SocialLoginController::class, 'callback'])->name('auth.social.callback');
 
 // Firebase authentication
-Route::middleware('guest')->post('auth/firebase', [FirebaseLoginController::class, 'login'])->name('auth.firebase');
+Route::middleware(['guest', 'throttle:10,1'])->post('auth/firebase', [FirebaseLoginController::class, 'login'])->name('auth.firebase');
 
 /*
 |--------------------------------------------------------------------------

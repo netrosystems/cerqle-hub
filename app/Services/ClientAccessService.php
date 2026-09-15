@@ -17,8 +17,13 @@ class ClientAccessService
 
     public const UNVERIFIED = 'unverified';
 
+    public const INACTIVE = 'inactive';
+
     public function state(User $user): string
     {
+        if (! $user->canAuthenticate()) {
+            return self::INACTIVE;
+        }
         if (! $user->hasVerifiedEmail()) {
             return self::UNVERIFIED;
         }
@@ -36,10 +41,6 @@ class ClientAccessService
 
     public function stateForWorkspace(int $workspaceId): string
     {
-        if (! $this->enforcementEnabled()) {
-            return self::ACTIVE;
-        }
-
         $workspace = Workspace::with(['owner', 'client.users'])->find($workspaceId);
         $owner = $workspace?->client?->users
             ?->first(fn (User $candidate) => $candidate->isClientAdministrator())
@@ -47,6 +48,13 @@ class ClientAccessService
 
         if (! $owner instanceof User) {
             return self::NO_PLAN;
+        }
+
+        if (! $owner->canAuthenticate()) {
+            return self::INACTIVE;
+        }
+        if (! $this->enforcementEnabled()) {
+            return self::ACTIVE;
         }
 
         if ($owner->effectiveSubscription()?->isActive()) {

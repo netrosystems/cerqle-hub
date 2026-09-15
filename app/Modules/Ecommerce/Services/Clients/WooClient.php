@@ -3,7 +3,9 @@
 namespace App\Modules\Ecommerce\Services\Clients;
 
 use App\Modules\Ecommerce\Services\Credentials\StoreCredentials;
+use App\Services\PublicHttpClient;
 use Illuminate\Http\Client\PendingRequest;
+use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
 
 class WooClient implements EcommerceClientInterface
@@ -27,11 +29,20 @@ class WooClient implements EcommerceClientInterface
             ->baseUrl($base);
     }
 
+    /** @param array<string, mixed> $data */
+    private function request(string $method, string $path, array $data = []): Response
+    {
+        $url = rtrim($this->baseUrl, '/').'/wp-json/wc/v3'.$path;
+
+        return app(PublicHttpClient::class)->send($this->http(), $method, $url,
+            $method === 'GET' ? ['query' => $data] : ['json' => $data], maxBytes: 10485760);
+    }
+
     public function testConnection(): array
     {
         try {
             // products?per_page=1 is the cheapest authenticated read available on every Woo store.
-            $resp = $this->http()->get('/products', ['per_page' => 1]);
+            $resp = $this->request('GET', '/products', ['per_page' => 1]);
             if ($resp->successful()) {
                 return ['ok' => true, 'message' => 'Connected to '.$this->baseUrl];
             }
@@ -48,7 +59,7 @@ class WooClient implements EcommerceClientInterface
         $failures = [];
         try {
             foreach (self::WEBHOOK_TOPICS as $topic) {
-                $resp = $this->http()->post('/webhooks', [
+                $resp = $this->request('POST', '/webhooks', [
                     'name' => 'Cerqle '.$topic,
                     'topic' => $topic,
                     'delivery_url' => $callbackUrl,
@@ -72,11 +83,11 @@ class WooClient implements EcommerceClientInterface
     public function deregisterWebhooks(string $callbackUrl): array
     {
         try {
-            $resp = $this->http()->get('/webhooks', ['per_page' => 100]);
+            $resp = $this->request('GET', '/webhooks', ['per_page' => 100]);
             $deleted = 0;
             foreach ($resp->json() ?? [] as $hook) {
                 if (($hook['delivery_url'] ?? '') === $callbackUrl && isset($hook['id'])) {
-                    $this->http()->delete("/webhooks/{$hook['id']}", ['force' => true]);
+                    $this->request('DELETE', "/webhooks/{$hook['id']}", ['force' => true]);
                     $deleted++;
                 }
             }
@@ -90,7 +101,7 @@ class WooClient implements EcommerceClientInterface
     public function fetchCustomers(?string $cursor = null): array
     {
         $page = $cursor ? (int) $cursor : 1;
-        $resp = $this->http()->get('/customers', ['per_page' => 100, 'page' => $page]);
+        $resp = $this->request('GET', '/customers', ['per_page' => 100, 'page' => $page]);
 
         if (! $resp->successful()) {
             throw new \RuntimeException("WooCommerce customers fetch failed (HTTP {$resp->status()}).");
@@ -105,7 +116,7 @@ class WooClient implements EcommerceClientInterface
 
     public function fetchOrder(string $externalId): ?array
     {
-        $resp = $this->http()->get("/orders/{$externalId}");
+        $resp = $this->request('GET', '/orders/'.rawurlencode($externalId));
 
         return $resp->successful() ? $resp->json() : null;
     }
@@ -113,7 +124,7 @@ class WooClient implements EcommerceClientInterface
     public function fetchOrders(?string $cursor = null): array
     {
         $page = $cursor ? (int) $cursor : 1;
-        $resp = $this->http()->get('/orders', ['per_page' => 100, 'page' => $page]);
+        $resp = $this->request('GET', '/orders', ['per_page' => 100, 'page' => $page]);
 
         if (! $resp->successful()) {
             throw new \RuntimeException("WooCommerce orders fetch failed (HTTP {$resp->status()}).");
@@ -131,7 +142,7 @@ class WooClient implements EcommerceClientInterface
         if (! $email) {
             return [];
         }
-        $resp = $this->http()->get('/orders', ['search' => $email, 'per_page' => $limit]);
+        $resp = $this->request('GET', '/orders', ['search' => $email, 'per_page' => $limit]);
 
         return $resp->successful() ? ($resp->json() ?? []) : [];
     }
@@ -147,7 +158,7 @@ class WooClient implements EcommerceClientInterface
                     ['key' => '_tracking_url', 'value' => $trackingUrl ?? ''],
                 ];
             }
-            $resp = $this->http()->put("/orders/{$externalId}", $payload);
+            $resp = $this->request('PUT', '/orders/'.rawurlencode($externalId), $payload);
 
             return $resp->successful()
                 ? ['ok' => true, 'message' => 'Order marked completed.']
@@ -160,7 +171,7 @@ class WooClient implements EcommerceClientInterface
     public function fetchProducts(?string $cursor = null): array
     {
         $page = $cursor ? (int) $cursor : 1;
-        $resp = $this->http()->get('/products', ['per_page' => 100, 'page' => $page]);
+        $resp = $this->request('GET', '/products', ['per_page' => 100, 'page' => $page]);
 
         if (! $resp->successful()) {
             throw new \RuntimeException("WooCommerce products fetch failed (HTTP {$resp->status()}).");

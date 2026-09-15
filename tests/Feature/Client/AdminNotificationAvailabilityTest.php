@@ -45,7 +45,7 @@ class AdminNotificationAvailabilityTest extends TestCase
     {
         $ctx = $this->createSubscribedWorkspaceContext();
         $member = $this->staff($ctx);
-        Sanctum::actingAs($member);
+        Sanctum::actingAs($member, ['*']);
         $this->getJson('/api/v1/notification-availability')->assertOk()->assertJsonPath('can_edit', false);
         $this->patchJson('/api/v1/notification-availability', ['mode' => 'paused', 'revision' => 0])->assertForbidden();
         $this->assertSame(0, NotificationAvailability::count());

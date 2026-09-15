@@ -27,6 +27,7 @@ use App\Modules\Shared\Services\ChannelManager;
 use App\Modules\Whatsapp\Models\WhatsappTemplate;
 use App\Modules\Whatsapp\Services\CloudApiClient;
 use App\Services\ClientAccessService;
+use App\Services\PublicHttpClient;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -909,9 +910,8 @@ class AutomationEngine
             $request = $request->withHeaders($headers);
         }
 
-        $response = $method === 'get'
-            ? $request->get($url, $payload)
-            : $request->{$method}($url, array_merge($payload, ['context' => $context]));
+        $response = app(PublicHttpClient::class)->send($request, $method, $url,
+            $method === 'get' ? ['query' => $payload] : ['json' => array_merge($payload, ['context' => $context])]);
 
         return [
             'status' => 'ok',

@@ -7,12 +7,12 @@ use App\Models\Client;
 use App\Models\Plan;
 use App\Models\SocialAccount;
 use App\Models\User;
+use App\Services\ClientLoginService;
 use App\Services\FreePlanActivationService;
 use App\Services\GoogleSignInConfigurator;
 use Illuminate\Auth\Events\Registered;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
@@ -114,7 +114,9 @@ class SocialLoginController extends Controller
                 'refresh_token' => $socialUser->refreshToken,
             ]);
             $this->markProviderVerifiedEmail($existing->user, $provider, $socialUser);
-            Auth::login($existing->user, true);
+            if ($challenge = app(ClientLoginService::class)->login($request, $existing->user, true)) {
+                return redirect()->to($challenge);
+            }
 
             return redirect()->intended(route('client.dashboard'));
         }
@@ -188,7 +190,9 @@ class SocialLoginController extends Controller
             ],
         );
 
-        Auth::login($user, true);
+        if ($challenge = app(ClientLoginService::class)->login($request, $user, true)) {
+            return redirect()->to($challenge);
+        }
 
         $planId = $context['plan_id'] ?? null;
         if ($intent === 'signup' && $planId) {

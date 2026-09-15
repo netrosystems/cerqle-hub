@@ -26,6 +26,9 @@ class TokenController extends Controller
         ]);
 
         $abilities = $validated['abilities'] ?? ['*'];
+        if ($request->bearerToken()) {
+            abort_unless($request->user()->tokenCan('*'), 403, 'Full access is required to manage tokens.');
+        }
         $expiresAt = isset($validated['expires_at']) ? Carbon::parse($validated['expires_at']) : null;
 
         $token = $request->user()->createToken($validated['name'], $abilities, $expiresAt);

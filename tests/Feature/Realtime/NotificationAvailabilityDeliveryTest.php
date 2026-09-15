@@ -82,8 +82,10 @@ class NotificationAvailabilityDeliveryTest extends TestCase
         $message = Message::create([
             'conversation_id' => $conversation->id,
             'direction' => 'in', 'channel' => 'whatsapp', 'body' => 'After hours',
-            'status' => 'sent', 'created_at' => '2026-09-14 08:00:00',
+            'status' => 'sent',
         ]);
+        // created_at is intentionally not mass-assignable on Message.
+        $message->forceFill(['created_at' => '2026-09-14 08:00:00'])->save();
         CarbonImmutable::setTestNow('2026-09-14 10:00:00');
         $notification = new NewMessageNotification($message, $conversation);
         $this->assertSame(['database', 'broadcast'], $notification->via($context['user']));

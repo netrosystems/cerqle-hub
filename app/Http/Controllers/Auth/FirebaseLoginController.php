@@ -7,12 +7,12 @@ use App\Models\Client;
 use App\Models\SocialAccount;
 use App\Models\SystemSetting;
 use App\Models\User;
+use App\Services\ClientLoginService;
+use App\Services\FirebaseIdTokenVerifier;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
@@ -25,7 +25,7 @@ class FirebaseLoginController extends Controller
         }
 
         $request->validate([
-            'id_token' => ['required', 'string'],
+            'id_token' => ['required', 'string', 'max:16384'],
         ]);
 
         $projectId = SystemSetting::get('firebase_project_id', '');
@@ -33,20 +33,19 @@ class FirebaseLoginController extends Controller
             return response()->json(['message' => 'Firebase project is not configured.'], 500);
         }
 
-        $tokenInfo = $this->verifyIdToken($request->id_token, $projectId);
+        $tokenInfo = app(FirebaseIdTokenVerifier::class)->verify($request->id_token, $projectId);
         if (! $tokenInfo) {
             Log::warning('Firebase login token verification failed', [
                 'project_id' => $projectId,
-                'token_prefix' => Str::limit($request->id_token, 16, '…'),
             ]);
 
             return response()->json(['message' => 'Invalid or expired token.'], 422);
         }
 
-        $email   = $tokenInfo['email'] ?? null;
-        $uid     = $tokenInfo['sub']   ?? null;
-        $name    = $tokenInfo['name']  ?? $email;
-        $avatar  = $tokenInfo['picture'] ?? null;
+        $email = $tokenInfo['email'] ?? null;
+        $uid = $tokenInfo['sub'] ?? null;
+        $name = $tokenInfo['name'] ?? $email;
+        $avatar = $tokenInfo['picture'] ?? null;
 
         if (! $email || ! $uid) {
             return response()->json(['message' => 'Could not retrieve email from token.'], 422);
@@ -58,8 +57,12 @@ class FirebaseLoginController extends Controller
             ->first();
 
         if ($existing) {
-            Auth::login($existing->user, true);
-            return response()->json(['redirect' => route('client.dashboard')]);
+            if (! $existing->user || strcasecmp($existing->user->email, $email) !== 0) {
+                return response()->json(['message' => 'Account identity does not match.'], 422);
+            }
+            $challenge = app(ClientLoginService::class)->login($request, $existing->user, true);
+
+            return response()->json(['redirect' => $challenge ?? route('client.dashboard')]);
         }
 
         $user = User::where('email', $email)->first();
@@ -71,84 +74,36 @@ class FirebaseLoginController extends Controller
 
             $user = DB::transaction(function () use ($name, $email) {
                 $client = Client::create([
-                    'name'              => $name,
-                    'email'             => $email,
-                    'status'            => Client::STATUS_ACTIVE,
-                    'base_currency'     => 'USD',
-                    'currency_symbol'   => '$',
+                    'name' => $name,
+                    'email' => $email,
+                    'status' => Client::STATUS_ACTIVE,
+                    'base_currency' => 'USD',
+                    'currency_symbol' => '$',
                     'currency_position' => 'before',
                 ]);
 
                 return User::create([
-                    'name'              => $name,
-                    'email'             => $email,
-                    'password'          => bcrypt(Str::random(32)),
-                    'role'              => User::ROLE_CLIENT,
-                    'status'            => User::STATUS_ACTIVE,
+                    'name' => $name,
+                    'email' => $email,
+                    'password' => bcrypt(Str::random(32)),
+                    'role' => User::ROLE_CLIENT,
+                    'status' => User::STATUS_ACTIVE,
                     'email_verified_at' => now(),
-                    'client_id'         => $client->id,
-                    'client_role'       => User::CLIENT_ROLE_ADMINISTRATOR,
+                    'client_id' => $client->id,
+                    'client_role' => User::CLIENT_ROLE_ADMINISTRATOR,
                 ]);
             });
         }
 
         $user->socialAccounts()->create([
-            'provider'    => 'firebase',
+            'provider' => 'firebase',
             'provider_id' => $uid,
-            'email'       => $email,
-            'avatar_url'  => $avatar,
+            'email' => $email,
+            'avatar_url' => $avatar,
         ]);
 
-        Auth::login($user, true);
+        $challenge = app(ClientLoginService::class)->login($request, $user, true);
 
-        return response()->json(['redirect' => route('client.dashboard')]);
-    }
-
-    private function verifyIdToken(string $idToken, string $projectId): ?array
-    {
-        try {
-            $response = Http::timeout(10)->get('https://www.googleapis.com/oauth2/v3/tokeninfo', [
-                'id_token' => $idToken,
-            ]);
-
-            if (! $response->successful()) {
-                Log::warning('Firebase login tokeninfo request failed', [
-                    'status' => $response->status(),
-                    'body' => Str::limit($response->body(), 500),
-                ]);
-
-                return null;
-            }
-
-            $data = $response->json();
-
-            // Verify audience matches the Firebase project
-            $aud = $data['aud'] ?? '';
-            $iss = $data['iss'] ?? '';
-
-            $validAudience = $aud === $projectId || Str::contains($aud, $projectId);
-            $validIssuer   = in_array($iss, [
-                "https://securetoken.google.com/{$projectId}",
-                'https://accounts.google.com',
-            ]);
-
-            if (! $validAudience && ! $validIssuer) {
-                Log::warning('Firebase login token audience/issuer mismatch', [
-                    'expected_project_id' => $projectId,
-                    'aud' => $aud,
-                    'iss' => $iss,
-                ]);
-
-                return null;
-            }
-
-            return $data;
-        } catch (\Throwable $e) {
-            Log::warning('Firebase login token verification exception', [
-                'message' => $e->getMessage(),
-            ]);
-
-            return null;
-        }
+        return response()->json(['redirect' => $challenge ?? route('client.dashboard')]);
     }
 }

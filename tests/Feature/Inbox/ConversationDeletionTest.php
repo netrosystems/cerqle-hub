@@ -46,7 +46,7 @@ class ConversationDeletionTest extends TestCase
         $foreign = $this->makeChat($foreignWorkspace->id);
         $own = $this->makeChat($workspace->id);
         $this->actingAs($user)->delete(route('client.inbox.destroy', $foreign->uuid))->assertForbidden();
-        Sanctum::actingAs($user);
+        Sanctum::actingAs($user, ['*']);
         $this->deleteJson("/api/v1/mobile/conversations/{$foreign->uuid}")->assertNotFound();
         $this->deleteJson("/api/v1/mobile/conversations/{$own->uuid}")->assertNoContent();
         $this->deleteJson("/api/v1/mobile/conversations/{$own->uuid}")->assertNotFound();

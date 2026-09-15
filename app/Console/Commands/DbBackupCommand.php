@@ -2,62 +2,81 @@
 
 namespace App\Console\Commands;
 
+use App\Services\MysqlBackupService;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Storage;
 
 class DbBackupCommand extends Command
 {
-    protected $signature   = 'db:backup {--disk=local : Storage disk to upload the backup to} {--no-upload : Keep backup local only}';
+    protected $signature = 'db:backup {--disk=local : Storage disk to upload the backup to} {--no-upload : Keep backup local only}';
+
     protected $description = 'Dump the MySQL database and optionally upload to a storage disk.';
 
-    public function handle(): int
+    public function handle(MysqlBackupService $backup): int
     {
-        $connection = config('database.default');
+        if (config('database.default') !== 'mysql') {
+            $this->error('db:backup currently only supports MySQL.');
 
-        if ($connection !== 'mysql') {
-            $this->error("db:backup currently only supports MySQL (configured: {$connection}).");
             return self::FAILURE;
         }
+        $diskName = (string) $this->option('disk');
+        $diskConfig = config('filesystems.disks.'.$diskName, []);
+        $diskRoot = realpath($diskConfig['root'] ?? '');
+        $publicLocal = false;
+        foreach ([realpath(public_path()), realpath(storage_path('app/public'))] as $publicRoot) {
+            if ($diskRoot !== false && $publicRoot !== false && ($diskRoot === $publicRoot || str_starts_with($diskRoot, $publicRoot.DIRECTORY_SEPARATOR))) {
+                $publicLocal = true;
+            }
+        }
+        if (! $this->option('no-upload') && ($diskName === 'public' || ($diskConfig['visibility'] ?? null) === 'public'
+            || (($diskConfig['driver'] ?? null) === 'local' && $publicLocal))) {
+            $this->error('Database backups require a private storage disk.');
 
-        $cfg  = config('database.connections.mysql');
-        $host = $cfg['host'];
-        $port = $cfg['port'];
-        $db   = $cfg['database'];
-        $user = $cfg['username'];
-        $pass = $cfg['password'];
-
-        $timestamp = now()->format('Y_m_d_His');
-        $filename  = "{$db}_{$timestamp}.sql.gz";
-        $tmpPath   = sys_get_temp_dir().DIRECTORY_SEPARATOR.$filename;
-
-        $this->info("Backing up database `{$db}` to {$filename}…");
-
-        $env  = "MYSQL_PWD={$pass}";
-        $cmd  = "{$env} mysqldump --host={$host} --port={$port} --user={$user} {$db} | gzip > ".escapeshellarg($tmpPath);
-
-        $output = null;
-        $return = null;
-        exec($cmd, $output, $return);
-
-        if ($return !== 0 || ! file_exists($tmpPath)) {
-            $this->error('mysqldump failed. Make sure mysqldump is in PATH and credentials are correct.');
             return self::FAILURE;
         }
+        $directory = storage_path('app/private/backups');
+        if ((! is_dir($directory) && ! mkdir($directory, 0700, true)) || ! chmod($directory, 0700)) {
+            $this->error('Cannot create a private backup directory.');
 
-        $sizeMb = round(filesize($tmpPath) / 1_048_576, 2);
-        $this->info("Dump created: {$tmpPath} ({$sizeMb} MB)");
-
-        if (! $this->option('no-upload')) {
-            $disk = $this->option('disk');
-            $this->info("Uploading to disk `{$disk}`…");
-
-            Storage::disk($disk)->put("backups/{$filename}", file_get_contents($tmpPath));
-            $this->info('Upload complete: backups/'.$filename);
+            return self::FAILURE;
         }
+        $path = tempnam($directory, 'database_');
+        if ($path === false) {
+            $this->error('Cannot create a private backup file.');
 
-        @unlink($tmpPath);
+            return self::FAILURE;
+        }
+        $filename = 'database_'.now()->format('Y_m_d_His').'_'.bin2hex(random_bytes(6)).'.sql.gz';
+        try {
+            $backup->dump(config('database.connections.mysql'), $path);
+        } catch (\Throwable) {
+            @unlink($path);
+            $this->error('Database dump failed. No backup was uploaded.');
 
-        $this->info('✅  Backup finished.');
+            return self::FAILURE;
+        }
+        if ($this->option('no-upload')) {
+            $this->info('Private local backup retained: '.$path);
+
+            return self::SUCCESS;
+        }
+        $stream = fopen($path, 'rb');
+        try {
+            if ($stream === false || ! Storage::disk($this->option('disk'))->put('backups/'.$filename, $stream, ['visibility' => 'private'])) {
+                throw new \RuntimeException('Upload failed.');
+            }
+        } catch (\Throwable) {
+            $this->error('Upload failed; private local backup retained: '.$path);
+
+            return self::FAILURE;
+        } finally {
+            if (is_resource($stream)) {
+                fclose($stream);
+            }
+        }
+        @unlink($path);
+        $this->info('Private backup uploaded: backups/'.$filename);
+
         return self::SUCCESS;
     }
 }
