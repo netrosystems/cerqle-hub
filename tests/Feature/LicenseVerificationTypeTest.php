@@ -42,16 +42,21 @@ class LicenseVerificationTypeTest extends TestCase
         $this->assertSame(['envato', 'non_envato'], $license->verifyTypes());
     }
 
-    public function test_license_opt_out_is_local_only(): void
+    public function test_license_switch_is_respected_in_every_environment(): void
     {
-        config(['license.verify' => false]);
-        $this->app['env'] = 'local';
-        $this->assertFalse(app(LicenseManager::class)->enabled());
-
-        foreach (['production', 'staging', 'testing'] as $environment) {
+        Http::fake();
+        foreach (['local', 'production', 'staging', 'testing'] as $environment) {
             $this->app['env'] = $environment;
-            $this->assertTrue(app(LicenseManager::class)->enabled());
+            $license = app(LicenseManager::class);
+            config(['license.verify' => false]);
+            $this->assertFalse($license->enabled());
+            $this->assertTrue($license->verify()['ok']);
+            config(['license.verify' => true]);
+            $this->assertTrue($license->enabled());
+            $this->assertFalse($license->verify()['ok']);
+            $this->assertTrue($license->verify()['needs_activation']);
         }
+        Http::assertNothingSent();
     }
 
     public function test_server_ip_supports_present_missing_and_unbound_requests(): void
