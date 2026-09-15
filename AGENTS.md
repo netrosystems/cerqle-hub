@@ -36,7 +36,7 @@ Update the relevant authoritative document in the same commit when behavior chan
 - Never expose encrypted credentials to the browser. Blank credential fields mean “keep the stored value.”
 - Browser authentication uses session cookies and CSRF; mobile and external APIs use Sanctum bearer tokens.
 - Keep provider capabilities distinct. Facebook and Instagram post-edit/delete behavior must remain capability-driven.
-- Keep production license enforcement enabled. Local bypasses must be explicitly local-only and fail closed elsewhere.
+- Preserve configuration-controlled licensing: `LICENSE_VERIFY` defaults true and explicit false is respected in all environments per the owner's 2026-09-15 decision. Do not change an installation's license flag without explicit authorization; never weaken authentication, tenancy or subscription checks.
 - Preserve unrelated user changes in dirty worktrees.
 - Never put passwords, tokens, app secrets, private keys, license codes, reviewer credentials, or real customer personal data in documentation or commits. Use placeholders such as `YOUR_APP_ID` and `REDACTED`.
 

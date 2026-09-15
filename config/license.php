@@ -35,8 +35,8 @@ $d = static function (string $b): string {
 
 return [
 
-    // Local development opt-out only. Non-local environments ignore false;
-    // licensing also requires product id + api key + server URL.
+    // Operator-controlled switch in every environment; defaults to enabled.
+    // Licensing also requires product id + api key + server URL.
     'verify' => filter_var(env('LICENSE_VERIFY', true), FILTER_VALIDATE_BOOL),
 
     'server_url' => rtrim((string) (env('LICENSE_SERVER_URL') ?: $d('RlVccQ0MKR8wQBcAcVteHx1lEBk4GT8=')), '/'),

@@ -24,7 +24,7 @@ class LicenseManager
     /** Licensing is active only when fully configured and not switched off. */
     public function enabled(): bool
     {
-        return (! app()->environment('local') || (bool) config('license.verify'))
+        return (bool) config('license.verify')
             && filled(config('license.product_id'))
             && filled(config('license.api_key'))
             && filled(config('license.server_url'));
