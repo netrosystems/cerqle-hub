@@ -560,6 +560,7 @@ export function ConnectWhatsAppForm({ onClose, metaConfigIdWhatsapp, metaAppId }
     const [waSubmitting, setWaSubmitting] = useState(false);
 
     const prepareCoexistence = async () => {
+        if (!props.whatsappCoexistenceEnabled || waSubmitting) return;
         setWaApiError(null);
         setWaSubmitting(true);
         try {
@@ -613,7 +614,7 @@ export function ConnectWhatsAppForm({ onClose, metaConfigIdWhatsapp, metaAppId }
         <div className="space-y-3">
             {metaConfigIdWhatsapp ? (
                 <>
-                    {props.whatsappCoexistenceEnabled && (
+                    <>
                         <fieldset disabled={waSubmitting} className="space-y-2 text-xs">
                             <legend className="mb-2 font-semibold">{t('inbox.choose_connection', 'Choose how to connect')}</legend>
                             {[
@@ -622,7 +623,9 @@ export function ConnectWhatsAppForm({ onClose, metaConfigIdWhatsapp, metaAppId }
                             ].map(([value, label]) => (
                                 <label key={value} className={`flex gap-2 rounded-lg border p-3 ${mode === value ? 'border-brand-500 bg-brand-50 dark:bg-brand-950' : 'border-neutral-200 dark:border-neutral-700'}`}>
                                     <input type="radio" name="wa-connection-mode" value={value} checked={mode === value}
+                                        disabled={value === 'coexistence' && !props.whatsappCoexistenceEnabled}
                                         onChange={() => {
+                                            if (waSubmitting || (value === 'coexistence' && !props.whatsappCoexistenceEnabled)) return;
                                             setMode(value); setAttemptId(null); setWaApiError(null);
                                             if (value === 'coexistence') prepareCoexistence();
                                         }} />
@@ -637,12 +640,15 @@ export function ConnectWhatsAppForm({ onClose, metaConfigIdWhatsapp, metaAppId }
                                 </details>
                             </>}
                         </fieldset>
-                    )}
+                        {!props.whatsappCoexistenceEnabled && <p className="text-xs text-neutral-500 dark:text-neutral-400">
+                            {t('inbox.coexistence_unavailable', 'WhatsApp Business App connections are temporarily unavailable. Contact your administrator.')}
+                        </p>}
+                    </>
                     {mode === 'cloud_api' && <p className="text-xs text-neutral-500 dark:text-neutral-400">
                         {t('inbox.cloud_api_brief', 'For a new or dedicated API number.')}
                     </p>}
                     {mode === 'coexistence' && !attemptId ? (
-                        <button type="button" onClick={prepareCoexistence} disabled={waSubmitting}
+                        <button type="button" onClick={prepareCoexistence} disabled={waSubmitting || !props.whatsappCoexistenceEnabled}
                             className="w-full rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50">
                             {waSubmitting ? t('inbox.connecting_whatsapp') : t('common.retry', 'Retry')}
                         </button>
@@ -655,7 +661,7 @@ export function ConnectWhatsAppForm({ onClose, metaConfigIdWhatsapp, metaAppId }
                         label={t('inbox.continue_meta_whatsapp')}
                         color="green"
                         onCode={handleWaEmbeddedCode}
-                        disabled={waSubmitting}
+                        disabled={waSubmitting || (mode === 'coexistence' && !props.whatsappCoexistenceEnabled)}
                     />}
                     {waSubmitting && <p role="status" className="text-xs text-neutral-400">{t('inbox.connecting_whatsapp')}</p>}
                     {waApiError && <p role="alert" className="text-xs text-red-500">{waApiError}</p>}

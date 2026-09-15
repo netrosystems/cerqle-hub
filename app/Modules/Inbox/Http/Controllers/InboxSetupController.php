@@ -87,7 +87,7 @@ class InboxSetupController extends Controller
             'metaWebhookUrl' => $metaWebhookUrl,
             'metaAppId' => $metaCreds?->appId() ?: null,
             'metaConfigIdWhatsapp' => $metaCreds?->configIdWhatsapp() ?: null,
-            'whatsappCoexistenceEnabled' => CoexistenceRollout::enabledFor((int) $workspaceId),
+            'whatsappCoexistenceEnabled' => CoexistenceRollout::enabled(),
             'metaConfigIdSocial' => $metaCreds?->configIdSocial() ?: null,
         ]);
     }

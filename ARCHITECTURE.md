@@ -305,19 +305,20 @@ Provider references: [append](https://docs.x.com/x-api/media/append-media-upload
 [finalize](https://docs.x.com/x-api/media/finalize-media-upload), and
 [status](https://docs.x.com/x-api/media/get-media-upload-status).
 
-### WhatsApp coexistence guarded pilot (updated 2026-09-11)
+### WhatsApp coexistence client-wide availability (updated 2026-09-15)
 
-Connection onboarding requires both an enabled rollout flag and explicit workspace
-allowlist membership; an empty allowlist grants no access. Workspace-default sends
+Connection onboarding uses the installation-wide `WHATSAPP_COEXISTENCE_ENABLED`
+switch, available to every client when enabled. `WHATSAPP_COEXISTENCE_WORKSPACES`
+is retired and ignored, including stale server values. Workspace-default sends
 delegate to the explicit phone factory, retaining ownership, active-WABA and
 Business-app-disconnection checks. PHPUnit forces SQLite `:memory:` and the testing
 environment so inherited local database variables cannot target persistent data.
 
-The implementation was deployed in release v1.0.82 and rollout was last recorded
-as enabled only for one allowlisted pilot workspace. Meta onboarding remains
-externally blocked by Advanced Access error 2655111; no successful phone connection
-or end-to-end coexistence validation has been recorded. See `PROJECT_STATUS.md` for
-the dated operational checkpoint.
+The implementation was initially deployed in release v1.0.82 with a scoped pilot.
+The owner approved removing that availability restriction on 2026-09-15. Meta's
+September 10 review was observed approved/renewed for the WhatsApp permissions;
+successful number onboarding and end-to-end messaging remain unverified. See
+`PROJECT_STATUS.md` for the dated operational checkpoint.
 
 The signup session listener captures Meta events for the whole OAuth interaction;
 its 15-second grace period starts only after the code callback. Explicit CANCEL,
@@ -325,7 +326,7 @@ ERROR, and mismatched connection-mode events fail closed instead of invoking
 standard registration. Only a standard-flow missing-event timeout retains the
 legacy server discovery fallback. The session utility understands the documented
 `FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING` event. The separate coexistence option is
-exposed only when rollout is enabled for the active workspace.
+shown to all clients; it is disabled with an explanation when the global switch is off.
 
 `WhatsappDriver` sends only the `messages` field to live message/status ingestion.
 History media can also contain a `messages` array: it must never enter that path
@@ -341,7 +342,7 @@ one eligible coexistence phone is required. Ambiguous discovery fails closed.
 Reauthorization can begin at capacity; new identities still undergo model quota
 enforcement inside the billing-account lock. The controller never calls
 registration/deregistration or prunes other phones. New onboarding/import config
-flags default off, with an optional workspace allowlist. `CoexistenceMessageStore`
+flags default off, without a workspace allowlist. `CoexistenceMessageStore`
 is connected only to the mobile-app echo ingress (not historical import):
 its persistence tests cover history consent, phone/WABA/workspace scoping,
 duplicates, media enrichment, and mobile-app human takeover. Echo receipts are

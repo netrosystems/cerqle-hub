@@ -97,14 +97,18 @@ journey
 
 ### Feature 4: WhatsApp Cloud API & Template Manager (`app/Modules/Whatsapp`)
 
-Coexistence has a deployed guarded pilot, not a globally validated release. Initial
+Coexistence is available to all clients when the installation-wide onboarding switch
+is enabled (owner decision 2026-09-15); no workspace allowlist applies. Both Connect
+WABA and WhatsApp Business App are shown in the drawer. If the global switch is off,
+Business App is disabled with an explanation while WABA remains available. Initial
 safety work prevents an OAuth interaction longer than 15 seconds from losing its
 session selection, rejects cancelled/mismatched signup completion, and separates
 non-live webhook fields from live ingestion. Remaining implementation and live
 validation gates are tracked in `WHATSAPP_COEXISTENCE.md`. The new-messages-only
-coexistence pilot is implemented behind disabled-by-default rollout and workspace
-allowlist settings; history/contact import is not enabled. Standard Cloud API
-onboarding remains the only mode shown while rollout is disabled.
+coexistence implementation retains a disabled-by-default installation switch;
+history/contact import is not enabled. Feature availability is platform-wide, but
+accounts, onboarding attempts, quotas and messages remain workspace-isolated.
+Real number eligibility and end-to-end provider delivery remain separately verified.
 
 #### Capabilities
 - **Meta Embedded Signup**: Direct WABA account onboarding and phone number registration via Meta Embedded Signup flow.

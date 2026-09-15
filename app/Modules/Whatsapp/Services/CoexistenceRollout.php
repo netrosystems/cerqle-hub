@@ -4,11 +4,8 @@ namespace App\Modules\Whatsapp\Services;
 
 class CoexistenceRollout
 {
-    public static function enabledFor(int $workspaceId): bool
+    public static function enabled(): bool
     {
-        $allowed = array_filter(array_map('trim', explode(',', (string) config('whatsapp.coexistence_workspaces', ''))));
-
-        return (bool) config('whatsapp.coexistence_enabled')
-            && in_array((string) $workspaceId, $allowed, true);
+        return (bool) config('whatsapp.coexistence_enabled');
     }
 }

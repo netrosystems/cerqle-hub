@@ -23,7 +23,7 @@ class WhatsappCoexistenceController extends Controller
 {
     public function begin(Request $request): JsonResponse
     {
-        abort_unless(CoexistenceRollout::enabledFor((int) ($request->user()->current_workspace_id ?? $request->user()->workspace_id)), 404);
+        abort_unless(CoexistenceRollout::enabled(), 404);
         $workspaceId = (int) ($request->user()->current_workspace_id ?? $request->user()->workspace_id);
         $workspace = Workspace::findOrFail($workspaceId);
         // Identity is selected in Meta. Allow reauthorization at capacity; model
@@ -46,7 +46,7 @@ class WhatsappCoexistenceController extends Controller
 
     public function store(Request $request): JsonResponse
     {
-        abort_unless(CoexistenceRollout::enabledFor((int) ($request->user()->current_workspace_id ?? $request->user()->workspace_id)), 404);
+        abort_unless(CoexistenceRollout::enabled(), 404);
         $data = $request->validate([
             'attempt_id' => ['required', 'uuid'],
             'code' => ['required', 'string', 'max:2048'],

@@ -17,17 +17,22 @@ beforeEach(() => {
 });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
-it('keeps the legacy flow when coexistence rollout is disabled', () => {
+it('shows both modes but disables Business App when the installation switch is off', () => {
     enabled = false;
     render(<ConnectWhatsAppForm onClose={vi.fn()} metaConfigIdWhatsapp="config" metaAppId="app" />);
-    expect(screen.queryByText('Keep WhatsApp Business app')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('WhatsApp Business App')).toBeDisabled();
+    expect(screen.getByLabelText('Connect WABA')).toBeEnabled();
+    expect(screen.getByText(/connections are temporarily unavailable/)).toBeInTheDocument();
+    fireEvent.click(screen.getByLabelText('WhatsApp Business App'));
+    expect(fetch).not.toHaveBeenCalled();
     expect(screen.getByRole('button', { name: 'inbox.continue_meta_whatsapp' })).toBeEnabled();
 });
 
 it('prepares coexistence on mode selection without duplicate number entry', async () => {
     fetch.mockResolvedValue({ ok: true, json: async () => ({ attempt_id: 'demo-attempt' }) });
     render(<ConnectWhatsAppForm onClose={vi.fn()} metaConfigIdWhatsapp="config" metaAppId="app" />);
-    fireEvent.click(screen.getByLabelText('Keep WhatsApp Business app'));
+    expect(screen.getByLabelText('Connect WABA')).toBeChecked();
+    fireEvent.click(screen.getByLabelText('WhatsApp Business App'));
     expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
     expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
     await waitFor(() => expect(screen.getByRole('button', { name: 'inbox.continue_meta_whatsapp' })).toBeEnabled());
@@ -40,7 +45,7 @@ it('prepares coexistence on mode selection without duplicate number entry', asyn
 it('does not open authorization when the server rejects the attempt', async () => {
     fetch.mockResolvedValue({ ok: false, json: async () => ({ message: 'Setup unavailable' }) });
     render(<ConnectWhatsAppForm onClose={vi.fn()} metaConfigIdWhatsapp="config" metaAppId="app" />);
-    fireEvent.click(screen.getByLabelText('Keep WhatsApp Business app'));
+    fireEvent.click(screen.getByLabelText('WhatsApp Business App'));
     expect(await screen.findByRole('alert')).toHaveTextContent('Setup unavailable');
     expect(screen.queryByRole('button', { name: 'inbox.continue_meta_whatsapp' })).not.toBeInTheDocument();
     fetch.mockResolvedValue({ ok: true, json: async () => ({ attempt_id: 'retry-attempt' }) });

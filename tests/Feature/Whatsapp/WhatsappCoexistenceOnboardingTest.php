@@ -28,7 +28,6 @@ class WhatsappCoexistenceOnboardingTest extends TestCase
         config(['whatsapp.coexistence_enabled' => true]);
         Http::preventStrayRequests();
         $context = $this->createSubscribedWorkspaceContext();
-        config(['whatsapp.coexistence_workspaces' => (string) $context['workspace']->id]);
         $this->actingAs($context['user']);
         IntegrationConfig::create([
             'provider' => 'meta_app', 'label' => 'Meta', 'mode' => 'live', 'enabled' => true,
@@ -41,11 +40,16 @@ class WhatsappCoexistenceOnboardingTest extends TestCase
         return $this->postJson('/test/coexistence/begin', [])->assertOk()->json('attempt_id');
     }
 
-    public function test_empty_or_foreign_allowlist_rejects_before_provider_calls(): void
+    public function test_all_clients_can_begin_without_workspace_allowlisting(): void
     {
         foreach (['', '999999999'] as $allowlist) {
+            // Stale installation allowlists no longer restrict clients.
             config(['whatsapp.coexistence_workspaces' => $allowlist]);
-            $this->postJson('/test/coexistence/begin', [])->assertNotFound();
+            $context = $this->createSubscribedWorkspaceContext();
+            $this->actingAs($context['user']);
+            $this->postJson('/test/coexistence/begin', [])->assertOk();
+            $this->get(route('client.inbox.setup'))->assertInertia(fn ($page) => $page
+                ->component('Inbox/Setup')->where('whatsappCoexistenceEnabled', true));
         }
         Http::assertNothingSent();
     }
@@ -75,6 +79,8 @@ class WhatsappCoexistenceOnboardingTest extends TestCase
     public function test_disabled_rollout_rejects_before_provider_calls(): void
     {
         config(['whatsapp.coexistence_enabled' => false]);
+        $this->get(route('client.inbox.setup'))->assertInertia(fn ($page) => $page
+            ->component('Inbox/Setup')->where('whatsappCoexistenceEnabled', false));
         $this->postJson('/test/coexistence/begin', [])->assertNotFound();
         $this->finish('00000000-0000-4000-8000-000000000000')->assertNotFound();
         Http::assertNothingSent();
@@ -166,7 +172,6 @@ class WhatsappCoexistenceOnboardingTest extends TestCase
     {
         $id = $this->attempt();
         $context = $this->createSubscribedWorkspaceContext();
-        config(['whatsapp.coexistence_workspaces' => config('whatsapp.coexistence_workspaces').','.$context['workspace']->id]);
         $this->actingAs($context['user']);
         $this->finish($id)->assertConflict();
         Http::assertNothingSent();
