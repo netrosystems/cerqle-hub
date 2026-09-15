@@ -12,6 +12,7 @@ use App\Modules\Social\Models\SocialPost;
 use App\Modules\Social\Models\SocialPostAccount;
 use App\Modules\Social\Services\SocialMediaLifecycleService;
 use App\Modules\Social\Services\SocialPublisher;
+use App\Modules\Social\Services\XContentValidator;
 use App\Services\MediaService;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
@@ -63,7 +64,12 @@ class SocialPostController extends Controller
         }
     }
 
-    private function validatePlatformPayloads(Collection $selectedNetworks, array $validated, Collection $accounts): void
+    /**
+     * @param  Collection<int|string, string>  $selectedNetworks
+     * @param  array<string, mixed>  $validated
+     * @param  Collection<int, SocialAccount>  $accounts
+     */
+    private function validatePlatformPayloads(Collection $selectedNetworks, array $validated, Collection $accounts, bool $draft = false): void
     {
         $payloads = (array) ($validated['platform_payloads'] ?? []);
         $unexpected = array_diff(array_keys($payloads), $selectedNetworks->all());
@@ -77,6 +83,14 @@ class SocialPostController extends Controller
         $errors = [];
 
         foreach ($selectedNetworks as $network) {
+            if ($network === 'twitter') {
+                $validator = app(XContentValidator::class);
+                $validator->assertPayload($validator->effectivePayload(array_merge($validated, [
+                    'status' => $draft ? 'draft' : 'publishing',
+                ])), (int) $accounts->firstWhere('network', 'twitter')->workspace_id);
+
+                continue;
+            }
             $override = (array) ($payloads[$network] ?? []);
             $hasOverride = array_key_exists($network, $payloads);
             $customize = (bool) ($override['customize'] ?? false);
@@ -156,6 +170,10 @@ class SocialPostController extends Controller
         ];
     }
 
+    /**
+     * @param  Collection<int|string, string>  $selectedNetworks
+     * @param  array<string, mixed>  $validated
+     */
     private function validateUploadedMediaCompatibility(Collection $selectedNetworks, array $validated, Request $request): void
     {
         $payloads = (array) ($validated['platform_payloads'] ?? []);
@@ -180,6 +198,9 @@ class SocialPostController extends Controller
         $media = $mediaQuery->get()->keyBy('id');
 
         foreach ($selectedNetworks as $network) {
+            if ($network === 'twitter') {
+                continue; // XContentValidator already checks actual bytes and library ownership.
+            }
             $override = (array) ($payloads[$network] ?? []);
             $ids = collect(($override['customize'] ?? false) ? ($override['media_ids'] ?? []) : ($validated['media_ids'] ?? []))
                 ->filter()->map(fn ($id) => (int) $id);
@@ -402,7 +423,7 @@ class SocialPostController extends Controller
         $requestedIds = collect($validated['target_accounts'])->map(fn ($id) => (int) $id);
         $accounts = SocialAccount::where('workspace_id', $wid)
             ->whereIn('id', $requestedIds)
-            ->get(['id', 'network']);
+            ->get(['id', 'network', 'workspace_id']);
         if ($accounts->count() !== $requestedIds->count()) {
             throw ValidationException::withMessages([
                 'target_accounts' => ['One or more selected accounts do not belong to your workspace.'],
@@ -428,13 +449,16 @@ class SocialPostController extends Controller
             ->merge(collect($validated['platform_payloads'] ?? [])->flatMap(fn ($payload) => $payload['media_ids'] ?? []))
             ->merge(collect($validated['platform_payloads'] ?? [])->pluck('options.thumbnail_media_id'))
             ->filter()->unique()->values()->all();
+        if ($selectedNetworks->contains('twitter') && ! data_get($validated, 'platform_payloads.twitter.customize', false)) {
+            $validated['platform_payloads']['twitter']['media_ids'] = $validated['media_ids'] ?? [];
+        }
         unset($validated['media_ids']);
 
         $scheduledAt = $validated['scheduled_at'] ?? null;
         $post = DB::transaction(function () use ($validated, $wid, $scheduledAt, $request, $allMediaIds): SocialPost {
             $post = SocialPost::create(array_merge($validated, [
                 'workspace_id' => $wid,
-                'status' => $scheduledAt ? 'scheduled' : 'draft',
+                'status' => $scheduledAt ? 'scheduled' : 'publishing',
             ]));
             $this->mediaLifecycle->syncPostMedia($post, $request->user(), $allMediaIds);
 
@@ -443,7 +467,6 @@ class SocialPostController extends Controller
 
         if (! $scheduledAt) {
             PublishSocialPostJob::dispatch($post->id)->onQueue('social');
-            $post->update(['status' => 'publishing']);
         }
 
         if ($request->expectsJson()) {
@@ -509,7 +532,7 @@ class SocialPostController extends Controller
         $requestedIds = collect($validated['target_accounts'])->map(fn ($id) => (int) $id);
         $accounts = SocialAccount::where('workspace_id', $this->workspaceId($request))
             ->whereIn('id', $requestedIds)
-            ->get(['id', 'network']);
+            ->get(['id', 'network', 'workspace_id']);
         if ($accounts->count() !== $requestedIds->count()) {
             throw ValidationException::withMessages([
                 'target_accounts' => ['One or more selected accounts do not belong to your workspace.'],
@@ -517,7 +540,7 @@ class SocialPostController extends Controller
         }
 
         $selectedNetworks = $accounts->pluck('network')->unique();
-        $this->validatePlatformPayloads($selectedNetworks, $validated, $accounts);
+        $this->validatePlatformPayloads($selectedNetworks, $validated, $accounts, empty($validated['scheduled_at']));
         $this->validateUploadedMediaCompatibility($selectedNetworks, $validated, $request);
         $mediaUrls = array_values(array_filter($validated['media_urls'] ?? [], fn ($value) => $value !== null && $value !== ''));
         $validated['media_urls'] = $mediaUrls;
@@ -535,6 +558,9 @@ class SocialPostController extends Controller
             ->merge(collect($validated['platform_payloads'] ?? [])->flatMap(fn ($payload) => $payload['media_ids'] ?? []))
             ->merge(collect($validated['platform_payloads'] ?? [])->pluck('options.thumbnail_media_id'))
             ->filter()->unique()->values()->all();
+        if ($selectedNetworks->contains('twitter') && ! data_get($validated, 'platform_payloads.twitter.customize', false)) {
+            $validated['platform_payloads']['twitter']['media_ids'] = $validated['media_ids'] ?? [];
+        }
         unset($validated['media_ids']);
         DB::transaction(function () use ($post, $validated, $request, $mediaIds): void {
             $post->update($validated);
@@ -549,6 +575,16 @@ class SocialPostController extends Controller
         abort_unless((int) $post->workspace_id === $this->workspaceId($request), 403);
         abort_if($post->status === 'publishing', 422, 'Post is already being published.');
         abort_if($post->status === 'published', 422, 'Post is already published.');
+
+        $accounts = SocialAccount::where('workspace_id', $post->workspace_id)
+            ->whereIn('id', $post->target_accounts)->get(['id', 'network', 'workspace_id']);
+        if ($accounts->contains('network', 'twitter')) {
+            $validator = app(XContentValidator::class);
+            $validator->assertPayload($validator->effectivePayload(array_merge($post->toArray(), [
+                'media_ids' => $post->media()->pluck('media.id')->all(),
+                'status' => 'publishing',
+            ])), (int) $post->workspace_id);
+        }
 
         $post->update(['scheduled_at' => null, 'status' => 'publishing']);
         PublishSocialPostJob::dispatch($post->id)->onQueue('social');
@@ -1071,6 +1107,18 @@ SYSTEM;
         }
 
         $created = [];
+        foreach ($validated['posts'] as $i => $postData) {
+            if (SocialAccount::where('workspace_id', $wid)->whereIn('id', $postData['target_accounts'])->where('network', 'twitter')->exists()) {
+                try {
+                    app(XContentValidator::class)->assertPayload(array_merge($postData, [
+                        'status' => empty($postData['scheduled_at']) ? 'draft' : 'scheduled',
+                    ]), $wid);
+                } catch (ValidationException $exception) {
+                    throw ValidationException::withMessages(collect($exception->errors())
+                        ->mapWithKeys(fn ($messages, $field) => ["posts.{$i}.{$field}" => $messages])->all());
+                }
+            }
+        }
         \DB::transaction(function () use ($validated, $wid, &$created) {
             foreach ($validated['posts'] as $postData) {
                 $scheduledAt = $postData['scheduled_at'] ?? null;

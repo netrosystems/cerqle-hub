@@ -69,6 +69,7 @@ class IntegrationConfigController extends Controller
             // OAuth redirect/callback URL the admin must register in the platform's app settings.
             'callbackUrl' => match ($provider) {
                 'oauth_linkedin' => route('client.social.oauth.callback', 'linkedin'),
+                'oauth_twitter' => route('client.social.oauth.callback', 'twitter'),
                 'oauth_google_signin' => route('auth.social.callback', 'google'),
                 'oauth_youtube' => route('client.social.oauth.callback', 'youtube'),
                 'oauth_tiktok' => route('client.social.oauth.callback', 'tiktok'),
@@ -165,7 +166,23 @@ class IntegrationConfigController extends Controller
             return response()->json(['ok' => false, 'message' => 'Not configured yet.']);
         }
 
-        $result = app(ConnectionTester::class)->test($config);
+        if ($provider === 'oauth_twitter') {
+            // App credentials alone cannot prove user-scoped publishing access.
+            // Do not exchange tokens, upload media, or publish a test post here.
+            $result = [
+                'ok' => $config->isConfigured(),
+                'message' => $config->isConfigured()
+                    ? 'Required X credentials are present. Connect an X account to verify OAuth and publishing access; no provider request was made.'
+                    : 'Complete the X OAuth 2.0 Client ID and Client Secret before testing.',
+            ];
+            $config->update([
+                'last_tested_at' => now(),
+                'last_test_status' => $result['ok'] ? 'ok' : 'fail',
+                'last_test_message' => $result['message'],
+            ]);
+        } else {
+            $result = app(ConnectionTester::class)->test($config);
+        }
         $this->auditLog($request, $config, 'test', []);
 
         if ($request->wantsJson()) {

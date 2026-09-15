@@ -16,7 +16,6 @@ class SocialMediaLifecycleService
         $ids = collect($mediaIds)->map(fn ($id) => (int) $id)->filter()->unique()->values();
         $mediaQuery = Media::query()
             ->whereIn('id', $ids)
-            ->where('is_temporary', true)
             ->where('mediable_type', $user::class);
 
         if ($user->client_id) {
@@ -37,7 +36,7 @@ class SocialMediaLifecycleService
             $previous = $post->media()->pluck('media.id');
             $post->media()->sync($ids->all());
 
-            Media::whereIn('id', $ids)->update([
+            Media::whereIn('id', $ids)->where('is_temporary', true)->update([
                 'quota_released_at' => null,
                 'purge_after' => null,
             ]);
@@ -51,6 +50,9 @@ class SocialMediaLifecycleService
     {
         $postMedia = $post->media()->get();
         $postMedia->each(function (Media $media) use ($post): void {
+            if (! $media->is_temporary) {
+                return;
+            }
             $stillRequired = $media->socialPosts()
                 ->where('social_media_posts.id', '!=', $post->getKey())
                 ->whereNotIn('status', ['published'])
@@ -64,7 +66,7 @@ class SocialMediaLifecycleService
             }
         });
 
-        if ($postMedia->isNotEmpty() && $postMedia->every(fn (Media $media) => $media->fresh()->quota_released_at !== null)) {
+        if ($postMedia->isNotEmpty() && $postMedia->every(fn (Media $media) => $media->is_temporary && $media->fresh()->quota_released_at !== null)) {
             $post->update(['temporary_media_released_at' => now()]);
         }
     }
@@ -81,6 +83,9 @@ class SocialMediaLifecycleService
 
     private function releaseIfUnused(Media $media): void
     {
+        if (! $media->is_temporary) {
+            return;
+        }
         if ($media->socialPosts()->whereNotIn('status', ['published'])->exists()) {
             return;
         }

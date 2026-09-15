@@ -7,6 +7,7 @@ use App\Modules\Social\Services\SocialPublisher;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
+use Illuminate\Queue\Middleware\WithoutOverlapping;
 use Throwable;
 
 class ConfirmSocialPostProcessingJob implements ShouldBeUnique, ShouldQueue
@@ -24,6 +25,12 @@ class ConfirmSocialPostProcessingJob implements ShouldBeUnique, ShouldQueue
     public function uniqueId(): string
     {
         return (string) $this->postId;
+    }
+
+    public function middleware(): array
+    {
+        return [(new WithoutOverlapping('social-post:'.$this->postId))
+            ->shared()->releaseAfter(10)->expireAfter(1900)];
     }
 
     public function handle(SocialPublisher $publisher): void

@@ -328,6 +328,23 @@
             }
         },
         "social": {
+        "network_desc_twitter": "Text, images and video posts on X.",
+        "x_weighted": "weighted estimate",
+        "x_guidance": "X supports text without links, up to four uploaded images, or one uploaded video. Do not mix images and video. The standard limit is 280 weighted characters.",
+        "x_upload_limits": "Up to four JPEG/PNG images (5 MB each), or one MP4 video (500 MB, 140 seconds).",
+        "x_upload_failed": "X media upload failed.",
+        "x_media_type": "X media",
+        "x_media_text": "Text only",
+        "x_media_images": "Images",
+        "x_media_video": "Video",
+        "status_unknown": "Unknown — review required",
+        "status_review": "Review required",
+        "status_processing": "Processing",
+        "x_record": "Record published post",
+        "x_retry": "Retry X",
+        "x_record_prompt": "Enter the numeric X post ID after checking your X profile.",
+        "x_unknown_warning": "X may already have published this post.",
+        "x_duplicate_warning": "Check your X profile first. Retrying may create a duplicate post. Continue?",
             "accounts": {
                 "index": "列表",
                 "disconnect": "断开连接",

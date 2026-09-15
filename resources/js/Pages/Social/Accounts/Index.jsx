@@ -6,6 +6,7 @@ import { useTranslation } from 'react-i18next';
 import { SocialBrandIcon } from '@/Components/BrandIcons';
 
 const NETWORKS = [
+    { id: 'twitter', label: 'X', descriptionKey: 'social.network_desc_twitter' },
     { id: 'facebook',  label: 'Facebook',  descriptionKey: 'social.network_desc_facebook' },
     { id: 'instagram', label: 'Instagram', descriptionKey: 'social.network_desc_instagram' },
     { id: 'linkedin',  label: 'LinkedIn',  descriptionKey: 'social.network_desc_linkedin' },

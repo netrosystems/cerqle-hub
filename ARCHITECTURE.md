@@ -253,6 +253,58 @@ can be edited or deleted independently.
 
 ## 5. Integrations & External Service Contracts
 
+### X native publishing primitives
+
+The registered `twitter` driver uses system `oauth_twitter` credentials. X OAuth
+uses PKCE S256 and single-use session attempts bound to user, original workspace,
+application ID and ten-minute expiry. The callback rechecks workspace membership.
+Encrypted tokens refresh through the existing per-account lock and ten-minute
+refresh job; changing the app Client ID requires reconnect, while disabling the
+integration suppresses outbound work without removing account rows.
+
+`XDestinationPublisher` persists encrypted payload/media state and review history
+in the additive `x_publish_attempts` table. Payloads are pinned per destination;
+shared and override media IDs survive IDs-only API requests. Existing plan limits
+remain unchanged. Actual file inspection runs before upload and again before
+create; permanent library assets are linked but never released/purged as temporary
+uploads. `ffprobe` must be installed for video validation, which fails closed.
+Upload readiness is checked again after inspection to handle expiry boundaries.
+Publishing and provider-confirmation jobs share a per-post non-overlap lock.
+The durable `creating` state becomes `unknown` on abandoned execution rather than
+replaying. Explicit review verifies a supplied post ID's author or authorizes a
+new attempt with a duplicate warning, archiving prior encrypted attempt evidence.
+Explicit X disconnect clears tokens and tombstones the account via `disconnected_at`,
+preserving uncertain/published receipts while excluding it from connected inventory.
+Reconnect restores the same identity; restoring a disconnected row rechecks capacity
+under the existing usage lock. Other networks retain their existing deletion behavior.
+Result aggregation counts only current destinations, retaining removed destinations'
+history without letting old failures poison the current outcome. Immediate browser
+creation persists `publishing` before dispatching its job.
+
+`XDriver` reads `/2/users/me` with username/profile-picture fields and creates
+`/2/tweets` using text and `x_media_ids`, never media URLs. Create has no automatic
+HTTP retries. `XProviderException` exposes sanitized `category`, `retryAfter`
+(seconds, honoring the later Retry-After/reset up to 86400), and `outcome` (`definite` or `unknown`).
+Create connection errors, 5xx, and successful responses missing an ID are unknown
+(`category` and `outcome` both `unknown`) and must enter delivery review rather than automatic replay. 401 requires reconnect;
+403 distinguishes credit/permission failures without exposing provider details.
+
+`XMediaUploader::advance(account, localMediaIds, state)` performs at most one
+initialize/append/finalize/status request. State contains `uploads` keyed by local
+Media ID (provider `id`, `expires_at`, offset/segment, stage, optional next-check
+timestamp), aggregate `stage` (`uploading`, `processing`, `ready`), `retry_after`
+seconds and ordered provider `media_ids` only when ready. Media must be linked to a
+post in the account's workspace. Stored files are read through Storage readStream;
+append sends one bounded raw-binary multipart chunk, never an external URL.
+The main attempt orchestrator owns encrypted state persistence, credential refresh
+before every stage, scheduling, and create claims. It must call advance immediately
+before create: sessions expiring within 30 seconds are reinitialized. These primitives
+are wired into the registered X destination workflow.
+Provider references: [append](https://docs.x.com/x-api/media/append-media-upload),
+[initialize](https://docs.x.com/x-api/media/initialize-media-upload),
+[finalize](https://docs.x.com/x-api/media/finalize-media-upload), and
+[status](https://docs.x.com/x-api/media/get-media-upload-status).
+
 ### WhatsApp coexistence guarded pilot (updated 2026-09-11)
 
 Connection onboarding requires both an enabled rollout flag and explicit workspace

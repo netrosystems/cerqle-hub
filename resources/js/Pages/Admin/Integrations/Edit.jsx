@@ -7,6 +7,19 @@ import { formatInTz } from '@/Utils/datetime';
 import { useTranslation, Trans } from 'react-i18next';
 
 const SETUP_GUIDES = {
+    oauth_twitter: {
+        title: 'X OAuth 2.0 Setup',
+        steps: [
+            'Configure OAuth 2.0 user authentication for a confidential Web App in the X Developer Portal.',
+            'Register the exact callback URL shown on the configuration page.',
+            'Save the OAuth 2.0 Client ID and Client Secret, then enable this integration.',
+            'Use tweet.read, tweet.write, users.read, media.write and offline.access permissions, then connect an X account from Social Accounts.',
+            'Purchase API credits and set a spending limit in X Developer Console. Cerqle clients use the existing social publishing limits; API costs are paid by the shared app owner.',
+            'The configuration test checks required fields only. It never publishes or uploads media.',
+        ],
+        link: 'https://developer.x.com',
+        linkLabel: 'Open X Developer Portal',
+    },
     onesignal: {
         title: 'OneSignal Push Setup',
         steps: [
@@ -802,9 +815,9 @@ export default function IntegrationsEdit({ provider, label, category, fields, co
                             className="flex items-center gap-1.5 rounded-lg border border-neutral-300 dark:border-neutral-600 px-4 py-2 text-sm font-medium text-neutral-700 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-800 disabled:opacity-60 transition"
                         >
                             <FlaskConical className="h-4 w-4" />
-                            {testing ? t('integrations.testing') : provider === 'onesignal' ? 'Test configuration' : t('integrations.test_connection')}
+                            {testing ? t('integrations.testing') : ['onesignal', 'oauth_twitter'].includes(provider) ? 'Test configuration' : t('integrations.test_connection')}
                         </button>
-                        {!STORAGE_PROVIDERS.includes(provider) && (
+                        {!STORAGE_PROVIDERS.includes(provider) && provider !== 'oauth_twitter' && (
                             <button
                                 type="button"
                                 disabled={rotating}

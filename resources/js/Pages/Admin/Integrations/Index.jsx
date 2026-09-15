@@ -6,6 +6,19 @@ import axios from 'axios';
 import { useTranslation } from 'react-i18next';
 
 const SETUP_GUIDES = {
+    oauth_twitter: {
+        title: 'X OAuth 2.0 Setup',
+        steps: [
+            'Configure OAuth 2.0 user authentication for a confidential Web App in the X Developer Portal.',
+            'Register the exact callback URL shown on the configuration page.',
+            'Save the OAuth 2.0 Client ID and Client Secret, then enable this integration.',
+            'Use tweet.read, tweet.write, users.read, media.write and offline.access permissions, then connect an X account from Social Accounts.',
+            'Purchase API credits and set a spending limit in X Developer Console. Cerqle clients use the existing social publishing limits; API costs are paid by the shared app owner.',
+            'The configuration test checks required fields only. It never publishes or uploads media.',
+        ],
+        link: 'https://developer.x.com',
+        linkLabel: 'Open X Developer Portal',
+    },
     onesignal: {
         title: 'OneSignal Push Setup',
         steps: [

@@ -2,6 +2,7 @@
 
 namespace App\Modules\Social\Services;
 
+use App\Models\Media;
 use App\Modules\Broadcasting\Models\UsageMeter;
 use App\Modules\Social\Jobs\ConfirmSocialPostProcessingJob;
 use App\Modules\Social\Models\SocialAccount;
@@ -15,6 +16,7 @@ use App\Modules\Social\Services\Drivers\InstagramSocialDriver;
 use App\Modules\Social\Services\Drivers\LinkedInDriver;
 use App\Modules\Social\Services\Drivers\SocialNetworkInterface;
 use App\Modules\Social\Services\Drivers\TikTokDriver;
+use App\Modules\Social\Services\Drivers\XDriver;
 use App\Modules\Social\Services\Drivers\YoutubeDriver;
 use Illuminate\Support\Facades\Log;
 
@@ -33,6 +35,7 @@ class SocialPublisher
             'linkedin' => new LinkedInDriver,
             'youtube' => new YoutubeDriver,
             'tiktok' => new TikTokDriver,
+            'twitter' => new XDriver,
         ];
     }
 
@@ -46,13 +49,35 @@ class SocialPublisher
             ->get();
 
         $results = (array) $post->publish_results;
-        $publishedUrls = collect($results)->pluck('url')->filter()->values()->all();
+        $targetKeys = array_fill_keys(array_map('intval', (array) $post->target_accounts), true);
+        foreach (array_diff(array_keys($targetKeys), $accounts->modelKeys()) as $missingId) {
+            if (($results[$missingId]['status'] ?? '') !== 'unknown') {
+                $results[$missingId] = ['status' => 'failed', 'error' => 'This destination was disconnected. Reconnect it or remove it from the post.'];
+            }
+        }
+        $publishedUrls = collect(array_intersect_key($results, $targetKeys))->pluck('url')->filter()->values()->all();
 
         foreach ($accounts as $account) {
             $link = SocialPostAccount::firstOrCreate(
                 ['post_id' => $post->id, 'social_account_id' => $account->id],
                 ['status' => 'pending']
             );
+
+            if ($account->network === 'twitter') {
+                $result = app(XDestinationPublisher::class)->advance($post, $account, $this->payloadFor($post, $account));
+                $link->update([
+                    'status' => $result['status'] === 'published' ? 'published' : 'pending',
+                    'platform_post_id' => $result['post_id'] ?? null,
+                    'error' => $result['error'] ?? null,
+                    'published_at' => $result['status'] === 'published' ? now() : null,
+                ]);
+                $results[$account->id] = $result;
+                if (! empty($result['url'])) {
+                    $publishedUrls[] = $result['url'];
+                }
+
+                continue;
+            }
 
             // On job retry, skip accounts already successfully published.
             if (in_array($link->status, ['published', 'processing'], true)) {
@@ -110,26 +135,27 @@ class SocialPublisher
             }
         }
 
-        $succeededCount = collect($results)->filter(fn ($r) => $r['status'] === 'published')->count();
-        $failedCount = collect($results)->filter(fn ($r) => $r['status'] === 'failed')->count();
-        $processingCount = collect($results)->filter(fn ($r) => $r['status'] === 'processing')->count();
+        $currentResults = array_intersect_key($results, $targetKeys);
+        $succeededCount = collect($currentResults)->filter(fn ($r) => $r['status'] === 'published')->count();
+        $failedCount = collect($currentResults)->filter(fn ($r) => in_array($r['status'] ?? '', ['failed', 'unknown'], true))->count();
+        $processingCount = collect($currentResults)->filter(fn ($r) => in_array($r['status'] ?? '', ['processing', 'uploading'], true))->count();
         $allFailed = $succeededCount === 0;
 
         // Keep the post retryable whenever one account failed. Published account
         // links are skipped on the next attempt, while failed links are retried.
-        $finalStatus = $failedCount > 0 ? 'failed' : ($processingCount > 0 ? 'publishing' : 'published');
+        $finalStatus = $processingCount > 0 ? 'publishing' : ($failedCount > 0 || $currentResults === [] ? 'failed' : 'published');
 
         $post->update([
             'status' => $finalStatus,
             'published_at' => $failedCount === 0 && $processingCount === 0 && ! $allFailed ? now() : null,
             'publish_results' => $results,
-            'provider_post_id' => count($results) === 1 && $succeededCount === 1
-                ? (string) data_get(collect($results)->first(), 'post_id')
+            'provider_post_id' => count($currentResults) === 1 && $succeededCount === 1
+                ? (string) data_get(collect($currentResults)->first(), 'post_id')
                 : null,
-            'post_url' => count($publishedUrls) === 1 ? $publishedUrls[0] : null,
+            'post_url' => count(array_unique($publishedUrls)) === 1 ? array_values(array_unique($publishedUrls))[0] : null,
         ]);
 
-        if ($processingCount > 0) {
+        if ($post->accountLinks()->where('status', 'processing')->exists()) {
             ConfirmSocialPostProcessingJob::dispatch($post->id)->delay(now()->addMinute())->onQueue('social');
         }
 
@@ -158,7 +184,7 @@ class SocialPublisher
         $post->load('accountLinks.account');
         $results = (array) $post->publish_results;
 
-        foreach ($post->accountLinks->where('status', 'processing') as $link) {
+        foreach ($post->accountLinks->whereIn('social_account_id', (array) $post->target_accounts)->where('status', 'processing') as $link) {
             $account = $link->account;
             $driver = $account ? ($this->drivers[$account->network] ?? null) : null;
             if (! $account || ! $driver instanceof ChecksPublishProcessing) {
@@ -199,14 +225,17 @@ class SocialPublisher
         }
 
         $post->unsetRelation('accountLinks');
-        $links = $post->accountLinks()->get();
-        if ($links->where('status', 'processing')->isNotEmpty()) {
+        $links = $post->accountLinks()->whereIn('social_account_id', (array) $post->target_accounts)->get();
+        $currentResults = array_intersect_key($results, array_fill_keys(array_map('intval', (array) $post->target_accounts), true));
+        if ($links->where('status', 'processing')->isNotEmpty()
+            || collect($currentResults)->contains(fn ($result) => in_array($result['status'] ?? '', ['uploading', 'processing'], true))) {
             $post->update(['status' => 'publishing', 'publish_results' => $results]);
 
             return false;
         }
 
-        if ($links->where('status', 'failed')->isNotEmpty()) {
+        if ($links->where('status', 'failed')->isNotEmpty()
+            || collect($currentResults)->contains(fn ($result) => in_array($result['status'] ?? '', ['unknown', 'failed'], true))) {
             $post->update(['status' => 'failed', 'publish_results' => $results]);
 
             return true;
@@ -225,6 +254,7 @@ class SocialPublisher
         return true;
     }
 
+    /** @return array<string, mixed> */
     private function payloadFor(SocialPost $post, SocialAccount $account): array
     {
         $payload = $post->toArray();
@@ -236,6 +266,14 @@ class SocialPublisher
                     $payload[$field] = $override[$field];
                 }
             }
+        }
+
+        if ($account->network === 'twitter') {
+            $payload['x_oauth_client_id'] = data_get($account->meta, 'oauth_client_id');
+            $urls = (array) ($payload['media_urls'] ?? []);
+            $payload['media_ids'] = array_key_exists('media_ids', $override) ? (array) $override['media_ids']
+                : Media::whereIn('id', $post->media()->pluck('media.id'))
+                    ->get()->filter(fn ($media) => in_array($media->url(), $urls, true))->pluck('id')->all();
         }
 
         $options = array_merge(
@@ -259,6 +297,7 @@ class SocialPublisher
         return $payload;
     }
 
+    /** @param array<string, mixed> $postData */
     public function updatePublishedPost(SocialAccount $account, string $platformPostId, array $postData): void
     {
         $account = $this->accessTokens->fresh($account);

@@ -2,13 +2,14 @@
 
 namespace App\Modules\Social\Services;
 
+use App\Modules\Integrations\Services\CredentialResolver;
 use App\Modules\Social\Models\SocialAccount;
 use App\Modules\Social\Services\OAuth\OAuthManager;
 use Illuminate\Support\Facades\Cache;
 
 class SocialAccessTokenService
 {
-    private const REFRESHABLE_NETWORKS = ['youtube', 'tiktok', 'linkedin'];
+    private const REFRESHABLE_NETWORKS = ['youtube', 'tiktok', 'linkedin', 'twitter'];
 
     private const REFRESH_BUFFER_MINUTES = 10;
 
@@ -21,6 +22,15 @@ class SocialAccessTokenService
      */
     public function fresh(SocialAccount $account): SocialAccount
     {
+        if ($account->network === 'twitter') {
+            $credentials = CredentialResolver::system()->oauth('twitter');
+            if (! $account->active || ! $credentials) {
+                throw new \RuntimeException('X publishing is unavailable. Contact your administrator.');
+            }
+            if (data_get($account->meta, 'oauth_client_id') !== $credentials->clientId()) {
+                throw new \RuntimeException('X application changed. Reconnect this account.');
+            }
+        }
         if (! $this->needsRefresh($account)) {
             return $account;
         }
