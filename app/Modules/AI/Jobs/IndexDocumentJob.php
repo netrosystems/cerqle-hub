@@ -4,6 +4,8 @@ namespace App\Modules\AI\Jobs;
 
 use App\Modules\AI\Models\AiKbChunk;
 use App\Modules\AI\Models\AiKbDocument;
+use App\Modules\AI\Models\AiKbGeneration;
+use App\Modules\AI\Models\AiKnowledgeBase;
 use App\Modules\AI\Services\EmbeddingStore;
 use App\Modules\AI\Services\Llm\LlmManager;
 use App\Modules\AI\Services\LlmGateway;
@@ -15,6 +17,7 @@ use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
+use Illuminate\Queue\Middleware\WithoutOverlapping;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
@@ -33,16 +36,30 @@ class IndexDocumentJob implements ShouldQueue
 
     public function __construct(public readonly int $documentId) {}
 
+    /** @return list<WithoutOverlapping> */
+    public function middleware(): array
+    {
+        $kbId = (int) (AiKbDocument::whereKey($this->documentId)->value('kb_id') ?? 0);
+
+        return [(new WithoutOverlapping('kb-index:'.$kbId))->releaseAfter(5)->expireAfter(300)];
+    }
+
     public function handle(LlmGateway $llm, EmbeddingStore $store, StorageManager $storage): void
     {
-        $doc = AiKbDocument::with('chunks')->find($this->documentId);
+        $doc = AiKbDocument::with('knowledgeBase')->find($this->documentId);
         if (! $doc) {
             return;
         }
 
         $doc->update(['status' => 'indexing', 'error_message' => null]);
+        $generation = null;
 
         try {
+            $kb = $doc->knowledgeBase;
+            if (! $kb) {
+                return;
+            }
+
             $text = $this->extractText($doc, $storage);
             $chunks = $this->chunk($text);
 
@@ -54,25 +71,61 @@ class IndexDocumentJob implements ShouldQueue
                 });
             }
 
-            // Remove old vectors before deleting the relational chunks. Without
-            // this, re-indexing leaves stale Qdrant points that can be returned
-            // for a knowledge base even though their document no longer exists.
-            $store->deleteDocumentEmbeddings($doc->id);
+            $generation = DB::transaction(function () use ($kb): AiKbGeneration {
+                $locked = AiKnowledgeBase::whereKey($kb->id)->lockForUpdate()->firstOrFail();
+                $generation = AiKbGeneration::create([
+                    'kb_id' => $locked->id,
+                    'status' => 'building',
+                ]);
+                $locked->update([
+                    'pending_generation_id' => $generation->id,
+                    'status' => 'indexing',
+                ]);
 
-            // Remove old chunks
-            $doc->chunks()->delete();
+                return $generation;
+            });
 
-            $kb = $doc->knowledgeBase ?? $doc->load('knowledgeBase')->knowledgeBase;
-            $kbId = $kb?->id ?? 0;
+            $kbId = $kb->id;
+            $activeGenerationId = $kb->fresh()->active_generation_id;
+
+            // Build a complete unpublished snapshot. Existing documents are
+            // copied forward; this document is replaced only inside the pending
+            // generation, so failed indexing never damages the live answers.
+            $existing = AiKbChunk::query()
+                ->where('kb_id', $kbId)
+                ->when($activeGenerationId, fn ($query) => $query->where('generation_id', $activeGenerationId))
+                ->where('document_id', '!=', $doc->id)
+                ->get();
+
+            foreach ($existing as $oldChunk) {
+                $copy = AiKbChunk::create([
+                    'kb_id' => $kbId,
+                    'generation_id' => $generation->id,
+                    'document_id' => $oldChunk->document_id,
+                    'ord' => $oldChunk->ord,
+                    'content' => $oldChunk->content,
+                    'tokens' => $oldChunk->tokens,
+                    'embedding' => $oldChunk->embedding,
+                    'source_title' => $oldChunk->source_title,
+                    'source_url' => $oldChunk->source_url,
+                ]);
+                $storedEmbedding = json_decode((string) $oldChunk->embedding, true);
+                if (is_array($storedEmbedding) && $storedEmbedding !== []) {
+                    $store->storeEmbedding($copy, $storedEmbedding);
+                }
+            }
 
             $chunkModels = [];
             foreach ($chunks as $i => $chunkText) {
                 $chunkModels[] = AiKbChunk::create([
                     'kb_id' => $kbId,
+                    'generation_id' => $generation->id,
                     'document_id' => $doc->id,
                     'ord' => $i,
                     'content' => $chunkText,
                     'tokens' => (int) (strlen($chunkText) / 4),
+                    'source_title' => $doc->title,
+                    'source_url' => in_array($doc->source_type, ['url', 'sitemap'], true) ? $doc->source_ref : null,
                 ]);
             }
 
@@ -85,7 +138,7 @@ class IndexDocumentJob implements ShouldQueue
             // A transient embedding API error, by contrast, is allowed to propagate so
             // the queue retries — rather than silently marking the document "indexed"
             // with no vectors.
-            $workspaceId = $kb?->workspace_id ?? 0;
+            $workspaceId = $kb->workspace_id;
 
             if ($workspaceId && ! empty($chunkModels)) {
                 if ($this->embedProviderAvailable($workspaceId)) {
@@ -114,7 +167,53 @@ class IndexDocumentJob implements ShouldQueue
                 'last_indexed_at' => now(),
                 'tokens' => array_sum(array_map(fn ($c) => $c->tokens, $chunkModels)),
             ]);
+
+            $oldGenerationId = DB::transaction(function () use ($kb, $generation): ?int {
+                $locked = AiKnowledgeBase::whereKey($kb->id)->lockForUpdate()->firstOrFail();
+                if ((int) $locked->pending_generation_id !== $generation->id) {
+                    $generation->update(['status' => 'superseded']);
+                    throw new \RuntimeException('A newer knowledge-base build superseded this indexing attempt.');
+                }
+
+                $oldGenerationId = $locked->active_generation_id ? (int) $locked->active_generation_id : null;
+                $generation->update([
+                    'status' => 'active',
+                    'document_count' => AiKbDocument::where('kb_id', $kb->id)->where('status', 'indexed')->count(),
+                    'chunk_count' => AiKbChunk::where('generation_id', $generation->id)->count(),
+                    'activated_at' => now(),
+                    'error_message' => null,
+                ]);
+                $locked->update([
+                    'active_generation_id' => $generation->id,
+                    'pending_generation_id' => null,
+                    'status' => 'active',
+                ]);
+                if ($oldGenerationId) {
+                    AiKbGeneration::whereKey($oldGenerationId)->update(['status' => 'superseded']);
+                }
+
+                return $oldGenerationId;
+            });
+
+            if ($oldGenerationId && $oldGenerationId !== $generation->id) {
+                $store->deleteGenerationEmbeddings($oldGenerationId);
+                AiKbChunk::where('generation_id', $oldGenerationId)->delete();
+            }
         } catch (\Throwable $e) {
+            if ($generation) {
+                $generation->update([
+                    'status' => 'failed',
+                    'error_message' => $this->safeErrorMessage($e),
+                ]);
+                $store->deleteGenerationEmbeddings($generation->id);
+                AiKbChunk::where('generation_id', $generation->id)->delete();
+                AiKnowledgeBase::whereKey($generation->kb_id)
+                    ->where('pending_generation_id', $generation->id)
+                    ->update([
+                        'pending_generation_id' => null,
+                        'status' => DB::raw('CASE WHEN active_generation_id IS NULL THEN \'error\' ELSE \'active\' END'),
+                    ]);
+            }
             $doc->update([
                 'status' => 'error',
                 'error_message' => $this->safeErrorMessage($e),
@@ -173,7 +272,7 @@ class IndexDocumentJob implements ShouldQueue
 
     private function extractText(AiKbDocument $doc, StorageManager $storage): string
     {
-        $text = match ($doc->source_type) {
+        $text = match ((string) $doc->getAttribute('source_type')) {
             'text' => $doc->source_ref ?? '',
             'url' => $this->fetchUrl($doc->source_ref ?? ''),
             'file' => $this->readFile($doc->source_ref ?? '', $storage),
@@ -439,6 +538,7 @@ class IndexDocumentJob implements ShouldQueue
         return trim($text);
     }
 
+    /** @return list<string> */
     private function chunk(string $text, int $size = 700, int $overlap = 80, int $maxChars = 6000): array
     {
         $words = preg_split('/\s+/', trim($text)) ?: [];
@@ -459,6 +559,7 @@ class IndexDocumentJob implements ShouldQueue
         return array_values(array_filter($chunks));
     }
 
+    /** @return list<string> */
     private function splitOversizedChunk(string $chunk, int $maxChars): array
     {
         if (strlen($chunk) <= $maxChars) {

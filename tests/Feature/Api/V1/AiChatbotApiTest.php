@@ -87,4 +87,30 @@ class AiChatbotApiTest extends TestCase
             ])
             ->assertStatus(404);
     }
+
+    public function test_disabled_chatbot_cannot_answer_through_api(): void
+    {
+        ['user' => $user, 'workspace' => $workspace] = $this->createWorkspaceContext();
+        $this->grantDeveloperToolsAddon($user);
+        $token = $user->createToken('t', [ApiAbilities::AI_WRITE])->plainTextToken;
+
+        $chatbot = AiChatbot::factory()->create([
+            'workspace_id' => $workspace->id,
+            'enabled' => false,
+        ]);
+
+        Http::fake();
+
+        $this->withToken($token)
+            ->postJson("/api/v1/ai/chatbots/{$chatbot->id}/chat", [
+                'message' => 'Hello?',
+            ])
+            ->assertStatus(422)
+            ->assertJson([
+                'error' => 'Chatbot is disabled.',
+                'error_code' => 'chatbot_disabled',
+            ]);
+
+        Http::assertNothingSent();
+    }
 }

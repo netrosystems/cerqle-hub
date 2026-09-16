@@ -100,6 +100,8 @@ Primary Plum:    #3E2A49   Brand Lilac:    #8F5FA7   Cool Accent:  #45B6D6   Cor
 
 Channel and Email Setup place one compact AI Automation card beneath the header/usage strip and above account/provider controls. One Manage button opens a focus-trapped dialog with Off/On/Scheduled radios, conditional enabled-chatbot selection and expandable weekly hours/help. One interval/day, all-day, overnight, timezone and weekday-copy are supported. Existing account configurations show Existing setup until grouped configuration is saved; grouped configuration hides competing account selectors. Errors appear in the dialog, and saving uses optimistic revision checks. The groups are independent; Channel Setup explicitly names WhatsApp, Instagram and Messenger, not website widgets.
 
+Smart Bot settings keep scope and unsupported-question behavior visible, while confidence thresholds remain in an expandable advanced section. Scope labels are Business only, Verified knowledge only and General. When Business only points to an incomplete Knowledge Base profile, show a compact safe-downgrade notice. Knowledge Base detail shows one compact Business profile card and supports Website URL, Sitemap, File and Text sources. Playground replies may show a small answer-origin/mode diagnostic, but never expose prompts, embeddings, private model context or raw provider responses. Website quick replies render as compact accessible pills and the human-help pill invokes the existing handoff control.
+
 ### 5.1 Button Variants (`Button.jsx`)
 - **`primary`**: `bg-brand-600 text-white hover:bg-brand-700 shadow-soft` — Used for the main action on a page.
 - **`secondary`**: `bg-neutral-100 text-neutral-800 hover:bg-neutral-200` — Used for secondary actions.

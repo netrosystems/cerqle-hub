@@ -43,6 +43,11 @@ class WidgetPayloadBuilder
             'filename' => $message->payload['filename'] ?? null,
             'mime_type' => $message->payload['mime_type'] ?? null,
             'file_size' => $message->payload['file_size'] ?? null,
+            'quick_replies' => $message->payload['ai_answer']['quick_replies'] ?? [],
+            'answer_origin' => $message->payload['ai_answer']['answer_origin'] ?? null,
+            'response_mode' => $message->payload['ai_answer']['response_mode'] ?? null,
+            'citations' => $message->payload['ai_answer']['citations'] ?? [],
+            'handoff_offer' => (bool) ($message->payload['ai_answer']['handoff_offer'] ?? false),
             'sent_by' => $message->sent_by,
             'agent_name' => $isAgent
                 ? ($message->sender?->name ?: ($widget->agent_name ?: 'Support'))
@@ -62,18 +67,13 @@ class WidgetPayloadBuilder
         return [
             'enabled' => $enabled,
             'eligible' => ! $connected && (! app(WidgetAiAvailability::class)->available($widget) || $this->hasTwoCustomerMessages($conversation)),
-            'status' => $enabled && $connected ? 'connected' : 'bot',
+            'status' => $connected ? 'connected' : 'bot',
         ];
     }
 
     public function hasTwoCustomerMessages(Conversation $conversation): bool
     {
-        return $conversation->messages()
-            ->where('direction', 'in')
-            ->orderBy('id')
-            ->limit(2)
-            ->get(['id'])
-            ->count() >= 2;
+        return $conversation->messages()->where('direction', 'in')->count() >= 2;
     }
 
     private function browserSafePublicUrl(?string $url): ?string

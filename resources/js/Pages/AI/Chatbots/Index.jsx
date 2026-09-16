@@ -60,6 +60,7 @@ function PlaygroundPanel({ chatbot }) {
             setMessages(prev => [...prev, {
                 role: res.ok ? 'assistant' : 'error',
                 content: data.reply ?? data.error ?? t('ai.playground_error'),
+                answer: data.answer,
             }]);
         } catch {
             setMessages(prev => [...prev, { role: 'error', content: t('ai.playground_error') }]);
@@ -100,6 +101,11 @@ function PlaygroundPanel({ chatbot }) {
                             </div>
                             <div className={`rounded-2xl px-3.5 py-2 text-sm leading-relaxed ${isUser ? 'max-w-[75%] bg-brand-600 text-white rounded-tr-sm whitespace-pre-wrap break-words' : isError ? 'max-w-[85%] border border-red-200 bg-red-50 text-red-800 dark:border-red-900/60 dark:bg-red-900/20 dark:text-red-200 rounded-tl-sm whitespace-pre-wrap break-words' : 'max-w-[85%] bg-white dark:bg-neutral-700 text-neutral-900 dark:text-neutral-100 shadow-sm rounded-tl-sm'}`}>
                                 {isUser || isError ? m.content : <MarkdownLite content={m.content} />}
+                                {m.answer?.answer_origin && (
+                                    <p className="mt-1.5 border-t border-neutral-100 pt-1 text-[10px] uppercase tracking-wide text-neutral-400 dark:border-neutral-600">
+                                        {m.answer.answer_origin.replaceAll('_', ' ')} · {m.answer.response_mode}
+                                    </p>
+                                )}
                             </div>
                         </div>
                     );
@@ -146,12 +152,16 @@ function ChatbotCard({ chatbot, knowledgeBases }) {
     const { t } = useTranslation();
     const [tab, setTab] = useState(null); // null | 'settings' | 'playground'
 
-    const { data, setData, put, processing } = useForm({
+    const { data, setData, put, processing, errors } = useForm({
         name: chatbot.name,
         system_prompt: chatbot.system_prompt ?? '',
         tone: chatbot.tone ?? 'professional',
+        answer_scope: chatbot.answer_scope ?? 'business_only',
         max_context_chunks: chatbot.max_context_chunks ?? 5,
         fallback_reply: chatbot.fallback_reply ?? '',
+        fallback_mode: chatbot.fallback_mode ?? 'clarify_then_handoff',
+        confidence_threshold: chatbot.confidence_threshold ?? 0.72,
+        clarification_threshold: chatbot.clarification_threshold ?? 0.47,
         ai_kb_id: chatbot.ai_kb_id ?? '',
         enabled: chatbot.enabled,
     });
@@ -190,6 +200,9 @@ function ChatbotCard({ chatbot, knowledgeBases }) {
                                 {t(`ai.tone_${chatbot.tone}`)}
                             </span>
                         )}
+                        <span className="rounded-full bg-brand-50 px-2 py-0.5 text-xs font-medium text-brand-700 dark:bg-brand-900/30 dark:text-brand-300">
+                            {(chatbot.answer_scope ?? 'business_only').replaceAll('_', ' ')}
+                        </span>
                     </div>
                     <div className="flex items-center gap-3 mt-0.5">
                         {linkedKb ? (
@@ -268,6 +281,41 @@ function ChatbotCard({ chatbot, knowledgeBases }) {
                             </select>
                         </div>
 
+                        <div className="grid gap-4 sm:grid-cols-2">
+                            <div className="space-y-1">
+                                <label className="text-xs font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-400">Answer scope</label>
+                                <select
+                                    value={data.answer_scope}
+                                    onChange={e => setData('answer_scope', e.target.value)}
+                                    className="w-full rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2 text-sm text-neutral-900 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-100"
+                                >
+                                    <option value="business_only">Business only</option>
+                                    <option value="verified_only">Verified knowledge only</option>
+                                    <option value="general">General</option>
+                                </select>
+                                <p className="text-xs text-neutral-400">Business facts always require verified knowledge. Account and order details go to your team.</p>
+                                {errors.answer_scope && <p className="text-xs text-red-500">{errors.answer_scope}</p>}
+                            </div>
+                            <div className="space-y-1">
+                                <label className="text-xs font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-400">When no answer is verified</label>
+                                <select
+                                    value={data.fallback_mode}
+                                    onChange={e => setData('fallback_mode', e.target.value)}
+                                    className="w-full rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2 text-sm text-neutral-900 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-100"
+                                >
+                                    <option value="clarify_then_handoff">Clarify once, then offer human help</option>
+                                    <option value="handoff">Offer human help immediately</option>
+                                </select>
+                                {errors.fallback_mode && <p className="text-xs text-red-500">{errors.fallback_mode}</p>}
+                            </div>
+                        </div>
+
+                        {data.answer_scope === 'business_only' && linkedKb && !linkedKb.profile_complete && (
+                            <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
+                                Add the business profile to this knowledge base. Until then, this bot safely answers as Verified knowledge only.
+                            </div>
+                        )}
+
                         <div className="space-y-1">
                             <label className="text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wide">{t('ai.system_prompt')}</label>
                             <textarea
@@ -308,6 +356,22 @@ function ChatbotCard({ chatbot, knowledgeBases }) {
                                 <span className="text-sm font-medium text-neutral-700 dark:text-neutral-300">{t('common.active')}</span>
                             </div>
                         </div>
+
+                        <details className="rounded-lg border border-neutral-200 p-3 dark:border-neutral-700">
+                            <summary className="cursor-pointer text-xs font-semibold text-neutral-600 dark:text-neutral-300">Retrieval confidence</summary>
+                            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                                <label className="space-y-1 text-xs text-neutral-500">
+                                    <span>Verified answer threshold</span>
+                                    <input type="number" min="0.1" max="1" step="0.01" value={data.confidence_threshold} onChange={e => setData('confidence_threshold', Number(e.target.value))} className="w-full rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-800" />
+                                    {errors.confidence_threshold && <span className="block text-red-500">{errors.confidence_threshold}</span>}
+                                </label>
+                                <label className="space-y-1 text-xs text-neutral-500">
+                                    <span>Clarification threshold</span>
+                                    <input type="number" min="0" max="0.99" step="0.01" value={data.clarification_threshold} onChange={e => setData('clarification_threshold', Number(e.target.value))} className="w-full rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-800" />
+                                    {errors.clarification_threshold && <span className="block text-red-500">{errors.clarification_threshold}</span>}
+                                </label>
+                            </div>
+                        </details>
 
                         <div className="flex gap-2 pt-1 border-t border-neutral-100 dark:border-neutral-800">
                             <button

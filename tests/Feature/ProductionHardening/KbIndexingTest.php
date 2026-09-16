@@ -94,6 +94,8 @@ class KbIndexingTest extends TestCase
             $doc->chunks()->where('content', 'like', '%warranty period is 12 months%')->exists(),
             'The file content should have been read from the storage disk and chunked.'
         );
+        $this->assertNotNull($kb->fresh()->active_generation_id);
+        $this->assertTrue($doc->chunks()->where('generation_id', $kb->fresh()->active_generation_id)->exists());
     }
 
     public function test_faq_document_is_decoded_into_clean_qa_text(): void
