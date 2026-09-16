@@ -58,7 +58,7 @@ class AiKnowledgeBaseController extends Controller
     public function store(Request $request): RedirectResponse
     {
         $workspaceId = $request->user()->current_workspace_id ?? $request->user()->workspace_id;
-        $validated = $request->validate(['name' => ['required', 'string', 'max:128']]);
+        $validated = $request->validate($this->knowledgeBaseRules());
         AiKnowledgeBase::create(array_merge($validated, ['workspace_id' => $workspaceId]));
 
         return back()->with('success', 'Knowledge base created.');
@@ -67,7 +67,7 @@ class AiKnowledgeBaseController extends Controller
     public function update(Request $request, AiKnowledgeBase $kb): RedirectResponse
     {
         $this->authorise($request, $kb);
-        $validated = $request->validate(['name' => ['required', 'string', 'max:128']]);
+        $validated = $request->validate($this->knowledgeBaseRules());
         $kb->update($validated);
 
         return back()->with('success', 'Knowledge base updated.');
@@ -118,14 +118,14 @@ class AiKnowledgeBaseController extends Controller
         $this->authorise($request, $kb);
 
         $sourceType = (string) $request->input('source_type');
-        if ($sourceType === 'url') {
+        if (in_array($sourceType, ['url', 'sitemap'], true)) {
             $request->merge([
                 'source_ref' => $this->normaliseSourceUrl((string) $request->input('source_ref')),
             ]);
         }
 
         $validated = $request->validate([
-            'source_type' => ['required', 'in:file,url,text'],
+            'source_type' => ['required', 'in:file,url,text,sitemap'],
             'source_ref' => $this->sourceRefRules((string) $request->input('source_type')),
             'title' => ['nullable', 'string', 'max:256'],
         ]);
@@ -196,6 +196,7 @@ class AiKnowledgeBaseController extends Controller
         return back()->with('success', 'Document removed.');
     }
 
+    /** @param list<string> $paths */
     private function deleteStoredFiles(array $paths): void
     {
         if ($paths === []) {
@@ -232,6 +233,7 @@ class AiKnowledgeBaseController extends Controller
         return min(self::UPLOAD_MAX_KB, $serverMaxKb);
     }
 
+    /** @return array<string, string> */
     private function fileValidationMessages(): array
     {
         $maxMb = round($this->kbUploadMaxKb() / 1024, 1);
@@ -261,10 +263,11 @@ class AiKnowledgeBaseController extends Controller
         };
     }
 
+    /** @return array<int, string> */
     private function sourceRefRules(string $sourceType): array
     {
         return match ($sourceType) {
-            'url' => ['required', 'url', 'max:2048'],
+            'url', 'sitemap' => ['required', 'url', 'max:2048'],
             'text' => ['required', 'string', 'max:200000'],
             'file' => ['nullable', 'string', 'max:512'],
             default => ['nullable', 'string', 'max:512'],
@@ -279,5 +282,16 @@ class AiKnowledgeBaseController extends Controller
         }
 
         return 'https://'.$url;
+    }
+
+    /** @return array<string, array<int, string>> */
+    private function knowledgeBaseRules(): array
+    {
+        return [
+            'name' => ['required', 'string', 'max:128'],
+            'business_name' => ['nullable', 'string', 'max:160'],
+            'business_purpose' => ['nullable', 'string', 'max:2000'],
+            'target_audience' => ['nullable', 'string', 'max:2000'],
+        ];
     }
 }

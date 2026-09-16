@@ -39,6 +39,9 @@ class AiKnowledgeBaseApiController extends WorkspaceScopedController
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:128'],
             'embedding_model' => ['nullable', 'string'],
+            'business_name' => ['nullable', 'string', 'max:160'],
+            'business_purpose' => ['nullable', 'string', 'max:2000'],
+            'target_audience' => ['nullable', 'string', 'max:2000'],
         ]);
 
         $kb = AiKnowledgeBase::create(array_merge($validated, [
@@ -144,6 +147,10 @@ class AiKnowledgeBaseApiController extends WorkspaceScopedController
         return [
             'id' => $kb->id,
             'name' => $kb->name,
+            'business_name' => $kb->business_name,
+            'business_purpose' => $kb->business_purpose,
+            'target_audience' => $kb->target_audience,
+            'profile_complete' => $kb->profile_complete,
             'embedding_model' => $kb->embedding_model,
             'status' => $kb->status,
             'workspace_id' => $kb->workspace_id,
@@ -165,6 +172,7 @@ class AiKnowledgeBaseApiController extends WorkspaceScopedController
         ];
     }
 
+    /** @return array<string, string> */
     private function fileValidationMessages(): array
     {
         return [

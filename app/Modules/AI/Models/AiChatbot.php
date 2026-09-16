@@ -5,8 +5,11 @@ namespace App\Modules\AI\Models;
 use Database\Factories\AiChatbotFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Str;
 
+/** @property-read AiKnowledgeBase|null $knowledgeBase */
 class AiChatbot extends Model
 {
     use HasFactory;
@@ -33,7 +36,11 @@ class AiChatbot extends Model
 
     protected $table = 'ai_chatbots';
 
-    protected $fillable = ['workspace_id', 'name', 'ai_kb_id', 'system_prompt', 'tone', 'max_context_chunks', 'fallback_reply', 'channels', 'enabled'];
+    protected $fillable = [
+        'workspace_id', 'name', 'ai_kb_id', 'system_prompt', 'tone', 'answer_scope',
+        'max_context_chunks', 'fallback_reply', 'fallback_mode', 'confidence_threshold',
+        'clarification_threshold', 'channels', 'enabled',
+    ];
 
     protected function casts(): array
     {
@@ -41,15 +48,19 @@ class AiChatbot extends Model
             'channels' => 'array',
             'enabled' => 'boolean',
             'max_context_chunks' => 'integer',
+            'confidence_threshold' => 'float',
+            'clarification_threshold' => 'float',
         ];
     }
 
-    public function knowledgeBase()
+    /** @return BelongsTo<AiKnowledgeBase, $this> */
+    public function knowledgeBase(): BelongsTo
     {
         return $this->belongsTo(AiKnowledgeBase::class, 'ai_kb_id');
     }
 
-    public function runs()
+    /** @return HasMany<AiRun, $this> */
+    public function runs(): HasMany
     {
         return $this->hasMany(AiRun::class, 'chatbot_id');
     }

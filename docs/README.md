@@ -42,6 +42,8 @@ Client-wide WhatsApp connection modes QA: [`coexistence-client-wide-qa-2026-09-1
 
 Security hardening and compatibility evidence: [`security-hardening-qa-2026-09-15.md`](security-hardening-qa-2026-09-15.md).
 
+Grounded Smart Bot and atomic Knowledge Base implementation evidence: [`grounded-smart-bot-qa-2026-09-16.md`](grounded-smart-bot-qa-2026-09-16.md).
+
 Decision records explain durable choices and their rationale. A newer record may supersede an older one; do not edit history to imply a decision was always different.
 
 - [`decisions/README.md`](decisions/README.md) — format and maintenance rules
@@ -55,6 +57,7 @@ Decision records explain durable choices and their rationale. A newer record may
 - [`decisions/2026-09-15-x-standard-social-publishing.md`](decisions/2026-09-15-x-standard-social-publishing.md)
 - [`decisions/2026-09-15-client-wide-whatsapp-coexistence.md`](decisions/2026-09-15-client-wide-whatsapp-coexistence.md)
 - [`decisions/2026-09-15-security-boundaries-and-deferred-client-permissions.md`](decisions/2026-09-15-security-boundaries-and-deferred-client-permissions.md)
+- [`decisions/2026-09-16-grounded-smart-bot-answering.md`](decisions/2026-09-16-grounded-smart-bot-answering.md)
 
 ## Maintenance rule
 

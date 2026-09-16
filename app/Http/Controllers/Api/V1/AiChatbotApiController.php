@@ -25,6 +25,8 @@ class AiChatbotApiController extends WorkspaceScopedController
                 'enabled' => $b->enabled,
                 'kb_id' => $b->ai_kb_id,
                 'channels' => $b->channels ?? [],
+                'answer_scope' => $b->answer_scope,
+                'fallback_mode' => $b->fallback_mode,
                 'created_at' => $b->created_at->toIso8601String(),
             ]);
 
@@ -40,6 +42,13 @@ class AiChatbotApiController extends WorkspaceScopedController
 
         if (! $chatbot) {
             return response()->json(['error' => 'Chatbot not found.'], 404);
+        }
+
+        if (! $chatbot->enabled) {
+            return response()->json([
+                'error' => 'Chatbot is disabled.',
+                'error_code' => 'chatbot_disabled',
+            ], 422);
         }
 
         $validated = $request->validate([

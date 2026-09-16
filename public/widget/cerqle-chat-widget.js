@@ -155,7 +155,7 @@
   thread.forEach(function (m) {
     rendered[m.id] = true;
     if (m.id > lastId) lastId = m.id;
-    addBubble(m.role, m.body, m.agent_name, m.attachment_url, m.type, m.filename, m.mime_type, m.file_size, m.status, m.id);
+    addBubble(m.role, m.body, m.agent_name, m.attachment_url, m.type, m.filename, m.mime_type, m.file_size, m.status, m.id, m.quick_replies, m.handoff_offer);
   });
   updateStatus();
   if (prechatNeeded) { prechat.style.display = 'block'; form.style.display = 'none'; }
@@ -432,7 +432,7 @@
     thread.forEach(function (m) {
       rendered[m.id] = true;
       if (m.id > lastId) lastId = m.id;
-      addBubble(m.role, m.body, m.agent_name, m.attachment_url, m.type, m.filename, m.mime_type, m.file_size, m.status, m.id);
+      addBubble(m.role, m.body, m.agent_name, m.attachment_url, m.type, m.filename, m.mime_type, m.file_size, m.status, m.id, m.quick_replies, m.handoff_offer);
     });
 
     if (prechatNeeded) {
@@ -1042,7 +1042,7 @@
       for (var i = 0; i < thread.length; i++) {
         if (thread[i].id === m.id) { existingIdx = i; break; }
       }
-      var msgObj = { id: m.id, role: m.role, body: m.body, agent_name: m.agent_name, attachment_url: m.attachment_url, type: m.type, filename: m.filename, mime_type: m.mime_type, file_size: m.file_size, status: m.status };
+      var msgObj = { id: m.id, role: m.role, body: m.body, agent_name: m.agent_name, attachment_url: m.attachment_url, type: m.type, filename: m.filename, mime_type: m.mime_type, file_size: m.file_size, status: m.status, quick_replies: m.quick_replies, handoff_offer: m.handoff_offer };
       if (existingIdx >= 0) thread[existingIdx] = msgObj;
       else thread.push(msgObj);
       saveThread();
@@ -1055,11 +1055,11 @@
     for (var j = 0; j < thread.length; j++) {
       if (thread[j].id === m.id) { existingIdx2 = j; break; }
     }
-    var msgObj2 = { id: m.id, role: m.role, body: m.body, agent_name: m.agent_name, attachment_url: m.attachment_url, type: m.type, filename: m.filename, mime_type: m.mime_type, file_size: m.file_size, status: m.status };
+    var msgObj2 = { id: m.id, role: m.role, body: m.body, agent_name: m.agent_name, attachment_url: m.attachment_url, type: m.type, filename: m.filename, mime_type: m.mime_type, file_size: m.file_size, status: m.status, quick_replies: m.quick_replies, handoff_offer: m.handoff_offer };
     if (existingIdx2 >= 0) thread[existingIdx2] = msgObj2;
     else thread.push(msgObj2);
     saveThread();
-    addBubble(m.role, m.body, m.agent_name, m.attachment_url, m.type, m.filename, m.mime_type, m.file_size, m.status, m.id);
+    addBubble(m.role, m.body, m.agent_name, m.attachment_url, m.type, m.filename, m.mime_type, m.file_size, m.status, m.id, m.quick_replies, m.handoff_offer);
     return true;
   }
 
@@ -1139,7 +1139,7 @@
     if (!activelyComposing) playNotificationSound();
   }
 
-  function addBubble(role, text, name, attachmentUrl, type, filename, mimeType, fileSize, status, id) {
+  function addBubble(role, text, name, attachmentUrl, type, filename, mimeType, fileSize, status, id, quickReplies, handoffOffer) {
     var row = document.createElement('div');
     row.className = 'wb-row wb-' + (role === 'visitor' ? 'out' : 'in');
     var av = '';
@@ -1188,6 +1188,24 @@
       glyph = '<span class="' + statusClass + '"' + (id ? ' data-wb-status-id="' + escAttr(id) + '"' : '') + '>' + glyphChar + '</span>';
     }
     row.innerHTML = av + '<div class="wb-bubble">' + attachment + textBody + glyph + '</div>';
+    if (role !== 'visitor' && Array.isArray(quickReplies) && quickReplies.length) {
+      var choices = document.createElement('div');
+      choices.className = 'wb-ai-choices';
+      quickReplies.slice(0, 4).forEach(function (choice) {
+        if (!choice || typeof choice !== 'string') return;
+        var button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'wb-ai-choice';
+        button.textContent = choice;
+        button.addEventListener('click', function () {
+          if (handoffOffer && choice.toLowerCase().indexOf('person') !== -1) requestHumanAgent();
+          else send(choice);
+          choices.querySelectorAll('button').forEach(function (item) { item.disabled = true; });
+        });
+        choices.appendChild(button);
+      });
+      row.querySelector('.wb-bubble').appendChild(choices);
+    }
     body.appendChild(row);
     scrollToBottom();
     return row;
@@ -1525,6 +1543,7 @@
       '.wb-doc-meta{font-size:11px;opacity:.75;display:block;margin-top:1px}',
       '.wb-doc-dl{display:flex;align-items:center;justify-content:center;padding:4px;border-radius:50%;opacity:.85;flex-shrink:0}',
       '.wb-caption a{color:inherit;font-weight:650;text-decoration:underline;text-underline-offset:2px;word-break:break-word}',
+      '.wb-ai-choices{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}.wb-ai-choice{border:1px solid ' + COLOR + ';border-radius:999px;background:#fff;color:' + COLOR + ';padding:5px 9px;font:inherit;font-size:12px;font-weight:650;cursor:pointer}.wb-ai-choice:hover{background:' + COLOR + ';color:#fff}.wb-ai-choice:disabled{opacity:.55;cursor:default}',
       '.wb-agent-typing{display:none;align-items:center;gap:7px;min-height:30px;padding:5px 16px;border-top:1px solid #f0f1f4;background:#f7f8fa;color:#737984;font-size:11px;font-weight:600}',
       '.wb-typing-dots{display:inline-flex;align-items:center;gap:3px}.wb-typing-dots i{display:block;width:5px;height:5px;border-radius:50%;background:' + COLOR + ';animation:wb-typing 1.05s ease-in-out infinite}.wb-typing-dots i:nth-child(2){animation-delay:.14s}.wb-typing-dots i:nth-child(3){animation-delay:.28s}',
       '.wb-handoff{display:none;align-items:center;justify-content:center;gap:6px;min-height:38px;padding:8px 12px;border-top:1px solid #eceef2;background:#fff;color:#667085;font-size:12px}.wb-handoff strong{color:#1f2937}.wb-handoff-btn{border:1px solid ' + COLOR + ';border-radius:999px;background:#fff;color:' + COLOR + ';padding:5px 10px;font-size:12px;font-weight:700;cursor:pointer;transition:background .15s,color .15s}.wb-handoff-btn:hover{background:' + COLOR + ';color:#fff}.wb-handoff-dot{width:8px;height:8px;border-radius:50%;background:#22c55e;flex-shrink:0}.wb-handoff-pulse{background:#f59e0b;animation:wb-handoff-pulse 1s ease-in-out infinite}',

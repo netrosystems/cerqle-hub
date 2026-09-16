@@ -1,6 +1,14 @@
 <?php
 
 return [
+    'smart_bot' => [
+        // Both switches are intentionally rollout-controlled. Configuration and
+        // indexing can ship before business-aware routing is enabled in production.
+        'business_aware_routing' => (bool) env('SMART_BOT_BUSINESS_AWARE_ROUTING', false),
+        'hybrid_retrieval' => (bool) env('KB_HYBRID_RETRIEVAL_ENABLED', false),
+        'confidence_threshold' => 0.72,
+        'clarification_threshold' => 0.47,
+    ],
     'credits' => [
         // Shadow mode records usage but does not block. Enable only after the
         // reconciliation report has shown that every production path is metered.

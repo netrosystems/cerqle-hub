@@ -5,11 +5,9 @@ import { ArrowLeft, Plus, Pencil, RefreshCw, Trash2, Globe, FileText, Type, X, U
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation, Trans } from 'react-i18next';
 
-// These are the only document sources that can be added going forward.
-// Legacy sitemap and FAQ records remain readable/re-indexable below so existing
-// customer knowledge bases are not damaged by this product change.
 const ADDABLE_SOURCE_TYPES = {
     url:     { icon: Globe,    labelKey: 'ai.source_url' },
+    sitemap: { icon: Globe,    labelKey: 'ai.source_sitemap' },
     file:    { icon: Upload,   labelKey: 'ai.source_file' },
     text:    { icon: Type,     labelKey: 'ai.source_text' },
 };
@@ -46,7 +44,12 @@ export default function AiKnowledgeBaseShow({ kb, kbUploadMaxKb = 20480, kbUploa
         title: '',
         file: null,
     });
-    const renameForm = useForm({ name: kb.name });
+    const renameForm = useForm({
+        name: kb.name,
+        business_name: kb.business_name ?? '',
+        business_purpose: kb.business_purpose ?? '',
+        target_audience: kb.target_audience ?? '',
+    });
     const [processing, setProcessing] = useState(false);
 
     const maxFileBytes = Number(kbUploadMaxKb) * 1024;
@@ -111,7 +114,12 @@ export default function AiKnowledgeBaseShow({ kb, kbUploadMaxKb = 20480, kbUploa
 
     const openEdit = () => {
         renameForm.clearErrors();
-        renameForm.setData('name', kb.name);
+        renameForm.setData({
+            name: kb.name,
+            business_name: kb.business_name ?? '',
+            business_purpose: kb.business_purpose ?? '',
+            target_audience: kb.target_audience ?? '',
+        });
         setShowEdit(true);
     };
 
@@ -202,6 +210,20 @@ export default function AiKnowledgeBaseShow({ kb, kbUploadMaxKb = 20480, kbUploa
                         {flash.success}
                     </div>
                 )}
+
+                <div className={`rounded-xl border px-4 py-3 ${kb.profile_complete ? 'border-neutral-200 bg-white dark:border-neutral-700 dark:bg-neutral-900' : 'border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/20'}`}>
+                    <div className="flex items-start justify-between gap-3">
+                        <div>
+                            <p className="text-sm font-semibold text-neutral-900 dark:text-neutral-100">Business profile</p>
+                            {kb.profile_complete ? (
+                                <p className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">{kb.business_name} · {kb.target_audience}</p>
+                            ) : (
+                                <p className="mt-1 text-xs text-amber-800 dark:text-amber-200">Add the business name, purpose and audience before using Business only. Until then, bots safely use Verified knowledge only.</p>
+                            )}
+                        </div>
+                        <button type="button" onClick={openEdit} className="shrink-0 rounded-lg border border-neutral-200 px-3 py-1.5 text-xs font-medium text-neutral-600 hover:bg-neutral-50 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800">Edit profile</button>
+                    </div>
+                </div>
 
                 {/* Stats */}
                 {(kb.documents?.length ?? 0) > 0 && (
@@ -305,7 +327,7 @@ export default function AiKnowledgeBaseShow({ kb, kbUploadMaxKb = 20480, kbUploa
             {/* Edit Knowledge Base Modal */}
             {showEdit && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-                    <div className="w-full max-w-sm rounded-2xl bg-white dark:bg-neutral-900 shadow-2xl">
+                    <div className="w-full max-w-lg rounded-2xl bg-white dark:bg-neutral-900 shadow-2xl">
                         <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-neutral-100 dark:border-neutral-800">
                             <h3 className="text-base font-semibold text-neutral-900 dark:text-neutral-100">{t('ai.edit_kb')}</h3>
                             <button onClick={() => setShowEdit(false)} className="text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-200 transition">
@@ -324,6 +346,21 @@ export default function AiKnowledgeBaseShow({ kb, kbUploadMaxKb = 20480, kbUploa
                                     className="w-full rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm text-neutral-900 dark:text-neutral-100 placeholder-neutral-400 focus:outline-none focus:ring-2 focus:ring-brand-500 transition"
                                 />
                                 {renameForm.errors.name && <p className="mt-1 text-xs text-red-500">{renameForm.errors.name}</p>}
+                            </div>
+                            <div>
+                                <label className="mb-1 block text-xs font-medium text-neutral-700 dark:text-neutral-300">Business name</label>
+                                <input type="text" value={renameForm.data.business_name} onChange={e => renameForm.setData('business_name', e.target.value)} maxLength={160} placeholder="The customer-facing business name" className="w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 focus:outline-none focus:ring-2 focus:ring-brand-500 dark:border-neutral-600 dark:bg-neutral-800 dark:text-neutral-100" />
+                                {renameForm.errors.business_name && <p className="mt-1 text-xs text-red-500">{renameForm.errors.business_name}</p>}
+                            </div>
+                            <div>
+                                <label className="mb-1 block text-xs font-medium text-neutral-700 dark:text-neutral-300">What this business does</label>
+                                <textarea rows={3} value={renameForm.data.business_purpose} onChange={e => renameForm.setData('business_purpose', e.target.value)} maxLength={2000} placeholder="Products, services and the problems this business solves" className="w-full resize-none rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 focus:outline-none focus:ring-2 focus:ring-brand-500 dark:border-neutral-600 dark:bg-neutral-800 dark:text-neutral-100" />
+                                {renameForm.errors.business_purpose && <p className="mt-1 text-xs text-red-500">{renameForm.errors.business_purpose}</p>}
+                            </div>
+                            <div>
+                                <label className="mb-1 block text-xs font-medium text-neutral-700 dark:text-neutral-300">Who it serves</label>
+                                <textarea rows={2} value={renameForm.data.target_audience} onChange={e => renameForm.setData('target_audience', e.target.value)} maxLength={2000} placeholder="The customers or audience this business supports" className="w-full resize-none rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 focus:outline-none focus:ring-2 focus:ring-brand-500 dark:border-neutral-600 dark:bg-neutral-800 dark:text-neutral-100" />
+                                {renameForm.errors.target_audience && <p className="mt-1 text-xs text-red-500">{renameForm.errors.target_audience}</p>}
                             </div>
                             <div className="flex gap-2 pt-1 pb-2">
                                 <button
@@ -361,7 +398,7 @@ export default function AiKnowledgeBaseShow({ kb, kbUploadMaxKb = 20480, kbUploa
                             {/* Source Type Tabs */}
                             <div>
                                 <label className="block text-xs font-medium text-neutral-700 dark:text-neutral-300 mb-2">{t('ai.source_type')}</label>
-                                <div className="grid grid-cols-3 gap-1 rounded-lg bg-neutral-100 dark:bg-neutral-800 p-1">
+                                <div className="grid grid-cols-2 gap-1 rounded-lg bg-neutral-100 p-1 sm:grid-cols-4 dark:bg-neutral-800">
                                     {Object.entries(ADDABLE_SOURCE_TYPES).map(([type, { icon: Icon, labelKey }]) => (
                                         <button
                                             key={type}
@@ -429,13 +466,13 @@ export default function AiKnowledgeBaseShow({ kb, kbUploadMaxKb = 20480, kbUploa
                                 </div>
                             ) : (
                                 <div>
-                                    <label className="block text-xs font-medium text-neutral-700 dark:text-neutral-300 mb-1">{t('ai.source_url')}</label>
+                                    <label className="block text-xs font-medium text-neutral-700 dark:text-neutral-300 mb-1">{data.source_type === 'sitemap' ? t('ai.source_sitemap') : t('ai.source_url')}</label>
                                     <input
                                         type="text"
                                         inputMode="url"
                                         value={data.source_ref}
                                         onChange={e => setData('source_ref', e.target.value)}
-                                        placeholder="https://example.com"
+                                        placeholder={data.source_type === 'sitemap' ? 'https://example.com/sitemap.xml' : 'https://example.com'}
                                         className="w-full rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 px-3 py-2 text-sm text-neutral-900 dark:text-neutral-100 placeholder-neutral-400 focus:outline-none focus:ring-2 focus:ring-brand-500 transition"
                                     />
                                     {errors.source_ref && (

@@ -3,7 +3,9 @@
 namespace App\Modules\AI\Services;
 
 use App\Modules\AI\Models\AiKbChunk;
+use App\Modules\AI\Models\AiKnowledgeBase;
 use App\Modules\Integrations\Services\CredentialResolver;
+use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
@@ -64,18 +66,50 @@ class EmbeddingStore
         }
     }
 
-    /** Find top-k most similar chunks to the query embedding. */
-    public function search(int $kbId, array $queryEmbedding, int $topK = 5): array
+    /** Remove every vector belonging to one unpublished/superseded generation. */
+    public function deleteGenerationEmbeddings(int $generationId): void
     {
+        if (! $this->qdrantEnabled()) {
+            return;
+        }
+
+        try {
+            $response = $this->qdrantClient()->post('/collections/'.self::QDRANT_COLLECTION.'/points/delete', [
+                'filter' => [
+                    'must' => [['key' => 'generation_id', 'match' => ['value' => $generationId]]],
+                ],
+                'wait' => true,
+            ]);
+
+            if ($response->status() !== 404 && ! $response->successful()) {
+                throw new \RuntimeException('Qdrant generation delete failed (HTTP '.$response->status().'): '.$response->body());
+            }
+        } catch (\Throwable $e) {
+            Log::warning('Qdrant generation-vector cleanup failed', [
+                'generation_id' => $generationId,
+                'error' => $e->getMessage(),
+            ]);
+        }
+    }
+
+    /** Find top-k most similar chunks to the query embedding. */
+    public function search(int $kbId, array $queryEmbedding, int $topK = 5, string $query = ''): array
+    {
+        $generationId = AiKnowledgeBase::whereKey($kbId)->value('active_generation_id');
+
+        if (config('ai.smart_bot.hybrid_retrieval') && trim($query) !== '') {
+            return $this->hybridSearch($kbId, $generationId ? (int) $generationId : null, $queryEmbedding, $query, $topK);
+        }
+
         if ($this->qdrantEnabled()) {
-            $results = $this->qdrantSearch($kbId, $queryEmbedding, $topK);
+            $results = $this->qdrantSearch($kbId, $generationId ? (int) $generationId : null, $queryEmbedding, $topK);
             if (! empty($results)) {
                 return $results;
             }
             // Fall through to MySQL if Qdrant returns nothing (e.g. collection empty)
         }
 
-        return $this->mysqlSearch($kbId, $queryEmbedding, $topK);
+        return $this->mysqlSearch($kbId, $generationId ? (int) $generationId : null, $queryEmbedding, $topK);
     }
 
     // -------------------------------------------------------------------------
@@ -87,7 +121,7 @@ class EmbeddingStore
         return $this->qdrantCredentials() !== null;
     }
 
-    private function qdrantClient(): \Illuminate\Http\Client\PendingRequest
+    private function qdrantClient(): PendingRequest
     {
         $credentials = $this->qdrantCredentials();
         if ($credentials === null) {
@@ -127,6 +161,7 @@ class EmbeddingStore
                         'kb_id' => $chunk->kb_id,
                         'document_id' => $chunk->document_id,
                         'chunk_id' => $chunk->id,
+                        'generation_id' => $chunk->generation_id,
                     ],
                 ]],
             ]);
@@ -139,14 +174,22 @@ class EmbeddingStore
         }
     }
 
-    private function qdrantSearch(int $kbId, array $queryEmbedding, int $topK): array
+    private function qdrantSearch(int $kbId, ?int $generationId, array $queryEmbedding, int $topK): array
     {
+        if ($queryEmbedding === []) {
+            return [];
+        }
+
         try {
+            $must = [['key' => 'kb_id', 'match' => ['value' => $kbId]]];
+            if ($generationId !== null) {
+                $must[] = ['key' => 'generation_id', 'match' => ['value' => $generationId]];
+            }
             $resp = $this->qdrantClient()->post('/collections/'.self::QDRANT_COLLECTION.'/points/search', [
                 'vector' => $queryEmbedding,
                 'limit' => $topK,
                 'filter' => [
-                    'must' => [['key' => 'kb_id', 'match' => ['value' => $kbId]]],
+                    'must' => $must,
                 ],
                 'with_payload' => true,
             ]);
@@ -160,12 +203,18 @@ class EmbeddingStore
                 return [];
             }
 
-            $chunks = AiKbChunk::whereIn('id', $chunkIds)->get()->keyBy('id');
+            $chunks = AiKbChunk::whereIn('id', $chunkIds)->with('document')->get()->keyBy('id');
             $results = [];
             foreach ($resp->json('result', []) as $hit) {
                 $chunk = $chunks->get($hit['id']);
                 if ($chunk) {
-                    $results[] = ['chunk' => $chunk, 'score' => $hit['score']];
+                    $results[] = [
+                        'chunk' => $chunk,
+                        'score' => max(0.0, (float) $hit['score']),
+                        'semantic_score' => max(0.0, (float) $hit['score']),
+                        'lexical_score' => 0.0,
+                        'fuzzy_score' => 0.0,
+                    ];
                 }
             }
 
@@ -209,18 +258,75 @@ class EmbeddingStore
     // MySQL fallback
     // -------------------------------------------------------------------------
 
-    private function mysqlSearch(int $kbId, array $queryEmbedding, int $topK): array
+    private function mysqlSearch(int $kbId, ?int $generationId, array $queryEmbedding, int $topK): array
     {
         $chunks = AiKbChunk::where('kb_id', $kbId)
+            ->when($generationId !== null, fn ($builder) => $builder->where('generation_id', $generationId))
             ->whereNotNull('embedding')
+            ->with('document')
             ->get();
 
         return $chunks->map(function (AiKbChunk $chunk) use ($queryEmbedding) {
             return [
                 'chunk' => $chunk,
-                'score' => $this->cosine($queryEmbedding, $this->unpackEmbedding($chunk->embedding ?? '')),
+                'score' => max(0.0, $this->cosine($queryEmbedding, $this->unpackEmbedding($chunk->embedding ?? ''))),
+                'semantic_score' => max(0.0, $this->cosine($queryEmbedding, $this->unpackEmbedding($chunk->embedding ?? ''))),
+                'lexical_score' => 0.0,
+                'fuzzy_score' => 0.0,
             ];
         })->sortByDesc('score')->take($topK)->values()->toArray();
+    }
+
+    /**
+     * Blend semantic, exact-word and typo-tolerant evidence. Retrieval is always
+     * constrained to the currently published generation.
+     */
+    /**
+     * @param  list<float|int>  $queryEmbedding
+     * @return array<int, array{chunk:AiKbChunk,score:float,semantic_score:float,lexical_score:float,fuzzy_score:float}>
+     */
+    private function hybridSearch(int $kbId, ?int $generationId, array $queryEmbedding, string $query, int $topK): array
+    {
+        $semanticHits = $this->qdrantEnabled()
+            ? $this->qdrantSearch($kbId, $generationId, $queryEmbedding, max($topK * 3, 15))
+            : $this->mysqlSearch($kbId, $generationId, $queryEmbedding, max($topK * 3, 15));
+        $semantic = [];
+        foreach ($semanticHits as $hit) {
+            $semantic[$hit['chunk']->id] = $hit;
+        }
+
+        $chunks = AiKbChunk::query()
+            ->where('kb_id', $kbId)
+            ->when($generationId !== null, fn ($builder) => $builder->where('generation_id', $generationId))
+            ->with('document')
+            ->limit(2000)
+            ->get();
+        $queryTokens = $this->tokens($query);
+
+        return $chunks->map(function (AiKbChunk $chunk) use ($semantic, $query, $queryTokens): array {
+            $semanticScore = (float) ($semantic[$chunk->id]['semantic_score'] ?? 0.0);
+            $chunkTokens = $this->tokens($chunk->content);
+            $lexical = $queryTokens === [] ? 0.0 : count(array_intersect($queryTokens, $chunkTokens)) / count($queryTokens);
+            similar_text(mb_strtolower(mb_substr($query, 0, 400)), mb_strtolower(mb_substr($chunk->content, 0, 1200)), $fuzzyPercent);
+            $fuzzy = min(1.0, $fuzzyPercent / 100);
+            $score = ($semanticScore * 0.65) + ($lexical * 0.30) + ($fuzzy * 0.05);
+
+            return [
+                'chunk' => $chunk,
+                'score' => $score,
+                'semantic_score' => $semanticScore,
+                'lexical_score' => $lexical,
+                'fuzzy_score' => $fuzzy,
+            ];
+        })->sortByDesc('score')->take($topK)->values()->all();
+    }
+
+    /** @return list<string> */
+    private function tokens(string $text): array
+    {
+        preg_match_all('/[\p{L}\p{N}]{2,}/u', mb_strtolower($text), $matches);
+
+        return array_values(array_unique($matches[0]));
     }
 
     private function unpackEmbedding(string $json): array

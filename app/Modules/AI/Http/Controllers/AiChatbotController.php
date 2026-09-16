@@ -10,6 +10,7 @@ use App\Modules\AI\Services\ProviderErrorPresenter;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -24,7 +25,8 @@ class AiChatbotController extends Controller
     {
         $wid = $this->workspaceId($request);
         $chatbots = AiChatbot::where('workspace_id', $wid)->with('knowledgeBase')->latest()->get();
-        $knowledgeBases = AiKnowledgeBase::where('workspace_id', $wid)->get(['id', 'name']);
+        $knowledgeBases = AiKnowledgeBase::where('workspace_id', $wid)
+            ->get(['id', 'name', 'business_name', 'business_purpose', 'target_audience']);
 
         return Inertia::render('AI/Chatbots/Index', [
             'chatbots' => $chatbots,
@@ -39,7 +41,11 @@ class AiChatbotController extends Controller
             'name' => ['required', 'string', 'max:128'],
         ]);
 
-        AiChatbot::create(array_merge($validated, ['workspace_id' => $wid]));
+        AiChatbot::create(array_merge($validated, [
+            'workspace_id' => $wid,
+            'answer_scope' => 'business_only',
+            'fallback_mode' => 'clarify_then_handoff',
+        ]));
 
         return back()->with('success', 'Smart Bot created.');
     }
@@ -53,8 +59,12 @@ class AiChatbotController extends Controller
             'ai_kb_id' => ['nullable', 'integer'],
             'system_prompt' => ['nullable', 'string', 'max:8192'],
             'tone' => ['nullable', 'string', 'max:64'],
+            'answer_scope' => ['sometimes', 'in:business_only,verified_only,general'],
             'max_context_chunks' => ['nullable', 'integer', 'min:1', 'max:20'],
             'fallback_reply' => ['nullable', 'string', 'max:512'],
+            'fallback_mode' => ['sometimes', 'in:clarify_then_handoff,handoff'],
+            'confidence_threshold' => ['sometimes', 'numeric', 'min:0.1', 'max:1'],
+            'clarification_threshold' => ['sometimes', 'numeric', 'min:0', 'max:0.99'],
             'channels' => ['nullable', 'array'],
             'enabled' => ['boolean'],
         ]);
@@ -64,6 +74,13 @@ class AiChatbotController extends Controller
                 ->where('id', $validated['ai_kb_id'])
                 ->exists();
             abort_unless($kbExists, 422);
+        }
+        $confidence = (float) ($validated['confidence_threshold'] ?? $chatbot->confidence_threshold ?? 0.72);
+        $clarification = (float) ($validated['clarification_threshold'] ?? $chatbot->clarification_threshold ?? 0.47);
+        if ($clarification >= $confidence) {
+            throw ValidationException::withMessages([
+                'clarification_threshold' => 'The clarification threshold must be lower than the verified answer threshold.',
+            ]);
         }
 
         $chatbot->update($validated);
@@ -113,6 +130,7 @@ class AiChatbotController extends Controller
 
             return response()->json([
                 'reply' => $reply,
+                'answer' => collect($result)->except(['reply', 'tokens_used'])->all(),
             ]);
         } catch (\Throwable $e) {
             $error = ProviderErrorPresenter::present($e);

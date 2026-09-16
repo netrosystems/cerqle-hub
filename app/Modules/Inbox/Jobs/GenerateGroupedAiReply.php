@@ -100,6 +100,9 @@ class GenerateGroupedAiReply implements ShouldQueue
             if (! $reply) {
                 throw new \RuntimeException('Chatbot returned no reply.');
             }
+            $answerMetadata = get_class($runner) === ChatbotRunner::class
+                ? $runner->lastAnswer()?->toArray()
+                : null;
             $inbound->unsetRelation('conversation');
             $inbound->load('conversation.channelAccount', 'conversation.contact');
             if (! $this->eligible($inbound, $access) || ! AiChatbot::where('workspace_id', $this->workspaceId)->where('enabled', true)->whereKey($this->chatbotId)->exists()) {
@@ -109,7 +112,11 @@ class GenerateGroupedAiReply implements ShouldQueue
             }
             $outbound = Message::create([
                 'conversation_id' => $inbound->conversation_id, 'direction' => 'out', 'channel' => $inbound->channel,
-                'type' => 'text', 'body' => $reply, 'payload' => ['reply_to_message_id' => $inbound->id, 'ai_automation' => true],
+                'type' => 'text', 'body' => $reply, 'payload' => array_filter([
+                    'reply_to_message_id' => $inbound->id,
+                    'ai_automation' => true,
+                    'ai_answer' => $answerMetadata,
+                ], fn ($value) => $value !== null),
                 'status' => 'queued', 'sent_by' => 'bot', 'sent_at' => now(),
             ]);
             $receipt->update(['outbound_message_id' => $outbound->id, 'status' => 'sending']);
