@@ -9,6 +9,7 @@ use App\Modules\Shared\Models\ChannelAccount;
 use App\Modules\Shared\Models\Contact;
 use App\Modules\Shared\Models\Conversation;
 use App\Modules\Shared\Models\Message;
+use App\Services\StorageManager;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Event;
@@ -33,10 +34,17 @@ class MobileConversationTest extends TestCase
             'workspace_id' => $workspace->id,
             'name' => 'John Agent',
         ]);
+        $channelAccount = ChannelAccount::create([
+            'workspace_id' => $workspace->id,
+            'channel' => 'webchat',
+            'display_name' => 'Website Widget',
+            'status' => 'active',
+        ]);
 
         $conversation = Conversation::create([
             'workspace_id' => $workspace->id,
             'contact_id' => $contact->id,
+            'channel_account_id' => $channelAccount->id,
             'assigned_user_id' => $assignedAgent->id,
             'assigned_to' => 'human',
             'status' => 'open',
@@ -88,6 +96,53 @@ class MobileConversationTest extends TestCase
         $response->assertOk();
         $this->assertCount(55, $response->json('messages'));
         $this->assertEquals('Message 55', $response->json('messages.54.body'));
+    }
+
+    public function test_mobile_media_uses_authenticated_route_and_media_only_preview_label(): void
+    {
+        Storage::fake('public');
+        $workspace = Workspace::factory()->create();
+        $user = User::factory()->create(['workspace_id' => $workspace->id]);
+        $account = ChannelAccount::create([
+            'workspace_id' => $workspace->id,
+            'channel' => 'webchat',
+            'display_name' => 'Website Widget',
+            'status' => 'active',
+        ]);
+        $contact = Contact::create(['workspace_id' => $workspace->id, 'first_name' => 'Media']);
+        $conversation = Conversation::create([
+            'workspace_id' => $workspace->id,
+            'contact_id' => $contact->id,
+            'channel_account_id' => $account->id,
+            'status' => 'open',
+            'last_message_at' => now(),
+        ]);
+        $storage = app(StorageManager::class);
+        $path = $storage->prefixedPath('message-media/mobile-random-image.jpg');
+        $storage->disk()->put($path, 'mobile-image-bytes');
+        $message = Message::create([
+            'conversation_id' => $conversation->id,
+            'direction' => 'in',
+            'channel' => 'webchat',
+            'type' => 'image',
+            'body' => '',
+            'payload' => ['path' => $path, 'preview_url' => '/broken.jpg', 'mime_type' => 'image/jpeg'],
+            'status' => 'delivered',
+            'sent_at' => now(),
+        ]);
+
+        Sanctum::actingAs($user, ['*']);
+        $index = $this->getJson('/api/v1/mobile/conversations');
+        $index->assertOk()
+            ->assertJsonPath('data.0.latest_message_preview', 'Image')
+            ->assertJsonPath('data.0.last_message.body', 'Image');
+
+        $attachmentUrl = (string) $index->json('data.0.last_message.attachment_url');
+        $this->assertStringContainsString("/api/v1/mobile/conversations/{$conversation->uuid}/messages/{$message->id}/media", $attachmentUrl);
+
+        $media = $this->get("/api/v1/mobile/conversations/{$conversation->uuid}/messages/{$message->id}/media");
+        $media->assertOk()->assertHeader('Content-Type', 'image/jpeg');
+        $this->assertSame('mobile-image-bytes', $media->streamedContent());
     }
 
     public function test_mobile_conversations_index_supports_live_folder_and_returns_online_status(): void

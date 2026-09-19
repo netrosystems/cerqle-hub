@@ -367,7 +367,7 @@ function MediaDocument({ src, filename, conversationId, messageId, isOut }) {
                 {ext ? (ext.length > 4 ? ext.slice(0, 4) : ext) : <Paperclip className="h-4 w-4" />}
             </div>
             <div className="min-w-0 flex-1">
-                <p className="text-xs font-medium truncate">{filename || t('inbox.document')}</p>
+                <p className="break-all text-xs font-medium leading-snug [overflow-wrap:anywhere]">{filename || t('inbox.document')}</p>
                 <p className="text-[10px] opacity-60">{t('inbox.tap_to_open')}</p>
             </div>
             <Download className="h-3.5 w-3.5 opacity-60 shrink-0" />
@@ -688,7 +688,7 @@ function MessageBubble({ msg, conversationId }) {
     const sticker  = mediaType === 'sticker';
     const caption  = p.caption ?? p[mediaType]?.caption ?? (msg.body && msg.body !== '(media)' ? msg.body : '');
 
-    const bubbleBase = `max-w-[70%] rounded-2xl overflow-hidden text-sm ${isOut
+    const bubbleBase = `min-w-0 max-w-[70%] rounded-2xl overflow-hidden text-sm ${isOut
         ? 'bg-brand-600 text-white rounded-br-sm'
         : 'bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 rounded-bl-sm border border-neutral-200 dark:border-neutral-700'}`;
 
@@ -818,7 +818,9 @@ function MessageBubble({ msg, conversationId }) {
 
                     {/* Caption below media */}
                     {(['image','video','document','audio'].includes(mediaType) || igAttachments.length > 0) && caption && (
-                        <p className="text-xs mt-1 opacity-90"><WaText text={caption} /></p>
+                        <p className="mt-1 max-w-full break-all text-xs leading-snug opacity-90 [overflow-wrap:anywhere]">
+                            <WaText text={caption} className="block max-w-full break-all [overflow-wrap:anywhere]" />
+                        </p>
                     )}
 
                     {timeRow}

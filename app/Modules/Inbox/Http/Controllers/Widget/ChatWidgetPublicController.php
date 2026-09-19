@@ -159,6 +159,7 @@ class ChatWidgetPublicController extends Controller
             }
 
             $messagePayload = [
+                'path' => $upload['path'],
                 'preview_url' => $upload['url'],
                 'filename' => $upload['filename'],
                 'mime_type' => $upload['mime_type'],

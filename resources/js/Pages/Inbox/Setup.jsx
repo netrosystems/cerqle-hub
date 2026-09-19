@@ -722,6 +722,7 @@ function AccountRow({ account, channel, chatbots }) {
     const { t } = useTranslation();
     const [confirmDelete, setConfirmDelete] = useState(false);
     const [deleting, setDeleting] = useState(false);
+    const [repairing, setRepairing] = useState(false);
     const pageId = channel === 'instagram'
         ? account.meta_json?.instagram_page_id
         : account.meta_json?.page_id;
@@ -732,6 +733,32 @@ function AccountRow({ account, channel, chatbots }) {
             preserveScroll: true,
             onFinish: () => { setDeleting(false); setConfirmDelete(false); },
         });
+    };
+
+    const repairConnection = async () => {
+        setRepairing(true);
+        try {
+            const response = await fetch(route('client.inbox.setup.repair', { channelAccount: account.id }), {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
+                    Accept: 'application/json',
+                },
+                body: JSON.stringify({}),
+            });
+            const json = await response.json().catch(() => ({}));
+            if (!response.ok) {
+                toast.error(json.message ?? 'Connection check failed.');
+                return;
+            }
+            toast.success(json.message ?? 'Connection refreshed.');
+            router.reload({ preserveScroll: true });
+        } catch {
+            toast.error(t('inbox.network_error_retry'));
+        } finally {
+            setRepairing(false);
+        }
     };
 
     return (
@@ -764,10 +791,17 @@ function AccountRow({ account, channel, chatbots }) {
                             </button>
                         </>
                     ) : (
-                        <button onClick={() => setConfirmDelete(true)}
-                            className="rounded-lg border border-red-200 dark:border-red-800 p-1.5 text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 hover:text-red-600 transition">
-                            <Trash2 className="h-3.5 w-3.5" />
-                        </button>
+                        <>
+                            <button type="button" onClick={repairConnection} disabled={repairing}
+                                title={t('inbox.refresh_status_meta')}
+                                className="rounded-lg border border-neutral-200 p-1.5 text-neutral-500 transition hover:bg-neutral-100 hover:text-brand-600 disabled:opacity-50 dark:border-neutral-700 dark:hover:bg-neutral-800 dark:hover:text-brand-400">
+                                <RefreshCw className={`h-3.5 w-3.5 ${repairing ? 'animate-spin' : ''}`} />
+                            </button>
+                            <button onClick={() => setConfirmDelete(true)}
+                                className="rounded-lg border border-red-200 dark:border-red-800 p-1.5 text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 hover:text-red-600 transition">
+                                <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                        </>
                     )}
                 </div>
             </div>

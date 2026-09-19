@@ -276,6 +276,7 @@ class WebchatAttachmentTest extends TestCase
 
         $this->assertNotEmpty($msgRes->json('message.attachment_url'));
         $this->assertGreaterThan(0, $msgRes->json('message.file_size'));
+        $this->assertNotEmpty(Message::latest('id')->firstOrFail()->payload['path'] ?? null);
     }
 
     public function test_website_visitors_are_not_automatically_opted_into_marketing(): void

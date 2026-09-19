@@ -21,7 +21,10 @@ class MessengerDriver implements ChannelDriverInterface
 {
     private const BASE = 'https://graph.facebook.com/v25.0';
 
-    public function __construct(private ContactService $contactService) {}
+    public function __construct(
+        private ContactService $contactService,
+        private MetaMessageAttachmentNormalizer $attachmentNormalizer,
+    ) {}
 
     public function send(Message $message): string
     {
@@ -36,15 +39,18 @@ class MessengerDriver implements ChannelDriverInterface
 
         $recipient = ['id' => $conv->external_thread_id];
         $payload = $message->payload ?? [];
-        $imageUrl = $payload['link'] ?? $payload['preview_url'] ?? null;
+        $mediaUrl = $payload['link'] ?? $payload['preview_url'] ?? $payload['url'] ?? null;
 
-        // Image messages (e.g. shared products): send the photo as an attachment,
-        // then the caption as a follow-up — a Messenger attachment carries no text.
-        if ($message->type === 'image' && $imageUrl) {
+        // Messenger attachments carry no text. Send supported media first, then
+        // an optional caption/body as a follow-up text message.
+        if (in_array($message->type, ['image', 'video', 'audio'], true) && $mediaUrl) {
             $messageId = $this->postMessage($conv->workspace_id, $accessToken, $recipient, [
-                'attachment' => ['type' => 'image', 'payload' => ['url' => $imageUrl, 'is_reusable' => true]],
+                'attachment' => [
+                    'type' => $message->type,
+                    'payload' => ['url' => $mediaUrl, 'is_reusable' => true],
+                ],
             ]);
-            if (! empty($message->body)) {
+            if (! empty($message->body) && ! $this->isGenericAudioBody((string) $message->type, (string) $message->body)) {
                 $this->postMessage($conv->workspace_id, $accessToken, $recipient, ['text' => $message->body]);
             }
 
@@ -82,6 +88,11 @@ class MessengerDriver implements ChannelDriverInterface
         }
 
         return $resp->json('message_id', '');
+    }
+
+    private function isGenericAudioBody(string $type, string $body): bool
+    {
+        return $type === 'audio' && in_array(strtolower(trim($body)), ['voice message', 'audio', 'audio attachment'], true);
     }
 
     public function receiveWebhook(Request $request): array
@@ -136,9 +147,7 @@ class MessengerDriver implements ChannelDriverInterface
                         continue;
                     }
 
-                    $message = $this->processInboundMessage($entryId, $event);
-
-                    if ($message !== null) {
+                    foreach ($this->processInboundMessage($entryId, $event) as $message) {
                         $processed[] = $message;
                     }
                 } catch (\Throwable $e) {
@@ -237,10 +246,10 @@ class MessengerDriver implements ChannelDriverInterface
         return true;
     }
 
-    private function processInboundMessage(string $pageId, array $event, ?ChannelAccount $matchedAccount = null): ?Message
+    /** @return array<int, Message> */
+    private function processInboundMessage(string $pageId, array $event, ?ChannelAccount $matchedAccount = null): array
     {
         $senderId = $event['sender']['id'] ?? '';
-        $msgBody = $event['message']['text'] ?? '';
         $providerMessageId = $event['message']['mid'] ?? null;
         $sentAt = isset($event['timestamp'])
             ? Carbon::createFromTimestampMs((int) $event['timestamp'])
@@ -248,7 +257,7 @@ class MessengerDriver implements ChannelDriverInterface
 
         if ($senderId === '' || ($providerMessageId && Message::where('channel', 'messenger')
             ->where('provider_message_id', $providerMessageId)->exists())) {
-            return null;
+            return [];
         }
 
         // The webhook entry.id is the Facebook Page id. Match it against the page_id
@@ -270,7 +279,7 @@ class MessengerDriver implements ChannelDriverInterface
                     ->filter()->values()->all(),
             ]);
 
-            return null;
+            return [];
         }
 
         $workspaceId = $channelAccount->workspace_id;
@@ -290,30 +299,41 @@ class MessengerDriver implements ChannelDriverInterface
             ['status' => 'open', 'external_thread_id' => $senderId]
         );
 
-        $message = Message::create([
-            'conversation_id' => $conversation->id,
-            'direction' => 'in',
-            'channel' => 'messenger',
-            'type' => 'text',
-            'payload' => $event,
-            'body' => $msgBody,
-            'status' => 'delivered',
-            'provider_message_id' => $providerMessageId,
-            'sent_by' => 'human',
-            'sent_at' => $sentAt,
+        $messages = [];
+        foreach ($this->attachmentNormalizer->messagesFromEvent($event, 'messenger') as $presented) {
+            $messages[] = Message::create([
+                'conversation_id' => $conversation->id,
+                'direction' => 'in',
+                'channel' => 'messenger',
+                'type' => $presented['type'],
+                'payload' => $presented['payload'],
+                'body' => $presented['body'],
+                'status' => 'delivered',
+                'provider_message_id' => $presented['provider_message_id'],
+                'sent_by' => 'human',
+                'sent_at' => $sentAt,
+            ]);
+        }
+
+        $conversation->update([
+            'last_message_at' => $sentAt,
+            'status' => 'open',
+            'unread_count' => $conversation->unread_count + count($messages),
         ]);
 
-        $conversation->update(['last_message_at' => $sentAt, 'status' => 'open', 'unread_count' => $conversation->unread_count + 1]);
+        foreach ($messages as $message) {
+            MessageReceived::dispatch($message);
+        }
 
-        MessageReceived::dispatch($message);
-
+        $lastMessage = $messages[array_key_last($messages)] ?? null;
         Log::info('Messenger webhook: message stored', [
-            'message_id' => $message->id,
+            'message_id' => $lastMessage?->id,
+            'message_count' => count($messages),
             'conversation_id' => $conversation->id,
             'workspace_id' => $workspaceId,
         ]);
 
-        return $message;
+        return $messages;
     }
 
     private function syncConversationMessages(

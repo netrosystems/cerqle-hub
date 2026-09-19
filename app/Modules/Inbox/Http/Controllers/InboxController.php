@@ -12,6 +12,7 @@ use App\Modules\Inbox\Services\ConversationDeletionService;
 use App\Modules\Inbox\Services\ConversationHandoverService;
 use App\Modules\Inbox\Services\EmailBulkResolveService;
 use App\Modules\Inbox\Services\EmailInboxSyncDispatcher;
+use App\Modules\Inbox\Services\MessageMediaResolver;
 use App\Modules\Inbox\Services\WebchatGeoService;
 use App\Modules\Inbox\Services\WebchatPresence;
 use App\Modules\Shared\Models\ChannelAccount;
@@ -46,6 +47,7 @@ class InboxController extends Controller
         private ConversationHandoverService $handoverService,
         private EmailInboxSyncDispatcher $emailSyncDispatcher,
         private AttachmentService $attachmentService,
+        private MessageMediaResolver $mediaResolver,
     ) {}
 
     public function index(Request $request): Response
@@ -176,6 +178,9 @@ class InboxController extends Controller
 
         $conversation->load(['contact', 'channelAccount', 'labels']);
         $messages = $conversation->messages()->with(['conversation', 'user:id,name,avatar'])->orderBy('sent_at')->get();
+        $messages->each(function (Message $message) use ($request): void {
+            $message->setAttribute('payload', $this->mediaResolver->augmentPayload($message, $request, 'client.inbox.message-media'));
+        });
 
         // Mark as read
         $conversation->update(['unread_count' => 0]);
@@ -266,10 +271,14 @@ class InboxController extends Controller
 
         $after = max(0, (int) $request->integer('after'));
         $messages = $conversation->messages()
-            ->with('user:id,name,avatar')
+            ->with(['conversation', 'user:id,name,avatar'])
             ->where('id', '>', $after)
             ->orderBy('sent_at')
             ->get();
+
+        $messages->each(function (Message $message) use ($request): void {
+            $message->setAttribute('payload', $this->mediaResolver->augmentPayload($message, $request, 'client.inbox.message-media'));
+        });
 
         if ($messages->isNotEmpty()) {
             $conversation->update(['unread_count' => 0]);
@@ -665,83 +674,7 @@ class InboxController extends Controller
         $this->authorise($request, $conversation);
         abort_unless((int) $message->conversation_id === (int) $conversation->id, 404);
 
-        $payload = $message->payload ?? [];
-
-        // Already cached locally — verify the file still exists before redirecting
-        if (! empty($payload['preview_url'])) {
-            $storagePath = "message-media/{$message->id}";
-            $disk = $this->storageManager->disk();
-            $files = $disk->files($this->storageManager->prefixedPath('message-media'));
-            $cached = collect($files)->first(fn ($f) => str_starts_with($f, $this->storageManager->prefixedPath($storagePath).'.'));
-
-            if ($cached && $disk->exists($cached)) {
-                return $this->mediaFileResponse($cached, $payload['mime_type'] ?? ($disk->mimeType($cached) ?: null));
-            }
-
-            // File missing — clear stale preview_url and fall through to re-download
-            $payload = array_merge($payload, ['preview_url' => null]);
-            $message->update(['payload' => $payload]);
-        }
-
-        // Resolve media ID from raw WhatsApp webhook payload
-        $type = $message->type ?? 'image';
-        $mediaId = $payload[$type]['id'] ?? $payload['media_id'] ?? null;
-
-        if (! $mediaId) {
-            abort(404, 'No media available.');
-        }
-
-        $workspaceId = $request->user()->current_workspace_id ?? $request->user()->workspace_id;
-        $phoneNumberId = $conversation->channelAccount?->phone_number_id;
-        $client = $phoneNumberId
-            ? CloudApiClient::forPhoneNumber($phoneNumberId, (int) $workspaceId)
-            : CloudApiClient::forWorkspace((int) $workspaceId);
-
-        if (! $client) {
-            abort(503, 'WhatsApp account not configured.');
-        }
-
-        try {
-            ['url' => $downloadUrl, 'mime_type' => $mimeType] = $client->getMediaUrl($mediaId);
-            $bytes = $client->downloadMedia($downloadUrl);
-            $ext = explode('/', explode(';', $mimeType)[0])[1] ?? 'bin';
-            $ext = preg_replace('/[^a-zA-Z0-9]/', '', $ext) ?: 'bin';
-            $ext = str_replace(['jpeg'], ['jpg'], $ext);
-            $filename = "message-media/{$message->id}.{$ext}";
-
-            $filename = $this->storageManager->prefixedPath($filename);
-            if (! $this->storageManager->disk()->put($filename, $bytes)) {
-                throw new \RuntimeException('Media cache write failed.');
-            }
-            $previewUrl = $this->storageManager->disk()->url($filename);
-
-            // Cache for next request
-            $message->update(['payload' => array_merge($payload, ['preview_url' => $previewUrl, 'mime_type' => $mimeType])]);
-
-            return $this->mediaFileResponse($filename, $mimeType);
-        } catch (\Throwable $e) {
-            Log::warning('Inbox media retrieval failed', ['message_id' => $message->id, 'workspace_id' => $workspaceId, 'exception' => get_class($e)]);
-            abort(502, 'Could not retrieve this attachment. Please try again later.');
-        }
-    }
-
-    private function mediaFileResponse(string $path, ?string $mimeType): \Symfony\Component\HttpFoundation\Response
-    {
-        $stream = $this->storageManager->disk()->readStream($path);
-        abort_unless(is_resource($stream), 404, 'Attachment unavailable.');
-
-        return response()->stream(function () use ($stream): void {
-            try {
-                fpassthru($stream);
-            } finally {
-                fclose($stream);
-            }
-        }, 200, [
-            'Content-Type' => $mimeType ?: 'application/octet-stream',
-            'Content-Security-Policy' => "sandbox; default-src 'none'",
-            'Cache-Control' => 'private, max-age=300',
-            'X-Content-Type-Options' => 'nosniff',
-        ]);
+        return $this->mediaResolver->response($message, $request);
     }
 
     /** Upload a media file to WhatsApp and return the media_id */

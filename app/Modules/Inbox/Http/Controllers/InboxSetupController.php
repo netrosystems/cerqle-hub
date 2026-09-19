@@ -987,6 +987,64 @@ class InboxSetupController extends Controller
         return back()->with('success', $label);
     }
 
+    public function repairMetaConnection(Request $request, ChannelAccount $channelAccount): JsonResponse
+    {
+        $workspaceId = $request->user()->current_workspace_id ?? $request->user()->workspace_id;
+        abort_unless((int) $channelAccount->workspace_id === (int) $workspaceId, 403);
+        abort_unless(in_array($channelAccount->channel, ['instagram', 'messenger'], true), 403);
+
+        $meta = $channelAccount->meta_json ?? [];
+        $credentials = $channelAccount->credentials ?? [];
+        $channel = (string) $channelAccount->channel;
+        $pageId = $channel === 'instagram'
+            ? (string) ($meta['facebook_page_id'] ?? '')
+            : (string) ($meta['page_id'] ?? '');
+        $pageToken = $channel === 'instagram'
+            ? (string) ($credentials['access_token'] ?? '')
+            : (string) ($credentials['page_access_token'] ?? '');
+
+        if ($pageId === '' || $pageToken === '') {
+            Log::warning('Meta inbox setup repair failed: missing page id or token', [
+                'channel_account_id' => $channelAccount->id,
+                'channel' => $channel,
+                'has_page_id' => $pageId !== '',
+                'has_page_token' => $pageToken !== '',
+            ]);
+
+            return response()->json([
+                'message' => 'This account is missing the Facebook Page ID or Page access token. Reconnect it from Meta.',
+            ], 422);
+        }
+
+        $registered = $channel === 'instagram'
+            ? $this->registerInstagramAppWebhook()
+            : $this->registerMessengerAppWebhook();
+        if (! $registered) {
+            return response()->json([
+                'message' => 'Cerqle could not register the Meta app webhook. Check the Meta app credentials and callback URL.',
+            ], 422);
+        }
+
+        $subscribed = $channel === 'instagram'
+            ? $this->subscribePageToInstagram($pageId, $pageToken)
+            : $this->subscribePageToMessenger($pageId, $pageToken);
+        if (! $subscribed) {
+            return response()->json([
+                'message' => 'Meta app webhook was registered, but the connected Page could not be subscribed for messaging.',
+            ], 422);
+        }
+
+        $channelAccount->update([
+            'status' => 'active',
+            'meta_json' => array_merge($meta, ['webhook_repaired_at' => now()->toIso8601String()]),
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => ucfirst($channel).' webhook subscription refreshed. Send a new customer message to verify delivery.',
+        ]);
+    }
+
     public function destroy(Request $request, ChannelAccount $channelAccount): RedirectResponse
     {
         $workspaceId = $request->user()->current_workspace_id ?? $request->user()->workspace_id;
@@ -1006,9 +1064,30 @@ class InboxSetupController extends Controller
         $pageId = $channelAccount->channel === 'instagram'
             ? (string) ($meta['facebook_page_id'] ?? '')
             : (string) ($meta['page_id'] ?? '');
-        $pageToken = (string) (($channelAccount->credentials ?? [])['page_access_token'] ?? '');
+        $credentials = $channelAccount->credentials ?? [];
+        $pageToken = $channelAccount->channel === 'instagram'
+            ? (string) ($credentials['access_token'] ?? '')
+            : (string) ($credentials['page_access_token'] ?? '');
 
         if ($pageId === '' || $pageToken === '') {
+            return;
+        }
+
+        $sharedPageExists = ChannelAccount::whereKeyNot($channelAccount->id)
+            ->whereIn('channel', ['instagram', 'messenger'])
+            ->where(function ($query) use ($pageId): void {
+                $query->whereJsonContains('meta_json->facebook_page_id', $pageId)
+                    ->orWhereJsonContains('meta_json->page_id', $pageId);
+            })
+            ->exists();
+
+        if ($sharedPageExists) {
+            Log::info('Meta Page unsubscribe skipped because another inbox channel still uses this Page', [
+                'channel_account_id' => $channelAccount->id,
+                'channel' => $channelAccount->channel,
+                'page_id' => $pageId,
+            ]);
+
             return;
         }
 

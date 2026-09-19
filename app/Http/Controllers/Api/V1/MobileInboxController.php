@@ -16,6 +16,8 @@ use Illuminate\Http\Request;
 
 class MobileInboxController extends WorkspaceScopedController
 {
+    private const OMNI_CHANNELS = ['whatsapp', 'instagram', 'messenger', 'webchat'];
+
     /**
      * GET /api/v1/mobile/inbox/setup
      * Single bootstrapping call: labels, canned replies, channel accounts, team members, live visitors count.
@@ -35,6 +37,7 @@ class MobileInboxController extends WorkspaceScopedController
 
         $channelAccounts = ChannelAccount::where('workspace_id', $wsId)
             ->where('status', 'active')
+            ->whereIn('channel', self::OMNI_CHANNELS)
             ->orderBy('channel')
             ->orderBy('display_name')
             ->get(['id', 'channel', 'display_name', 'phone_number_id']);
@@ -77,7 +80,9 @@ class MobileInboxController extends WorkspaceScopedController
         $userId = $request->user()->id;
         $liveSince = app(WebchatPresence::class)->onlineSince();
 
-        $openQuery = Conversation::where('workspace_id', $wsId)->where('status', 'open');
+        $openQuery = Conversation::where('workspace_id', $wsId)
+            ->whereHas('channelAccount', fn ($account) => $account->whereIn('channel', self::OMNI_CHANNELS))
+            ->where('status', 'open');
 
         return response()->json([
             'all' => (clone $openQuery)->count(),
@@ -89,6 +94,7 @@ class MobileInboxController extends WorkspaceScopedController
                 ->distinct('contact_id')
                 ->count('contact_id'),
             'unread' => Conversation::where('workspace_id', $wsId)
+                ->whereHas('channelAccount', fn ($account) => $account->whereIn('channel', self::OMNI_CHANNELS))
                 ->where('unread_count', '>', 0)
                 ->count(),
         ]);
