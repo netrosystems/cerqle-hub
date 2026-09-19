@@ -74,6 +74,22 @@ class MessageMediaResolver
         return $payload;
     }
 
+    public function displayBody(Message $message): ?string
+    {
+        $body = (string) ($message->body ?? '');
+        if ($body === '' || ! $this->isGenericMediaBody((string) $message->type, $body)) {
+            return $message->body;
+        }
+
+        $payload = $message->payload ?? [];
+        $type = (string) $message->type;
+        $explicitCaption = $payload['caption'] ?? $payload[$type]['caption'] ?? null;
+
+        return is_string($explicitCaption) && trim($explicitCaption) !== ''
+            ? $message->body
+            : '';
+    }
+
     /** @param array<string, mixed> $payload */
     private function whatsappResponse(Message $message, array $payload, string $type, Request $request): Response
     {
@@ -293,6 +309,23 @@ class MessageMediaResolver
         return parse_url($url, PHP_URL_SCHEME) === 'https'
             && collect(['facebook.com', 'fbcdn.net', 'fbsbx.com', 'cdninstagram.com', 'instagram.com'])
                 ->contains(fn ($suffix) => $host === $suffix || str_ends_with($host, '.'.$suffix));
+    }
+
+    private function isGenericMediaBody(string $type, string $body): bool
+    {
+        if (! in_array($type, ['image', 'video', 'audio', 'sticker'], true)) {
+            return false;
+        }
+
+        $plain = preg_replace('/^[^\p{L}\p{N}]+/u', '', trim($body)) ?: '';
+        $plain = strtolower(trim($plain));
+
+        return in_array($plain, match ($type) {
+            'image' => ['image', 'image attachment'],
+            'video' => ['video', 'video attachment'],
+            'audio' => ['audio', 'voice message', 'audio attachment'],
+            'sticker' => ['sticker'],
+        }, true);
     }
 
     private function isHeicPath(string $path): bool

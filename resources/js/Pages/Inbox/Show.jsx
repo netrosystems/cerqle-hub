@@ -115,6 +115,27 @@ function WaText({ text, className = '' }) {
     return <span className={className}>{segments}</span>;
 }
 
+function isGenericMediaCaption(value, mediaType) {
+    const plain = String(value ?? '').trim().replace(/^[^\p{L}\p{N}]+/u, '').trim().toLowerCase();
+    const generic = {
+        image: ['image', 'image attachment'],
+        video: ['video', 'video attachment'],
+        audio: ['audio', 'voice message', 'audio attachment'],
+        sticker: ['sticker'],
+    };
+
+    return (generic[mediaType] ?? []).includes(plain);
+}
+
+function mediaCaption(payload, mediaType, body) {
+    const explicitCaption = payload?.caption ?? payload?.[mediaType]?.caption ?? null;
+    if (explicitCaption) return explicitCaption;
+
+    if (!body || body === '(media)' || isGenericMediaCaption(body, mediaType)) return '';
+
+    return body;
+}
+
 /* ─── message type renderers ─────────────────────────── */
 
 function MediaImage({ src, alt, conversationId, messageId, isOut }) {
@@ -686,7 +707,7 @@ function MessageBubble({ msg, conversationId }) {
     const contacts = p.contacts;
     const reaction = p.reaction;
     const sticker  = mediaType === 'sticker';
-    const caption  = p.caption ?? p[mediaType]?.caption ?? (msg.body && msg.body !== '(media)' ? msg.body : '');
+    const caption  = mediaCaption(p, mediaType, msg.body);
 
     const bubbleBase = `min-w-0 max-w-[70%] rounded-2xl overflow-hidden text-sm ${isOut
         ? 'bg-brand-600 text-white rounded-br-sm'
