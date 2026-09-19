@@ -2,6 +2,7 @@
 
 namespace App\Events;
 
+use App\Modules\Inbox\Services\MessageMediaResolver;
 use App\Modules\Shared\Models\Message;
 use Illuminate\Broadcasting\InteractsWithSockets;
 use Illuminate\Broadcasting\PrivateChannel;
@@ -42,7 +43,7 @@ class MessageReceived implements ShouldBroadcastNow
             'direction' => $this->message->direction,
             'channel' => $this->message->channel,
             'type' => $this->message->type,
-            'body' => $this->message->body,
+            'body' => app(MessageMediaResolver::class)->displayBody($this->message),
             'payload' => $this->message->payload,
             'status' => $this->message->status,
             'sent_at' => $this->message->sent_at?->toIso8601String(),

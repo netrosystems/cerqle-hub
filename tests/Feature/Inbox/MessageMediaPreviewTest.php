@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Inbox;
 
+use App\Modules\Inbox\Services\MessageMediaResolver;
 use App\Modules\Shared\Models\ChannelAccount;
 use App\Modules\Shared\Models\Contact;
 use App\Modules\Shared\Models\Conversation;
@@ -62,5 +63,23 @@ class MessageMediaPreviewTest extends TestCase
 
         $response->assertOk()->assertHeader('Content-Type', 'image/jpeg');
         $this->assertSame('widget-image-bytes', $response->streamedContent());
+    }
+
+    public function test_generic_media_body_is_hidden_but_an_explicit_image_caption_is_preserved(): void
+    {
+        $resolver = app(MessageMediaResolver::class);
+        $generic = new Message([
+            'type' => 'image',
+            'body' => '🖼 Image',
+            'payload' => ['image' => ['id' => 'media-1']],
+        ]);
+        $captioned = new Message([
+            'type' => 'image',
+            'body' => 'Image',
+            'payload' => ['image' => ['id' => 'media-2', 'caption' => 'Image']],
+        ]);
+
+        $this->assertSame('', $resolver->displayBody($generic));
+        $this->assertSame('Image', $resolver->displayBody($captioned));
     }
 }
