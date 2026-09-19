@@ -1,6 +1,6 @@
 # Cerqle Hub current status
 
-Status date: **2026-09-13**. This file is a checkpoint, not permanent proof. Recheck Git, production and external-provider state before acting.
+Status date: **2026-09-19**. This file is a checkpoint, not permanent proof. Recheck Git, production and external-provider state before acting.
 
 ## Git and release state
 
@@ -22,6 +22,8 @@ Status date: **2026-09-13**. This file is a checkpoint, not permanent proof. Rec
 - PHPStan has a known historical backlog of 578 findings. This number is stale until rerun; do not add suppressions merely to claim a green result.
 
 ## Recently implemented
+
+- 2026-09-19 inbox media parity implemented locally: Messenger/Instagram inbound attachments are normalized without deleting real captions; Messenger outbound image/video/audio keeps Cerqle's existing quota path; website/staff uploads persist internal storage paths; authenticated web and Sanctum mobile routes privately serve cached provider or stored media; media-only mobile list rows receive response-level preview labels; long filenames wrap in the web inbox; and HEIC/HEIF conversion can use Imagick, ImageMagick, `heif-convert` or ffmpeg when installed. Meta account rows can safely refresh app/Page messaging subscriptions, and deleting one Meta channel does not unsubscribe a Page still used by another account. Cerqle's content-derived upload naming, workspace isolation, public HTTP guard and existing Instagram outbound capability remain unchanged. Focused validation passes 9 tests/51 assertions, PHP syntax, focused Pint, targeted new-service PHPStan and Vite production build. No migration, app-version bump, deployment or live provider delivery was performed; server converter availability and real Meta/WhatsApp/iOS media remain release checks.
 
 - 2026-09-15 security hardening implemented locally on spiderman: unified active-account/MFA browser and mobile login, exact signed Firebase verification, hidden MFA secrets, scoped-token/first-party CSRF boundaries, lower-admin role protection, unsigned widget identity isolation, content-derived upload names, public/pinned/TLS-verified outbound HTTP and bounded sitemaps, single-use actor-bound Woo callbacks and safe reconnect persistence, CSP nonces and private shell-free backups. Owner's `view_clients` impersonation/plan-assignment exception remains unchanged. Full backend regression run passes 1008 tests/4209 assertions, including 64 focused security tests/173 assertions; frontend 183 tests/33 files and production build pass; focused security PHPStan/Pint and route/config cache checks pass. Global static analysis remains non-green (585 findings on this run); lockfile security audits show zero advisories. Additive migration, native mobile MFA handling and real provider/backup/proxy checks remain release gates. No promotion/deployment/environment or license edit. See `docs/security-hardening-qa-2026-09-15.md`. Existing unrelated local documents/review guide preserved.
 

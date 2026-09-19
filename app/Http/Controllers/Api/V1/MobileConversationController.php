@@ -9,6 +9,7 @@ use App\Events\TypingChanged;
 use App\Models\User;
 use App\Modules\Inbox\Models\InboxLabel;
 use App\Modules\Inbox\Services\ConversationDeletionService;
+use App\Modules\Inbox\Services\MessageMediaResolver;
 use App\Modules\Inbox\Services\WebchatPresence;
 use App\Modules\Shared\Models\ChannelAccount;
 use App\Modules\Shared\Models\Contact;
@@ -28,6 +29,8 @@ use Illuminate\Validation\ValidationException;
 
 class MobileConversationController extends WorkspaceScopedController
 {
+    private const OMNI_CHANNELS = ['whatsapp', 'instagram', 'messenger', 'webchat'];
+
     public function destroy(Request $request, string $uuid): Response
     {
         app(ConversationDeletionService::class)->delete($this->workspaceId($request), $uuid);
@@ -39,6 +42,7 @@ class MobileConversationController extends WorkspaceScopedController
         private ChannelManager $channelManager,
         private StorageManager $storageManager,
         private AttachmentService $attachmentService,
+        private MessageMediaResolver $mediaResolver,
     ) {}
 
     /**
@@ -55,6 +59,7 @@ class MobileConversationController extends WorkspaceScopedController
         $isLiveFolder = $folder === 'live';
 
         $conversations = Conversation::where('workspace_id', $wsId)
+            ->whereHas('channelAccount', fn ($account) => $account->whereIn('channel', self::OMNI_CHANNELS))
             ->with(['contact', 'channelAccount', 'lastMessage', 'labels', 'assignedUser'])
             ->when($isLiveFolder, fn ($q) => $q
                 ->whereHas('channelAccount', fn ($account) => $account->where('channel', 'webchat'))
@@ -144,6 +149,16 @@ class MobileConversationController extends WorkspaceScopedController
                 'last_page' => 1,
             ],
         ]);
+    }
+
+    public function media(Request $request, string $uuid, Message $message): \Symfony\Component\HttpFoundation\Response
+    {
+        $conversation = Conversation::where('workspace_id', $this->workspaceId($request))
+            ->where('uuid', $uuid)
+            ->firstOrFail();
+        abort_unless((int) $message->conversation_id === (int) $conversation->id, 404);
+
+        return $this->mediaResolver->response($message, $request);
     }
 
     /**
@@ -632,6 +647,11 @@ class MobileConversationController extends WorkspaceScopedController
             : ($c->webchat_last_seen_at ? Carbon::parse($c->webchat_last_seen_at) : null);
         $isOnline = $isWebchat && $lastSeen !== null && $lastSeen->gte(app(WebchatPresence::class)->onlineSince());
 
+        $lastMessage = $c->lastMessage ? $this->formatMessage($c->lastMessage) : null;
+        if ($lastMessage && trim((string) ($lastMessage['body'] ?? '')) === '') {
+            $lastMessage['body'] = $this->messagePreviewLabel($c->lastMessage);
+        }
+
         $data = [
             'id' => $c->id,
             'uuid' => $c->uuid,
@@ -680,7 +700,8 @@ class MobileConversationController extends WorkspaceScopedController
                 'name' => $l->name,
                 'color' => $l->color,
             ])->values(),
-            'last_message' => $c->lastMessage ? $this->formatMessage($c->lastMessage) : null,
+            'latest_message_preview' => $lastMessage['body'] ?? null,
+            'last_message' => $lastMessage,
         ];
 
         if ($detail) {
@@ -695,6 +716,9 @@ class MobileConversationController extends WorkspaceScopedController
 
     private function formatMessage(Message $m): array
     {
+        $m->loadMissing('conversation');
+        $payload = $this->mediaResolver->augmentPayload($m, request(), 'api.v1.mobile.conversations.messages.media');
+
         return [
             'id' => $m->id,
             'conversation_id' => $m->conversation_id,
@@ -702,12 +726,31 @@ class MobileConversationController extends WorkspaceScopedController
             'channel' => $m->channel,
             'type' => $m->type,
             'body' => Demo::text($m->body),
-            'attachment_url' => $m->payload['preview_url'] ?? null,
-            'payload' => $m->payload,
+            'attachment_url' => $payload['attachment_url'] ?? $payload['preview_url'] ?? null,
+            'payload' => $payload,
             'status' => $m->status,
             'sent_by' => $m->sent_by,
             'sent_at' => $m->sent_at?->toIso8601String(),
             'created_at' => $m->created_at->toIso8601String(),
         ];
+    }
+
+    private function messagePreviewLabel(Message $message): string
+    {
+        $payload = $message->payload ?? [];
+        $filename = $payload['filename'] ?? $payload[(string) $message->type]['filename'] ?? null;
+
+        if ($message->type === 'document' && is_string($filename) && trim($filename) !== '') {
+            return trim($filename);
+        }
+
+        return match ($message->type) {
+            'image' => 'Image',
+            'video' => 'Video',
+            'audio' => 'Audio',
+            'sticker' => 'Sticker',
+            'document' => 'Document',
+            default => '',
+        };
     }
 }

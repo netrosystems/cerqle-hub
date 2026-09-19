@@ -36,4 +36,31 @@ class MessageMediaPreviewTest extends TestCase
         ['user' => $foreign] = $this->createSubscribedWorkspaceContext();
         $this->actingAs($foreign)->get(route('client.inbox.message-media', ['conversation' => $conversation->uuid, 'message' => $message->id]))->assertForbidden();
     }
+
+    public function test_random_stored_upload_path_is_used_when_public_preview_is_unavailable(): void
+    {
+        ['user' => $user, 'workspace' => $workspace] = $this->createSubscribedWorkspaceContext();
+        Storage::fake('public');
+        $account = ChannelAccount::create(['workspace_id' => $workspace->id, 'channel' => 'webchat', 'display_name' => 'Widget', 'status' => 'active']);
+        $contact = Contact::create(['workspace_id' => $workspace->id, 'source' => 'webchat']);
+        $conversation = Conversation::create(['workspace_id' => $workspace->id, 'channel_account_id' => $account->id, 'contact_id' => $contact->id, 'status' => 'open']);
+        $storage = app(StorageManager::class);
+        $path = $storage->prefixedPath('message-media/random-upload-name.jpg');
+        $storage->disk()->put($path, 'widget-image-bytes');
+        $message = Message::create([
+            'conversation_id' => $conversation->id,
+            'channel' => 'webchat',
+            'direction' => 'in',
+            'type' => 'image',
+            'payload' => ['path' => $path, 'preview_url' => '/broken-widget-image.jpg', 'mime_type' => 'image/jpeg'],
+        ]);
+
+        $response = $this->actingAs($user)->get(route('client.inbox.message-media', [
+            'conversation' => $conversation->uuid,
+            'message' => $message->id,
+        ]));
+
+        $response->assertOk()->assertHeader('Content-Type', 'image/jpeg');
+        $this->assertSame('widget-image-bytes', $response->streamedContent());
+    }
 }

@@ -73,6 +73,8 @@ Route::prefix('v1/mobile')->middleware(['auth:sanctum', 'throttle:api', 'demo', 
     Route::get('/conversations', [MobileConversationController::class, 'index']);
     Route::get('/conversations/{uuid}', [MobileConversationController::class, 'show']);
     Route::get('/conversations/{uuid}/messages', [MobileConversationController::class, 'messages']);
+    Route::get('/conversations/{uuid}/messages/{message}/media', [MobileConversationController::class, 'media'])
+        ->name('api.v1.mobile.conversations.messages.media');
     Route::post('/conversations', [MobileConversationController::class, 'start']);
     Route::post('/conversations/{uuid}/reply', [MobileConversationController::class, 'reply']);
     Route::patch('/conversations/{uuid}/assign', [MobileConversationController::class, 'assign']);

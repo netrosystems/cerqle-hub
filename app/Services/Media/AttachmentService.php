@@ -6,11 +6,12 @@ use App\Services\StorageManager;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
+use Symfony\Component\Process\Process;
 
 class AttachmentService
 {
     /** Supported MIME types / extensions for messaging attachments */
-    public const ALLOWED_MIMES = 'jpg,jpeg,png,webp,gif,heic,heif,mp3,aac,m4a,amr,ogg,oga,wav,webm,mp4,mov,3gp,pdf,doc,docx,xls,xlsx,ppt,pptx,txt,csv,zip';
+    public const ALLOWED_MIMES = 'jpg,jpeg,png,webp,gif,heic,heif,mp3,aac,m4a,amr,ogg,oga,opus,weba,wav,webm,mp4,mov,3gp,pdf,doc,docx,xls,xlsx,ppt,pptx,txt,csv,zip';
 
     public const MAX_FILE_KILOBYTES = 10240; // 10 MB limit
 
@@ -35,12 +36,15 @@ class AttachmentService
     public function processUpload(UploadedFile $file, string $directory = 'message-media'): array
     {
         $originalName = $file->getClientOriginalName();
-        $rawMime = $file->getMimeType() ?? 'application/octet-stream';
+        $clientExtension = strtolower($file->getClientOriginalExtension() ?: pathinfo($originalName, PATHINFO_EXTENSION));
+        $rawMime = $this->normaliseMimeType(
+            $file->getMimeType() ?? 'application/octet-stream',
+            $clientExtension,
+        );
         $extension = SafeUploadName::extension($file);
         $sizeBytes = (int) $file->getSize();
 
         $isHeic = $this->isHeic($file);
-        $convertedHeic = false;
 
         if ($isHeic) {
             $convertedPath = $this->attemptHeicConversion($file->getRealPath());
@@ -53,7 +57,6 @@ class AttachmentService
                 );
                 @unlink($convertedPath);
 
-                $convertedHeic = true;
                 $url = $this->storageManager->disk()->url($storedPath);
                 $convertedFilename = pathinfo($originalName, PATHINFO_FILENAME).'.jpg';
 
@@ -76,8 +79,8 @@ class AttachmentService
         $this->storageManager->disk()->putFileAs(dirname($storedPath), $file, basename($storedPath));
         $url = $this->storageManager->disk()->url($storedPath);
 
-        $inferredType = $this->inferMessageType($rawMime, $extension);
-        if ($isHeic && ! $convertedHeic) {
+        $inferredType = $this->inferMessageType($rawMime, $clientExtension ?: $extension);
+        if ($isHeic) {
             // Server could not decode HEIC into JPEG -> treat safely as a document attachment
             $inferredType = 'document';
         }
@@ -131,40 +134,104 @@ class AttachmentService
     }
 
     /**
-     * Attempt converting a HEIC file to JPEG using Imagick.
+     * Attempt converting a HEIC file to JPEG using Imagick or an available
+     * server-side converter.
      * Returns the temporary JPEG file path on success, or null on failure.
      */
     public function attemptHeicConversion(string $sourcePath, int $quality = 90): ?string
     {
-        if (! class_exists('\Imagick')) {
-            Log::info('AttachmentService: Imagick extension not installed; skipping HEIC auto-conversion.');
+        return $this->attemptImagickConversion($sourcePath, $quality)
+            ?? $this->attemptCommandConversion($sourcePath, $quality);
+    }
 
+    private function attemptImagickConversion(string $sourcePath, int $quality): ?string
+    {
+        if (! class_exists('\Imagick')) {
             return null;
         }
 
+        $tempPath = $this->temporaryJpegPath('heic_conv_');
         try {
-            /** @phpstan-ignore-next-line */
             $imagick = new \Imagick;
             $imagick->readImage($sourcePath);
             $imagick->setImageFormat('jpeg');
             $imagick->setImageCompressionQuality($quality);
 
             // Strip metadata profiles if needed and fix orientation
-            if (method_exists($imagick, 'autoOrient')) {
-                $imagick->autoOrient();
-            }
+            $imagick->autoOrient();
 
-            $tempPath = tempnam(sys_get_temp_dir(), 'heic_conv_').'.jpg';
             $imagick->writeImage($tempPath);
             $imagick->clear();
             $imagick->destroy();
 
-            return $tempPath;
+            return $this->validConvertedImage($tempPath) ? $tempPath : null;
         } catch (\Throwable $e) {
-            Log::warning('AttachmentService: HEIC conversion failed: '.$e->getMessage());
+            @unlink($tempPath);
+            Log::warning('AttachmentService: Could not convert HEIC image to JPEG: '.$e->getMessage());
 
             return null;
         }
+    }
+
+    private function attemptCommandConversion(string $sourcePath, int $quality): ?string
+    {
+        foreach ($this->conversionCommands($sourcePath, $quality) as [$name, $command, $target]) {
+            try {
+                $process = new Process($command);
+                $process->setTimeout(60);
+                $process->run();
+
+                if ($process->isSuccessful() && $this->validConvertedImage($target)) {
+                    return $target;
+                }
+
+                @unlink($target);
+            } catch (\Throwable $e) {
+                @unlink($target);
+                Log::debug('AttachmentService: HEIC converter unavailable.', [
+                    'converter' => $name,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
+
+        Log::warning('AttachmentService: No available HEIC converter produced a JPEG preview.');
+
+        return null;
+    }
+
+    /** @return array<int, array{0:string, 1:array<int, string>, 2:string}> */
+    private function conversionCommands(string $sourcePath, int $quality): array
+    {
+        $quality = (string) max(1, min(100, $quality));
+        $magickTarget = $this->temporaryJpegPath('heic_magick_');
+        $convertTarget = $this->temporaryJpegPath('heic_convert_');
+        $heifTarget = $this->temporaryJpegPath('heic_heif_');
+        $ffmpegTarget = $this->temporaryJpegPath('heic_ffmpeg_');
+
+        return [
+            ['magick', ['magick', $sourcePath, '-auto-orient', '-strip', '-quality', $quality, $magickTarget], $magickTarget],
+            ['convert', ['convert', $sourcePath, '-auto-orient', '-strip', '-quality', $quality, $convertTarget], $convertTarget],
+            ['heif-convert', ['heif-convert', '-q', $quality, $sourcePath, $heifTarget], $heifTarget],
+            ['ffmpeg', ['ffmpeg', '-y', '-i', $sourcePath, '-frames:v', '1', $ffmpegTarget], $ffmpegTarget],
+        ];
+    }
+
+    private function validConvertedImage(string $path): bool
+    {
+        return is_file($path) && filesize($path) > 0;
+    }
+
+    private function temporaryJpegPath(string $prefix): string
+    {
+        $base = tempnam(sys_get_temp_dir(), $prefix);
+        if (! $base) {
+            return sys_get_temp_dir().DIRECTORY_SEPARATOR.$prefix.Str::uuid().'.jpg';
+        }
+
+        @unlink($base);
+
+        return $base.'.jpg';
     }
 
     /**
@@ -179,15 +246,37 @@ class AttachmentService
             return 'image';
         }
 
+        if (str_starts_with($mime, 'audio/')
+            || $mime === 'application/ogg'
+            || in_array($ext, ['mp3', 'aac', 'm4a', 'amr', 'ogg', 'oga', 'opus', 'weba', 'wav'], true)) {
+            return 'audio';
+        }
+
         if (str_starts_with($mime, 'video/') || in_array($ext, ['mp4', 'mov', '3gp', 'webm'], true)) {
             return 'video';
         }
 
-        if (str_starts_with($mime, 'audio/') || in_array($ext, ['mp3', 'aac', 'm4a', 'amr', 'ogg', 'oga', 'wav'], true)) {
-            return 'audio';
+        return 'document';
+    }
+
+    private function normaliseMimeType(string $mimeType, string $extension): string
+    {
+        $mime = strtolower(trim(explode(';', $mimeType)[0]));
+
+        if (in_array($mime, ['', 'application/octet-stream', 'video/mp4'], true)) {
+            return match (strtolower($extension)) {
+                'm4a' => 'audio/mp4',
+                'aac' => 'audio/aac',
+                'mp3' => 'audio/mpeg',
+                'amr' => 'audio/amr',
+                'ogg', 'oga', 'opus' => 'audio/ogg',
+                'weba', 'webm' => 'audio/webm',
+                'wav' => 'audio/wav',
+                default => $mime ?: 'application/octet-stream',
+            };
         }
 
-        return 'document';
+        return $mime;
     }
 
     /**
