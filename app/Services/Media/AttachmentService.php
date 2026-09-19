@@ -106,6 +106,14 @@ class AttachmentService
         $extension = strtolower($file instanceof UploadedFile ? $file->getClientOriginalExtension() : pathinfo($file, PATHINFO_EXTENSION));
         $mime = $file instanceof UploadedFile ? ($file->getMimeType() ?? '') : '';
 
+        // Some iOS/browser uploads retain a .heic filename after converting the
+        // bytes to JPEG. Content detection must win over that stale extension.
+        if ($file instanceof UploadedFile && in_array(strtolower($mime), [
+            'image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif',
+        ], true)) {
+            return false;
+        }
+
         if (in_array($extension, ['heic', 'heif', 'heifs', 'heic-sequence', 'heif-sequence'], true)) {
             return true;
         }
@@ -140,8 +148,104 @@ class AttachmentService
      */
     public function attemptHeicConversion(string $sourcePath, int $quality = 90): ?string
     {
+        return $this->attemptImageConversionToJpeg($sourcePath, $quality);
+    }
+
+    /** Convert any browser-readable but WhatsApp-incompatible image to JPEG. */
+    public function attemptImageConversionToJpeg(string $sourcePath, int $quality = 90): ?string
+    {
         return $this->attemptImagickConversion($sourcePath, $quality)
             ?? $this->attemptCommandConversion($sourcePath, $quality);
+    }
+
+    /**
+     * Prepare an already validated upload for the WhatsApp media endpoint.
+     * The returned temporary file, when present, is owned by the caller.
+     *
+     * @param  array{path:string,mime_type:string,type:string,is_converted_heic:bool}  $upload
+     * @return array{path:string,mime_type:string,temporary:bool}
+     */
+    public function prepareForWhatsapp(UploadedFile $file, array $upload): array
+    {
+        $sourcePath = $file->getRealPath();
+        if (! is_string($sourcePath) || ! is_file($sourcePath)) {
+            throw new \RuntimeException('The uploaded media file is no longer available.');
+        }
+        $mimeType = $this->normaliseMimeType(
+            $file->getMimeType() ?? $upload['mime_type'],
+            strtolower($file->getClientOriginalExtension()),
+        );
+
+        if ($upload['type'] !== 'image') {
+            return ['path' => $sourcePath, 'mime_type' => $mimeType, 'temporary' => false];
+        }
+
+        if (in_array($mimeType, ['image/jpeg', 'image/jpg', 'image/png'], true)) {
+            return [
+                'path' => $sourcePath,
+                'mime_type' => $mimeType === 'image/jpg' ? 'image/jpeg' : $mimeType,
+                'temporary' => false,
+            ];
+        }
+
+        if ($upload['is_converted_heic']) {
+            $convertedPath = $this->temporaryJpegPath('wa_image_');
+            $contents = $this->storageManager->disk()->get($upload['path']);
+            if (file_put_contents($convertedPath, $contents) === false) {
+                @unlink($convertedPath);
+                throw new \RuntimeException('Could not prepare the converted image for delivery.');
+            }
+        } else {
+            $convertedPath = $this->attemptImageConversionToJpeg($sourcePath);
+        }
+
+        if (! $convertedPath || ! $this->validConvertedImage($convertedPath)) {
+            throw new \RuntimeException('This image must be converted to JPEG or PNG before delivery, but no working server converter was available.');
+        }
+
+        return ['path' => $convertedPath, 'mime_type' => 'image/jpeg', 'temporary' => true];
+    }
+
+    /**
+     * Persist a provider-safe JPEG for URL-based social sends while keeping
+     * browser-native JPEG/PNG uploads untouched.
+     *
+     * @param  array{path:string,url:string,filename:string,mime_type:string,type:string,size_bytes:int,is_converted_heic:bool}  $upload
+     * @return array{path:string,url:string,filename:string,mime_type:string,type:string,size_bytes:int,is_converted_heic:bool}
+     */
+    public function normaliseExternalImage(UploadedFile $file, array $upload): array
+    {
+        if ($upload['type'] !== 'image' || in_array($upload['mime_type'], ['image/jpeg', 'image/jpg', 'image/png'], true)) {
+            return $upload;
+        }
+
+        $prepared = $this->prepareForWhatsapp($file, $upload);
+        if (! $prepared['temporary']) {
+            return $upload;
+        }
+
+        try {
+            $contents = file_get_contents($prepared['path']);
+            if ($contents === false) {
+                throw new \RuntimeException('Could not read the converted image.');
+            }
+
+            $storedPath = dirname($upload['path']).'/'.Str::random(40).'.jpg';
+            if (! $this->storageManager->disk()->put($storedPath, $contents)) {
+                throw new \RuntimeException('Could not store the converted image.');
+            }
+
+            $this->storageManager->disk()->delete($upload['path']);
+
+            return array_merge($upload, [
+                'path' => $storedPath,
+                'url' => $this->storageManager->disk()->url($storedPath),
+                'mime_type' => 'image/jpeg',
+                'size_bytes' => strlen($contents),
+            ]);
+        } finally {
+            @unlink($prepared['path']);
+        }
     }
 
     private function attemptImagickConversion(string $sourcePath, int $quality): ?string
@@ -210,10 +314,10 @@ class AttachmentService
         $ffmpegTarget = $this->temporaryJpegPath('heic_ffmpeg_');
 
         return [
-            ['magick', ['magick', $sourcePath, '-auto-orient', '-strip', '-quality', $quality, $magickTarget], $magickTarget],
-            ['convert', ['convert', $sourcePath, '-auto-orient', '-strip', '-quality', $quality, $convertTarget], $convertTarget],
-            ['heif-convert', ['heif-convert', '-q', $quality, $sourcePath, $heifTarget], $heifTarget],
-            ['ffmpeg', ['ffmpeg', '-y', '-i', $sourcePath, '-frames:v', '1', $ffmpegTarget], $ffmpegTarget],
+            ['magick', [(string) config('whatsapp.media.magick_binary', 'magick'), $sourcePath, '-auto-orient', '-strip', '-quality', $quality, $magickTarget], $magickTarget],
+            ['convert', [(string) config('whatsapp.media.convert_binary', 'convert'), $sourcePath, '-auto-orient', '-strip', '-quality', $quality, $convertTarget], $convertTarget],
+            ['heif-convert', [(string) config('whatsapp.media.heif_convert_binary', 'heif-convert'), '-q', $quality, $sourcePath, $heifTarget], $heifTarget],
+            ['ffmpeg', [(string) config('whatsapp.media.ffmpeg_binary', 'ffmpeg'), '-y', '-i', $sourcePath, '-frames:v', '1', $ffmpegTarget], $ffmpegTarget],
         ];
     }
 

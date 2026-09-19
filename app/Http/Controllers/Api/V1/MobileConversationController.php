@@ -190,6 +190,14 @@ class MobileConversationController extends WorkspaceScopedController
             $file = $request->file('attachment');
             $upload = $this->attachmentService->processUpload($file, 'message-media');
 
+            if (in_array($channel, ['messenger', 'instagram', 'telegram'], true)) {
+                try {
+                    $upload = $this->attachmentService->normaliseExternalImage($file, $upload);
+                } catch (\RuntimeException $e) {
+                    return response()->json(['error' => $e->getMessage()], 422);
+                }
+            }
+
             if ($msgType === 'text' || empty($msgType)) {
                 $msgType = $upload['type'];
             } elseif ($msgType === 'audio' && in_array($upload['type'], ['audio', 'video', 'document'], true)) {
@@ -214,26 +222,28 @@ class MobileConversationController extends WorkspaceScopedController
             ];
 
             if ($channel === 'whatsapp') {
-                $client = CloudApiClient::forWorkspace($conversation->workspace_id);
+                $phoneNumberId = (string) ($conversation->channelAccount?->phone_number_id ?? '');
+                $client = $phoneNumberId !== ''
+                    ? CloudApiClient::forPhoneNumber($phoneNumberId, $conversation->workspace_id)
+                    : CloudApiClient::forWorkspace($conversation->workspace_id);
                 if (! $client) {
                     return response()->json(['error' => 'No active WhatsApp account.'], 422);
                 }
 
-                $tempPath = null;
-                if ($upload['is_converted_heic']) {
-                    $tempPath = tempnam(sys_get_temp_dir(), 'wa_upload_').'.jpg';
-                    file_put_contents($tempPath, $this->storageManager->disk()->get($upload['path']));
-                    $uploadPath = $tempPath;
-                } else {
-                    $uploadPath = $file->getRealPath();
-                }
-
                 try {
-                    $attachmentPayload['media_id'] = $client->uploadMedia($uploadPath, $upload['mime_type']);
-                } finally {
-                    if ($tempPath && file_exists($tempPath)) {
-                        @unlink($tempPath);
+                    $prepared = $this->attachmentService->prepareForWhatsapp($file, $upload);
+                    try {
+                        $attachmentPayload['media_id'] = $client->uploadMedia(
+                            $prepared['path'],
+                            $prepared['mime_type'],
+                        );
+                    } finally {
+                        if ($prepared['temporary'] && file_exists($prepared['path'])) {
+                            @unlink($prepared['path']);
+                        }
                     }
+                } catch (\Throwable $e) {
+                    return response()->json(['error' => $e->getMessage()], 422);
                 }
             }
 

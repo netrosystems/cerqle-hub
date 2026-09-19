@@ -424,7 +424,14 @@ class WhatsappDriver implements ChannelDriverInterface
         if ($message) {
             $current = $priority[$message->status] ?? 0;
             if ($newPriority >= $current) {
-                $message->update(['status' => $mapped]);
+                $patch = ['status' => $mapped];
+                if ($mapped === 'failed' && ! empty($status['errors'])) {
+                    $patch['error_json'] = [
+                        'provider' => 'whatsapp',
+                        'errors' => $status['errors'],
+                    ];
+                }
+                $message->update($patch);
                 $message->load('conversation');
                 MessageStatusUpdated::dispatch($message);
             }

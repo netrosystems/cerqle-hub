@@ -7,6 +7,13 @@ return [
     'coexistence_import_enabled' => env('WHATSAPP_COEXISTENCE_IMPORT_ENABLED', false),
     'coexistence_graph_version' => 'v26.0',
 
+    'media' => [
+        'magick_binary' => env('IMAGEMAGICK_BINARY', 'magick'),
+        'convert_binary' => env('IMAGEMAGICK_CONVERT_BINARY', 'convert'),
+        'heif_convert_binary' => env('HEIF_CONVERT_BINARY', 'heif-convert'),
+        'ffmpeg_binary' => env('FFMPEG_BINARY', 'ffmpeg'),
+    ],
+
     /*
     |--------------------------------------------------------------------------
     | Inbound WhatsApp opt-in keywords
