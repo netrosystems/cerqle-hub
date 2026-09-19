@@ -26,6 +26,10 @@ exit on Laravel's restart signal during the cycle. Deployment waits up to forty-
 seconds and requires every expected process in both worker groups to settle in
 `RUNNING` before recording the release.
 
+## Media conversion runtime
+
+Outbound provider images require PHP Imagick with JPEG/PNG/WebP/HEIC delegates or the configured server binaries. Production currently uses `/usr/bin/convert` and `/usr/bin/heif-convert`; set `IMAGEMAGICK_CONVERT_BINARY` and `HEIF_CONVERT_BINARY` explicitly when paths differ. After changing these values, clear/rebuild Laravel configuration and restart PHP-FPM plus queue workers. Verify the PHP web runtime and real WhatsApp, Messenger and Instagram JPEG/WebP/HEIC sends; CLI availability alone does not prove provider delivery.
+
 ## Why deployment previously stopped
 
 The production checkout contained server-local merge commits. `git pull --ff-only` cannot follow GitHub when histories diverge, even when those server commits introduce no file changes. Do not solve this by repeatedly merging on the server.

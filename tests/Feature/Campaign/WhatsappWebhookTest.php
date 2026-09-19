@@ -6,7 +6,10 @@ use App\Models\User;
 use App\Models\Workspace;
 use App\Modules\Broadcasting\Models\Campaign;
 use App\Modules\Broadcasting\Models\CampaignRecipient;
+use App\Modules\Shared\Models\ChannelAccount;
 use App\Modules\Shared\Models\Contact;
+use App\Modules\Shared\Models\Conversation;
+use App\Modules\Shared\Models\Message;
 use App\Modules\Whatsapp\Services\WhatsappDriver;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use PHPUnit\Framework\Attributes\Test;
@@ -105,6 +108,31 @@ class WhatsappWebhookTest extends TestCase
         [$user, $workspace] = $this->ctx();
         $providerId = 'wamid.fail_123';
         $recipient = $this->makeRecipient($workspace->id, $providerId);
+        $account = ChannelAccount::create([
+            'workspace_id' => $workspace->id,
+            'channel' => 'whatsapp',
+            'display_name' => 'Test WhatsApp',
+            'phone_number_id' => 'PHONE_ID',
+            'status' => 'active',
+        ]);
+        $contact = Contact::factory()->create(['workspace_id' => $workspace->id]);
+        $conversation = Conversation::create([
+            'workspace_id' => $workspace->id,
+            'channel_account_id' => $account->id,
+            'contact_id' => $contact->id,
+            'external_thread_id' => '15550000001',
+            'status' => 'open',
+        ]);
+        $message = Message::create([
+            'conversation_id' => $conversation->id,
+            'direction' => 'out',
+            'channel' => 'whatsapp',
+            'type' => 'image',
+            'status' => 'sent',
+            'provider_message_id' => $providerId,
+            'sent_by' => 'human',
+            'sent_at' => now(),
+        ]);
 
         $driver = app(WhatsappDriver::class);
         $driver->processWebhookPayload($this->statusPayload($providerId, 'failed', [
@@ -112,8 +140,12 @@ class WhatsappWebhookTest extends TestCase
         ]));
 
         $recipient->refresh();
+        $message->refresh();
         $this->assertSame('failed', $recipient->status);
         $this->assertSame('Recipient blocked you', $recipient->failed_reason);
+        $this->assertSame('failed', $message->status);
+        $this->assertSame('whatsapp', $message->error_json['provider']);
+        $this->assertSame('Recipient blocked you', $message->error_json['errors'][0]['title']);
     }
 
     #[Test]
