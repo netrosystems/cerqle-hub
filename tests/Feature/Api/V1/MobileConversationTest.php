@@ -14,7 +14,9 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\URL;
 use Laravel\Sanctum\Sanctum;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 use Tests\TestCase;
 
 class MobileConversationTest extends TestCase
@@ -98,7 +100,7 @@ class MobileConversationTest extends TestCase
         $this->assertEquals('Message 55', $response->json('messages.54.body'));
     }
 
-    public function test_mobile_media_uses_authenticated_route_and_media_only_preview_label(): void
+    public function test_mobile_media_uses_temporary_signed_route_and_media_only_preview_label(): void
     {
         Storage::fake('public');
         $workspace = Workspace::factory()->create();
@@ -137,12 +139,34 @@ class MobileConversationTest extends TestCase
             ->assertJsonPath('data.0.latest_message_preview', 'Image')
             ->assertJsonPath('data.0.last_message.body', 'Image');
 
-        $attachmentUrl = (string) $index->json('data.0.last_message.attachment_url');
-        $this->assertStringContainsString("/api/v1/mobile/conversations/{$conversation->uuid}/messages/{$message->id}/media", $attachmentUrl);
+        $attachmentUrl = (string) $index->json('data.0.last_message.payload.attachment_url');
+        $this->assertStringContainsString("/api/v1/mobile/conversations/{$conversation->uuid}/messages/{$message->id}/media/signed", $attachmentUrl);
+        $this->assertStringContainsString('expires=', $attachmentUrl);
+        $this->assertStringContainsString('signature=', $attachmentUrl);
 
-        $media = $this->get("/api/v1/mobile/conversations/{$conversation->uuid}/messages/{$message->id}/media");
+        auth()->guard('web')->logout();
+        $this->app['auth']->forgetGuards();
+        $media = $this->get($attachmentUrl);
         $media->assertOk()->assertHeader('Content-Type', 'image/jpeg');
-        $this->assertSame('mobile-image-bytes', $media->streamedContent());
+        $content = $media->baseResponse instanceof StreamedResponse
+            ? $media->streamedContent()
+            : $media->getContent();
+        $this->assertSame('mobile-image-bytes', $content);
+
+        $this->get($attachmentUrl.'&tampered=1')->assertForbidden();
+
+        $otherConversation = Conversation::create([
+            'workspace_id' => $workspace->id,
+            'contact_id' => $contact->id,
+            'channel_account_id' => $account->id,
+            'status' => 'open',
+        ]);
+        $wrongConversationUrl = URL::temporarySignedRoute(
+            'api.v1.mobile.conversations.messages.media.signed',
+            now()->addMinutes(5),
+            ['uuid' => $otherConversation->uuid, 'message' => $message->id],
+        );
+        $this->get($wrongConversationUrl)->assertNotFound();
     }
 
     public function test_mobile_conversations_index_supports_live_folder_and_returns_online_status(): void

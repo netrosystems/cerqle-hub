@@ -9,6 +9,7 @@ use App\Services\PublicHttpClient;
 use App\Services\StorageManager;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\URL;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 
@@ -69,6 +70,34 @@ class MessageMediaResolver
             }
         } elseif (! empty($payload['preview_url'])) {
             $payload['preview_url'] = $this->browserSafeUrl((string) $payload['preview_url'], $request);
+        }
+
+        return $payload;
+    }
+
+    /** @return array<string, mixed>|null */
+    public function augmentPayloadForRoute(Message $message, ?string $routeName = null): ?array
+    {
+        $payload = $message->payload;
+        if (! $payload) {
+            return $payload;
+        }
+
+        $url = $this->routedUrl($message, $routeName);
+        if (! $url) {
+            return $payload;
+        }
+
+        $type = (string) $message->type;
+        $payload['media_url'] = $url;
+        $payload['attachment_url'] = $url;
+        $payload['preview_url'] = $url;
+        $payload['url'] = $url;
+        $payload['link'] = $url;
+        if (isset($payload[$type]) && is_array($payload[$type])) {
+            $payload[$type]['url'] = $url;
+            $payload[$type]['preview_url'] = $url;
+            $payload[$type]['link'] = $url;
         }
 
         return $payload;
@@ -260,7 +289,14 @@ class MessageMediaResolver
             return null;
         }
         $parameters = ['uuid' => $message->conversation->uuid, 'message' => $message->id];
-        if ($routeName === 'api.v1.mobile.conversations.messages.media') {
+        if (in_array($routeName, [
+            'api.v1.mobile.conversations.messages.media',
+            'api.v1.mobile.conversations.messages.media.signed',
+        ], true)) {
+            if ($routeName === 'api.v1.mobile.conversations.messages.media.signed') {
+                return URL::temporarySignedRoute($routeName, now()->addDay()->endOfDay(), $parameters);
+            }
+
             return route($routeName, $parameters);
         }
 

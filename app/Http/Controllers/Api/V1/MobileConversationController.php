@@ -161,6 +161,14 @@ class MobileConversationController extends WorkspaceScopedController
         return $this->mediaResolver->response($message, $request);
     }
 
+    public function signedMedia(Request $request, string $uuid, Message $message): \Symfony\Component\HttpFoundation\Response
+    {
+        $conversation = Conversation::where('uuid', $uuid)->firstOrFail();
+        abort_unless((int) $message->conversation_id === (int) $conversation->id, 404);
+
+        return $this->mediaResolver->response($message, $request);
+    }
+
     /**
      * POST /api/v1/mobile/conversations/{uuid}/reply
      * Send a message (text, template, media).
@@ -727,7 +735,7 @@ class MobileConversationController extends WorkspaceScopedController
     private function formatMessage(Message $m): array
     {
         $m->loadMissing('conversation');
-        $payload = $this->mediaResolver->augmentPayload($m, request(), 'api.v1.mobile.conversations.messages.media');
+        $payload = $this->mediaResolver->augmentPayload($m, request(), 'api.v1.mobile.conversations.messages.media.signed');
 
         return [
             'id' => $m->id,

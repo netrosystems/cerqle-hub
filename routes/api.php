@@ -56,6 +56,10 @@ Route::post('v1/broadcasting/auth', [BroadcastController::class, 'authenticate']
     ->middleware(['auth:sanctum', 'throttle:api', 'api.ability:*'])
     ->name('api.v1.broadcasting.auth');
 
+Route::get('v1/mobile/conversations/{uuid}/messages/{message}/media/signed', [MobileConversationController::class, 'signedMedia'])
+    ->middleware(['signed', 'throttle:api'])
+    ->name('api.v1.mobile.conversations.messages.media.signed');
+
 Route::prefix('v1')->middleware(['auth:sanctum', 'throttle:api', 'demo', 'client.access', 'api.ability:*'])->group(function () {
     Route::get('/notification-availability', [NotificationAvailabilityController::class, 'show']);
     Route::patch('/notification-availability', [NotificationAvailabilityController::class, 'update']);
