@@ -1191,15 +1191,23 @@
     if (role !== 'visitor' && Array.isArray(quickReplies) && quickReplies.length) {
       var choices = document.createElement('div');
       choices.className = 'wb-ai-choices';
-      quickReplies.slice(0, 4).forEach(function (choice) {
-        if (!choice || typeof choice !== 'string') return;
+      quickReplies.slice(0, 4).forEach(function (raw) {
+        // A choice arrives either as a plain string (messages written before
+        // roles existed) or as {id, label, role}. The role is decided on the
+        // server, so a "talk to a person" label translated into any language
+        // still reaches a human instead of being posted back as chat text.
+        var choice = typeof raw === 'string' ? { label: raw, role: '' } : raw;
+        if (!choice || typeof choice.label !== 'string' || !choice.label) return;
+        var label = choice.label;
+        var isHandoff = choice.role === 'handoff'
+          || (!choice.role && handoffOffer && label.toLowerCase().indexOf('person') !== -1);
         var button = document.createElement('button');
         button.type = 'button';
         button.className = 'wb-ai-choice';
-        button.textContent = choice;
+        button.textContent = label;
         button.addEventListener('click', function () {
-          if (handoffOffer && choice.toLowerCase().indexOf('person') !== -1) requestHumanAgent();
-          else send(choice);
+          if (isHandoff) requestHumanAgent();
+          else send(label);
           choices.querySelectorAll('button').forEach(function (item) { item.disabled = true; });
         });
         choices.appendChild(button);

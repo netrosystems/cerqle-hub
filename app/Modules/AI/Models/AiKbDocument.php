@@ -26,11 +26,11 @@ class AiKbDocument extends Model
         return 'uuid';
     }
 
-    protected $fillable = ['kb_id', 'source_type', 'source_ref', 'title', 'status', 'error_message', 'tokens', 'last_indexed_at', 'crawl_root_id', 'sitemap_depth'];
+    protected $fillable = ['kb_id', 'source_type', 'source_ref', 'title', 'status', 'error_message', 'tokens', 'last_indexed_at', 'crawl_root_id', 'sitemap_depth', 'authoritative', 'priority'];
 
     protected function casts(): array
     {
-        return ['last_indexed_at' => 'datetime', 'tokens' => 'integer'];
+        return ['last_indexed_at' => 'datetime', 'tokens' => 'integer', 'authoritative' => 'boolean', 'priority' => 'integer'];
     }
 
     /** @return BelongsTo<AiKnowledgeBase, $this> */

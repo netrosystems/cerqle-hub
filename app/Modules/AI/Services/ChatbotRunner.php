@@ -4,6 +4,14 @@ namespace App\Modules\AI\Services;
 
 use App\Modules\AI\Models\AiChatbot;
 use App\Modules\AI\Models\AiKbChunk;
+use App\Modules\AI\Models\AiKnowledgeBase;
+use App\Modules\AI\Services\Smart\AnswerDiagnostics;
+use App\Modules\AI\Services\Smart\CannedPhrases;
+use App\Modules\AI\Services\Smart\Choices;
+use App\Modules\AI\Services\Smart\ConversationLanguage;
+use App\Modules\AI\Services\Smart\EvidenceSelector;
+use App\Modules\AI\Services\Smart\IntentClassifier;
+use App\Modules\AI\Services\Smart\QueryEmbedder;
 use App\Modules\AI\ValueObjects\ChatbotAnswer;
 use App\Modules\Shared\Models\Message;
 
@@ -11,7 +19,16 @@ class ChatbotRunner
 {
     private ?ChatbotAnswer $lastAnswer = null;
 
-    public function __construct(private LlmGateway $llmGateway, private EmbeddingStore $embedStore) {}
+    public function __construct(
+        private LlmGateway $llmGateway,
+        private EmbeddingStore $embedStore,
+        private QueryEmbedder $queryEmbedder,
+        private EvidenceSelector $evidenceSelector,
+        private AnswerDiagnostics $diagnostics,
+        private IntentClassifier $intents,
+        private CannedPhrases $phrases,
+        private ConversationLanguage $language,
+    ) {}
 
     /** Backward-compatible plain-text entry point used by existing callers. */
     public function run(AiChatbot $bot, Message $inboundMessage, bool $throwProviderErrors = false): ?string
@@ -83,20 +100,51 @@ class ChatbotRunner
         return array_merge(['reply' => $answer->displayBody, 'tokens_used' => $answer->tokensUsed], $answer->toArray());
     }
 
-    /** @param array<int, array{role:string,content:string}> $history */
+    /**
+     * Resolve, then record exactly once.
+     *
+     * The ladder below has many exits; funnelling them through here is what lets
+     * every turn be accounted for, including the ones that never reach a model.
+     *
+     * @param  array<int, array{role:string,content:string}>  $history
+     */
     private function generate(AiChatbot $bot, string $message, int $workspaceId, array $history, bool $alreadyClarified, string $idempotencyKey, ?int $conversationId, bool $throwProviderErrors): ChatbotAnswer
+    {
+        $started = microtime(true);
+        $answer = $this->resolveAnswer($bot, $message, $workspaceId, $history, $alreadyClarified, $idempotencyKey, $conversationId, $throwProviderErrors);
+
+        $this->diagnostics->record(
+            $bot,
+            $workspaceId,
+            $conversationId,
+            $message,
+            $answer,
+            (int) ((microtime(true) - $started) * 1000),
+        );
+
+        return $answer;
+    }
+
+    /** @param array<int, array{role:string,content:string}> $history */
+    private function resolveAnswer(AiChatbot $bot, string $message, int $workspaceId, array $history, bool $alreadyClarified, string $idempotencyKey, ?int $conversationId, bool $throwProviderErrors): ChatbotAnswer
     {
         $message = trim($message);
         if ($message === '') {
-            return $this->fallback($bot, $alreadyClarified, 0.0);
+            return $this->fallback($bot, $alreadyClarified, 0.0, $workspaceId, $conversationId);
         }
         if ($this->isAccountSpecific($message)) {
             return new ChatbotAnswer(
                 'I can help with general information, but a team member needs to check account or order details. Would you like me to connect you?',
-                answerOrigin: 'handoff', responseMode: 'handoff', quickReplies: ['Talk to a person'], handoffOffer: true,
+                answerOrigin: 'handoff', responseMode: 'handoff',
+                quickReplies: $this->fallbackChoices(['qr_talk_to_person'], $workspaceId, $conversationId, $message),
+                handoffOffer: true,
             );
         }
-        if (config('ai.smart_bot.business_aware_routing') && $history === [] && $this->isGreeting($message)) {
+        if ($turn = $this->conversationalTurn($bot, $message, $workspaceId, $history, $conversationId)) {
+            return $turn;
+        }
+        if (config('ai.smart_bot.business_aware_routing') && $history === [] && ! config('ai.smart_bot.conversational_turns')
+            && $this->isGreeting($message)) {
             return new ChatbotAnswer('Hello! How can I help you today?', answerOrigin: 'greeting', responseMode: 'greeting');
         }
 
@@ -114,11 +162,11 @@ class ChatbotRunner
                 return new ChatbotAnswer($exactFaq, answerOrigin: 'knowledge_base', citations: $citations, confidence: $confidence);
             }
             if ($scope === 'verified_only' && ! $hasVerifiedEvidence) {
-                return $this->fallback($bot, $alreadyClarified, $confidence);
+                return $this->fallback($bot, $alreadyClarified, $confidence, $workspaceId, $conversationId, $message);
             }
             if ($scope === 'business_only' && ! $hasVerifiedEvidence
                 && ! $this->businessRelevant($bot, $message, $confidence, $clarificationThreshold)) {
-                return $this->fallback($bot, $alreadyClarified, $confidence);
+                return $this->fallback($bot, $alreadyClarified, $confidence, $workspaceId, $conversationId, $message);
             }
         }
 
@@ -137,7 +185,11 @@ class ChatbotRunner
                 $conversationId,
             );
             if (blank($response->content)) {
+                // The credit is returned and so is a usable reply: sending the
+                // empty body would surface as "the bot said nothing".
                 $this->llmGateway->rejectMalformed($response);
+
+                return $this->fallback($bot, $alreadyClarified, $confidence, $workspaceId, $conversationId, $message);
             }
 
             return new ChatbotAnswer(
@@ -154,28 +206,100 @@ class ChatbotRunner
 
             return new ChatbotAnswer(
                 $bot->fallback_reply ?: 'I could not complete that answer. Would you like help from a team member?',
-                answerOrigin: 'fallback', responseMode: 'handoff', quickReplies: ['Talk to a person'],
+                answerOrigin: 'fallback', responseMode: 'handoff',
+                quickReplies: $this->fallbackChoices(['qr_talk_to_person'], $workspaceId, $conversationId, $message),
                 handoffOffer: true, confidence: $confidence,
             );
         }
     }
 
+    /**
+     * Greetings, thanks and closings, answered in the customer's language for
+     * nothing.
+     *
+     * The old greeting shortcut only fired on the very first turn and only
+     * matched English, so a customer saying "thanks" mid-conversation in their
+     * own language fell through retrieval, found nothing, and was handed to a
+     * person for no reason. Intent here is recognised by meaning rather than by
+     * spelling, so it works in languages nobody listed.
+     *
+     * @param  array<int, array{role:string,content:string}>  $history
+     */
+    private function conversationalTurn(AiChatbot $bot, string $message, int $workspaceId, array $history, ?int $conversationId): ?ChatbotAnswer
+    {
+        if (! config('ai.smart_bot.conversational_turns')) {
+            return null;
+        }
+
+        $vector = $this->queryEmbedder->vector($workspaceId, $message);
+        $result = $this->intents->classify($workspaceId, $message, $vector, $this->botAskedAQuestion($history));
+
+        $phraseKey = match ($result['intent']) {
+            'greeting' => 'greeting',
+            'thanks' => 'thanks_ack',
+            'closing' => 'closing',
+            'decline' => 'decline_ack',
+            default => null,
+        };
+        if ($phraseKey === null) {
+            return null;
+        }
+
+        $language = $this->language->resolve($conversationId);
+
+        return new ChatbotAnswer(
+            $this->phrases->get($phraseKey, $language, $workspaceId, $message),
+            answerOrigin: 'conversation',
+            responseMode: 'answer',
+        );
+    }
+
+    /**
+     * Whether the bot's own last turn asked something, so a bare yes or no can
+     * be read as an answer to it rather than as an unanswerable question.
+     *
+     * @param  array<int, array{role:string,content:string}>  $history
+     */
+    private function botAskedAQuestion(array $history): bool
+    {
+        $last = end($history);
+
+        return is_array($last)
+            && ($last['role'] ?? null) === 'assistant'
+            && preg_match('/[?\x{061F}\x{FF1F}]\s*$/u', trim((string) ($last['content'] ?? ''))) === 1;
+    }
+
     /** @return array<int, array<string,mixed>> */
     private function retrieve(AiChatbot $bot, string $message, int $workspaceId, bool $throwProviderErrors): array
     {
-        if (! $bot->ai_kb_id) {
+        if (! $bot->ai_kb_id || ! $this->knowledgeBaseBelongsToWorkspace((int) $bot->ai_kb_id, $workspaceId)) {
             return [];
         }
-        $queryEmbedding = [];
-        try {
-            $queryEmbedding = $this->llmGateway->embed($workspaceId, [$message])[0] ?? [];
-        } catch (\Throwable $error) {
-            if ($throwProviderErrors && ! config('ai.smart_bot.hybrid_retrieval')) {
-                throw $error;
-            }
-        }
 
-        return $this->embedStore->search((int) $bot->ai_kb_id, $queryEmbedding, (int) ($bot->max_context_chunks ?: 5), $message);
+        $queryEmbedding = $this->queryEmbedder->vector(
+            $workspaceId,
+            $message,
+            $throwProviderErrors && ! config('ai.smart_bot.hybrid_retrieval'),
+        );
+
+        $results = $this->embedStore->search(
+            (int) $bot->ai_kb_id,
+            $queryEmbedding,
+            (int) ($bot->max_context_chunks ?: 5),
+            $message,
+        );
+
+        return $this->evidenceSelector->select($results, (int) ($bot->max_context_chunks ?: 5))['passages'];
+    }
+
+    /**
+     * ai_kb_chunks carries no workspace_id, so retrieval trusts the bot row for
+     * tenancy. Confirm the knowledge base really belongs to the acting workspace
+     * before any of its content can reach a prompt.
+     */
+    private function knowledgeBaseBelongsToWorkspace(int $kbId, int $workspaceId): bool
+    {
+        return AiKnowledgeBase::whereKey($kbId)->where('workspace_id', $workspaceId)->exists();
     }
 
     /** @param array<int, AiKbChunk> $contextChunks */
@@ -225,21 +349,55 @@ PROMPT;
         return implode("\n\n", array_filter($parts));
     }
 
-    private function fallback(AiChatbot $bot, bool $alreadyClarified, float $confidence): ChatbotAnswer
+    private function fallback(AiChatbot $bot, bool $alreadyClarified, float $confidence, ?int $workspaceId = null, ?int $conversationId = null, ?string $message = null): ChatbotAnswer
     {
         if (($bot->fallback_mode ?: 'clarify_then_handoff') === 'clarify_then_handoff' && ! $alreadyClarified) {
             return new ChatbotAnswer(
                 'Could you clarify what you need help with so I can find the right business information?',
-                answerOrigin: 'fallback', responseMode: 'clarification', quickReplies: ['Tell me more', 'Talk to a person'],
+                answerOrigin: 'fallback', responseMode: 'clarification',
+                quickReplies: $this->fallbackChoices(['qr_tell_me_more', 'qr_talk_to_person'], $workspaceId, $conversationId, $message),
                 handoffOffer: true, confidence: $confidence,
             );
         }
 
         return new ChatbotAnswer(
             $bot->fallback_reply ?: 'I do not have verified information for that. Would you like me to connect you with a team member?',
-            answerOrigin: 'fallback', responseMode: 'handoff', quickReplies: ['Talk to a person'],
+            answerOrigin: 'fallback', responseMode: 'handoff',
+            quickReplies: $this->fallbackChoices(['qr_talk_to_person'], $workspaceId, $conversationId, $message),
             handoffOffer: true, confidence: $confidence,
         );
+    }
+
+    /**
+     * The bot's own offers, in the customer's language and carrying their roles.
+     *
+     * Only server-authored choices may ask for a person; a model-produced choice
+     * can never do more than send text back. While the flag is off these stay
+     * the historical English strings, so nothing reading stored messages sees a
+     * shape it does not expect.
+     *
+     * @param  list<string>  $keys
+     * @return list<string>|list<array{id:string,label:string,role:string}>
+     */
+    private function fallbackChoices(array $keys, ?int $workspaceId, ?int $conversationId, ?string $message): array
+    {
+        $english = ['qr_tell_me_more' => 'Tell me more', 'qr_talk_to_person' => 'Talk to a person'];
+
+        if (! config('ai.smart_bot.multilingual_handover')) {
+            return array_map(static fn (string $key): string => $english[$key], $keys);
+        }
+
+        $language = $this->language->resolve($conversationId);
+        $choices = [];
+        foreach ($keys as $index => $key) {
+            $choices[] = Choices::make(
+                $this->phrases->get($key, $language, $workspaceId, $message) ?: $english[$key],
+                $key === 'qr_talk_to_person' ? Choices::ROLE_HANDOFF : Choices::ROLE_SEND,
+                $index + 1,
+            );
+        }
+
+        return $choices;
     }
 
     private function effectiveScope(AiChatbot $bot): string

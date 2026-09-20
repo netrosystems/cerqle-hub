@@ -3,12 +3,14 @@
 namespace App\Modules\AI\Services;
 
 use App\Modules\AI\Exceptions\AiCreditsExhaustedException;
+use App\Modules\AI\Exceptions\AiRateLimitException;
 use App\Modules\AI\Exceptions\AiRequestInProgressException;
 use App\Modules\AI\Models\AiCreditUsage;
 use App\Modules\AI\Models\AiRun;
 use App\Modules\AI\Services\Llm\LlmManager;
 use App\Modules\AI\Services\Llm\LlmResponse;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\RateLimiter;
 
 class LlmGateway
 {
@@ -157,11 +159,82 @@ class LlmGateway
         );
     }
 
-    public function rejectMalformed(LlmResponse $response): void
+    public function rejectMalformed(LlmResponse $response, string $code = 'malformed_response'): void
     {
         if ($response->creditUsageId) {
-            $this->credits->refundCompleted($response->creditUsageId, 'malformed_response');
+            $this->credits->refundCompleted($response->creditUsageId, $code);
         }
+    }
+
+    /**
+     * A short chat that supports an answer without being one.
+     *
+     * Translating a question so it can be searched, or rendering a fixed UI
+     * phrase in the customer's language, are infrastructure the client should
+     * not pay for — charging for them would mean a client's allowance drains
+     * faster the more languages their customers speak.
+     *
+     * Modelled on embed(): it resolves a provider and records an AiRun, but
+     * never opens a credit reservation, so it cannot exhaust an allowance or
+     * trip the per-minute limiter that guards paid features.
+     *
+     * @param  array<int, array<string, mixed>>  $messages
+     * @param  array<string, mixed>  $opts
+     */
+    public function chatUnmetered(int $workspaceId, array $messages, array $opts, string $featureKey): LlmResponse
+    {
+        // Two independent guards, so a billable feature can never be smuggled
+        // through by editing one config value.
+        $allowed = (array) config('ai.credits.unmetered_features', []);
+        if (! in_array($featureKey, $allowed, true) || (int) config("ai.credits.rates.{$featureKey}", 1) !== 0) {
+            throw new \LogicException("The feature {$featureKey} is not allowed to bypass AI credit metering.");
+        }
+
+        // Queued jobs skip AiCreditService's limiter entirely, so this path
+        // carries its own ceiling rather than inheriting none.
+        $limiterKey = 'ai:unmetered:'.$workspaceId;
+        if (RateLimiter::tooManyAttempts($limiterKey, (int) config('ai.abuse.unmetered_per_minute', 30))) {
+            throw new AiRateLimitException;
+        }
+        RateLimiter::hit($limiterKey, 60);
+
+        unset($opts['feature_key'], $opts['idempotency_key'], $opts['internal_retry']);
+        $opts['max_tokens'] = min((int) ($opts['max_tokens'] ?? 60), 60);
+
+        try {
+            $provider = LlmManager::forWorkspace($workspaceId);
+            $response = $provider->chat($messages, $opts);
+        } catch (\Throwable $error) {
+            $this->recordUnmeteredRun($workspaceId, $featureKey, null, 'error');
+            Log::warning('llm.unmetered_failed', [
+                'workspace_id' => $workspaceId,
+                'feature_key' => $featureKey,
+                'error' => $error->getMessage(),
+            ]);
+
+            throw $error;
+        }
+
+        $this->recordUnmeteredRun($workspaceId, $featureKey, $response, 'ok');
+
+        return $response;
+    }
+
+    private function recordUnmeteredRun(int $workspaceId, string $featureKey, ?LlmResponse $response, string $status): void
+    {
+        AiRun::create([
+            'workspace_id' => $workspaceId,
+            'feature_key' => $featureKey,
+            'provider_source' => 'infrastructure',
+            'chatbot_id' => null,
+            'conversation_id' => null,
+            'prompt_tokens' => $response?->promptTokens ?? 0,
+            'completion_tokens' => $response?->completionTokens ?? 0,
+            'cost_cents' => 0,
+            'latency_ms' => $response?->latencyMs ?? 0,
+            'model' => $response?->model,
+            'status' => $status,
+        ]);
     }
 
     public function embed(int $workspaceId, array $texts): array

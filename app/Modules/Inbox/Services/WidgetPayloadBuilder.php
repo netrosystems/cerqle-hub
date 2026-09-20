@@ -2,6 +2,7 @@
 
 namespace App\Modules\Inbox\Services;
 
+use App\Modules\AI\Services\Smart\Choices;
 use App\Modules\Inbox\Models\ChatWidget;
 use App\Modules\Shared\Models\Conversation;
 use App\Modules\Shared\Models\Message;
@@ -43,7 +44,7 @@ class WidgetPayloadBuilder
             'filename' => $message->payload['filename'] ?? null,
             'mime_type' => $message->payload['mime_type'] ?? null,
             'file_size' => $message->payload['file_size'] ?? null,
-            'quick_replies' => $message->payload['ai_answer']['quick_replies'] ?? [],
+            'quick_replies' => $this->quickReplies($message),
             'answer_origin' => $message->payload['ai_answer']['answer_origin'] ?? null,
             'response_mode' => $message->payload['ai_answer']['response_mode'] ?? null,
             'citations' => $message->payload['ai_answer']['citations'] ?? [],
@@ -54,6 +55,25 @@ class WidgetPayloadBuilder
                 : null,
             'created_at' => optional($message->sent_at ?? $message->created_at)->toIso8601String(),
         ];
+    }
+
+    /**
+     * Choices as the widget should render them.
+     *
+     * With roles enabled a translated "talk to a person" reaches a human,
+     * because the widget acts on the role rather than on the English wording.
+     * While the flag is off the stored strings pass through untouched.
+     *
+     * @return list<mixed>
+     */
+    private function quickReplies(Message $message): array
+    {
+        $stored = $message->payload['ai_answer']['quick_replies'] ?? [];
+        if (! config('ai.smart_bot.multilingual_handover')) {
+            return is_array($stored) ? $stored : [];
+        }
+
+        return Choices::normalise($stored, (bool) ($message->payload['ai_answer']['handoff_offer'] ?? false));
     }
 
     /**

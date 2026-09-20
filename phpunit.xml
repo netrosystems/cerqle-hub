@@ -30,6 +30,21 @@
         <env name="QUEUE_CONNECTION" value="sync"/>
         <env name="BROADCAST_CONNECTION" value="log"/>
         <env name="SESSION_DRIVER" value="array"/>
+        <!--
+            Smart Bot behaviour switches are pinned off so the suite is
+            deterministic whatever a developer has enabled in their own .env.
+            A test that needs one on turns it on explicitly with config()->set().
+        -->
+        <env name="SMART_BOT_BUSINESS_AWARE_ROUTING" value="false" force="true"/>
+        <env name="KB_HYBRID_RETRIEVAL_ENABLED" value="false" force="true"/>
+        <env name="SMART_BOT_RETRIEVAL_AUTHORITY" value="false" force="true"/>
+        <env name="SMART_BOT_DIAGNOSTICS" value="false" force="true"/>
+        <env name="SMART_BOT_CONVERSATIONAL_TURNS" value="false" force="true"/>
+        <env name="SMART_BOT_MULTILINGUAL_INTENT" value="false" force="true"/>
+        <env name="SMART_BOT_MULTILINGUAL_HANDOVER" value="false" force="true"/>
+        <env name="SMART_BOT_CHANNEL_CHOICE_FALLBACK" value="false" force="true"/>
+        <env name="SMART_BOT_NO_AGENT_HOLDING_REPLY" value="false" force="true"/>
+        <env name="SMART_BOT_CONTINUES_AFTER_HANDOFF" value="false" force="true"/>
         <env name="TELESCOPE_ENABLED" value="false"/>
         <env name="VITE_TESTING" value="true"/>
     </php>

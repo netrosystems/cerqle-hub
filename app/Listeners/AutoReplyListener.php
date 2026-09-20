@@ -4,12 +4,17 @@ namespace App\Listeners;
 
 use App\Events\MessageReceived;
 use App\Events\MessageSent;
+use App\Modules\AI\Services\Smart\CannedPhrases;
+use App\Modules\AI\Services\Smart\ConversationLanguage;
 use App\Modules\Inbox\Jobs\GenerateGroupedAiReply;
 use App\Modules\Inbox\Models\ChatWidget;
 use App\Modules\Inbox\Models\InboundReplyOwnership;
+use App\Modules\Inbox\Services\AgentAvailability;
 use App\Modules\Inbox\Services\AiAutomationSettings;
 use App\Modules\Inbox\Services\AiReplyEligibility;
+use App\Modules\Inbox\Services\AiRoutingReason;
 use App\Modules\Inbox\Services\ConversationHandoverService;
+use App\Modules\Inbox\Services\HandoverIntent;
 use App\Modules\Inbox\Services\WidgetAiAvailability;
 use App\Modules\Shared\Models\Conversation;
 use App\Modules\Shared\Models\Message;
@@ -80,7 +85,7 @@ class AutoReplyListener
         $conversation = $message->conversation;
         if (! $conversation || ! $this->access->allowsWorkspaceWrite($conversation->workspace_id)) {
             if ($conversation) {
-                $this->ownership($message, 'human', 'skipped');
+                $this->ownership($message, 'human', 'skipped', null, AiRoutingReason::WORKSPACE_WRITE_BLOCKED);
             }
 
             return;
@@ -88,33 +93,40 @@ class AutoReplyListener
         $channelAccount = $conversation->channelAccount;
 
         if (! $channelAccount || (int) $channelAccount->workspace_id !== (int) $conversation->workspace_id) {
-            $this->ownership($message, 'human', 'skipped');
+            $this->ownership($message, 'human', 'skipped', null, AiRoutingReason::CHANNEL_ACCOUNT_INVALID);
 
             return;
         }
 
         $eligibility = app(AiReplyEligibility::class);
-        if ($eligibility->humanOwned($conversation, $message->channel) || ($message->channel === 'email' && $eligibility->suppressed($message)) || $message->origin === 'whatsapp_history') {
-            $this->ownership($message, 'human', 'skipped');
+        $humanOwnedReason = match (true) {
+            $eligibility->humanOwned($conversation, $message->channel) => AiRoutingReason::HUMAN_OWNED,
+            $message->channel === 'email' && $eligibility->suppressed($message) => AiRoutingReason::EMAIL_SUPPRESSED,
+            $message->origin === 'whatsapp_history' => AiRoutingReason::HISTORY_IMPORT,
+            default => null,
+        };
+        if ($humanOwnedReason !== null) {
+            $this->ownership($message, 'human', 'skipped', null, $humanOwnedReason);
 
             return;
         }
 
-        foreach (HANDOVER_PHRASES as $phrase) {
-            if (str_contains(strtolower($message->body ?? ''), $phrase)) {
-                $this->triggerHandover($conversation, 'user_request');
-                $this->ownership($message, 'human', 'completed');
+        // Embedding is deliberately not allowed here: this listener runs inside
+        // the customer's own send request, so a provider call would be latency
+        // they wait through. The queued reply job does the fuller check.
+        if (app(HandoverIntent::class)->wants($message, (int) $conversation->workspace_id, allowEmbedding: false)) {
+            $this->triggerHandover($conversation, 'user_request', $message);
+            $this->ownership($message, 'human', 'completed', null, AiRoutingReason::HANDOVER_REQUESTED);
 
-                return;
-            }
+            return;
         }
         if (app(AutomationTriggerListener::class)->routeMessage($event)) {
-            $this->ownership($message, 'workflow', 'completed');
+            $this->ownership($message, 'workflow', 'completed', null, AiRoutingReason::WORKFLOW_OWNED);
 
             return;
         }
         if ($eligibility->suppressed($message)) {
-            $this->ownership($message, 'ai', 'skipped');
+            $this->ownership($message, 'ai', 'skipped', null, AiRoutingReason::MESSAGE_SUPPRESSED);
 
             return;
         }
@@ -129,7 +141,7 @@ class AutoReplyListener
         );
 
         if ($autoReply) {
-            $this->ownership($message, 'rule', 'sending');
+            $this->ownership($message, 'rule', 'sending', null, AiRoutingReason::RULE_MATCHED);
             $this->dispatchAutoReply($autoReply, $message, $conversation);
 
             return;
@@ -139,12 +151,21 @@ class AutoReplyListener
         if ($message->channel === 'webchat') {
             $widget = ChatWidget::where('workspace_id', $conversation->workspace_id)->where('channel_account_id', $channelAccount->id)->first();
             $availability = app(WidgetAiAvailability::class);
-            if (! $widget || ! $availability->available($widget) || ! $availability->available($widget, CarbonImmutable::parse($message->created_at))) {
-                $this->ownership($message, 'ai', 'skipped');
+            if (! $widget) {
+                $this->ownership($message, 'ai', 'skipped', null, AiRoutingReason::CHATBOT_MISSING);
 
                 return;
             }
-            $this->ownership($message, 'ai', 'queued', $widget->ai_revision);
+            // Checked for now and for when the message arrived, so a boundary
+            // crossed mid-queue cannot produce a late reply.
+            $unavailable = $availability->reason($widget)
+                ?? $availability->reason($widget, CarbonImmutable::parse($message->created_at));
+            if ($unavailable !== null) {
+                $this->ownership($message, 'ai', 'skipped', null, $unavailable);
+
+                return;
+            }
+            $this->ownership($message, 'ai', 'queued', $widget->ai_revision, AiRoutingReason::QUEUED);
             GenerateGroupedAiReply::dispatch($message->id, $conversation->workspace_id, $channelAccount->id, (int) $widget->ai_chatbot_id, null, $widget->id, $widget->ai_revision)->onQueue('ai');
 
             return;
@@ -153,25 +174,35 @@ class AutoReplyListener
         $group = $settings->group($message->channel);
         $setting = $group ? $settings->find($conversation->workspace_id, $group) : null;
         if ($setting && (! $settings->available($setting) || ! $setting->activated_at || $message->sent_at < $setting->activated_at)) {
-            $this->ownership($message, 'ai', 'skipped');
+            $this->ownership($message, 'ai', 'skipped', null, AiRoutingReason::GROUP_UNAVAILABLE);
 
             return;
         }
         $chatbotId = $setting ? $setting->chatbot_id : ($channelAccount->meta_json['ai_chatbot_id'] ?? null);
         if (! $chatbotId) {
-            $this->ownership($message, 'ai', 'skipped');
+            $this->ownership($message, 'ai', 'skipped', null, AiRoutingReason::NO_CHATBOT_ASSIGNED);
 
             return;
         }
 
-        $this->ownership($message, 'ai', 'queued', $setting?->revision);
+        $this->ownership($message, 'ai', 'queued', $setting?->revision, AiRoutingReason::QUEUED);
         GenerateGroupedAiReply::dispatch($message->id, $conversation->workspace_id, $channelAccount->id, (int) $chatbotId, $setting?->revision)->onQueue('ai');
     }
 
-    private function ownership(Message $message, string $owner, string $status, ?int $revision = null): void
+    private function ownership(Message $message, string $owner, string $status, ?int $revision = null, ?string $reasonCode = null): void
     {
-        InboundReplyOwnership::where('workspace_id', $message->conversation->workspace_id)->where('message_id', $message->id)
-            ->update(['owner' => $owner, 'status' => $status, 'settings_revision' => $revision]);
+        $attributes = ['owner' => $owner, 'status' => $status, 'settings_revision' => $revision];
+
+        // The code is the stable machine-readable value; the sentence beside it
+        // is what an operator reads in the inbox.
+        if ($reasonCode !== null) {
+            $attributes['reason_code'] = $reasonCode;
+            $attributes['reason'] = AiRoutingReason::describe($reasonCode);
+        }
+
+        InboundReplyOwnership::where('workspace_id', $message->conversation->workspace_id)
+            ->where('message_id', $message->id)
+            ->update($attributes);
     }
 
     private function findMatchingAutoReply(
@@ -313,8 +344,92 @@ class AutoReplyListener
         return $nowMinutes < $startMinutes || $nowMinutes >= $endMinutes;
     }
 
-    private function triggerHandover(Conversation $conversation, string $reason): void
+    private function triggerHandover(Conversation $conversation, string $reason, ?Message $inbound = null): void
     {
-        $this->handoverService->request($conversation, $reason);
+        $created = $this->handoverService->request($conversation, $reason);
+
+        if ($created && $inbound) {
+            $this->acknowledgeWhenNobodyIsAvailable($conversation, $inbound);
+        }
+    }
+
+    /**
+     * Tell the customer what happens next when the team is closed.
+     *
+     * A handover outside working hours used to be silent: the conversation was
+     * queued and notifications fired, but the customer saw nothing at all and
+     * had no idea whether anyone had received their message.
+     */
+    private function acknowledgeWhenNobodyIsAvailable(Conversation $conversation, Message $inbound): void
+    {
+        if (! config('ai.smart_bot.no_agent_holding_reply')) {
+            return;
+        }
+
+        $widget = $conversation->channel_account_id
+            ? ChatWidget::where('workspace_id', $conversation->workspace_id)
+                ->where('channel_account_id', $conversation->channel_account_id)
+                ->first()
+            : null;
+
+        if (app(AgentAvailability::class)->available((int) $conversation->workspace_id, $widget)) {
+            return;
+        }
+
+        // The client's own offline wording wins: they wrote it, in their own
+        // voice, and it needs no translation.
+        $body = trim((string) ($widget?->offline_message ?? ''));
+        if ($body === '') {
+            $body = app(CannedPhrases::class)->get(
+                'no_agent_available',
+                app(ConversationLanguage::class)->resolve($conversation->id),
+                (int) $conversation->workspace_id,
+                $inbound->body,
+            );
+        }
+
+        $opening = app(AgentAvailability::class)->nextOpening($widget);
+        if ($opening) {
+            $body .= ' '.__('We are back at :time.', ['time' => $opening->isoFormat('ddd HH:mm')]);
+        }
+
+        $this->botReply($inbound, $conversation, $body);
+    }
+
+    /** Sends a zero-credit bot message that is not a generated answer. */
+    private function botReply(Message $inbound, Conversation $conversation, string $body): void
+    {
+        if (trim($body) === '') {
+            return;
+        }
+
+        try {
+            $outbound = Message::create([
+                'conversation_id' => $conversation->id,
+                'direction' => 'out',
+                'channel' => $inbound->channel,
+                'type' => 'text',
+                'body' => $body,
+                'payload' => [
+                    'reply_to_message_id' => $inbound->id,
+                    'ai_automation' => true,
+                    'ai_answer' => ['answer_origin' => 'conversation', 'response_mode' => 'answer', 'quick_replies' => []],
+                ],
+                'status' => 'queued',
+                'sent_by' => 'bot',
+                'sent_at' => now(),
+            ]);
+
+            $providerId = $this->channelManager->driver($inbound->channel)->send($outbound);
+            $outbound->update(['status' => 'sent', 'provider_message_id' => $providerId]);
+            $conversation->update(['last_message_at' => now()]);
+            MessageSent::dispatch($outbound->load('conversation'));
+        } catch (\Throwable $error) {
+            // A missing acknowledgement must never break routing.
+            Log::warning('AutoReplyListener holding reply failed', [
+                'conversation_id' => $conversation->id,
+                'error' => $error->getMessage(),
+            ]);
+        }
     }
 }

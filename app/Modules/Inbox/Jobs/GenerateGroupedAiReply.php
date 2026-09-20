@@ -8,6 +8,7 @@ use App\Modules\AI\Exceptions\AiRateLimitException;
 use App\Modules\AI\Exceptions\AiRequestInProgressException;
 use App\Modules\AI\Models\AiChatbot;
 use App\Modules\AI\Services\ChatbotRunner;
+use App\Modules\AI\Services\Smart\ChoiceRenderer;
 use App\Modules\Inbox\Models\ChatWidget;
 use App\Modules\Inbox\Models\InboundReplyOwnership;
 use App\Modules\Inbox\Services\AiAutomationSettings;
@@ -110,6 +111,15 @@ class GenerateGroupedAiReply implements ShouldQueue
 
                 return;
             }
+            // Channels without buttons need the options written into the body,
+            // or the customer never sees them. Null-safe: a mocked runner in
+            // tests returns no answer metadata and the body passes through.
+            $reply = app(ChoiceRenderer::class)->body(
+                $answerMetadata ? $runner->lastAnswer() : null,
+                $inbound->channel,
+                $reply,
+            );
+
             $outbound = Message::create([
                 'conversation_id' => $inbound->conversation_id, 'direction' => 'out', 'channel' => $inbound->channel,
                 'type' => 'text', 'body' => $reply, 'payload' => array_filter([

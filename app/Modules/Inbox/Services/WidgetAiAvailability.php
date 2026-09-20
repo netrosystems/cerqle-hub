@@ -4,6 +4,7 @@ namespace App\Modules\Inbox\Services;
 
 use App\Modules\Inbox\Models\ChatWidget;
 use Carbon\CarbonImmutable;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\ValidationException;
 
@@ -17,21 +18,59 @@ class WidgetAiAvailability
 
     public function available(ChatWidget $widget, ?CarbonImmutable $at = null): bool
     {
-        if (! $widget->enabled || ! $widget->hasEnabledAiChatbot()) {
-            return false;
+        return $this->reason($widget, $at) === null;
+    }
+
+    /**
+     * Why this widget's bot is not answering, or null when it is.
+     *
+     * available() used to collapse five distinct causes into one boolean, so a
+     * silent bot looked identical whether the widget was off, the chatbot was
+     * deleted, or a malformed timezone was throwing. Support cannot chase a
+     * phantom AI bug without this, so the reason is the source of truth and
+     * available() is derived from it.
+     */
+    public function reason(ChatWidget $widget, ?CarbonImmutable $at = null): ?string
+    {
+        if (! $widget->enabled) {
+            return 'widget_disabled';
         }
+        if (! $widget->ai_enabled) {
+            return 'ai_switch_off';
+        }
+        if (! $widget->hasEnabledAiChatbot()) {
+            // No chatbot selected, or the selected one was deleted, disabled or
+            // belongs to another workspace.
+            return 'chatbot_missing';
+        }
+
         $mode = $widget->ai_mode ?? ($widget->ai_enabled ? 'permanent' : 'off');
         if ($mode === 'permanent') {
-            return true;
+            return null;
         }
         if ($mode !== 'scheduled') {
-            return false;
+            return 'mode_off';
         }
+
         try {
-            return app(AiAutomationSchedule::class)->activeWindows($widget->ai_weekly_hours ?? [], $widget->ai_timezone ?: config('app.timezone', 'UTC'), $at);
-        } catch (\Throwable) {
-            return false;
+            $active = app(AiAutomationSchedule::class)->activeWindows(
+                $widget->ai_weekly_hours ?? [],
+                $widget->ai_timezone ?: config('app.timezone', 'UTC'),
+                $at,
+            );
+        } catch (\Throwable $error) {
+            // Previously swallowed, which left a bot permanently and invisibly
+            // silent on a malformed schedule or timezone.
+            Log::warning('widget_ai.schedule_error', [
+                'widget_id' => $widget->id,
+                'workspace_id' => $widget->workspace_id,
+                'error' => $error->getMessage(),
+            ]);
+
+            return 'schedule_error';
         }
+
+        return $active ? null : 'outside_hours';
     }
 
     /**
