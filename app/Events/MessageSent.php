@@ -47,7 +47,10 @@ class MessageSent implements ShouldBroadcastNow
             'channel' => $this->message->channel,
             'type' => $this->message->type,
             'body' => app(MessageMediaResolver::class)->displayBody($this->message),
-            'payload' => $this->message->payload,
+            'payload' => app(MessageMediaResolver::class)->augmentPayloadForRoute(
+                $this->message,
+                'api.v1.mobile.conversations.messages.media.signed',
+            ),
             'status' => $this->message->status,
             'sent_by' => $this->message->sent_by,
             'origin' => $this->message->origin,

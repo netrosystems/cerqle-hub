@@ -12,6 +12,11 @@ class MessageResource extends JsonResource
     public function toArray(Request $request): array
     {
         $mediaResolver = app(MessageMediaResolver::class);
+        $payload = $mediaResolver->augmentPayload(
+            $this->resource,
+            $request,
+            'api.v1.mobile.conversations.messages.media.signed',
+        );
 
         return [
             'id' => $this->id,
@@ -20,6 +25,7 @@ class MessageResource extends JsonResource
             'channel' => $this->channel,
             'type' => $this->type,
             'body' => Demo::text($mediaResolver->displayBody($this->resource)),
+            'payload' => $payload,
             'status' => $this->status,
             'provider_message_id' => $this->provider_message_id,
             'sent_by' => $this->sent_by,
