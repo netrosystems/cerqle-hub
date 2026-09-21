@@ -5,13 +5,16 @@ namespace App\Modules\AI\Services;
 use App\Modules\AI\Models\AiChatbot;
 use App\Modules\AI\Models\AiKbChunk;
 use App\Modules\AI\Models\AiKnowledgeBase;
+use App\Modules\AI\Services\Llm\LlmResponse;
 use App\Modules\AI\Services\Smart\AnswerDiagnostics;
 use App\Modules\AI\Services\Smart\CannedPhrases;
 use App\Modules\AI\Services\Smart\Choices;
 use App\Modules\AI\Services\Smart\ConversationLanguage;
 use App\Modules\AI\Services\Smart\EvidenceSelector;
+use App\Modules\AI\Services\Smart\GroundingValidator;
 use App\Modules\AI\Services\Smart\IntentClassifier;
 use App\Modules\AI\Services\Smart\QueryEmbedder;
+use App\Modules\AI\Services\Smart\ReplyContract;
 use App\Modules\AI\ValueObjects\ChatbotAnswer;
 use App\Modules\Shared\Models\Message;
 
@@ -28,6 +31,8 @@ class ChatbotRunner
         private IntentClassifier $intents,
         private CannedPhrases $phrases,
         private ConversationLanguage $language,
+        private ReplyContract $contract,
+        private GroundingValidator $grounding,
     ) {}
 
     /** Backward-compatible plain-text entry point used by existing callers. */
@@ -176,28 +181,43 @@ class ChatbotRunner
             $history,
             [['role' => 'user', 'content' => $message]],
         );
+        $structured = (bool) config('ai.smart_bot.structured_output');
+        $options = $structured
+            ? $this->contract->requestOptions((bool) ($bot->kb_exact_wording ?? false))
+            : $this->chatOptions();
+        if ($structured) {
+            $messages[0]['content'] .= "\n\n".$this->contract->promptInstruction();
+        }
+
         try {
             $response = $this->llmGateway->chat(
                 $workspaceId,
                 $messages,
-                array_merge($this->chatOptions(), ['feature_key' => 'rag_reply', 'idempotency_key' => $idempotencyKey]),
+                array_merge($options, ['feature_key' => 'rag_reply', 'idempotency_key' => $idempotencyKey]),
                 $bot->id,
                 $conversationId,
             );
             if (blank($response->content)) {
                 // The credit is returned and so is a usable reply: sending the
                 // empty body would surface as "the bot said nothing".
-                $this->llmGateway->rejectMalformed($response);
+                $this->llmGateway->rejectMalformed($response, 'empty_reply');
 
                 return $this->fallback($bot, $alreadyClarified, $confidence, $workspaceId, $conversationId, $message);
             }
 
-            return new ChatbotAnswer(
-                $response->content,
-                answerOrigin: $hasVerifiedEvidence ? 'knowledge_base' : 'general',
-                citations: $hasVerifiedEvidence ? $citations : [],
-                tokensUsed: $response->promptTokens + $response->completionTokens,
-                confidence: $confidence,
+            if (! $structured) {
+                return new ChatbotAnswer(
+                    $response->content,
+                    answerOrigin: $hasVerifiedEvidence ? 'knowledge_base' : 'general',
+                    citations: $hasVerifiedEvidence ? $citations : [],
+                    tokensUsed: $response->promptTokens + $response->completionTokens,
+                    confidence: $confidence,
+                );
+            }
+
+            return $this->structuredAnswer(
+                $bot, $response, $messages, $options, $message, $workspaceId, $conversationId,
+                $idempotencyKey, $alreadyClarified, $confidence, $citations, $hasVerifiedEvidence, $results,
             );
         } catch (\Throwable $error) {
             if ($throwProviderErrors) {
@@ -211,6 +231,141 @@ class ChatbotRunner
                 handoffOffer: true, confidence: $confidence,
             );
         }
+    }
+
+    /**
+     * Turns a contract reply into an answer, or refuses to send it.
+     *
+     * The model reports whether it stayed grounded; that claim is checked
+     * against the evidence rather than trusted. A rejected reply is retried
+     * once inside the SAME reservation, so a customer is charged for one
+     * logical answer however many attempts it took — and if the retry fails
+     * too, the credit is returned and they get the fallback instead.
+     *
+     * @param  array<int, array<string, mixed>>  $messages
+     * @param  array<string, mixed>  $options
+     * @param  list<array{title:string,type:string,url:?string}>  $citations
+     * @param  array<int, array<string,mixed>>  $results
+     */
+    private function structuredAnswer(
+        AiChatbot $bot,
+        LlmResponse $response,
+        array $messages,
+        array $options,
+        string $message,
+        int $workspaceId,
+        ?int $conversationId,
+        string $idempotencyKey,
+        bool $alreadyClarified,
+        float $confidence,
+        array $citations,
+        bool $hasVerifiedEvidence,
+        array $results,
+    ): ChatbotAnswer {
+        $parsed = $this->contract->parse($response->content);
+        $verdict = $parsed === null
+            ? ['result' => 'rejected', 'reason' => 'The reply was not in the required format.']
+            : $this->validateGrounding($parsed, $results, $message, $bot);
+
+        if ($verdict['result'] === 'rejected') {
+            $retry = $this->retryOnce($messages, $options, $workspaceId, $conversationId, $bot, $idempotencyKey, (string) $verdict['reason']);
+            $retryParsed = $retry ? $this->contract->parse($retry->content) : null;
+            $retryVerdict = $retryParsed === null
+                ? ['result' => 'rejected', 'reason' => null]
+                : $this->validateGrounding($retryParsed, $results, $message, $bot);
+
+            if ($retry !== null && $retryVerdict['result'] === 'passed') {
+                $response = $retry;
+                $parsed = $retryParsed;
+            } else {
+                // Two attempts, neither usable: the client pays for answers,
+                // not for attempts.
+                $this->llmGateway->rejectMalformed($response, 'ungrounded_answer');
+
+                return $this->fallback($bot, $alreadyClarified, $confidence, $workspaceId, $conversationId, $message);
+            }
+        }
+
+        $this->language->remember($conversationId, $parsed['language'] ?? null);
+        $body = $this->choiceText($parsed['reply']);
+
+        return new ChatbotAnswer(
+            $body,
+            answerOrigin: $hasVerifiedEvidence ? 'knowledge_base' : 'general',
+            responseMode: $parsed['response_type'] === 'clarification' ? 'clarification' : 'answer',
+            /** @phpstan-ignore-next-line argument.type — structured choices are an accepted shape */
+            quickReplies: Choices::fromModel($parsed['quick_replies']),
+            citations: $hasVerifiedEvidence ? $citations : [],
+            tokensUsed: $response->promptTokens + $response->completionTokens,
+            confidence: $confidence,
+        );
+    }
+
+    /**
+     * @param  array{reply:string,quick_replies:list<string>,response_type:string,grounded:bool}  $parsed
+     * @param  array<int, array<string,mixed>>  $results
+     * @return array{result:string,reason:?string}
+     */
+    private function validateGrounding(array $parsed, array $results, string $message, AiChatbot $bot): array
+    {
+        if (! config('ai.smart_bot.grounding_validation')) {
+            return ['result' => 'passed', 'reason' => null];
+        }
+
+        $kb = $bot->knowledgeBase;
+        $profile = $kb
+            ? implode(' ', array_filter([$kb->business_name, $kb->business_purpose, $kb->target_audience]))
+            : null;
+
+        return $this->grounding->check($parsed, $results, $message, $profile);
+    }
+
+    /**
+     * One more attempt under the same reservation. internal_retry makes the
+     * gateway reuse the existing usage row, so tokens accumulate and credits
+     * do not.
+     *
+     * @param  array<int, array<string, mixed>>  $messages
+     * @param  array<string, mixed>  $options
+     */
+    private function retryOnce(array $messages, array $options, int $workspaceId, ?int $conversationId, AiChatbot $bot, string $idempotencyKey, string $reason): ?LlmResponse
+    {
+        $messages[0]['content'] .= "\n\nYour previous reply was rejected: ".$reason
+            .' Answer again using only facts that appear in the evidence above.';
+
+        try {
+            return $this->llmGateway->chat(
+                $workspaceId,
+                $messages,
+                array_merge($options, [
+                    'feature_key' => 'rag_reply',
+                    'idempotency_key' => $idempotencyKey,
+                    'internal_retry' => true,
+                ]),
+                $bot->id,
+                $conversationId,
+            );
+        } catch (\Throwable) {
+            // A failed retry is not worth losing the fallback over.
+            return null;
+        }
+    }
+
+    /** Caps the reply so a customer is not handed an essay. */
+    private function choiceText(string $reply): string
+    {
+        $limit = (int) config('ai.smart_bot.max_reply_words', 70);
+        $words = preg_split('/\s+/u', trim($reply)) ?: [];
+        if ($limit <= 0 || count($words) <= $limit) {
+            return trim($reply);
+        }
+
+        $truncated = implode(' ', array_slice($words, 0, $limit));
+        if (preg_match('/^(.*[.!?؟。！？])\s/su', $truncated.' ', $matches)) {
+            return trim($matches[1]);
+        }
+
+        return rtrim($truncated, " \t\n\r\0\x0B,;:").'…';
     }
 
     /**
@@ -265,8 +420,8 @@ class ChatbotRunner
         $last = end($history);
 
         return is_array($last)
-            && ($last['role'] ?? null) === 'assistant'
-            && preg_match('/[?\x{061F}\x{FF1F}]\s*$/u', trim((string) ($last['content'] ?? ''))) === 1;
+            && $last['role'] === 'assistant'
+            && preg_match('/[?\x{061F}\x{FF1F}]\s*$/u', trim($last['content'])) === 1;
     }
 
     /** @return array<int, array<string,mixed>> */

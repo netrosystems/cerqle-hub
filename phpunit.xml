@@ -39,6 +39,8 @@
         <env name="KB_HYBRID_RETRIEVAL_ENABLED" value="false" force="true"/>
         <env name="SMART_BOT_RETRIEVAL_AUTHORITY" value="false" force="true"/>
         <env name="SMART_BOT_DIAGNOSTICS" value="false" force="true"/>
+        <env name="SMART_BOT_STRUCTURED_OUTPUT" value="false" force="true"/>
+        <env name="SMART_BOT_GROUNDING_VALIDATION" value="false" force="true"/>
         <env name="SMART_BOT_CONVERSATIONAL_TURNS" value="false" force="true"/>
         <env name="SMART_BOT_MULTILINGUAL_INTENT" value="false" force="true"/>
         <env name="SMART_BOT_MULTILINGUAL_HANDOVER" value="false" force="true"/>

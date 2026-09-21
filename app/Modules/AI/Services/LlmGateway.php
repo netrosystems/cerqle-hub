@@ -8,6 +8,7 @@ use App\Modules\AI\Exceptions\AiRequestInProgressException;
 use App\Modules\AI\Models\AiCreditUsage;
 use App\Modules\AI\Models\AiRun;
 use App\Modules\AI\Services\Llm\LlmManager;
+use App\Modules\AI\Services\Llm\LlmProviderInterface;
 use App\Modules\AI\Services\Llm\LlmResponse;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\RateLimiter;
@@ -86,7 +87,7 @@ class LlmGateway
                     }
                 }
             }
-            $response = $provider->chat($messages, $opts);
+            $response = $this->callProvider($provider, $messages, $opts, $workspaceId);
             if ($usage) {
                 $this->credits->complete($usage, [
                     'content' => $response->content,
@@ -94,6 +95,7 @@ class LlmGateway
                     'completionTokens' => $response->completionTokens,
                     'model' => $response->model,
                     'latencyMs' => $response->latencyMs,
+                    'structuredMode' => $response->structuredMode,
                 ], $response->promptTokens, $response->completionTokens, $response->model, $internalRetry);
             }
         } catch (\Throwable $e) {
@@ -149,13 +151,59 @@ class LlmGateway
             'latency_ms' => $response->latencyMs,
         ]);
 
-        return new LlmResponse(
-            $response->content,
-            $response->promptTokens,
-            $response->completionTokens,
-            $response->model,
-            $response->latencyMs,
-            $usage?->id,
+        return $response->withCreditUsageId($usage?->id);
+    }
+
+    /**
+     * Calls the provider, stepping a structured-output request down until the
+     * provider accepts it: strict schema, then JSON mode, then plain text.
+     *
+     * The ladder lives here rather than in the caller because one reservation
+     * has to cover the whole attempt — a retry routed through chat() again
+     * would open a second one and charge twice. Only a failure that names a
+     * structured-output feature steps down; every other error is the caller's
+     * to handle, so refunds and error runs behave exactly as before.
+     *
+     * @param  array<int, array<string, mixed>>  $messages
+     * @param  array<string, mixed>  $opts
+     */
+    private function callProvider(LlmProviderInterface $provider, array $messages, array $opts, int $workspaceId): LlmResponse
+    {
+        if (! isset($opts['response_schema'])) {
+            return $provider->chat($messages, $opts);
+        }
+
+        $modes = ['json_schema', 'json_object', 'text'];
+        foreach ($modes as $index => $mode) {
+            $attempt = $opts;
+            $attempt['structured_mode'] = $mode;
+            if ($mode === 'text') {
+                unset($attempt['response_schema']);
+            }
+
+            try {
+                return $provider->chat($messages, $attempt);
+            } catch (\Throwable $error) {
+                if ($index === count($modes) - 1 || ! $this->structuredOutputRejected($error)) {
+                    throw $error;
+                }
+                Log::channel('json')->info('llm.structured_degraded', [
+                    'workspace_id' => $workspaceId,
+                    'from' => $mode,
+                    'to' => $modes[$index + 1],
+                ]);
+            }
+        }
+
+        throw new \RuntimeException('Structured chat exhausted every mode without a provider error.');
+    }
+
+    /** A provider refusing the schema looks different from one that is down. */
+    private function structuredOutputRejected(\Throwable $error): bool
+    {
+        return (bool) preg_match(
+            '/(response_format|json_schema|responseSchema|response_mime|tool_choice|\b400\b)/i',
+            $error->getMessage(),
         );
     }
 
@@ -228,10 +276,10 @@ class LlmGateway
             'provider_source' => 'infrastructure',
             'chatbot_id' => null,
             'conversation_id' => null,
-            'prompt_tokens' => $response?->promptTokens ?? 0,
-            'completion_tokens' => $response?->completionTokens ?? 0,
+            'prompt_tokens' => $response ? $response->promptTokens : 0,
+            'completion_tokens' => $response ? $response->completionTokens : 0,
             'cost_cents' => 0,
-            'latency_ms' => $response?->latencyMs ?? 0,
+            'latency_ms' => $response ? $response->latencyMs : 0,
             'model' => $response?->model,
             'status' => $status,
         ]);

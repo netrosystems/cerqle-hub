@@ -13,6 +13,8 @@ return [
         // on its own; with every one false the bot answers exactly as before.
         'retrieval_authority' => (bool) env('SMART_BOT_RETRIEVAL_AUTHORITY', false),
         'diagnostics' => (bool) env('SMART_BOT_DIAGNOSTICS', false),
+        'structured_output' => (bool) env('SMART_BOT_STRUCTURED_OUTPUT', false),
+        'grounding_validation' => (bool) env('SMART_BOT_GROUNDING_VALIDATION', false),
         'conversational_turns' => (bool) env('SMART_BOT_CONVERSATIONAL_TURNS', false),
         'multilingual_handover' => (bool) env('SMART_BOT_MULTILINGUAL_HANDOVER', false),
         'channel_choice_fallback' => (bool) env('SMART_BOT_CHANNEL_CHOICE_FALLBACK', false),
@@ -34,6 +36,13 @@ return [
         // to 6000 characters each go verbatim into the prompt. These cap it.
         // Precedence rule: a per-bot value wins where set, the platform default
         // applies where the column is null.
+        'max_tokens' => 320,
+        'max_reply_words' => 70,
+        // Note: the managed default model (gpt-5-nano) fixes its own sampling
+        // and ignores temperature. These apply to BYOK providers; determinism
+        // on the managed path comes from the schema and validation instead.
+        'temperature' => 0.4,
+        'temperature_exact_wording' => 0.2,
         'context_chars' => 6000,
         'passage_chars' => 1800,
         'duplicate_overlap' => 0.75,

@@ -22,6 +22,7 @@ class LlmResponse
             model: $payload['model'],
             latencyMs: $payload['latencyMs'],
             creditUsageId: $creditUsageId,
+            structuredMode: is_string($payload['structuredMode'] ?? null) ? $payload['structuredMode'] : null,
         );
     }
 
@@ -32,5 +33,20 @@ class LlmResponse
         public readonly string $model,
         public readonly int $latencyMs,
         public readonly ?int $creditUsageId = null,
+        /** How the reply was constrained: json_schema, json_object or text. */
+        public readonly ?string $structuredMode = null,
     ) {}
+
+    public function withCreditUsageId(?int $creditUsageId): self
+    {
+        return new self(
+            content: $this->content,
+            promptTokens: $this->promptTokens,
+            completionTokens: $this->completionTokens,
+            model: $this->model,
+            latencyMs: $this->latencyMs,
+            creditUsageId: $creditUsageId,
+            structuredMode: $this->structuredMode,
+        );
+    }
 }
