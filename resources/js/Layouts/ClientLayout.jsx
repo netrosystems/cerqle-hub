@@ -179,11 +179,13 @@ export default function ClientLayout({ header, children, title }) {
                 showCreateButton={false}
                 navGroups={clientNavGroups.map(group => ({
                     ...group,
-                    items: group.items.map(item => ({
+                    items: (group.items ?? []).map(item => ({
                         ...item,
                         key: item.activePattern || item.label,
-                        active: () => item.activePattern ? route().current(item.activePattern) : false,
-                    }))
+                        // An item may resolve its own active state when a route
+                        // name cannot express it, such as a query-string view.
+                        active: item.isActive ?? (() => (item.activePattern ? route().current(item.activePattern) : false)),
+                    })),
                 }))}
 footer={<ClientLayoutFooter />}
             />

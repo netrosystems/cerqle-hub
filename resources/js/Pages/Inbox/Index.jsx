@@ -16,9 +16,11 @@ import { ChannelBrandIcon, CHANNEL_LABELS } from '@/Components/BrandIcons';
 import { formatInboxTimestamp } from '@/Utils/datetime';
 import axios from 'axios';
 
+// Live visitors are reached from the main sidebar now, so the view is not
+// repeated here. The ?folder=live URL still works and still renders the live
+// list — only the duplicate entry in this list is gone.
 const FOLDERS = [
     { key: null,         labelKey: 'inbox.folder_all',        icon: Inbox },
-    { key: 'live',       labelKey: 'inbox.folder_live_users', icon: Radio },
     { key: 'mine',       labelKey: 'inbox.folder_mine',       icon: User },
     { key: 'unassigned', labelKey: 'inbox.folder_unassigned', icon: MessageSquare },
     { key: 'resolved',   labelKey: 'inbox.folder_resolved',   icon: CheckCircle },
@@ -209,7 +211,7 @@ function ConversationSkeleton() {
     );
 }
 
-function FilterSidebar({ filters, labels, channelAccounts = [], onFolder, onChannel, onAccount, onLabel, liveUsersCount = 0 }) {
+function FilterSidebar({ filters, labels, channelAccounts = [], onFolder, onChannel, onAccount, onLabel }) {
     const { t } = useTranslation();
     return (
         <div className="flex flex-col h-full overflow-y-auto">
@@ -228,11 +230,6 @@ function FilterSidebar({ filters, labels, channelAccounts = [], onFolder, onChan
                     >
                         <Icon className="h-4 w-4 shrink-0" />
                         <span>{t(labelKey)}</span>
-                        {key === 'live' && liveUsersCount > 0 && (
-                            <span className="ml-auto rounded-full bg-emerald-100 dark:bg-emerald-950/50 px-1.5 py-0.5 text-[10px] font-bold text-emerald-700 dark:text-emerald-400">
-                                {liveUsersCount}
-                            </span>
-                        )}
                     </button>
                 ))}
             </div>
@@ -301,7 +298,7 @@ function FilterSidebar({ filters, labels, channelAccounts = [], onFolder, onChan
     );
 }
 
-export default function InboxIndex({ conversations: initialConversations, filters, labels = [], channelAccounts = [], liveUsersCount = 0 }) {
+export default function InboxIndex({ conversations: initialConversations, filters, labels = [], channelAccounts = [] }) {
     const { t } = useTranslation();
     const { props } = usePage();
     const authUser = props.auth?.user;
@@ -373,7 +370,7 @@ export default function InboxIndex({ conversations: initialConversations, filter
             if (document.hidden || refreshing) return;
             refreshing = true;
             router.reload({
-                only: ['conversations', 'liveUsersCount'],
+                only: ['conversations'],
                 preserveScroll: true,
                 preserveState: true,
                 onFinish: () => { refreshing = false; },
@@ -446,7 +443,6 @@ export default function InboxIndex({ conversations: initialConversations, filter
                         onChannel={handleChannel}
                         onAccount={handleAccount}
                         onLabel={handleLabel}
-                        liveUsersCount={liveUsersCount}
                     />
                 </aside>
 

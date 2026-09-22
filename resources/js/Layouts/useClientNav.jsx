@@ -30,6 +30,12 @@ export default function useClientNav() {
     const docsUrl = branding?.docs_url;
     const isClientAdmin = user?.client_role === 'administrator';
 
+    // The live visitors view is the same route with ?folder=live, so a route
+    // pattern alone cannot tell the two apart and both entries lit up at once.
+    const onLiveVisitors = () => typeof window !== 'undefined'
+        && window.location.pathname.startsWith('/app/inbox')
+        && new URLSearchParams(window.location.search).get('folder') === 'live';
+
     const landingItems = [
         { label: t('nav.dashboard'), href: safeRoute('client.dashboard'), icon: <LayoutDashboard className={iconClass} />, activePattern: 'client.dashboard' },
         {
@@ -38,6 +44,15 @@ export default function useClientNav() {
             icon: <BookOpen className={iconClass} />,
             activePattern: docsUrl ? null : 'client.onboarding.*',
             external: Boolean(docsUrl),
+        },
+        {
+            // The inbox's live folder, promoted to its own destination. Its
+            // active state is a query string rather than a route, which
+            // activePattern cannot express, so it is matched directly.
+            label: t('inbox.folder_live_users', { defaultValue: 'Live Users' }),
+            href: `${safeRoute('client.inbox.index')}?folder=live`,
+            icon: <Radio className={iconClass} />,
+            isActive: onLiveVisitors,
         },
     ];
 
@@ -87,7 +102,7 @@ export default function useClientNav() {
     ];
 
     const inboxItems = [
-        { label: 'inBOX', href: safeRoute('client.inbox.index'), icon: <Inbox className={iconClass} />, activePattern: 'client.inbox.index' },
+        { label: 'inBOX', href: safeRoute('client.inbox.index'), icon: <Inbox className={iconClass} />, activePattern: 'client.inbox.index', isActive: () => route().current('client.inbox.index') && ! onLiveVisitors() },
         { label: 'Email inBOX', href: safeRoute('client.inbox.email-inbox'), icon: <Mail className={iconClass} />, activePattern: 'client.inbox.email-inbox' },
     ];
 
@@ -98,14 +113,10 @@ export default function useClientNav() {
 
     const chatbotSetupItems = [
         { label: t('nav.website_widget', { defaultValue: 'Website Widget' }), href: safeRoute('client.inbox.chat-widgets.index'), icon: <MessageCircle className={iconClass} />, activePattern: 'client.inbox.chat-widgets.*' },
+        // Sits with the channels it answers on. A bot owns its knowledge, so
+        // there is no separate knowledge base entry to keep it company.
+        { label: t('nav.chatbots'), href: safeRoute('client.ai.chatbots.index'), icon: <Bot className={iconClass} />, activePattern: 'client.ai.chatbots.*' },
         { label: t('nav.chat_widget'), href: safeRoute('client.whatsapp.widget.index'), icon: whatsappNavIcon, activePattern: 'client.whatsapp.widget.*' },
-    ];
-
-    const automationToolsItems = [
-        // Temporarily hidden by product request; uncomment to restore workflow navigation.
-        // { label: t('nav.automations'), href: safeRoute('client.automations.index'), icon: <Zap className={iconClass} />, activePattern: 'client.automations.*' },
-        { label: t('nav.chatbots'),        href: safeRoute('client.ai.chatbots.index'),        icon: <Bot className={iconClass} />,      activePattern: 'client.ai.chatbots.*' },
-        { label: t('nav.knowledge_bases'), href: safeRoute('client.ai.knowledge-bases.index'), icon: <Database className={iconClass} />, activePattern: 'client.ai.knowledge-bases.*' },
     ];
 
     const socialPublishingItems = [
@@ -143,7 +154,6 @@ export default function useClientNav() {
         { type: 'group', label: t('nav.group_setup', { defaultValue: 'Setup' }), items: setupItems, defaultOpen: false },
         { type: 'group', label: t('nav.group_campaigns', { defaultValue: 'Campaigns' }), items: campaignItems, defaultOpen: false },
         { type: 'group', label: t('nav.group_social_media'), items: socialPublishingItems, defaultOpen: false },
-        { type: 'group', label: t('nav.group_automations'), items: automationToolsItems, defaultOpen: false },
         { type: 'group', label: t('nav.group_reports'), items: reportsItems, defaultOpen: false },
         { type: 'group', label: 'Assets', items: assetItems, defaultOpen: false },
         { type: 'group', label: t('nav.group_support'), items: supportItems, defaultOpen: false },

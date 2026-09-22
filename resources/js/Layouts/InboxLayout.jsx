@@ -78,7 +78,10 @@ export default function InboxLayout({ children }) {
                         items: group.items.map(item => ({
                             ...item,
                             key: item.activePattern || item.label,
-                            active: () => item.activePattern ? route().current(item.activePattern) : false,
+                            // An item may resolve its own active state when a
+                            // route name cannot express it, such as a
+                            // query-string view like the live visitors folder.
+                            active: item.isActive ?? (() => (item.activePattern ? route().current(item.activePattern) : false)),
                         }))
                     }))}
                     footer={<ReleaseBadge />}
