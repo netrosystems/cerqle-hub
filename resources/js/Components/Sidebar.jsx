@@ -1,10 +1,10 @@
 import { Link, usePage } from '@inertiajs/react';
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
+import { useLayoutEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ChevronDown, Plus, X } from 'lucide-react';
 
 const SIDEBAR_SCROLL_STORAGE_PREFIX = 'cerqle.sidebar.scroll.';
+const SIDEBAR_GROUPS_STORAGE_PREFIX = 'cerqle.sidebar.groups.';
 
 function readScrollPosition(storageKey) {
     if (typeof window === 'undefined') return 0;
@@ -27,13 +27,36 @@ function writeScrollPosition(storageKey, position) {
     }
 }
 
+function readOpenGroups(storageKey) {
+    if (typeof window === 'undefined') return {};
+
+    try {
+        const parsed = JSON.parse(window.sessionStorage.getItem(storageKey) ?? '{}');
+        return parsed && typeof parsed === 'object' ? parsed : {};
+    } catch {
+        return {};
+    }
+}
+
+function writeOpenGroup(storageKey, label, isOpen) {
+    if (typeof window === 'undefined') return;
+
+    try {
+        const state = readOpenGroups(storageKey);
+        state[label] = isOpen;
+        window.sessionStorage.setItem(storageKey, JSON.stringify(state));
+    } catch {
+        // Storage may be unavailable in privacy-restricted browser contexts.
+    }
+}
+
 function isNavItemActive(item) {
     return typeof item.active === 'function'
         ? item.active()
         : item.active ?? (item.route && route().current(item.route));
 }
 
-function NavLinks({ items, onClose, flyout = false }) {
+function NavLinks({ items, onClose }) {
     return items.map((item, i) => {
         const isActive = isNavItemActive(item);
         return (
@@ -45,9 +68,7 @@ function NavLinks({ items, onClose, flyout = false }) {
                     'group flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-150',
                     isActive
                         ? 'bg-brand-600 text-white shadow-sm'
-                        : flyout
-                            ? 'text-neutral-700 hover:bg-brand-50 hover:text-brand-700 dark:text-neutral-300 dark:hover:bg-brand-950/30 dark:hover:text-brand-300'
-                            : 'text-white/80 hover:bg-white/10 hover:text-white',
+                        : 'text-white/80 hover:bg-white/10 hover:text-white',
                 ].join(' ')}
             >
                 {item.icon && (
@@ -55,9 +76,7 @@ function NavLinks({ items, onClose, flyout = false }) {
                         'shrink-0 transition-colors duration-150',
                         isActive
                             ? 'text-white'
-                            : flyout
-                                ? 'text-neutral-400 group-hover:text-brand-600 dark:group-hover:text-brand-400'
-                                : 'text-white/65 group-hover:text-white',
+                            : 'text-white/65 group-hover:text-white',
                     ].join(' ')}>
                         {item.icon}
                     </span>
@@ -69,118 +88,41 @@ function NavLinks({ items, onClose, flyout = false }) {
     });
 }
 
-function NavGroup({ label, items, onClose, defaultOpen = true, surface = 'desktop' }) {
+function NavGroup({ label, items, onClose, defaultOpen = true, storageKey }) {
     const hasActiveItem = items.some((item) => (
         isNavItemActive(item)
     ));
-    const [open, setOpen] = useState(defaultOpen || hasActiveItem);
-    const [flyoutOpen, setFlyoutOpen] = useState(false);
-    const [flyoutPinned, setFlyoutPinned] = useState(false);
-    const [flyoutPosition, setFlyoutPosition] = useState({ left: 264, top: 12 });
-    const triggerRef = useRef(null);
-    const flyoutRef = useRef(null);
-    const closeTimerRef = useRef(null);
-    const useFlyout = surface === 'desktop' && !defaultOpen;
+    // Inertia recreates this sidebar on every visit, so which groups are open
+    // is remembered next to the scroll position rather than held in state alone.
+    const [open, setOpen] = useState(() => {
+        const remembered = readOpenGroups(storageKey)[label];
+        return typeof remembered === 'boolean' ? remembered : (defaultOpen || hasActiveItem);
+    });
 
-    const cancelFlyoutClose = () => {
-        if (closeTimerRef.current) window.clearTimeout(closeTimerRef.current);
-    };
-
-    const openFlyout = () => {
-        cancelFlyoutClose();
-        const rect = triggerRef.current?.getBoundingClientRect();
-        if (rect) {
-            const estimatedHeight = Math.min(items.length * 41 + 52, 420);
-            setFlyoutPosition({
-                left: rect.right + 8,
-                top: Math.max(12, Math.min(rect.top, window.innerHeight - estimatedHeight - 12)),
-            });
-        }
-        setFlyoutOpen(true);
-    };
-
-    const scheduleFlyoutClose = () => {
-        if (flyoutPinned) return;
-        cancelFlyoutClose();
-        closeTimerRef.current = window.setTimeout(() => setFlyoutOpen(false), 140);
-    };
-
-    useEffect(() => {
-        if (!flyoutPinned) return undefined;
-
-        const closeOnOutsideClick = (event) => {
-            if (!triggerRef.current?.contains(event.target) && !flyoutRef.current?.contains(event.target)) {
-                setFlyoutPinned(false);
-                setFlyoutOpen(false);
-            }
-        };
-        document.addEventListener('mousedown', closeOnOutsideClick);
-        return () => document.removeEventListener('mousedown', closeOnOutsideClick);
-    }, [flyoutPinned]);
-
-    if (useFlyout) {
-        return (
-            <div className="mb-0.5" onMouseEnter={openFlyout} onMouseLeave={scheduleFlyoutClose}>
-                <button
-                    ref={triggerRef}
-                    type="button"
-                    onClick={() => {
-                        if (flyoutPinned) {
-                            setFlyoutPinned(false);
-                            setFlyoutOpen(false);
-                        } else {
-                            openFlyout();
-                            setFlyoutPinned(true);
-                        }
-                    }}
-                    onFocus={openFlyout}
-                    onKeyDown={(event) => {
-                        if (event.key === 'Escape') {
-                            setFlyoutPinned(false);
-                            setFlyoutOpen(false);
-                        }
-                    }}
-                    aria-expanded={flyoutOpen}
-                    aria-haspopup="menu"
-                    className={[
-                        'mt-1 flex w-full items-center justify-between rounded-lg px-3 py-2 text-[10px] font-bold uppercase tracking-widest transition-colors duration-150 select-none',
-                        hasActiveItem ? 'bg-white/10 text-white' : 'text-white/70 hover:bg-white/5 hover:text-white',
-                    ].join(' ')}
-                >
-                    <span>{label}</span>
-                    <ChevronDown className={`h-3 w-3 -rotate-90 transition-transform duration-200 ${flyoutOpen ? 'translate-x-0.5' : ''}`} />
-                </button>
-
-                {flyoutOpen && typeof document !== 'undefined' && createPortal(
-                    <div
-                        ref={flyoutRef}
-                        role="menu"
-                        aria-label={label}
-                        onMouseEnter={cancelFlyoutClose}
-                        onMouseLeave={scheduleFlyoutClose}
-                        className="fixed z-50 w-60 overflow-hidden rounded-xl border border-neutral-200 bg-white shadow-2xl dark:border-neutral-700 dark:bg-neutral-900"
-                        style={{ left: flyoutPosition.left, top: flyoutPosition.top }}
-                    >
-                        <div className="border-b border-neutral-100 px-4 py-3 dark:border-neutral-800">
-                            <p className="text-xs font-bold uppercase tracking-wider text-neutral-500 dark:text-neutral-400">{label}</p>
-                        </div>
-                        <div className="max-h-[360px] space-y-0.5 overflow-y-auto p-2">
-                            <NavLinks items={items} onClose={() => { setFlyoutPinned(false); setFlyoutOpen(false); onClose?.(); }} flyout />
-                        </div>
-                    </div>,
-                    document.body,
-                )}
-            </div>
-        );
+    // A link in the page body can navigate into a collapsed group. Reveal the
+    // current item instead of leaving the menu pointing at nothing. Adjusted
+    // during render, not in an effect, so it never paints collapsed first.
+    const [sawActiveItem, setSawActiveItem] = useState(hasActiveItem);
+    if (hasActiveItem !== sawActiveItem) {
+        setSawActiveItem(hasActiveItem);
+        if (hasActiveItem) setOpen(true);
     }
+
+    const groupId = `nav-group-${label.replace(/\s+/g, '-').toLowerCase()}`;
+
+    const toggle = () => {
+        const next = !open;
+        setOpen(next);
+        writeOpenGroup(storageKey, label, next);
+    };
 
     return (
         <div className="mb-0.5">
             <button
                 type="button"
-                onClick={() => setOpen((o) => !o)}
+                onClick={toggle}
                 aria-expanded={open}
-                aria-controls={`nav-group-${label.replace(/\s+/g, '-').toLowerCase()}`}
+                aria-controls={groupId}
                 className="flex w-full items-center justify-between px-3 py-1.5 mt-3 text-[10px] font-bold uppercase tracking-widest text-white/70 hover:text-white transition-colors duration-150 select-none"
             >
                 <span>{label}</span>
@@ -193,7 +135,7 @@ function NavGroup({ label, items, onClose, defaultOpen = true, surface = 'deskto
             </button>
 
             {open && (
-                <div id={`nav-group-${label.replace(/\s+/g, '-').toLowerCase()}`} className="mt-0.5 space-y-0.5">
+                <div id={groupId} className="mt-0.5 space-y-0.5">
                     <NavLinks items={items} onClose={onClose} />
                 </div>
             )}
@@ -219,6 +161,7 @@ export default function Sidebar({
     const desktopNavRef = useRef(null);
     const mobileNavRef = useRef(null);
     const scrollStorageKey = `${SIDEBAR_SCROLL_STORAGE_PREFIX}${scrollKey}`;
+    const groupsStorageKey = `${SIDEBAR_GROUPS_STORAGE_PREFIX}${scrollKey}`;
 
     // Inertia swaps page components, which recreates the layout and this sidebar.
     // Restore the menu's own scroll position before paint so lower navigation
@@ -276,7 +219,7 @@ export default function Sidebar({
                             items={group.items ?? []}
                             onClose={onClose}
                             defaultOpen={group.defaultOpen ?? true}
-                            surface={surface}
+                            storageKey={groupsStorageKey}
                         />
                     ))}
 
