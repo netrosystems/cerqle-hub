@@ -89,8 +89,8 @@
   // Device-cached message history: shows instantly on return visits (incl. any
   // agent replies that arrived while the visitor was away) before the network.
   var thread = loadThread();
-  function loadThread() { try { return JSON.parse(safeGet(LS_THREAD) || '[]'); } catch (e) { return []; } }
-  function saveThread() { safeSet(LS_THREAD, JSON.stringify(thread.slice(-200))); }
+  function loadThread() { try { var items = JSON.parse(safeGet(LS_THREAD) || '[]'); return Array.isArray(items) ? items.sort(function (a, b) { return a.id - b.id; }) : []; } catch (e) { return []; } }
+  function saveThread() { thread.sort(function (a, b) { return a.id - b.id; }); safeSet(LS_THREAD, JSON.stringify(thread.slice(-200))); }
 
   // Identity passed from the client's website (e.g. their logged-in user).
   // Read once here and merged into the session request.
@@ -155,7 +155,7 @@
   thread.forEach(function (m) {
     rendered[m.id] = true;
     if (m.id > lastId) lastId = m.id;
-    addBubble(m.role, m.body, m.agent_name, m.attachment_url, m.type, m.filename, m.mime_type, m.file_size, m.status, m.id, m.quick_replies, m.handoff_offer);
+    renderMessage(m);
   });
   updateStatus();
   if (prechatNeeded) { prechat.style.display = 'block'; form.style.display = 'none'; }
@@ -432,7 +432,7 @@
     thread.forEach(function (m) {
       rendered[m.id] = true;
       if (m.id > lastId) lastId = m.id;
-      addBubble(m.role, m.body, m.agent_name, m.attachment_url, m.type, m.filename, m.mime_type, m.file_size, m.status, m.id, m.quick_replies, m.handoff_offer);
+      renderMessage(m);
     });
 
     if (prechatNeeded) {
@@ -881,7 +881,7 @@
       if (Array.isArray(data.messages) && data.messages.length > 0) {
         var agentCount = 0;
         data.messages.forEach(function (m) {
-          if (m.role === 'agent' && !rendered[m.id]) agentCount++;
+          if (m.role === 'agent' && m.kind !== 'activity' && !rendered[m.id]) agentCount++;
           addMessage(m);
         });
         if (agentCount > 0) {
@@ -943,7 +943,7 @@
         var msg = (data && data.message) ? data.message : data;
         if (!msg) return;
         var isNew = addMessage(msg);
-        if (isNew && msg.role === 'agent') {
+        if (isNew && msg.role === 'agent' && msg.kind !== 'activity') {
           notifyAboutAgentMessages(1);
           if (open) {
             post('/widget/v1/read', { key: KEY }).catch(function () {});
@@ -1042,7 +1042,7 @@
       for (var i = 0; i < thread.length; i++) {
         if (thread[i].id === m.id) { existingIdx = i; break; }
       }
-      var msgObj = { id: m.id, role: m.role, body: m.body, agent_name: m.agent_name, attachment_url: m.attachment_url, type: m.type, filename: m.filename, mime_type: m.mime_type, file_size: m.file_size, status: m.status, quick_replies: m.quick_replies, handoff_offer: m.handoff_offer };
+      var msgObj = { id: m.id, role: m.role, kind: m.kind, body: m.body, activity: m.activity, agent_name: m.agent_name, attachment_url: m.attachment_url, type: m.type, filename: m.filename, mime_type: m.mime_type, file_size: m.file_size, status: m.status, quick_replies: m.quick_replies, handoff_offer: m.handoff_offer };
       if (existingIdx >= 0) thread[existingIdx] = msgObj;
       else thread.push(msgObj);
       saveThread();
@@ -1055,12 +1055,37 @@
     for (var j = 0; j < thread.length; j++) {
       if (thread[j].id === m.id) { existingIdx2 = j; break; }
     }
-    var msgObj2 = { id: m.id, role: m.role, body: m.body, agent_name: m.agent_name, attachment_url: m.attachment_url, type: m.type, filename: m.filename, mime_type: m.mime_type, file_size: m.file_size, status: m.status, quick_replies: m.quick_replies, handoff_offer: m.handoff_offer };
+    var msgObj2 = { id: m.id, role: m.role, kind: m.kind, body: m.body, activity: m.activity, agent_name: m.agent_name, attachment_url: m.attachment_url, type: m.type, filename: m.filename, mime_type: m.mime_type, file_size: m.file_size, status: m.status, quick_replies: m.quick_replies, handoff_offer: m.handoff_offer };
     if (existingIdx2 >= 0) thread[existingIdx2] = msgObj2;
     else thread.push(msgObj2);
     saveThread();
-    addBubble(m.role, m.body, m.agent_name, m.attachment_url, m.type, m.filename, m.mime_type, m.file_size, m.status, m.id, m.quick_replies, m.handoff_offer);
+    renderMessage(m);
     return true;
+  }
+
+  function renderMessage(m) {
+    var row;
+    if (m.kind === 'activity') {
+      row = document.createElement('div');
+      row.className = 'wb-row wb-activity';
+      var name = (m.activity && m.activity.actor_name) || '';
+      var joined = m.activity && m.activity.type === 'conversation.joined';
+      row.innerHTML = '<span>' + (joined ? esc(name) + ' joined the chat' : 'Resolved by ' + esc(name)) + '</span>';
+      body.appendChild(row);
+    } else {
+      row = addBubble(m.role, m.body, m.agent_name, m.attachment_url, m.type, m.filename, m.mime_type, m.file_size, m.status, m.id, m.quick_replies, m.handoff_offer);
+    }
+    if (m.id) {
+      row.setAttribute('data-wb-message-id', String(m.id));
+      var rows = body.querySelectorAll('[data-wb-message-id]');
+      for (var i = 0; i < rows.length; i++) {
+        if (rows[i] !== row && Number(rows[i].getAttribute('data-wb-message-id')) > Number(m.id)) {
+          body.insertBefore(row, rows[i]);
+          break;
+        }
+      }
+    }
+    scrollToBottom();
   }
 
   function updateVisitorMessageStatus(msgId, status) {
@@ -1531,6 +1556,7 @@
       '.wb-close:hover{opacity:1}',
       '.wb-body{flex:1;min-height:0;overflow-x:hidden;overflow-y:scroll;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;touch-action:pan-y;padding:16px;background:#f7f8fa;display:flex;flex-direction:column;gap:10px;scrollbar-width:thin}',
       '.wb-row{display:flex;align-items:flex-end;gap:8px;max-width:85%}',
+      '.wb-row.wb-activity{align-self:center;justify-content:center;max-width:95%;text-align:center;color:#647083;font-size:11px;line-height:1.4;padding:3px 0;background:transparent}',
       '.wb-row.wb-pending{opacity:.65}',
       '.wb-row.wb-failed{cursor:pointer;opacity:.8}',
       '.wb-row.wb-failed .wb-bubble{outline:1px solid #ef4444}',

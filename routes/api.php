@@ -82,6 +82,9 @@ Route::prefix('v1/mobile')->middleware(['auth:sanctum', 'throttle:api', 'demo', 
     Route::post('/conversations', [MobileConversationController::class, 'start']);
     Route::post('/conversations/{uuid}/reply', [MobileConversationController::class, 'reply']);
     Route::patch('/conversations/{uuid}/assign', [MobileConversationController::class, 'assign']);
+    Route::post('/conversations/{uuid}/join', [MobileConversationController::class, 'join']);
+    Route::post('/conversations/{uuid}/leave', [MobileConversationController::class, 'leave']);
+    Route::post('/conversations/{uuid}/takeover', [MobileConversationController::class, 'takeover']);
     Route::patch('/conversations/{uuid}/status', [MobileConversationController::class, 'updateStatus']);
     Route::delete('/conversations/{uuid}', [MobileConversationController::class, 'destroy']);
     Route::post('/conversations/{uuid}/typing', [MobileConversationController::class, 'typing']);

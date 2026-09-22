@@ -687,6 +687,9 @@ function SoundPrefsMenu() {
 function MessageBubble({ msg, conversationId }) {
     const { t } = useTranslation();
     const { props: pageProps } = usePage();
+    if (msg.direction === 'system' && msg.type === 'event') {
+        return <div className="flex justify-center py-2 text-center"><span className="max-w-full text-xs font-normal text-neutral-500 dark:text-neutral-400">{msg.body}</span></div>;
+    }
     const bubbleTz = pageProps.timezone || 'Asia/Dhaka';
     const isOut = msg.direction === 'out';
     const p     = msg.payload ?? {};
@@ -1496,6 +1499,7 @@ export default function InboxShow({
     const [convLabels, setConvLabels]       = useState(conversation.labels ?? []);
     const [assignedTo, setAssignedTo]       = useState(conversation.assigned_to ?? 'bot');
     const [assignedUserId, setAssignedUserId] = useState(conversation.assigned_user_id ?? null);
+    const [joinedUserId, setJoinedUserId] = useState(conversation.joined_user_id ?? null);
     const [conversations, setConversations] = useState(initialConversations);
     const [listSearch, setListSearch]       = useState('');
     const [listLoading, setListLoading]     = useState(false);
@@ -1513,11 +1517,16 @@ export default function InboxShow({
         setConvLabels(conversation.labels ?? []);
         setAssignedTo(conversation.assigned_to ?? 'bot');
         setAssignedUserId(conversation.assigned_user_id ?? null);
+        setJoinedUserId(conversation.joined_user_id ?? null);
         setSendError(null);
         stopAudioTracks();
         setRecordingAudio(false);
         setAttachPreview(null);
     }, [conversation.id]);
+
+    useEffect(() => {
+        setJoinedUserId(conversation.joined_user_id ?? null);
+    }, [conversation.joined_user_id]);
 
     useEffect(() => {
         setConversations(initialConversations);
@@ -1591,6 +1600,10 @@ export default function InboxShow({
                     }
                     return [...prev, e];
                 });
+            })
+            .listen('.ConversationActivityCreated', (e) => {
+                const activity = e.message;
+                if (activity) setMessages(prev => prev.some(m => m.id === activity.id) ? prev : [...prev, activity]);
             })
             .listen('.MessageStatusUpdated', (e) => {
                 setMessages(prev => prev.map(m =>
@@ -1901,6 +1914,15 @@ export default function InboxShow({
     };
 
     const handleStatus = (status) => router.post(route('client.inbox.status', conversation.uuid), { status }, { preserveScroll: true });
+    const changeJoin = (action) => {
+        axios.post(route(`client.inbox.${action}`, conversation.uuid))
+            .then(({ data }) => {
+                setJoinedUserId(data.conversation?.joined_user_id ?? null);
+                setAssignedUserId(data.conversation?.assigned_user_id ?? null);
+                router.reload({ only: ['conversation'] });
+            })
+            .catch((error) => setSendError(error.response?.data?.message || 'Could not update chat ownership.'));
+    };
     const deleteChat = () => {
         if (!window.confirm(t('inbox.delete_chat_confirm', 'Permanently delete this chat, its messages and notes from Cerqle? This cannot be undone. The contact and messages on the original provider are kept. New incoming messages may create a new chat.'))) return;
         router.delete(route('client.inbox.destroy', conversation.uuid), {
@@ -2051,6 +2073,15 @@ export default function InboxShow({
                         )}
 
                         {/* Agent assign */}
+                        {conversation.status !== 'resolved' && (
+                            !joinedUserId
+                                ? <button type="button" onClick={() => changeJoin('join')} className="rounded-lg border border-neutral-200 px-2.5 py-1.5 text-xs text-neutral-700 hover:bg-neutral-50 dark:border-neutral-700 dark:text-neutral-200">Join chat</button>
+                                : Number(joinedUserId) === Number(authUser?.id)
+                                    ? <button type="button" onClick={() => changeJoin('leave')} className="rounded-lg border border-neutral-200 px-2.5 py-1.5 text-xs text-neutral-700 hover:bg-neutral-50 dark:border-neutral-700 dark:text-neutral-200">Leave chat</button>
+                                    : authUser?.client_role === 'administrator'
+                                        ? <button type="button" onClick={() => changeJoin('takeover')} className="rounded-lg border border-neutral-200 px-2.5 py-1.5 text-xs text-neutral-700 hover:bg-neutral-50 dark:border-neutral-700 dark:text-neutral-200">Take over</button>
+                                        : null
+                        )}
                         <div className="relative">
                             <button
                                 type="button"
@@ -2113,7 +2144,7 @@ export default function InboxShow({
                     {/* Messages tab */}
                     {activeTab === 'messages' && (
                         <div ref={messagesContainerRef} className="flex-1 overflow-y-auto p-4 space-y-1">
-                            {groupMessagesForRender(messages).map(item => (
+                            {groupMessagesForRender([...messages].sort((a, b) => Number(a.id) - Number(b.id))).map(item => (
                                 item.kind === 'album'
                                     ? <ImageGallery key={item.key} messages={item.messages} conversationId={conversation.uuid} />
                                     : <MessageBubble key={item.key} msg={item.msg} conversationId={conversation.uuid} />
