@@ -876,7 +876,11 @@
       if (data.config) applyConfigUpdates(data.config);
       if (data.handover) applyHandover(data.handover);
       if (data.handoff) applyHandoff(data.handoff);
-      if (data.typing) renderAgentTyping(data.typing);
+      // The server sends this as agent_typing. Reading data.typing meant the
+      // authoritative state was never applied, so the optimistic "is typing"
+      // set when the visitor pressed send had nothing to switch it off and the
+      // bot looked like it was still working after it had answered.
+      if (data.agent_typing) renderAgentTyping(data.agent_typing);
       if (data.command) applyCommand(data.command);
       if (Array.isArray(data.statuses)) {
         data.statuses.forEach(function (st) {
