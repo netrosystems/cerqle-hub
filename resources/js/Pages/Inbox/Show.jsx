@@ -688,7 +688,13 @@ function MessageBubble({ msg, conversationId }) {
     const { t } = useTranslation();
     const { props: pageProps } = usePage();
     if (msg.direction === 'system' && msg.type === 'event') {
-        return <div className="flex justify-center py-2 text-center"><span className="max-w-full text-xs font-normal text-neutral-500 dark:text-neutral-400">{msg.body}</span></div>;
+        return (
+            <div className="my-2.5 flex w-full justify-center px-6" role="status">
+                <div className="w-fit max-w-[90%] rounded-lg bg-white px-3 py-1.5 text-center text-[11px] font-medium leading-4 text-neutral-500 shadow-sm ring-1 ring-black/5 dark:bg-neutral-800 dark:text-neutral-300 dark:ring-white/10">
+                    <span className="break-words">{msg.body}</span>
+                </div>
+            </div>
+        );
     }
     const bubbleTz = pageProps.timezone || 'Asia/Dhaka';
     const isOut = msg.direction === 'out';
@@ -1399,7 +1405,7 @@ function ProductPicker({ conversationId, onSent, onClose }) {
 }
 
 /* ─── agent assign dropdown ──────────────────────────── */
-function AgentDropdown({ teamMembers, currentUserId, conversationId, onAssigned, onClose }) {
+function AgentDropdown({ teamMembers, currentUserId, selectedUserId, conversationId, onAssigned, onClose }) {
     const { t } = useTranslation();
     const ref = useRef(null);
     const [query, setQuery] = useState('');
@@ -1435,23 +1441,25 @@ function AgentDropdown({ teamMembers, currentUserId, conversationId, onAssigned,
                 />
             </div>
             <div className="max-h-52 overflow-y-auto">
-                <button type="button" onClick={() => assign(null)}
-                    className="w-full text-left px-3 py-2 text-xs text-neutral-500 hover:bg-neutral-50 dark:hover:bg-neutral-800 transition border-b border-neutral-100 dark:border-neutral-800">
+                <button type="button" onClick={() => assign(null)} disabled={loading} aria-pressed={selectedUserId == null}
+                    className={`flex w-full items-center justify-between border-b border-neutral-100 px-3 py-2 text-left text-xs transition dark:border-neutral-800 ${selectedUserId == null ? 'bg-brand-50 text-brand-700 dark:bg-brand-900/20 dark:text-brand-300' : 'text-neutral-500 hover:bg-neutral-50 dark:hover:bg-neutral-800'}`}>
                     {t('inbox.unassign')}
+                    {selectedUserId == null && <CheckCircle className="h-3.5 w-3.5" />}
                 </button>
                 {filtered.map(m => (
-                    <button key={m.id} type="button" onClick={() => assign(m.id)}
-                        className={`w-full text-left px-3 py-2 hover:bg-brand-50 dark:hover:bg-brand-900/20 transition ${loading ? 'opacity-50 pointer-events-none' : ''}`}>
+                    <button key={m.id} type="button" onClick={() => assign(m.id)} disabled={loading} aria-pressed={Number(m.id) === Number(selectedUserId)}
+                        className={`w-full px-3 py-2 text-left transition ${Number(m.id) === Number(selectedUserId) ? 'bg-brand-50 dark:bg-brand-900/20' : 'hover:bg-neutral-50 dark:hover:bg-neutral-800'} ${loading ? 'opacity-50' : ''}`}>
                         <div className="flex items-center gap-2">
                             <div className="h-6 w-6 rounded-full bg-brand-100 dark:bg-brand-900/30 flex items-center justify-center text-xs font-semibold text-brand-700 dark:text-brand-300 shrink-0">
                                 {m.name[0]?.toUpperCase()}
                             </div>
                             <div className="min-w-0">
-                                <p className={`text-xs font-medium truncate ${m.id === currentUserId ? 'text-brand-600 dark:text-brand-400' : 'text-neutral-800 dark:text-neutral-200'}`}>
+                                <p className={`truncate text-xs font-medium ${Number(m.id) === Number(selectedUserId) ? 'text-brand-700 dark:text-brand-300' : 'text-neutral-800 dark:text-neutral-200'}`}>
                                     {m.name} {m.id === currentUserId && t('inbox.you_paren')}
                                 </p>
                                 <p className="text-[10px] text-neutral-400 truncate">{m.email}</p>
                             </div>
+                            {Number(m.id) === Number(selectedUserId) && <CheckCircle className="ml-auto h-3.5 w-3.5 shrink-0 text-brand-600 dark:text-brand-300" />}
                         </div>
                     </button>
                 ))}
@@ -1527,6 +1535,10 @@ export default function InboxShow({
     useEffect(() => {
         setJoinedUserId(conversation.joined_user_id ?? null);
     }, [conversation.joined_user_id]);
+
+    useEffect(() => {
+        setAssignedUserId(conversation.assigned_user_id ?? null);
+    }, [conversation.assigned_user_id]);
 
     useEffect(() => {
         setConversations(initialConversations);
@@ -2096,6 +2108,7 @@ export default function InboxShow({
                                 <AgentDropdown
                                     teamMembers={teamMembers}
                                     currentUserId={authUser?.id}
+                                    selectedUserId={assignedUserId}
                                     conversationId={conversation.uuid}
                                     onAssigned={(uid) => setAssignedUserId(uid)}
                                     onClose={() => setShowAgentDrop(false)}
