@@ -9,12 +9,14 @@ const ADDABLE_SOURCE_TYPES = {
     url:     { icon: Globe,    labelKey: 'ai.source_url' },
     sitemap: { icon: Globe,    labelKey: 'ai.source_sitemap' },
     file:    { icon: Upload,   labelKey: 'ai.source_file' },
-    text:    { icon: Type,     labelKey: 'ai.source_text' },
 };
 
+// Pasted text is no longer offered when adding, but documents created that way
+// before still have to render, so the type stays here.
 const DISPLAY_SOURCE_TYPES = {
     ...ADDABLE_SOURCE_TYPES,
     sitemap: { icon: Globe,    labelKey: 'ai.source_sitemap' },
+    text:    { icon: Type,     labelKey: 'ai.source_text' },
     faq:     { icon: HelpCircle, labelKey: 'ai.source_faq' },
 };
 
@@ -34,6 +36,7 @@ export default function AiKnowledgeBaseShow({ kb, kbUploadMaxKb = 20480, kbUploa
     const flash = props.flash ?? {};
     const [showAdd, setShowAdd] = useState(false);
     const [showEdit, setShowEdit] = useState(false);
+    const [confirming, setConfirming] = useState(null);
     const [dragOver, setDragOver] = useState(false);
     const [fileError, setFileError] = useState('');
     const fileRef = useRef();
@@ -102,10 +105,16 @@ export default function AiKnowledgeBaseShow({ kb, kbUploadMaxKb = 20480, kbUploa
         });
     };
 
+    // A native confirm() is unreliable: once a visitor ticks "prevent this page
+    // from creating more dialogs" the browser answers false forever and the
+    // delete silently never fires. The in-page dialog below always works.
     const handleDelete = (docId) => {
-        if (confirm(t('ai.remove_document_confirm'))) {
-            router.delete(route('client.ai.documents.destroy', docId), { preserveScroll: true });
-        }
+        const doc = kb.documents?.find(d => d.uuid === docId);
+        setConfirming({
+            title: t('ai.remove_document_confirm'),
+            detail: doc?.title ?? '',
+            onConfirm: () => router.delete(route('client.ai.documents.destroy', docId), { preserveScroll: true }),
+        });
     };
 
     const handleReindex = (docId) => {
@@ -132,9 +141,11 @@ export default function AiKnowledgeBaseShow({ kb, kbUploadMaxKb = 20480, kbUploa
     };
 
     const handleDeleteKnowledgeBase = () => {
-        if (confirm(t('ai.delete_kb_confirm', { name: kb.name }))) {
-            router.delete(route('client.ai.knowledge-bases.destroy', kb.uuid));
-        }
+        setConfirming({
+            title: t('ai.delete_kb_confirm', { name: kb.name }),
+            detail: '',
+            onConfirm: () => router.delete(route('client.ai.knowledge-bases.destroy', kb.uuid)),
+        });
     };
 
     const handleDrop = (e) => {
@@ -509,6 +520,34 @@ export default function AiKnowledgeBaseShow({ kb, kbUploadMaxKb = 20480, kbUploa
                                 </button>
                             </div>
                         </form>
+                    </div>
+                </div>
+            )}
+            {confirming && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+                    <div className="w-full max-w-md rounded-2xl bg-white dark:bg-neutral-900 shadow-2xl">
+                        <div className="px-6 pt-5 pb-4">
+                            <h3 className="text-base font-semibold text-neutral-900 dark:text-neutral-100">{confirming.title}</h3>
+                            {confirming.detail && (
+                                <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400 break-words">{confirming.detail}</p>
+                            )}
+                        </div>
+                        <div className="flex justify-end gap-2 px-6 pb-5">
+                            <button
+                                type="button"
+                                onClick={() => setConfirming(null)}
+                                className="rounded-lg border border-neutral-300 dark:border-neutral-600 px-4 py-2 text-sm text-neutral-700 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-800 transition"
+                            >
+                                {t('common.cancel')}
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => { const run = confirming.onConfirm; setConfirming(null); run(); }}
+                                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 transition"
+                            >
+                                {t('common.delete')}
+                            </button>
+                        </div>
                     </div>
                 </div>
             )}
