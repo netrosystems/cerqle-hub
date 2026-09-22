@@ -218,10 +218,13 @@
             src="https://connect.facebook.net/en_US/sdk.js"></script>
         @endif
 
-        {{-- Public Cerqle chat widget. Keep this off authenticated app,
-             admin, and installer screens so it cannot create duplicate inboxes. --}}
-        @if(isset($page['component']) && ($page['component'] === 'Welcome' || str_starts_with($page['component'], 'marketing/')))
-        <script src="https://cerqle.ai/widgets/chat/vjtvefTu02ELq9oxGOA5B8iCqpEg2Ifw.js" async></script>
+        {{-- Our own chat widget. Kept off authenticated app, admin and
+             installer screens so it cannot create duplicate inboxes, and keyed
+             per environment so a local page never opens a conversation in the
+             production inbox. Unset key = not embedded. --}}
+        @php($publicChatWidgetKey = config('saas.marketing.chat_widget_key'))
+        @if($publicChatWidgetKey && isset($page['component']) && ($page['component'] === 'Welcome' || str_starts_with($page['component'], 'marketing/')))
+        <script src="{{ rtrim(config('saas.marketing.chat_widget_base') ?: url('/'), '/') }}/widgets/chat/{{ $publicChatWidgetKey }}.js" async></script>
         @endif
 
         <!-- Scripts -->
