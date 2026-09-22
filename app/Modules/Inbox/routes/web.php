@@ -58,6 +58,7 @@ Route::middleware(['web', 'client-app'])->prefix('app/inbox')->name('client.inbo
     Route::post('/chat-widgets', [ChatWidgetController::class, 'store'])->name('chat-widgets.store');
     Route::get('/chat-widgets/{chatWidget}/edit', [ChatWidgetController::class, 'edit'])->name('chat-widgets.edit');
     Route::put('/chat-widgets/{chatWidget}', [ChatWidgetController::class, 'update'])->name('chat-widgets.update');
+    Route::patch('/chat-widgets/{chatWidget}/enabled', [ChatWidgetController::class, 'toggleEnabled'])->name('chat-widgets.enabled');
     Route::delete('/chat-widgets/{chatWidget}', [ChatWidgetController::class, 'destroy'])->name('chat-widgets.destroy');
 
     // Channel account setup (Instagram / Messenger)

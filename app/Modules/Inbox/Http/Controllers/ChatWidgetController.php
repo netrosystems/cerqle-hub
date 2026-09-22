@@ -41,6 +41,7 @@ class ChatWidgetController extends Controller
             'widgets' => $widgets,
             'aiAvailability' => $widgets->mapWithKeys(fn ($widget) => [$widget->id => app(WidgetAiAvailability::class)->publicState($widget)]),
             'embedBase' => rtrim(url('/'), '/'),
+            'defaultPrimaryColor' => self::defaultPrimaryColor(),
         ]);
     }
 
@@ -50,7 +51,18 @@ class ChatWidgetController extends Controller
             'chatbots' => $this->chatbots($request),
             'aiTimezone' => config('app.timezone', 'UTC'),
             'canUseCustomLauncherLogo' => $this->canUseCustomLauncherLogo($request),
+            'defaultPrimaryColor' => self::defaultPrimaryColor(),
         ]);
+    }
+
+    /**
+     * A new widget starts in Cerqle's own colour; the client changes it from
+     * there. The value comes from config rather than a literal in three files,
+     * so rebranding is one edit.
+     */
+    public static function defaultPrimaryColor(): string
+    {
+        return (string) config('saas.branding.primary_color', '#8F5FA7');
     }
 
     public function edit(Request $request, ChatWidget $chatWidget): Response
@@ -66,6 +78,7 @@ class ChatWidgetController extends Controller
             // client so they can HMAC-sign logged-in users on their backend.
             'identitySecret' => $chatWidget->identity_secret,
             'canUseCustomLauncherLogo' => $this->canUseCustomLauncherLogo($request),
+            'defaultPrimaryColor' => self::defaultPrimaryColor(),
         ]);
     }
 
@@ -118,6 +131,22 @@ class ChatWidgetController extends Controller
         return back()->with('success', 'Widget updated.');
     }
 
+    /**
+     * Flip the widget on or off on its own.
+     *
+     * Separate from update() because it is a different kind of action: it takes
+     * effect the moment it is clicked rather than waiting for Save, and it must
+     * not drag the rest of an unsaved form along with it.
+     */
+    public function toggleEnabled(Request $request, ChatWidget $chatWidget): RedirectResponse
+    {
+        $this->assertOwner($request, $chatWidget);
+        $enabled = $request->boolean('enabled');
+        $chatWidget->update(['enabled' => $enabled]);
+
+        return back()->with('success', $enabled ? 'Widget turned on.' : 'Widget turned off.');
+    }
+
     public function destroy(Request $request, ChatWidget $chatWidget): RedirectResponse
     {
         $this->assertOwner($request, $chatWidget);
@@ -145,7 +174,11 @@ class ChatWidgetController extends Controller
             'agent_name' => ['nullable', 'string', 'max:64'],
             'avatar_image' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:1024'],
             'remove_avatar' => ['nullable', 'boolean'],
-            'primary_color' => ['nullable', 'string', 'max:16'],
+            // A colour that is not a hex reaches the embed script as-is and
+            // renders as nothing, so the widget loses its branding on the
+            // client's own site. Rejecting it here is the only place it can be
+            // caught before that happens.
+            'primary_color' => ['nullable', 'string', 'max:16', 'regex:/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/'],
             'position' => ['required', 'in:bottom_right,bottom_left'],
             'launcher_text' => ['nullable', 'string', 'max:64'],
             'footer_company_name' => ['nullable', 'string', 'max:128'],
@@ -160,6 +193,8 @@ class ChatWidgetController extends Controller
             'offline_message' => ['nullable', 'string', 'max:512'],
             'allowed_domains' => ['nullable', 'array'],
             'working_hours_json' => ['nullable', 'array'],
+        ], [
+            'primary_color.regex' => 'Enter a hex colour such as #8F5FA7.',
         ]);
 
         // Coerce booleans explicitly (Inertia may omit unchecked toggles).
@@ -175,9 +210,20 @@ class ChatWidgetController extends Controller
         $data['ai_timezone'] = $data['ai_timezone'] ?? $widget?->ai_timezone ?? config('app.timezone', 'UTC');
         $data['ai_weekly_hours'] = app(WidgetAiAvailability::class)->validateHours($data['ai_weekly_hours'] ?? $widget?->ai_weekly_hours ?? app(WidgetAiAvailability::class)->defaults(), $data['ai_timezone'], $data['ai_mode'] === 'scheduled');
         unset($data['ai_revision']);
+        // An empty colour field means "use ours", not "store nothing": the
+        // column is NOT NULL, and an empty string arrives here as null because
+        // of ConvertEmptyStringsToNull, so without this the save is a 500.
+        if (array_key_exists('primary_color', $data) && ($data['primary_color'] ?? '') === '') {
+            $data['primary_color'] = self::defaultPrimaryColor();
+        }
         $data['require_prechat'] = $request->boolean('require_prechat');
         $data['identity_verification'] = $request->boolean('identity_verification');
-        $data['enabled'] = $request->has('enabled') ? $request->boolean('enabled') : true;
+        // On/off lives in its own control, not in this form, so an absent value
+        // means "leave it as it is". Defaulting to true here would silently
+        // switch a disabled widget back on every time its settings were saved.
+        $data['enabled'] = $request->has('enabled')
+            ? $request->boolean('enabled')
+            : ($widget?->enabled ?? true);
 
         unset(
             $data['avatar_image'],

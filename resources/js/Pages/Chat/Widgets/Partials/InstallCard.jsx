@@ -5,7 +5,12 @@ import { Check, Copy, Code, ExternalLink } from 'lucide-react';
  * The install journey: the one-line embed snippet + copy button + 3 steps.
  * Shown on the Edit page and each widget card so setup is obvious.
  */
-export default function InstallCard({ embedBase, widgetKey, compact = false }) {
+/**
+ * `children` is an optional extra section inside the same card — used on the
+ * Setup tab so identity passthrough reads as part of installing the widget
+ * rather than a second, unrelated thing to do.
+ */
+export default function InstallCard({ embedBase, widgetKey, compact = false, title = 'Install on your website', children = null }) {
     const snippet = `<script src="${embedBase}/widgets/chat/${widgetKey}.js" async></script>`;
     const [copied, setCopied] = useState(false);
 
@@ -24,7 +29,7 @@ export default function InstallCard({ embedBase, widgetKey, compact = false }) {
     return (
         <div className={`rounded-2xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 ${compact ? 'p-4' : 'p-5'}`}>
             <h3 className="flex items-center gap-2 text-sm font-semibold text-neutral-900 dark:text-neutral-100">
-                <Code className="h-4 w-4 text-brand-500" /> Install on your website
+                <Code className="h-4 w-4 text-brand-500" /> {title}
             </h3>
             <p className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">
                 Paste this one line just before the closing <code className="rounded bg-neutral-100 dark:bg-neutral-800 px-1">&lt;/body&gt;</code> tag on every page.
@@ -57,6 +62,10 @@ export default function InstallCard({ embedBase, widgetKey, compact = false }) {
             <a href={`/widgets/chat/${widgetKey}.js`} target="_blank" rel="noopener" className="mt-3 inline-flex items-center gap-1.5 text-xs font-medium text-brand-600 dark:text-brand-400 hover:underline">
                 <ExternalLink className="h-3.5 w-3.5" /> View the generated script
             </a>
+
+            {children && (
+                <div className="mt-5 border-t border-neutral-200 pt-5 dark:border-neutral-800">{children}</div>
+            )}
         </div>
     );
 }

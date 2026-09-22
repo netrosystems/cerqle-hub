@@ -39,13 +39,14 @@ class AiChatbot extends Model
     protected $fillable = [
         'workspace_id', 'name', 'ai_kb_id', 'system_prompt', 'tone', 'answer_scope',
         'max_context_chunks', 'fallback_reply', 'fallback_mode', 'confidence_threshold',
-        'clarification_threshold', 'channels', 'enabled',
+        'clarification_threshold', 'channels', 'enabled', 'behaviour_set_at',
     ];
 
     protected function casts(): array
     {
         return [
             'channels' => 'array',
+            'behaviour_set_at' => 'datetime',
             'enabled' => 'boolean',
             'max_context_chunks' => 'integer',
             'confidence_threshold' => 'float',

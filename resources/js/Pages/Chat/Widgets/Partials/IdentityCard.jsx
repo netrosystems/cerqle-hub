@@ -24,7 +24,11 @@ function CopyBox({ code, label }) {
  * customer's details so agents see who they're talking to — with the optional
  * HMAC signing snippet when verification is on.
  */
-export default function IdentityCard({ embedBase, widgetKey, identitySecret, verification }) {
+/**
+ * `embedded` drops the card chrome so this can sit inside the install card as
+ * an optional step, instead of standing alone and reading like a separate task.
+ */
+export default function IdentityCard({ embedBase, widgetKey, identitySecret, verification, embedded = false }) {
     const [expanded, setExpanded] = useState(false);
     const basic =
 `<!-- Before the widget script, set identity ONLY when your visitor is logged in. -->
@@ -53,10 +57,17 @@ const userHash = crypto
   .update(String(userId))
   .digest('hex');`;
 
+    const Wrapper = ({ children }) =>
+        embedded ? (
+            <div>{children}</div>
+        ) : (
+            <div className="rounded-2xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 p-5">{children}</div>
+        );
+
     return (
-        <div className="rounded-2xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 p-5">
-            <h3 className="flex items-center gap-2 text-sm font-semibold text-neutral-900 dark:text-neutral-100">
-                <UserCheck className="h-4 w-4 text-brand-500" /> Show logged-in customers to your agents
+        <Wrapper>
+            <h3 className={`flex items-center gap-2 font-semibold text-neutral-900 dark:text-neutral-100 ${embedded ? 'text-[13px]' : 'text-sm'}`}>
+                <UserCheck className="h-4 w-4 text-brand-500" /> {embedded ? 'Optional: show logged-in customers to your agents' : 'Show logged-in customers to your agents'}
             </h3>
             <p className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">
                 Use this only if your website has logged-in users and you want your agents to see their name, email or photo automatically. Otherwise, you can leave it closed.
@@ -98,6 +109,6 @@ const userHash = crypto
                     )}
                 </div>
             )}
-        </div>
+        </Wrapper>
     );
 }

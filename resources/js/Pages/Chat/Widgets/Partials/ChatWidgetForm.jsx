@@ -4,6 +4,36 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Bot, Lock, MessageCircle, Send, Sparkles } from 'lucide-react';
 
+/**
+ * Last-resort colour. The server normally supplies Cerqle's brand colour as a
+ * page prop; this only covers a component rendered without one.
+ */
+const FALLBACK_COLOR = '#8F5FA7';
+
+/**
+ * A half-typed colour must never reach the preview's CSS. Anything that is not
+ * a complete 3- or 6-digit hex renders as "invalid" in the browser, which makes
+ * the preview flash to transparent while the client is still typing.
+ */
+function isUsableColor(value) {
+    return typeof value === 'string' && /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(value.trim());
+}
+
+/**
+ * Tidies what the client typed once they leave the field: a missing hash is
+ * added, and anything still unusable falls back rather than being saved and
+ * silently breaking the colour on their live site.
+ */
+function normaliseColor(value, fallback) {
+    const trimmed = (value ?? '').trim();
+    if (trimmed === '') {
+        return fallback;
+    }
+    const withHash = trimmed.startsWith('#') ? trimmed : '#' + trimmed;
+
+    return isUsableColor(withHash) ? withHash.toLowerCase() : fallback;
+}
+
 /** Small labelled field wrapper. */
 function Field({ label, hint, children }) {
     return (
@@ -32,13 +62,37 @@ function Toggle({ checked, onChange, label, description }) {
     );
 }
 
-function Card({ title, icon, children }) {
+/**
+ * `accent` marks a card as an AI surface. It tints with Cerqle Lilac rather than
+ * a new colour, matching how AI state is already badged on the widget list, so
+ * the section reads as AI without spending a signal the palette uses elsewhere.
+ */
+function Card({ title, subtitle, icon, accent = false, children }) {
     return (
-        <div className="rounded-2xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 p-5">
-            {title && (
+        <div
+            className={`rounded-2xl border p-5 ${
+                accent
+                    ? 'border-brand-200 bg-brand-50/50 dark:border-brand-800 dark:bg-brand-900/10'
+                    : 'border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-900'
+            }`}
+        >
+            {title && !accent && (
                 <h3 className="mb-4 flex items-center gap-2 text-sm font-semibold text-neutral-900 dark:text-neutral-100">
                     {icon} {title}
                 </h3>
+            )}
+            {title && accent && (
+                <div className="mb-4 flex items-start gap-3">
+                    <span className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-xl bg-brand-100 text-brand-700 dark:bg-brand-900/40 dark:text-brand-300">
+                        {icon}
+                    </span>
+                    <div className="min-w-0">
+                        <h3 className="text-sm font-semibold text-neutral-900 dark:text-neutral-100">{title}</h3>
+                        {subtitle && (
+                            <p className="mt-0.5 text-xs text-neutral-500 dark:text-neutral-400">{subtitle}</p>
+                        )}
+                    </div>
+                </div>
             )}
             <div className="space-y-4">{children}</div>
         </div>
@@ -48,6 +102,9 @@ function Card({ title, icon, children }) {
 export default function ChatWidgetForm({ widget = null, chatbots = [], aiTimezone = 'UTC', canUseCustomLauncherLogo = false, submitLabel, onSubmit }) {
     const { t } = useTranslation();
     const pageErrors = usePage().props.errors ?? {};
+    // Cerqle's own colour, supplied by the server so the brand lives in one
+    // place. A client who picks their own overrides it from here on.
+    const defaultColor = usePage().props.defaultPrimaryColor ?? '#8F5FA7';
 
     const { data, setData, processing, errors } = useForm({
         name: widget?.name ?? '',
@@ -57,14 +114,13 @@ export default function ChatWidgetForm({ widget = null, chatbots = [], aiTimezon
         agent_name: widget?.agent_name ?? 'Support',
         avatar_image: null,
         remove_avatar: false,
-        primary_color: widget?.primary_color ?? '#ff762e',
+        primary_color: widget?.primary_color ?? defaultColor,
         position: widget?.position ?? 'bottom_right',
         launcher_text: widget?.launcher_text ?? '',
         footer_company_name: widget?.footer_company_name ?? 'Cerqle',
         launcher_logo: null,
         remove_launcher_logo: false,
         launcher_logo_url: widget?.launcher_logo_url ?? null,
-        enabled: widget?.enabled ?? true,
         ai_enabled: widget?.ai_enabled ?? false,
         ai_mode: widget?.ai_mode ?? (widget?.ai_enabled ? 'permanent' : 'off'),
         ai_timezone: widget?.ai_timezone ?? aiTimezone,
@@ -102,6 +158,15 @@ export default function ChatWidgetForm({ widget = null, chatbots = [], aiTimezon
         <form onSubmit={submit} className="grid min-w-0 gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
             {/* ── Left: settings ── */}
             <div className="min-w-0 space-y-6">
+                <Card
+                    accent
+                    title="AI answering"
+                    subtitle="Answers visitors instantly, in their own language, and hands over to your team when it should."
+                    icon={<Bot className="h-4 w-4" />}
+                >
+                    <WidgetAiAnswering data={data} setData={setData} chatbots={chatbots} errors={{ ...errors, ...pageErrors }} />
+                </Card>
+
                 <Card title="Appearance" icon={<MessageCircle className="h-4 w-4 text-brand-500" />}>
                     <div className="grid gap-4 sm:grid-cols-2">
                         <Field label="Widget name" hint="Internal label — customers don't see this.">
@@ -109,9 +174,23 @@ export default function ChatWidgetForm({ widget = null, chatbots = [], aiTimezon
                         </Field>
                         <Field label="Brand color">
                             <div className="flex items-center gap-2">
-                                <input type="color" value={data.primary_color} onChange={(e) => setData('primary_color', e.target.value)} className="h-9 w-12 rounded border border-neutral-300 dark:border-neutral-700 bg-transparent p-0.5" />
-                                <input className={inputCls} value={data.primary_color} onChange={(e) => setData('primary_color', e.target.value)} />
+                                {/* The swatch only accepts a complete hex; feeding it a
+                                    half-typed one makes it jump to black mid-edit. */}
+                                <input type="color" aria-label="Brand color swatch" value={isUsableColor(data.primary_color) ? data.primary_color : defaultColor} onChange={(e) => setData('primary_color', e.target.value)} className="h-9 w-12 rounded border border-neutral-300 dark:border-neutral-700 bg-transparent p-0.5" />
+                                {/* Typing stays unrestricted; the value is tidied on blur so
+                                    "8F5FA7" is accepted as readily as "#8F5FA7". */}
+                                <input
+                                    aria-label="Brand color hex"
+                                    className={inputCls}
+                                    value={data.primary_color}
+                                    onChange={(e) => setData('primary_color', e.target.value)}
+                                    onBlur={(e) => setData('primary_color', normaliseColor(e.target.value, defaultColor))}
+                                    aria-invalid={errors.primary_color ? 'true' : undefined}
+                                />
                             </div>
+                            {errors.primary_color && (
+                                <span className="mt-1 block text-xs text-red-500">{errors.primary_color}</span>
+                            )}
                         </Field>
                         <Field label="Header title">
                             <input className={inputCls} value={data.title} onChange={(e) => setData('title', e.target.value)} />
@@ -231,10 +310,6 @@ export default function ChatWidgetForm({ widget = null, chatbots = [], aiTimezon
                     </div>
                 </Card>
 
-                <Card title="AI answering" icon={<Bot className="h-4 w-4 text-brand-500" />}>
-                    <WidgetAiAnswering data={data} setData={setData} chatbots={chatbots} errors={{ ...errors, ...pageErrors }} />
-                </Card>
-
                 <Card title="Visitor experience" icon={<Sparkles className="h-4 w-4 text-brand-500" />}>
                     <Toggle
                         checked={data.require_prechat}
@@ -261,7 +336,6 @@ export default function ChatWidgetForm({ widget = null, chatbots = [], aiTimezon
                         label="Verify passed identity (recommended)"
                         description="Only trust a logged-in customer's name/email if your server signs it with the widget secret. Prevents visitors impersonating others. Setup snippet is on this page after saving."
                     />
-                    <Toggle checked={data.enabled} onChange={(v) => setData('enabled', v)} label="Widget enabled" description="Turn the widget off without deleting it." />
                 </Card>
             </div>
 
@@ -269,7 +343,7 @@ export default function ChatWidgetForm({ widget = null, chatbots = [], aiTimezon
             <div className="min-w-0 lg:sticky lg:top-6 h-fit space-y-4">
                 <div className="rounded-2xl border border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-900/50 p-4">
                     <p className="mb-3 text-xs font-medium uppercase tracking-wide text-neutral-400">Live preview</p>
-                    <WidgetPreview data={data} avatarPreview={avatarPreview} />
+                    <WidgetPreview data={data} avatarPreview={avatarPreview} defaultColor={defaultColor} />
                 </div>
                 <button
                     type="submit"
@@ -287,8 +361,10 @@ export default function ChatWidgetForm({ widget = null, chatbots = [], aiTimezon
 }
 
 /** A faithful, static mock of the embedded widget using the live form values. */
-function WidgetPreview({ data, avatarPreview }) {
-    const color = data.primary_color || '#ff762e';
+function WidgetPreview({ data, avatarPreview, defaultColor = FALLBACK_COLOR }) {
+    // The field is empty for a moment whenever someone clears it to type a new
+    // value, so the preview has to keep rendering with no colour at all.
+    const color = isUsableColor(data.primary_color) ? data.primary_color : defaultColor;
     const initial = (data.agent_name || 'S').trim().charAt(0).toUpperCase();
     return (
         <div className="mx-auto w-full max-w-[300px] overflow-hidden rounded-2xl border border-neutral-200 dark:border-neutral-700 bg-white shadow-lg">

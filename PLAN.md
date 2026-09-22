@@ -140,6 +140,7 @@ Real number eligibility and end-to-end provider delivery remain separately verif
 ### Feature 6: AI Knowledge Bases & Autonomous Smart Bots (`app/Modules/AI`)
 
 #### Capabilities
+- **One setup journey**: Creating a Smart Bot creates the knowledge it answers from, in one request. The bot is the destination; its knowledge, behaviour and playground are tabs on it, and the business profile (name, purpose, audience) is edited there rather than on a separate Knowledge Base page. Reusing another bot's knowledge is offered explicitly and states that an edit affects both. A readiness strip names what still stands between the bot and answering, and links to the fix. Channel assignment stays in Channel Setup, Email Setup and the widget's own page. See `docs/decisions/2026-09-22-smart-bot-owns-its-knowledge.md`.
 - **Multi-Source Knowledge Ingestion**: Ingest raw text, PDF/Word documents, website URL crawlers, and XML sitemaps into vectorized embeddings (`IndexKnowledgeDocumentJob`).
 - **Hybrid Vector Retrieval**: Built-in MySQL vector-like similarity fallback with high-performance Qdrant vector database support.
 - **LLM Provider Agnostic**: Native support for OpenAI, Anthropic, Google Gemini, and DeepSeek frontier chat models. DeepSeek can be selected for lower-cost RAG answer generation while OpenAI or Gemini supplies the embeddings required for indexing and retrieval.

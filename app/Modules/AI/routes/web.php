@@ -24,7 +24,10 @@ Route::middleware(['web', 'client-app'])->prefix('app/ai')->name('client.ai.')->
 
     // Chatbots
     Route::get('/chatbots', [AiChatbotController::class, 'index'])->name('chatbots.index');
+    Route::get('/chatbots/create', [AiChatbotController::class, 'create'])->name('chatbots.create');
     Route::post('/chatbots', [AiChatbotController::class, 'store'])->name('chatbots.store');
+    Route::get('/chatbots/{chatbot}', [AiChatbotController::class, 'show'])->name('chatbots.show');
+    Route::put('/chatbots/{chatbot}/business', [AiChatbotController::class, 'updateBusinessProfile'])->name('chatbots.business');
     Route::put('/chatbots/{chatbot}', [AiChatbotController::class, 'update'])->name('chatbots.update');
     Route::delete('/chatbots/{chatbot}', [AiChatbotController::class, 'destroy'])->name('chatbots.destroy');
     Route::post('/chatbots/{chatbot}/playground', [AiChatbotController::class, 'playground'])->name('chatbots.playground');

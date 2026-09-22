@@ -1,4 +1,5 @@
 import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
+import { useConfirm } from '@/Components/ui/ConfirmProvider';
 import ClientLayout from '@/Layouts/ClientLayout';
 import EmptyState from '@/Components/EmptyState';
 import { Plus, BookOpen, FileText, Database, Pencil, Trash2, X } from 'lucide-react';
@@ -6,6 +7,7 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 export default function AiKnowledgeBasesIndex({ knowledgeBases }) {
+    const confirm = useConfirm();
     const { t } = useTranslation();
     const { props } = usePage();
     const flash = props.flash ?? {};
@@ -42,8 +44,8 @@ export default function AiKnowledgeBasesIndex({ knowledgeBases }) {
         });
     };
 
-    const handleDelete = (kb) => {
-        if (confirm(t('ai.delete_kb_confirm', { name: kb.name }))) {
+    const handleDelete = async (kb) => {
+        if (await confirm(t('ai.delete_kb_confirm', { name: kb.name }))) {
             router.delete(route('client.ai.knowledge-bases.destroy', kb.uuid), {
                 preserveScroll: true,
             });

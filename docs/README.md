@@ -61,6 +61,7 @@ Decision records explain durable choices and their rationale. A newer record may
 - [`decisions/2026-09-15-security-boundaries-and-deferred-client-permissions.md`](decisions/2026-09-15-security-boundaries-and-deferred-client-permissions.md)
 - [`decisions/2026-09-16-grounded-smart-bot-answering.md`](decisions/2026-09-16-grounded-smart-bot-answering.md)
 - [`decisions/2026-09-20-language-agnostic-smart-bot.md`](decisions/2026-09-20-language-agnostic-smart-bot.md)
+- [`decisions/2026-09-22-smart-bot-owns-its-knowledge.md`](decisions/2026-09-22-smart-bot-owns-its-knowledge.md)
 
 ## Maintenance rule
 

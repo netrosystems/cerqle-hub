@@ -23,7 +23,7 @@ class AiKnowledgeBaseController extends Controller
     private const SUPPORTED_FILE_LABEL = 'PDF, TXT, MD, CSV, DOCX, JSON';
 
     /** Application ceiling. The active PHP-FPM limit may be lower. */
-    private const UPLOAD_MAX_KB = 20 * 1024;
+    public const UPLOAD_MAX_KB = 20 * 1024;
 
     public function __construct(
         private StorageManager $storage,
@@ -219,7 +219,7 @@ class AiKnowledgeBaseController extends Controller
         abort_unless((int) $kb->workspace_id === (int) $workspaceId, 403);
     }
 
-    private function kbUploadMaxKb(): int
+    public function kbUploadMaxKb(): int
     {
         $serverMaxKb = min(
             $this->iniSizeToKb(ini_get('upload_max_filesize')),

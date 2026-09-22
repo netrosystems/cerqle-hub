@@ -59,6 +59,58 @@ class QueryEmbedder
         return $embedding;
     }
 
+    /**
+     * Vectors for many texts in one provider round trip, keyed by the text.
+     *
+     * Embedding a list one item at a time is a round trip each: the intent
+     * exemplars alone are about fifty, which took twenty seconds and fell on
+     * whichever customer happened to say hello first after a cache flush.
+     * Providers accept a batch, so this asks once.
+     *
+     * @param  list<string>  $texts
+     * @return array<string, list<float>>
+     */
+    public function vectors(int $workspaceId, array $texts): array
+    {
+        $wanted = [];
+        $found = [];
+        foreach ($texts as $text) {
+            $text = trim($text);
+            if ($text === '' || isset($found[$text]) || in_array($text, $wanted, true)) {
+                continue;
+            }
+            $cached = $this->remembered($this->key($workspaceId, $text));
+            if ($cached !== null) {
+                $found[$text] = $cached;
+
+                continue;
+            }
+            $wanted[] = $text;
+        }
+
+        if ($wanted === []) {
+            return $found;
+        }
+
+        try {
+            $embeddings = $this->llmGateway->embed($workspaceId, $wanted);
+        } catch (\Throwable) {
+            // The caller degrades to its own fallback; a missing vector is
+            // never worth failing a customer's reply over.
+            return $found;
+        }
+
+        foreach ($wanted as $index => $text) {
+            $embedding = $embeddings[$index] ?? [];
+            if (is_array($embedding) && $embedding !== []) {
+                $this->store($this->key($workspaceId, $text), $embedding);
+                $found[$text] = $embedding;
+            }
+        }
+
+        return $found;
+    }
+
     private function key(int $workspaceId, string $text): string
     {
         // Workspace-scoped: the input is customer text, so it never crosses a

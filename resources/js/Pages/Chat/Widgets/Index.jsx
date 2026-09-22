@@ -1,13 +1,15 @@
 import { Head, Link, router, usePage } from '@inertiajs/react';
+import { useConfirm } from '@/Components/ui/ConfirmProvider';
 import ClientLayout from '@/Layouts/ClientLayout';
 import { Plus, Pencil, Trash2, Check, Bot, MessageCircle, Globe, Power } from 'lucide-react';
 import InstallCard from './Partials/InstallCard';
 
-export default function ChatWidgetIndex({ widgets = [], embedBase, aiAvailability = {} }) {
+export default function ChatWidgetIndex({ widgets = [], embedBase, aiAvailability = {}, defaultPrimaryColor = '#8F5FA7' }) {
+    const confirm = useConfirm();
     const flash = usePage().props.flash ?? {};
 
-    const remove = (id) => {
-        if (confirm('Delete this widget? The embed will stop working. Past conversations stay in your inbox.')) {
+    const remove = async (id) => {
+        if (await confirm('Delete this widget? The embed will stop working. Past conversations stay in your inbox.')) {
             router.delete(route('client.inbox.chat-widgets.destroy', id), { preserveScroll: true });
         }
     };
@@ -42,7 +44,7 @@ export default function ChatWidgetIndex({ widgets = [], embedBase, aiAvailabilit
                             <div key={w.id} className="flex flex-col gap-4 rounded-2xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 p-5">
                                 <div className="flex items-start justify-between gap-2">
                                     <div className="flex items-center gap-3 min-w-0">
-                                        <span className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full text-white" style={{ background: w.primary_color || '#ff762e' }}>
+                                        <span className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full text-white" style={{ background: w.primary_color || defaultPrimaryColor }}>
                                             <MessageCircle className="h-5 w-5" />
                                         </span>
                                         <div className="min-w-0">

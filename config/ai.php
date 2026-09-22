@@ -55,7 +55,12 @@ return [
         // seeds, NOT translations, and no language list is shipped anywhere.
         'intent' => [
             'enabled' => (bool) env('SMART_BOT_MULTILINGUAL_INTENT', false),
-            'threshold' => 0.62,
+            // Measured 2026-09-22 against text-embedding-3-small, not guessed.
+            // Non-English greetings score 0.51-0.74 against the English seeds
+            // (Merhaba 0.514, Guten Tag 0.562, Ciao 0.559, Hola 0.742); short
+            // real questions score 0.14-0.42 (worst: "Book me in" 0.417). 0.47
+            // sits in that gap. 0.62 admitted English, Spanish and French only.
+            'threshold' => 0.47,
             'margin' => 0.04,
             'human_threshold' => 0.82,
             // Chit-chat is short. A long message is a question, whatever it
@@ -78,7 +83,10 @@ return [
         // English text is the seed; a translation is generated once per language
         // and cached, so no phrase table is ever shipped.
         'phrases' => [
-            'version' => 1,
+            // Bumped to 2 on 2026-09-22: v1 entries for an unknown language were
+            // keyed by script, so a phrase learned in one language was served to
+            // every language sharing that script. Those entries are poison.
+            'version' => 2,
             'cache_days' => 90,
             'seeds' => [
                 'greeting' => 'Hello! How can I help you today?',
