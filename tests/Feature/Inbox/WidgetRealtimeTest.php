@@ -121,7 +121,10 @@ class WidgetRealtimeTest extends TestCase
             'type' => 'text',
             'body' => 'Agent reply',
             'status' => 'sent',
-            'sent_by' => 'agent',
+            // A team member's reply is 'human' everywhere in the app; 'agent'
+            // is not an allowed value and the database rejects it. The widget
+            // still labels it an agent reply, from the outbound direction.
+            'sent_by' => 'human',
             'user_id' => $agent->id,
             'provider_message_id' => 'private-provider-id',
             'sent_at' => now(),
@@ -185,7 +188,10 @@ class WidgetRealtimeTest extends TestCase
             'type' => 'text',
             'body' => 'Agent reply for mobile SDK',
             'status' => 'sent',
-            'sent_by' => 'agent',
+            // A team member's reply is 'human' everywhere in the app; 'agent'
+            // is not an allowed value and the database rejects it. The widget
+            // still labels it an agent reply, from the outbound direction.
+            'sent_by' => 'human',
             'user_id' => $agent->id,
             'sent_at' => now(),
         ]);

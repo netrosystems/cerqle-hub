@@ -2,7 +2,6 @@
 
 namespace Tests\Feature\Campaign;
 
-use App\Models\User;
 use App\Models\Workspace;
 use App\Modules\Broadcasting\Models\Campaign;
 use App\Modules\Broadcasting\Models\CampaignRecipient;
@@ -21,11 +20,14 @@ class WhatsappWebhookTest extends TestCase
 
     private function ctx(): array
     {
-        $user = User::factory()->create(['role' => 'client', 'email_verified_at' => now()]);
-        $workspace = Workspace::factory()->create(['owner_id' => $user->id]);
-        $user->update(['workspace_id' => $workspace->id]);
+        // A subscribed workspace, because channel plan limits now refuse a
+        // WhatsApp connection on a workspace with no plan (0 of 0 allowed).
+        // The bare factory workspace this used to build predates those limits,
+        // so the one test that connects a channel failed on setup rather than
+        // on anything about webhooks.
+        $context = $this->createSubscribedWorkspaceContext();
 
-        return [$user, $workspace];
+        return [$context['user'], $context['workspace']];
     }
 
     private function makeRecipient(int $workspaceId, string $providerId): CampaignRecipient
