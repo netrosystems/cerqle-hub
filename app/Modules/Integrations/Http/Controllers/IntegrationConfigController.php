@@ -69,6 +69,7 @@ class IntegrationConfigController extends Controller
             // OAuth redirect/callback URL the admin must register in the platform's app settings.
             'callbackUrl' => match ($provider) {
                 'oauth_linkedin' => route('client.social.oauth.callback', 'linkedin'),
+                'oauth_linkedin_page' => route('client.social.oauth.callback', 'linkedin_page'),
                 'oauth_twitter' => route('client.social.oauth.callback', 'twitter'),
                 'oauth_google_signin' => route('auth.social.callback', 'google'),
                 'oauth_youtube' => route('client.social.oauth.callback', 'youtube'),
