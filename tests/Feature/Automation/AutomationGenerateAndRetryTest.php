@@ -235,6 +235,33 @@ class AutomationGenerateAndRetryTest extends TestCase
         $this->assertArrayNotHasKey('channel_account_id', Automation::where('name', 'Pricing reply')->sole()->trigger_config ?? []);
     }
 
+    public function test_generating_inside_the_builder_returns_the_draft_without_saving_it(): void
+    {
+        // The builder puts the draft on the canvas; only Save may write it,
+        // so an existing automation is never replaced behind the person's back.
+        $before = Automation::where('workspace_id', $this->ctx['workspace']->id)->count();
+        $generator = Mockery::mock(WorkflowGenerator::class);
+        $generator->shouldReceive('generate')->once()->andReturn($this->fakeGraph());
+        $this->app->instance(WorkflowGenerator::class, $generator);
+
+        $this->postJson(route('client.automations.generate'), ['prompt' => 'Reply to pricing questions', 'persist' => false])
+            ->assertOk()
+            ->assertJsonPath('ok', true)
+            ->assertJsonPath('graph.nodes.1.type', 'send_whatsapp')
+            ->assertJsonPath('graph.trigger_config.channel_account_id', $this->account->id)
+            ->assertJsonMissingPath('redirect');
+
+        $this->assertSame($before, Automation::where('workspace_id', $this->ctx['workspace']->id)->count());
+    }
+
+    public function test_the_builder_shows_what_generating_costs(): void
+    {
+        $automation = Automation::create(['workspace_id' => $this->ctx['workspace']->id, 'name' => 'Existing', 'status' => 'draft', 'trigger_type' => 'message.received', 'nodes' => [], 'edges' => []]);
+
+        $this->get(route('client.automations.edit', $automation->uuid))
+            ->assertInertia(fn ($page) => $page->component('Automation/Builder')->where('generateCost', (int) config('ai.credits.rates.automation_workflow_generate')));
+    }
+
     public function test_running_out_of_credits_is_reported_plainly(): void
     {
         $generator = Mockery::mock(WorkflowGenerator::class);

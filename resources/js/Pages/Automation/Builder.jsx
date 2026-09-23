@@ -1,7 +1,8 @@
 import { Head, router, usePage } from '@inertiajs/react';
 import ClientLayout from '@/Layouts/ClientLayout';
 import { useCallback, useContext, useState, useEffect, createContext } from 'react';
-import { automationReleaseNodes, legacyAutomation } from '@/Utils/automationRelease';
+import { automationAiExamples, automationReleaseNodes, legacyAutomation } from '@/Utils/automationRelease';
+import { useConfirm } from '@/Components/ui/ConfirmProvider';
 import {
     ArrowLeft, Save, Play, Pause, Copy, Check, RefreshCw,
     X, Zap, Mail, Phone, Clock, GitBranch,
@@ -1372,6 +1373,16 @@ const modalStyle = { background: '#fff', borderRadius: 16, boxShadow: '0 20px 60
 const modalHeaderStyle = { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px', borderBottom: '1px solid #f0f0f0' };
 const modalFooterStyle = { display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8, padding: '12px 16px', borderTop: '1px solid #f0f0f0', background: '#fafafa' };
 const iconBtnStyle = { background: 'none', border: 'none', cursor: 'pointer', color: '#9ca3af', display: 'flex' };
+const chipBtnStyle = { borderRadius: 10, padding: '6px 10px', fontSize: 10.5, fontWeight: 500, border: '1px solid #e5e7eb', background: '#fff', color: '#475569', cursor: 'pointer', textAlign: 'left' };
+
+// A "false" branch is drawn red so the two sides of a condition are easy to tell apart.
+const styleEdge = (e) => ({
+    ...e,
+    animated: true,
+    style: { stroke: e.sourceHandle === 'false' ? '#ef4444' : '#6366f1', strokeWidth: 2 },
+    markerEnd: { type: MarkerType.ArrowClosed, color: e.sourceHandle === 'false' ? '#ef4444' : '#6366f1' },
+});
+
 const ghostBtnStyle = { borderRadius: 8, padding: '7px 14px', fontSize: 12, fontWeight: 600, border: '1px solid #e5e7eb', background: '#fff', color: '#374151', cursor: 'pointer' };
 const primaryBtnStyle = { display: 'flex', alignItems: 'center', gap: 6, borderRadius: 8, padding: '7px 14px', fontSize: 12, fontWeight: 600, border: 'none', background: '#6366f1', color: '#fff', cursor: 'pointer' };
 
@@ -1484,20 +1495,63 @@ function ConfirmDeleteModal({ target, onCancel, onConfirm }) {
     );
 }
 
+function AiGenerateModal({ prompt, setPrompt, loading, error, onClose, onGenerate }) {
+    const { t } = useTranslation();
+    const cost = usePage().props.generateCost ?? 5;
+    return (
+        <div onClick={loading ? undefined : onClose} style={overlayStyle}>
+            <div role="dialog" aria-modal="true" aria-labelledby="builder-ai-title" onClick={e => e.stopPropagation()} style={{ ...modalStyle, width: 520 }}>
+                <div style={modalHeaderStyle}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span style={{ display: 'flex', width: 30, height: 30, borderRadius: 8, background: '#f5f0f8', color: '#8F5FA7', alignItems: 'center', justifyContent: 'center' }}><Sparkles size={16} /></span>
+                        <div>
+                            <div id="builder-ai-title" style={{ fontSize: 14, fontWeight: 700, color: '#111827' }}>{t('automation.ai_title')}</div>
+                            <div style={{ fontSize: 11, color: '#6b7280' }}>{t('automation.ai_subtitle')}</div>
+                        </div>
+                    </div>
+                    <button onClick={onClose} disabled={loading} aria-label={t('common.cancel')} style={iconBtnStyle}><X size={18} /></button>
+                </div>
+                <div style={{ padding: 16 }} className="space-y-3">
+                    <label htmlFor="builder-ai-prompt" className="sr-only">{t('automation.ai_title')}</label>
+                    <textarea
+                        id="builder-ai-prompt"
+                        autoFocus
+                        rows={5}
+                        maxLength={2000}
+                        className={textareaCls}
+                        value={prompt}
+                        onChange={e => setPrompt(e.target.value)}
+                        placeholder={t('automation.ai_placeholder_message', 'e.g. When a customer messages us, ask what they need help with. If they mention an order, ask for the order number; otherwise hand them to an agent.')}
+                        disabled={loading}
+                    />
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                        {automationAiExamples.map(([key, fallback]) => (
+                            <button key={key} type="button" disabled={loading} onClick={() => setPrompt(t(key, fallback))} style={chipBtnStyle}>{t(key, fallback)}</button>
+                        ))}
+                    </div>
+                    {error && <div role="alert" style={{ display: 'flex', gap: 8, background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: '8px 10px', fontSize: 11.5, color: '#b91c1c' }}><AlertTriangle size={14} style={{ flexShrink: 0, marginTop: 1 }} />{error}</div>}
+                    <div style={{ fontSize: 10.5, color: '#94a3b8', display: 'flex', gap: 6, alignItems: 'flex-start' }}><AlertCircle size={13} style={{ flexShrink: 0, marginTop: 1 }} />{t('automation.ai_disclaimer')}</div>
+                </div>
+                <div style={modalFooterStyle}>
+                    <button onClick={onClose} disabled={loading} style={ghostBtnStyle}>{t('common.cancel')}</button>
+                    <button onClick={onGenerate} disabled={loading || !prompt.trim()} style={{ ...primaryBtnStyle, opacity: (loading || !prompt.trim()) ? 0.6 : 1, display: 'flex', alignItems: 'center', gap: 6 }}>
+                        {loading
+                            ? <><Loader2 size={13} className="animate-spin" /> {t('automation.ai_generating')}</>
+                            : <><Sparkles size={13} /> {t('automation.ai_generate')} · {cost} {t('automation.credits', 'credits')}</>}
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+}
+
 function AutomationBuilderInner({ automation: initial }) {
     const { t } = useTranslation();
     const [automation, setAutomation] = useState(initial);
     const [nodes, setNodes, onNodesChange] = useNodesState(
         withTriggerNode(deserializeNodes(initial.nodes ?? []), initial.trigger_type ?? '')
     );
-    const [edges, setEdges, onEdgesChange] = useEdgesState(
-        (initial.edges ?? []).map(e => ({
-            ...e,
-            animated: true,
-            style: { stroke: e.sourceHandle === 'false' ? '#ef4444' : '#6366f1', strokeWidth: 2 },
-            markerEnd: { type: MarkerType.ArrowClosed, color: e.sourceHandle === 'false' ? '#ef4444' : '#6366f1' },
-        }))
-    );
+    const [edges, setEdges, onEdgesChange] = useEdgesState((initial.edges ?? []).map(styleEdge));
     const [saving, setSaving] = useState(false);
     const [selectedNode, setSelectedNode] = useState(null);
     const [copied, setCopied] = useState(false);
@@ -1509,6 +1563,11 @@ function AutomationBuilderInner({ automation: initial }) {
     const [sampleMessage, setSampleMessage] = useState('Hi');
     const [sampleAnswer, setSampleAnswer] = useState('sales');
     const [validationErrors, setValidationErrors] = useState({});
+    const confirm = useConfirm();
+    const [aiOpen, setAiOpen] = useState(false);
+    const [aiPrompt, setAiPrompt] = useState('');
+    const [aiLoading, setAiLoading] = useState(false);
+    const [aiError, setAiError] = useState(null);
     const canvasState = JSON.stringify({ nodes: serializeNodes(nodes), edges: edges.map(({ id, source, target, sourceHandle, targetHandle }) => ({ id, source, target, sourceHandle, targetHandle })), trigger_type: automation.trigger_type, trigger_config: automation.trigger_config, name: automation.name });
     const [savedState, setSavedState] = useState(canvasState);
     const dirty = canvasState !== savedState;
@@ -1662,6 +1721,54 @@ function AutomationBuilderInner({ automation: initial }) {
             .finally(() => setTesting(false));
     };
 
+    // Put an AI-drafted graph on the canvas for review. Nothing is saved until
+    // the person presses Save, and two things they already chose are kept:
+    // the name, and the WhatsApp number. Wisperbot overwrote both — its
+    // `graph.trigger_config ?? current` kept the AI's empty object, because
+    // an empty object is not "missing", and silently unset the sender.
+    const applyGraph = (graph) => {
+        setNodes(withTriggerNode(deserializeNodes(graph.nodes ?? []), graph.trigger_type ?? automation.trigger_type ?? ''));
+        setEdges((graph.edges ?? []).map(styleEdge));
+        setAutomation(a => {
+            // Only a real choice wins; a blank one must not hide the number the server prefilled.
+            const chosen = Object.fromEntries(Object.entries(a.trigger_config ?? {}).filter(([, v]) => v !== null && v !== ''));
+            return {
+                ...a,
+                trigger_type: graph.trigger_type ?? a.trigger_type,
+                trigger_config: { ...(graph.trigger_config ?? {}), ...chosen },
+            };
+        });
+        setSelectedNode(null);
+        setValidationErrors({});
+    };
+
+    const generateAi = async () => {
+        // Replacing someone's work needs their say-so; an empty canvas does not.
+        const hasSteps = nodes.some(n => n.type !== 'triggerNode' && n.type !== 'trigger');
+        if (hasSteps && !(await confirm(
+            t('automation.ai_replace_confirm', 'Replace the steps on the canvas with the AI draft? Nothing is saved until you press Save.'),
+            { confirmLabel: t('automation.ai_replace', 'Replace'), destructive: false },
+        ))) {
+            return;
+        }
+        setAiLoading(true);
+        setAiError(null);
+        axios.post(route('client.automations.generate'), { prompt: aiPrompt, persist: false }, {
+            headers: { 'Idempotency-Key': `workflow-generate:${window.crypto.randomUUID()}` },
+        })
+            .then(res => {
+                if (res.data?.ok && res.data.graph) {
+                    applyGraph(res.data.graph);
+                    setAiOpen(false);
+                    setAiPrompt('');
+                } else {
+                    setAiError(res.data?.error || t('automation.ai_failed'));
+                }
+            })
+            .catch(err => setAiError(err.response?.data?.error || err.response?.data?.message || t('automation.ai_failed')))
+            .finally(() => setAiLoading(false));
+    };
+
     const q = search.trim().toLowerCase();
     const grouped = CATEGORY_ORDER.map(cat => ({
         cat,
@@ -1762,6 +1869,13 @@ function AutomationBuilderInner({ automation: initial }) {
                                 <div style={{ width: 8, height: 8, borderRadius: '50%', background: automation.status === 'active' ? '#10b981' : '#f59e0b' }} />
                                 <span style={{ fontSize: 11, color: '#6b7280', fontWeight: 500 }}>{t(`automation.status_${automation.status}`)}</span>
                             </div>
+                            <button onClick={() => { setAiError(null); setAiOpen(true); }} title={t('automation.ai_title')} style={{
+                                display: 'flex', alignItems: 'center', gap: 6, borderRadius: 8,
+                                background: '#f5f0f8', padding: '6px 12px', fontSize: 12, fontWeight: 600,
+                                color: '#6b4383', border: '1px solid #e6dcec', cursor: 'pointer', transition: 'all 0.15s',
+                            }}>
+                                <Sparkles size={13} /> {t('automation.ai_generate_short', 'AI')}
+                            </button>
                             <button onClick={runTest} disabled={testing} title={t('automation.test_title')} style={{
                                 display: 'flex', alignItems: 'center', gap: 6, borderRadius: 8,
                                 background: '#eef2ff', padding: '6px 12px', fontSize: 12, fontWeight: 600,
@@ -1848,6 +1962,7 @@ function AutomationBuilderInner({ automation: initial }) {
                 )}
             </div>
 
+            {aiOpen && <AiGenerateModal prompt={aiPrompt} setPrompt={setAiPrompt} loading={aiLoading} error={aiError} onClose={() => setAiOpen(false)} onGenerate={generateAi} />}
             {showTest && <TestResultModal result={testResult} loading={testing} onClose={() => setShowTest(false)} onRerun={runTest} />}
             {confirmDelete && <ConfirmDeleteModal target={confirmDelete} onCancel={() => resolveDelete(false)} onConfirm={() => resolveDelete(true)} />}
         </div>

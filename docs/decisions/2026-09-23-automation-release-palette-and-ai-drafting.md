@@ -70,5 +70,10 @@ The Runs page shows which case applies before anyone clicks.
   `window.confirm`, which browsers can suppress — the same dead delete button
   this component was built to fix, reintroduced on every page that rendered
   its own layout.
-- Wisperbot's in-builder AI dialog was not ported; generation starts from the
-  Automations page. It can follow if clients ask to regenerate inside a draft.
+- Generate with AI is also in the builder toolbar. There it returns the graph
+  without saving (`persist: false`) and draws it on the canvas; only Save
+  writes it. Two deliberate differences from Wisperbot, whose version
+  overwrote both: the automation keeps its name, and a WhatsApp number already
+  chosen is kept — Wisperbot's `graph.trigger_config ?? current` kept the
+  AI's empty object and silently unset the sender. Replacing steps already on
+  the canvas asks first, before any credit is spent.

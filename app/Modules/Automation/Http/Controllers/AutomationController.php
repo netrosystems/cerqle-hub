@@ -70,6 +70,7 @@ class AutomationController extends Controller
         return Inertia::render('Automation/Builder', [
             'automation' => $automation,
             'resources' => $this->builderResources($wid, $automation->id),
+            'generateCost' => (int) config('ai.credits.rates.automation_workflow_generate', 5),
         ]);
     }
 
@@ -267,15 +268,18 @@ class AutomationController extends Controller
     /**
      * Build an automation from a plain-language description.
      *
-     * The draft is created paused, never active: the AI cannot know which
-     * templates are approved or which number to listen on, so a person
-     * always reviews it in the builder before switching it on.
+     * From the Automations page this creates a paused draft, never an active
+     * one: the AI cannot know which templates are approved, so a person always
+     * reviews it in the builder first. From inside the builder (persist=false)
+     * nothing is saved — the graph is returned to be placed on the canvas and
+     * saved only if the person chooses to.
      */
     public function generate(Request $request): JsonResponse
     {
         $wid = $this->workspaceId($request);
         $validated = $request->validate([
             'prompt' => ['required', 'string', 'max:2000'],
+            'persist' => ['nullable', 'boolean'],
         ]);
 
         try {
@@ -294,6 +298,10 @@ class AutomationController extends Controller
         $triggerConfig = $graph['trigger_config'];
         if ($accounts->count() === 1) {
             $triggerConfig['channel_account_id'] = (int) $accounts->first();
+        }
+
+        if (! $request->boolean('persist', true)) {
+            return response()->json(['ok' => true, 'graph' => array_merge($graph, ['trigger_config' => $triggerConfig])]);
         }
 
         $automation = Automation::create([

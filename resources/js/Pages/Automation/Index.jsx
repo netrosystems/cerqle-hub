@@ -11,7 +11,7 @@ import {
 } from 'lucide-react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { legacyAutomation } from '@/Utils/automationRelease';
+import { automationAiExamples, legacyAutomation } from '@/Utils/automationRelease';
 
 const STATUS_COLORS = {
     active: 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300',
@@ -39,15 +39,6 @@ const TRIGGER_META = {
     'cart.abandoned':    { labelKey: 'automation.trigger_cart_abandoned',    Icon: ShoppingCart  },
     'customer.created':  { labelKey: 'automation.trigger_customer_created',  Icon: UserPlus      },
 };
-
-// Every example must be buildable from the release actions and the Message
-// Received trigger. Wisperbot's examples ("when a contact is added", "abandoned
-// carts") produced drafts Cerqle would refuse to activate.
-const AI_EXAMPLES = [
-    ['automation.ai_example_pricing', 'When someone asks about price, reply with our pricing and ask if they would like a demo'],
-    ['automation.ai_example_triage', 'Ask new customers what they need help with. If they say "order", ask for their order number; otherwise assign an agent'],
-    ['automation.ai_example_after_hours', 'Thank people for their message, tag them as "follow-up", and wait 1 hour before asking if they still need help'],
-];
 
 const formatDate = (iso) => {
     if (!iso) return '—';
@@ -285,7 +276,7 @@ export default function AutomationIndex({ automations, generateCost = 5 }) {
                         />
 
                         <div className="flex flex-wrap gap-1.5">
-                            {AI_EXAMPLES.map(([key, fallback]) => (
+                            {automationAiExamples.map(([key, fallback]) => (
                                 <button
                                     key={key}
                                     type="button"
