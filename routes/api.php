@@ -14,6 +14,7 @@ use App\Http\Controllers\Api\V1\MobileAuthController;
 use App\Http\Controllers\Api\V1\MobileConversationController;
 use App\Http\Controllers\Api\V1\MobileEmailInboxController;
 use App\Http\Controllers\Api\V1\MobileInboxController;
+use App\Http\Controllers\Api\V1\MobileTeamAvailabilityController;
 use App\Http\Controllers\Api\V1\NotificationApiController;
 use App\Http\Controllers\Api\V1\OutboundWebhookApiController;
 use App\Http\Controllers\Api\V1\SegmentApiController;
@@ -106,6 +107,8 @@ Route::prefix('v1/mobile')->middleware(['auth:sanctum', 'throttle:api', 'demo', 
     Route::get('/inbox/templates', [MobileInboxController::class, 'templates']);
     Route::get('/inbox/labels', [MobileInboxController::class, 'labels']);
     Route::get('/inbox/canned-replies', [MobileInboxController::class, 'cannedReplies']);
+    Route::get('/team/availability', [MobileTeamAvailabilityController::class, 'index']);
+    Route::put('/team/{member}/availability', [MobileTeamAvailabilityController::class, 'update']);
 
     // Master Email Inbox (kept separate from the Omni Channel Inbox)
     Route::get('/email/accounts', [MobileEmailInboxController::class, 'accounts']);

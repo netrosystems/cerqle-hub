@@ -3,6 +3,7 @@
 namespace App\Events;
 
 use App\Models\User;
+use App\Modules\Inbox\Services\TeamAvailabilityService;
 use App\Modules\Shared\Models\Conversation;
 use Illuminate\Broadcasting\InteractsWithSockets;
 use Illuminate\Broadcasting\PrivateChannel;
@@ -44,7 +45,7 @@ class ConversationOwnershipChanged implements ShouldBroadcastNow
         ];
     }
 
-    /** @return array{id:int,name:string,avatar:mixed,avatar_url:string}|null */
+    /** @return array{id:int,name:string,avatar:mixed,avatar_url:string,available:bool}|null */
     private function publicUser(?User $user): ?array
     {
         return $user ? [
@@ -52,6 +53,7 @@ class ConversationOwnershipChanged implements ShouldBroadcastNow
             'name' => $user->name,
             'avatar' => $user->avatar ?? null,
             'avatar_url' => $user->avatarUrl(),
+            'available' => app(TeamAvailabilityService::class)->isAvailable((int) $this->conversation->workspace_id, $user),
         ] : null;
     }
 }

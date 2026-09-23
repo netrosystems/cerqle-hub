@@ -645,7 +645,7 @@ export default function EmailInbox({
     const selectedMailbox = selectedConversation?.channel_account;
     const joinedUser = selectedConversation?.joined_user ?? null;
     const isJoinedByMe = Number(joinedUser?.id) === Number(authUser?.id);
-    const canTakeOver = Boolean(joinedUser) && authUser?.client_role === 'administrator';
+    const canTakeOver = Boolean(joinedUser) && Boolean(selectedConversation?.can_takeover);
     // Folders + list + reader competed for the same row, leaving the mail
     // itself about a third of the window — the one thing this page exists to
     // show. Both side panels collapse and the choice is remembered, matching

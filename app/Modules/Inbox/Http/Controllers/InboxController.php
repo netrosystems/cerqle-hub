@@ -148,7 +148,10 @@ class InboxController extends Controller
         return Inertia::render('Inbox/EmailInbox', [
             ...$mailbox,
             'accounts' => $accounts,
-            'selectedConversation' => $selected,
+            'selectedConversation' => $selected ? [
+                ...$selected->toArray(),
+                'can_takeover' => app(ConversationActivityService::class)->canTakeover($selected, $request->user()),
+            ] : null,
             'messages' => $messages,
         ]);
     }
@@ -253,7 +256,10 @@ class InboxController extends Controller
                 ->exists();
 
         return Inertia::render('Inbox/Show', [
-            'conversation' => $conversation,
+            'conversation' => [
+                ...$conversation->toArray(),
+                'can_takeover' => app(ConversationActivityService::class)->canTakeover($conversation, $request->user()),
+            ],
             'messages' => $messages,
             'allLabels' => $allLabels,
             'conversations' => $conversations,
@@ -629,28 +635,40 @@ class InboxController extends Controller
     public function join(Request $request, Conversation $conversation): JsonResponse
     {
         $this->authorise($request, $conversation);
-        $updated = app(ConversationActivityService::class)->join($conversation, $request->user());
+        $service = app(ConversationActivityService::class);
+        $updated = $service->join($conversation, $request->user());
         ConversationAssigned::dispatch($updated, $request->user());
 
-        return response()->json(['ok' => true, 'conversation' => $updated]);
+        return response()->json(['ok' => true, 'conversation' => [
+            ...$updated->toArray(),
+            'can_takeover' => $service->canTakeover($updated, $request->user()),
+        ]]);
     }
 
     public function leave(Request $request, Conversation $conversation): JsonResponse
     {
         $this->authorise($request, $conversation);
-        $updated = app(ConversationActivityService::class)->leave($conversation, $request->user());
+        $service = app(ConversationActivityService::class);
+        $updated = $service->leave($conversation, $request->user());
         ConversationAssigned::dispatch($updated, $updated->assignedUser);
 
-        return response()->json(['ok' => true, 'conversation' => $updated]);
+        return response()->json(['ok' => true, 'conversation' => [
+            ...$updated->toArray(),
+            'can_takeover' => $service->canTakeover($updated, $request->user()),
+        ]]);
     }
 
     public function takeover(Request $request, Conversation $conversation): JsonResponse
     {
         $this->authorise($request, $conversation);
-        $updated = app(ConversationActivityService::class)->takeover($conversation, $request->user());
+        $service = app(ConversationActivityService::class);
+        $updated = $service->takeover($conversation, $request->user());
         ConversationAssigned::dispatch($updated, $request->user());
 
-        return response()->json(['ok' => true, 'conversation' => $updated]);
+        return response()->json(['ok' => true, 'conversation' => [
+            ...$updated->toArray(),
+            'can_takeover' => $service->canTakeover($updated, $request->user()),
+        ]]);
     }
 
     public function typing(Request $request, Conversation $conversation): JsonResponse
