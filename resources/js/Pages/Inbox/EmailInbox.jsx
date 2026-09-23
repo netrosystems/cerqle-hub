@@ -1,8 +1,9 @@
 import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
 import InboxLayout from '@/Layouts/InboxLayout';
+import EmailHtmlBody from '@/Components/Inbox/EmailHtmlBody';
 import {
-    Archive, ArrowLeft, CheckCircle2, ChevronLeft, ChevronRight, Circle,
-    ExternalLink, Image as ImageIcon, Inbox, Mail, MailOpen, Paperclip, PenLine, RefreshCw, Search, Send, Settings2, X,
+    Archive, ArrowLeft, CheckCircle2, ChevronLeft, ChevronRight, Circle, Columns2,
+    ExternalLink, Image as ImageIcon, Inbox, Mail, MailOpen, PanelLeft, Paperclip, PenLine, RefreshCw, Search, Send, Settings2, X,
 } from 'lucide-react';
 import axios from 'axios';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
@@ -305,6 +306,12 @@ function MessageBlock({ message, contact, mailbox, timezone = 'Asia/Dhaka' }) {
     const senderEmail = safeText(outbound ? (mailbox?.meta_json?.email || mailbox?.display_name) : contact?.email, 'unknown');
     const recipient = outbound ? (contact?.email || 'Customer') : (mailbox?.meta_json?.email || mailbox?.display_name || 'Your team');
     const body = safeText(message.body, '');
+    // Sanitised by the server; rendered in a script-free sandboxed frame.
+    // Messages synced before html_body existed have none, and fall back to the
+    // stored text — a resync of the mailbox backfills them.
+    const htmlBody = typeof message.payload?.html_body === 'string' && message.payload.html_body.trim() !== ''
+        ? message.payload.html_body
+        : null;
     const previewUrl = message.payload?.preview_url;
     const isImage = message.type === 'image' || (previewUrl && /\.(jpe?g|png|gif|webp|bmp|svg)$/i.test(previewUrl));
     const filename = message.payload?.filename || 'attachment';
@@ -357,11 +364,13 @@ function MessageBlock({ message, contact, mailbox, timezone = 'Asia/Dhaka' }) {
             {/* Email Body Content */}
             <div className="p-4 sm:p-6">
                 {message.status === 'failed' && message.payload?.ai_automation && <p role="status" className="mb-2 rounded-soft bg-coral-50 p-2 text-xs text-coral-700 dark:bg-coral-950/30 dark:text-coral-300">AI reply failed: {message.error_json?.message ?? 'Review delivery before replying manually.'}</p>}
-                {body && (
-                    <div className="whitespace-pre-wrap break-words text-sm leading-relaxed text-neutral-800 dark:text-neutral-200">
-                        {body}
-                    </div>
-                )}
+                {htmlBody
+                    ? <EmailHtmlBody html={htmlBody} />
+                    : body && (
+                        <div className="whitespace-pre-wrap break-words text-sm leading-relaxed text-neutral-800 dark:text-neutral-200">
+                            {body}
+                        </div>
+                    )}
 
                 {/* Attachments */}
                 {previewUrl && (
@@ -581,11 +590,35 @@ export default function EmailInbox({
     };
     const selectedSubject = safeText(messages.find(message => safeText(message.payload?.subject))?.payload?.subject) || subjectOf(selectedConversation);
     const selectedMailbox = selectedConversation?.channel_account;
+    // Folders + list + reader competed for the same row, leaving the mail
+    // itself about a third of the window — the one thing this page exists to
+    // show. Both side panels collapse and the choice is remembered, matching
+    // the omni-channel inbox so the two pages behave the same way.
+    const readPanel = (key, fallback) => {
+        try {
+            const stored = window.localStorage.getItem(key);
+
+            return stored === null ? fallback : stored === '1';
+        } catch {
+            return fallback;
+        }
+    };
+    const [showFolders, setShowFolders] = useState(() => readPanel('email.panel.folders', true));
+    const [showList, setShowList] = useState(() => readPanel('email.panel.list', true));
+    const togglePanel = (key, value, set) => {
+        set(value);
+        try {
+            window.localStorage.setItem(key, value ? '1' : '0');
+        } catch {
+            // A browser that refuses storage still gets the toggle, just not the memory.
+        }
+    };
+
 
     return <InboxLayout>
         <Head title="Master Email Inbox" />
         <div className="flex min-h-0 flex-1 overflow-hidden bg-white dark:bg-neutral-900">
-            <aside className="hidden w-56 shrink-0 flex-col border-r border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-900 xl:flex">
+            {showFolders && <aside className="hidden w-56 shrink-0 flex-col border-r border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-900 xl:flex">
                 <div className="border-b border-neutral-200 px-5 py-4 dark:border-neutral-800">
                     <div className="flex items-center gap-2 text-lg font-bold text-neutral-900 dark:text-white"><Mail className="h-5 w-5 text-brand-600" />Master Inbox</div>
                     <p className="mt-1 text-xs text-neutral-400">All connected email accounts</p>
@@ -603,9 +636,9 @@ export default function EmailInbox({
                 <div className="mt-auto border-t border-neutral-200 p-3 dark:border-neutral-800">
                     <Link href={route('client.inbox.email.index')} className="flex items-center gap-2 rounded-xl px-3 py-2.5 text-sm font-medium text-neutral-600 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800"><Settings2 className="h-4 w-4" />Email Setup</Link>
                 </div>
-            </aside>
+            </aside>}
 
-            <section className={`${selectedConversation ? 'hidden lg:flex' : 'flex'} w-full shrink-0 flex-col border-r border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-900 sm:w-[390px]`}>
+            <section className={`${selectedConversation ? (showList ? 'hidden lg:flex' : 'hidden') : 'flex'} w-full shrink-0 flex-col border-r border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-900 sm:w-[390px]`}>
                 <header className="space-y-3 border-b border-neutral-200 px-4 py-4 dark:border-neutral-800">
                     <div className="flex items-center justify-between gap-3">
                         <div><h1 className="font-bold text-neutral-900 dark:text-white">{FOLDERS.find(folder => folder.key === filters.folder)?.label || 'Inbox'}</h1><p className="text-xs text-neutral-400">{conversations.total} email threads</p></div>
@@ -632,6 +665,26 @@ export default function EmailInbox({
                     <header className="border-b border-neutral-200 bg-white px-4 py-4 dark:border-neutral-800 dark:bg-neutral-900 sm:px-6">
                         <div className="flex items-start gap-3">
                             <button type="button" onClick={() => navigate({ folder: filters.folder, account_id: filters.account_id || undefined, search: filters.search || undefined })} className="mt-0.5 rounded-lg p-2 text-neutral-500 hover:bg-neutral-100 lg:hidden"><ArrowLeft className="h-5 w-5" /></button>
+                            <div className="mt-0.5 hidden items-center gap-0.5 lg:flex">
+                                <button
+                                    type="button"
+                                    onClick={() => togglePanel('email.panel.folders', !showFolders, setShowFolders)}
+                                    aria-pressed={showFolders}
+                                    title={showFolders ? 'Hide folders' : 'Show folders'}
+                                    className={`hidden rounded-lg p-2 transition xl:block ${showFolders ? 'text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-800' : 'bg-brand-50 text-brand-600 dark:bg-brand-950/40 dark:text-brand-300'}`}
+                                >
+                                    <PanelLeft className="h-4 w-4" />
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => togglePanel('email.panel.list', !showList, setShowList)}
+                                    aria-pressed={showList}
+                                    title={showList ? 'Hide email list' : 'Show email list'}
+                                    className={`rounded-lg p-2 transition ${showList ? 'text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-800' : 'bg-brand-50 text-brand-600 dark:bg-brand-950/40 dark:text-brand-300'}`}
+                                >
+                                    <Columns2 className="h-4 w-4" />
+                                </button>
+                            </div>
                             <div className="min-w-0 flex-1"><h2 className="truncate text-lg font-bold text-neutral-900 dark:text-white">{selectedSubject}</h2><div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-neutral-400"><span>{contactName(selectedConversation)}</span><span>·</span><span>{selectedConversation.contact?.email}</span><span>·</span><span className="rounded-full bg-neutral-100 px-2 py-0.5 dark:bg-neutral-800">{selectedMailbox?.display_name}</span></div></div>
                             <div className="flex items-center gap-2">
                                 <Link
@@ -646,11 +699,14 @@ export default function EmailInbox({
                             </div>
                         </div>
                     </header>
-                    <div ref={threadScrollRef} className="min-h-0 flex-1 overflow-y-auto bg-neutral-100/70 p-4 space-y-4 dark:bg-neutral-950 sm:p-6">
-                        {messages.map(message => <MessageBlock key={message.id} message={message} contact={selectedConversation.contact} mailbox={selectedMailbox} timezone={timezone} />)}
-                        <div ref={bottomRef} />
+                    <div ref={threadScrollRef} className="min-h-0 flex-1 overflow-y-auto bg-neutral-100/70 p-4 dark:bg-neutral-950 sm:p-6">
+                        <div className="mx-auto max-w-4xl space-y-4">
+                            {messages.map(message => <MessageBlock key={message.id} message={message} contact={selectedConversation.contact} mailbox={selectedMailbox} timezone={timezone} />)}
+                            <div ref={bottomRef} />
+                        </div>
                     </div>
                     <form onSubmit={submitReply} className="border-t border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900 sm:p-5">
+                      <div className="mx-auto max-w-4xl">
                         {/* Attachment preview if selected */}
                         {replyAttachment && (
                             <div className="mb-2 flex items-center gap-2 rounded-xl border border-neutral-200 bg-neutral-50 p-2 dark:border-neutral-700 dark:bg-neutral-800">
@@ -714,6 +770,7 @@ export default function EmailInbox({
                             </div>
                         </div>
                         {sendError && <p className="mt-2 text-xs text-red-600">{sendError}</p>}
+                      </div>
                     </form>
                 </>}
             </main>

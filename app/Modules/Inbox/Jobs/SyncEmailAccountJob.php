@@ -3,6 +3,7 @@
 namespace App\Modules\Inbox\Jobs;
 
 use App\Events\MessageReceived;
+use App\Modules\Inbox\Services\EmailBodyParser;
 use App\Modules\Inbox\Services\GenericMailboxClient;
 use App\Modules\Inbox\Services\GoogleGmailClient;
 use App\Modules\Inbox\Services\MicrosoftGraphMailClient;
@@ -101,7 +102,14 @@ class SyncEmailAccountJob implements ShouldBeUnique, ShouldQueue
         if ($providerId === '') {
             return;
         }
-        $body = trim(strip_tags((string) data_get($item, 'body.content', $item['bodyPreview'] ?? '')));
+        $raw = (string) data_get($item, 'body.content', $item['bodyPreview'] ?? '');
+        $parser = app(EmailBodyParser::class);
+        // Text is what gets stored on the message: the AI reads it, search
+        // matches it and the conversation list previews it, none of which want
+        // markup. The HTML is kept beside it purely so the reader can show the
+        // mail as its sender built it.
+        $body = $parser->toText($raw);
+        $html = $parser->toSafeHtml($raw);
         $existing = Message::where('channel', 'email')
             ->where('provider_message_id', $providerId)
             ->whereHas('conversation', fn ($query) => $query->where('channel_account_id', $account->id))
@@ -109,12 +117,15 @@ class SyncEmailAccountJob implements ShouldBeUnique, ShouldQueue
         if ($existing) {
             // A manual bounded resync can repair messages saved by the legacy
             // IMAP parser, which stored raw multipart boundaries as the body.
-            if ($body !== '' && $existing->body !== $body) {
+            // A bounded resync also backfills html_body onto messages stored
+            // before the reader could render it.
+            if ($body !== '' && ($existing->body !== $body || ($existing->payload['html_body'] ?? null) !== $html)) {
                 $existing->update([
                     'body' => $body,
-                    'payload' => array_merge($existing->payload ?? [], [
+                    'payload' => array_merge($existing->payload ?? [], array_filter([
                         'subject' => (string) ($item['subject'] ?? '(no subject)'),
-                    ]),
+                        'html_body' => $html,
+                    ], fn ($value) => $value !== null)),
                 ]);
             }
 
@@ -155,6 +166,7 @@ class SyncEmailAccountJob implements ShouldBeUnique, ShouldQueue
             'body' => $body,
             'payload' => [
                 'subject' => (string) ($item['subject'] ?? '(no subject)'),
+                'html_body' => $html,
                 'internet_message_id' => (string) ($item['internetMessageId'] ?? ''),
                 'provider_thread_id' => (string) ($item['conversationId'] ?? ''),
                 'has_attachments' => (bool) ($item['hasAttachments'] ?? false),
