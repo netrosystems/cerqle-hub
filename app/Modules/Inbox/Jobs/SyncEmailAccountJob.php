@@ -4,6 +4,7 @@ namespace App\Modules\Inbox\Jobs;
 
 use App\Events\MessageReceived;
 use App\Modules\Inbox\Services\EmailBodyParser;
+use App\Modules\Inbox\Services\EmailTriage;
 use App\Modules\Inbox\Services\GenericMailboxClient;
 use App\Modules\Inbox\Services\GoogleGmailClient;
 use App\Modules\Inbox\Services\MicrosoftGraphMailClient;
@@ -179,6 +180,12 @@ class SyncEmailAccountJob implements ShouldBeUnique, ShouldQueue
             'sent_by' => 'human',
             'sent_at' => $item['receivedDateTime'] ?? now(),
         ]);
+        // Recorded once, on the message, so the inbox shows the operator the
+        // same verdict routing acted on rather than re-deriving it per render
+        // and risking the two disagreeing.
+        $triage = app(EmailTriage::class)->classify($message);
+        $message->update(['payload' => array_merge($message->payload ?? [], ['triage' => $triage])]);
+
         $conversation->update([
             'last_message_at' => $message->sent_at,
             'last_inbound_at' => $message->sent_at,

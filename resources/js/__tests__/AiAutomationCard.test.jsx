@@ -77,3 +77,39 @@ it('shows weekly hours only when needed and supports copying weekdays', () => {
     expect(screen.getByLabelText('Off', { exact: true })).toBeChecked()
     expect(patch).not.toHaveBeenCalled()
 })
+
+const emailSettings = {
+    ...settings,
+    legacy: false,
+    mailbox_ids: null,
+    mailboxes: [
+        { id: 7, name: 'Sales', email: 'sales@example.test', status: 'active' },
+        { id: 8, name: 'Billing', email: 'billing@example.test', status: 'active' },
+    ],
+}
+
+it('offers every mailbox by default and lets the client narrow it', () => {
+    render(<AiAutomationCard settings={emailSettings} group="email" />)
+    fireEvent.click(screen.getByRole('button', { name: 'Manage AI Automation' }))
+    fireEvent.click(screen.getByLabelText('On', { exact: true }))
+
+    // "All mailboxes" is the existing behaviour and has to stay the default,
+    // or turning AI on would quietly stop answering somewhere.
+    expect(screen.getByRole('radio', { name: /All mailboxes/ })).toBeChecked()
+    expect(screen.queryByRole('checkbox', { name: /Sales/ })).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('radio', { name: /Only the mailboxes I choose/ }))
+    expect(screen.getByRole('checkbox', { name: /Sales/ })).toBeChecked()
+
+    fireEvent.click(screen.getByRole('checkbox', { name: /Sales/ }))
+    expect(screen.getByRole('checkbox', { name: /Sales/ })).not.toBeChecked()
+    expect(screen.getByRole('checkbox', { name: /Billing/ })).toBeChecked()
+})
+
+it('does not offer mailboxes to channel groups that have none', () => {
+    render(<AiAutomationCard settings={settings} group="channels" />)
+    fireEvent.click(screen.getByRole('button', { name: 'Manage AI Automation' }))
+    fireEvent.click(screen.getByLabelText('On', { exact: true }))
+
+    expect(screen.queryByText('Which mailboxes')).not.toBeInTheDocument()
+})

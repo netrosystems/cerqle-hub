@@ -101,7 +101,9 @@ class AutoReplyListener
         $eligibility = app(AiReplyEligibility::class);
         $humanOwnedReason = match (true) {
             $eligibility->humanOwned($conversation, $message->channel) => AiRoutingReason::HUMAN_OWNED,
-            $message->channel === 'email' && $eligibility->suppressed($message) => AiRoutingReason::EMAIL_SUPPRESSED,
+            $message->channel === 'email' && $eligibility->suppressed($message) => $message->origin === 'whatsapp_history'
+                ? AiRoutingReason::EMAIL_SUPPRESSED
+                : AiRoutingReason::EMAIL_NOT_AN_INQUIRY,
             $message->origin === 'whatsapp_history' => AiRoutingReason::HISTORY_IMPORT,
             default => null,
         };
@@ -175,6 +177,13 @@ class AutoReplyListener
         $setting = $group ? $settings->find($conversation->workspace_id, $group) : null;
         if ($setting && (! $settings->available($setting) || ! $setting->activated_at || $message->sent_at < $setting->activated_at)) {
             $this->ownership($message, 'ai', 'skipped', null, AiRoutingReason::GROUP_UNAVAILABLE);
+
+            return;
+        }
+        // A workspace can run automatic replies on one mailbox and not another,
+        // so the group being on is not on its own enough.
+        if ($setting && ! $settings->coversAccount($setting, (int) $channelAccount->id)) {
+            $this->ownership($message, 'ai', 'skipped', null, AiRoutingReason::MAILBOX_NOT_SELECTED);
 
             return;
         }

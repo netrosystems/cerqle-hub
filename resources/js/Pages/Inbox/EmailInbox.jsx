@@ -277,6 +277,34 @@ function FolderNav({ filters, counts, onFolder }) {
     </div>;
 }
 
+/**
+ * How the inbox shows what triage decided about the newest inbound mail.
+ *
+ * Only the cases an operator can act on get a badge. A confident inquiry is
+ * the normal case and marking it would be noise on every row.
+ */
+const TRIAGE_BADGES = {
+    bulk: { label: 'Newsletter', className: 'bg-neutral-100 text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400' },
+    automated: { label: 'Automated', className: 'bg-neutral-100 text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400' },
+    loop: { label: 'Bounce', className: 'bg-coral-50 text-coral-700 dark:bg-coral-950/30 dark:text-coral-300' },
+    uncertain: { label: 'Unsure', className: 'bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-300' },
+};
+
+function TriageBadge({ conversation }) {
+    const triage = conversation.latest_inbound_message?.payload?.triage;
+    const badge = triage && TRIAGE_BADGES[triage.category];
+    if (!badge) return null;
+
+    return (
+        <span
+            title={triage.summary}
+            className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${badge.className}`}
+        >
+            {badge.label}
+        </span>
+    );
+}
+
 function MailRow({ conversation, active, timezone, onOpen }) {
     const last = conversation.last_message;
     const unread = conversation.unread_count > 0;
@@ -294,6 +322,7 @@ function MailRow({ conversation, active, timezone, onOpen }) {
         <p className="mt-0.5 line-clamp-2 text-xs leading-5 text-neutral-400">{last?.body || 'No message preview'}</p>
         <div className="mt-2 flex items-center gap-2">
             <span className="max-w-40 truncate rounded-full bg-neutral-100 px-2 py-0.5 text-[10px] font-medium text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400">{account?.display_name || PROVIDER_LABELS[account?.provider] || 'Mailbox'}</span>
+            <TriageBadge conversation={conversation} />
             <span className={`ml-auto h-2 w-2 rounded-full ${conversation.status === 'resolved' ? 'bg-neutral-300' : conversation.status === 'snoozed' ? 'bg-amber-400' : 'bg-emerald-500'}`} title={conversation.status} />
             {unread && <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-brand-600 px-1 text-[10px] font-bold text-white">{Math.min(conversation.unread_count, 99)}</span>}
         </div>
