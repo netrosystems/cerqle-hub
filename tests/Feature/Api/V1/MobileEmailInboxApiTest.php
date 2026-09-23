@@ -127,6 +127,11 @@ class MobileEmailInboxApiTest extends TestCase
         $context = $this->createWorkspaceContext();
         $token = $context['user']->createToken('mobile', ['*'])->plainTextToken;
         [$account, $conversation] = $this->emailThread($context['workspace']->id);
+        $conversation->update([
+            'assigned_user_id' => $context['user']->id,
+            'joined_user_id' => $context['user']->id,
+            'joined_at' => now(),
+        ]);
         $driver = new class implements ChannelDriverInterface
         {
             public function send(Message $message): string

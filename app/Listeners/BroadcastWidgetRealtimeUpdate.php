@@ -2,16 +2,16 @@
 
 namespace App\Listeners;
 
-use App\Events\ConversationAssigned;
 use App\Events\ConversationActivityCreated;
+use App\Events\ConversationAssigned;
 use App\Events\MessageSent;
 use App\Events\TypingChanged;
 use App\Events\WidgetHandoffUpdated;
 use App\Events\WidgetMessageCreated;
 use App\Events\WidgetTypingChanged;
 use App\Modules\Inbox\Models\ChatWidget;
-use App\Modules\Inbox\Services\WidgetVisitorPushService;
 use App\Modules\Inbox\Services\WidgetPayloadBuilder;
+use App\Modules\Inbox\Services\WidgetVisitorPushService;
 use App\Modules\Shared\Models\Conversation;
 
 class BroadcastWidgetRealtimeUpdate
@@ -87,9 +87,13 @@ class BroadcastWidgetRealtimeUpdate
             return null;
         }
 
+        $enabledColumn = $conversation->started_from === Conversation::STARTED_FROM_CUSTOMER_SDK
+            ? 'sdk_enabled'
+            : 'enabled';
+
         return ChatWidget::where('channel_account_id', $conversation->channel_account_id)
             ->where('workspace_id', $conversation->workspace_id)
-            ->where('enabled', true)
+            ->where($enabledColumn, true)
             ->first();
     }
 }

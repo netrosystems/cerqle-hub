@@ -2,9 +2,11 @@
 
 namespace App\Http\Resources\Api\V1;
 
+use App\Modules\Shared\Models\Conversation;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
+/** @mixin Conversation */
 class ConversationResource extends JsonResource
 {
     public function toArray(Request $request): array
@@ -12,6 +14,7 @@ class ConversationResource extends JsonResource
         return [
             'id' => $this->id,
             'channel' => $this->channelAccount?->channel,
+            'started_from' => $this->started_from,
             'channel_account_id' => $this->channel_account_id,
             'contact_id' => $this->contact_id,
             'status' => $this->status,

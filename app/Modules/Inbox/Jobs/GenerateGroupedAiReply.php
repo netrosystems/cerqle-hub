@@ -192,9 +192,11 @@ class GenerateGroupedAiReply implements ShouldQueue
         if ($message->channel === 'webchat') {
             $widget = ChatWidget::where('workspace_id', $this->workspaceId)->where('channel_account_id', $this->accountId)->whereKey($this->widgetId)->first();
             $availability = app(WidgetAiAvailability::class);
+            $surface = $availability->surfaceForConversation($conversation);
 
             return $widget && $widget->ai_revision === $this->widgetRevision && (int) $widget->ai_chatbot_id === $this->chatbotId
-                && $availability->available($widget) && $availability->available($widget, CarbonImmutable::parse($message->created_at));
+                && $availability->available($widget, surface: $surface)
+                && $availability->available($widget, CarbonImmutable::parse($message->created_at), $surface);
         }
         $group = $settings->group($message->channel);
         $setting = $group ? $settings->find($this->workspaceId, $group) : null;

@@ -118,7 +118,7 @@ class InboxController extends Controller
             $selected = Conversation::where('workspace_id', $workspaceId)
                 ->where('uuid', $request->string('conversation')->toString())
                 ->whereHas('channelAccount', fn ($query) => $query->where('channel', 'email'))
-                ->with(['contact', 'channelAccount', 'labels', 'latestInboundMessage', 'lastHumanReply.user:id,name,avatar'])
+                ->with(['contact', 'channelAccount', 'labels', 'latestInboundMessage', 'lastHumanReply.user:id,name,avatar', 'joinedUser:id,name,avatar'])
                 ->firstOrFail();
             $messages = $selected->messages()
                 ->with('user:id,name,avatar')
@@ -177,7 +177,7 @@ class InboxController extends Controller
     {
         $this->authorise($request, $conversation);
 
-        $conversation->load(['contact', 'channelAccount', 'labels']);
+        $conversation->load(['contact', 'channelAccount', 'labels', 'joinedUser:id,name,avatar']);
         $messages = $conversation->messages()->with(['conversation', 'user:id,name,avatar'])->orderBy('id')->get();
         $messages->each(function (Message $message) use ($request): void {
             $message->setAttribute('payload', $this->mediaResolver->augmentPayload($message, $request, 'client.inbox.message-media'));
@@ -291,6 +291,7 @@ class InboxController extends Controller
     public function reply(Request $request, Conversation $conversation): JsonResponse|RedirectResponse
     {
         $this->authorise($request, $conversation);
+        app(ConversationActivityService::class)->assertCanReply($conversation, $request->user());
 
         $validated = $request->validate([
             'body' => ['nullable', 'string', 'max:4096'],
@@ -391,46 +392,46 @@ class InboxController extends Controller
             return back()->with('error', 'WhatsApp 24-hour session is closed. Use an approved template to re-engage this contact.');
         }
 
-        $message = Message::create([
-            'conversation_id' => $conversation->id,
-            'direction' => 'out',
-            'channel' => $conversation->channelAccount?->channel ?? 'whatsapp',
-            'type' => $msgType,
-            'body' => $validated['body'],
-            'payload' => $msgPayload,
-            'status' => 'queued',
-            'sent_by' => 'human',
-            'user_id' => $request->user()->id,
-            'sent_at' => now(),
-        ]);
-
-        // Send via the channel driver
-        $sendError = null;
-        try {
-            $driver = $this->channelManager->driver($channel);
-            $messageId = $driver->send($message);
-            $message->update(['status' => 'sent', 'provider_message_id' => $messageId]);
-        } catch (\Throwable $e) {
-            $sendError = $e->getMessage();
-            Log::error('Inbox reply send failed', [
+        $ownership = app(ConversationActivityService::class);
+        [$message, $sendError] = $ownership->synchronized($conversation, function () use ($channel, $conversation, $msgPayload, $msgType, $ownership, $request, $validated): array {
+            $conversation->refresh()->loadMissing('joinedUser');
+            $ownership->assertCanReply($conversation, $request->user());
+            $message = Message::create([
                 'conversation_id' => $conversation->id,
+                'direction' => 'out',
                 'channel' => $channel,
-                'error' => $sendError,
+                'type' => $msgType,
+                'body' => $validated['body'],
+                'payload' => $msgPayload,
+                'status' => 'queued',
+                'sent_by' => 'human',
+                'user_id' => $request->user()->id,
+                'sent_at' => now(),
             ]);
-            $message->update(['status' => 'failed', 'error_json' => ['message' => $sendError]]);
-        }
 
-        $conversation->update(['last_message_at' => now()]);
+            $sendError = null;
+            try {
+                $messageId = $this->channelManager->driver($channel)->send($message);
+                $message->update(['status' => 'sent', 'provider_message_id' => $messageId]);
+            } catch (\Throwable $e) {
+                $sendError = $e->getMessage();
+                Log::error('Inbox reply send failed', [
+                    'conversation_id' => $conversation->id,
+                    'channel' => $channel,
+                    'error' => $sendError,
+                ]);
+                $message->update(['status' => 'failed', 'error_json' => ['message' => $sendError]]);
+            }
 
-        // SLA: set first_response_at on first outbound after inbound
-        if ($conversation->last_inbound_at && ! $conversation->first_response_at) {
-            $conversation->update(['first_response_at' => now()]);
-        }
+            $conversation->update(['last_message_at' => now()]);
+            if ($conversation->last_inbound_at && ! $conversation->first_response_at) {
+                $conversation->update(['first_response_at' => now()]);
+            }
+            $message->load(['conversation', 'user:id,name,avatar']);
+            MessageSent::dispatch($message);
 
-        // Re-load the relation so the broadcast event can resolve workspace_id
-        $message->load(['conversation', 'user:id,name,avatar']);
-
-        MessageSent::dispatch($message);
+            return [$message, $sendError];
+        });
 
         if ($request->wantsJson()) {
             // Always return 200 so the UI can display the queued/failed bubble
@@ -459,6 +460,8 @@ class InboxController extends Controller
     public function shareProduct(Request $request, Conversation $conversation): JsonResponse
     {
         $this->authorise($request, $conversation);
+        $ownership = app(ConversationActivityService::class);
+        $ownership->assertCanReply($conversation, $request->user());
 
         $validated = $request->validate(['product_id' => ['required', 'integer']]);
         $workspaceId = $request->user()->current_workspace_id ?? $request->user()->workspace_id;
@@ -496,40 +499,45 @@ class InboxController extends Controller
         // Send the product photo as a real image on every channel (drivers handle the
         // per-channel rendering); fall back to text only when there is no photo.
         $useImage = (bool) $image;
-        $message = Message::create([
-            'conversation_id' => $conversation->id,
-            'direction' => 'out',
-            'channel' => $channel,
-            'type' => $useImage ? 'image' : 'text',
-            'body' => $caption,
-            'payload' => $useImage ? ['link' => $image, 'preview_url' => $image, 'caption' => $caption] : null,
-            'status' => 'queued',
-            'sent_by' => 'human',
-            'user_id' => $request->user()->id,
-            'sent_at' => now(),
-        ]);
-
-        $sendError = null;
-        try {
-            $messageId = $this->channelManager->driver($channel)->send($message);
-            $message->update(['status' => 'sent', 'provider_message_id' => $messageId]);
-        } catch (\Throwable $e) {
-            $sendError = $e->getMessage();
-            Log::error('Inbox shareProduct send failed', [
+        [$message, $sendError] = $ownership->synchronized($conversation, function () use ($caption, $channel, $conversation, $image, $ownership, $request, $useImage): array {
+            $conversation->refresh()->loadMissing('joinedUser');
+            $ownership->assertCanReply($conversation, $request->user());
+            $message = Message::create([
                 'conversation_id' => $conversation->id,
+                'direction' => 'out',
                 'channel' => $channel,
-                'error' => $sendError,
+                'type' => $useImage ? 'image' : 'text',
+                'body' => $caption,
+                'payload' => $useImage ? ['link' => $image, 'preview_url' => $image, 'caption' => $caption] : null,
+                'status' => 'queued',
+                'sent_by' => 'human',
+                'user_id' => $request->user()->id,
+                'sent_at' => now(),
             ]);
-            $message->update(['status' => 'failed', 'error_json' => ['message' => $sendError]]);
-        }
 
-        $conversation->update(['last_message_at' => now()]);
-        if ($conversation->last_inbound_at && ! $conversation->first_response_at) {
-            $conversation->update(['first_response_at' => now()]);
-        }
+            $sendError = null;
+            try {
+                $messageId = $this->channelManager->driver($channel)->send($message);
+                $message->update(['status' => 'sent', 'provider_message_id' => $messageId]);
+            } catch (\Throwable $e) {
+                $sendError = $e->getMessage();
+                Log::error('Inbox shareProduct send failed', [
+                    'conversation_id' => $conversation->id,
+                    'channel' => $channel,
+                    'error' => $sendError,
+                ]);
+                $message->update(['status' => 'failed', 'error_json' => ['message' => $sendError]]);
+            }
 
-        $message->load(['conversation', 'user:id,name,avatar']);
-        MessageSent::dispatch($message);
+            $conversation->update(['last_message_at' => now()]);
+            if ($conversation->last_inbound_at && ! $conversation->first_response_at) {
+                $conversation->update(['first_response_at' => now()]);
+            }
+            $message->load(['conversation', 'user:id,name,avatar']);
+            MessageSent::dispatch($message);
+
+            return [$message, $sendError];
+        });
 
         return response()->json(['message' => $message, 'error' => $sendError]);
     }

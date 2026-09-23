@@ -21,6 +21,10 @@ use Illuminate\Support\Str;
  */
 class ChatWidget extends Model
 {
+    public const SURFACE_WEB = 'web';
+
+    public const SURFACE_SDK = 'sdk';
+
     use EnforcesChannelPlanLimit;
 
     protected function channelPlanLimitKey(): string
@@ -31,14 +35,14 @@ class ChatWidget extends Model
     protected $table = 'chat_widgets';
 
     protected $fillable = [
-        'workspace_id', 'channel_account_id', 'widget_key', 'name',
+        'workspace_id', 'channel_account_id', 'widget_key', 'sdk_widget_key', 'name',
         'title', 'subtitle', 'welcome_message', 'agent_name', 'avatar_url',
         'avatar_path', 'avatar_disk',
         'primary_color', 'position', 'launcher_text', 'footer_company_name',
         'launcher_logo_path', 'launcher_logo_disk',
         'ai_enabled', 'ai_chatbot_id', 'require_prechat', 'prechat_fields',
         'ai_mode', 'ai_timezone', 'ai_weekly_hours', 'ai_revision',
-        'offline_message', 'allowed_domains', 'working_hours_json', 'enabled',
+        'offline_message', 'allowed_domains', 'working_hours_json', 'enabled', 'sdk_enabled',
         'identity_verification', 'identity_secret',
     ];
 
@@ -54,6 +58,7 @@ class ChatWidget extends Model
             'ai_revision' => 'integer',
             'require_prechat' => 'boolean',
             'enabled' => 'boolean',
+            'sdk_enabled' => 'boolean',
             'identity_verification' => 'boolean',
             'prechat_fields' => 'array',
             'allowed_domains' => 'array',
@@ -69,7 +74,19 @@ class ChatWidget extends Model
             }
             $model->ai_revision ??= 1;
             if (empty($model->widget_key)) {
-                $model->widget_key = Str::random(32);
+                do {
+                    $key = Str::random(32);
+                } while (self::query()->where('widget_key', $key)->orWhere('sdk_widget_key', $key)->exists());
+                $model->widget_key = $key;
+            }
+            if (empty($model->sdk_widget_key)) {
+                do {
+                    $key = Str::random(32);
+                } while (self::query()->where('widget_key', $key)->orWhere('sdk_widget_key', $key)->exists());
+                $model->sdk_widget_key = $key;
+            }
+            if ($model->getAttribute('sdk_enabled') === null) {
+                $model->sdk_enabled = true;
             }
             if (empty($model->identity_secret)) {
                 $model->identity_secret = Str::random(48);
@@ -172,7 +189,7 @@ class ChatWidget extends Model
     }
 
     /** Public theming/config surfaced to the embed script + widget UI. */
-    public function publicConfig(): array
+    public function publicConfig(string $surface = self::SURFACE_WEB): array
     {
         $avatarUrl = $this->avatar_url;
         if (! $avatarUrl || str_contains($avatarUrl, 'cerqle-icon-white-bg') || str_contains($avatarUrl, 'wisperbot')) {
@@ -185,7 +202,7 @@ class ChatWidget extends Model
         }
 
         return [
-            'key' => $this->widget_key,
+            'key' => $surface === self::SURFACE_SDK ? $this->sdk_widget_key : $this->widget_key,
             'title' => $this->title ?: 'Chat with us',
             'subtitle' => $this->subtitle ?: 'We typically reply in a few minutes',
             'welcome_message' => $this->welcome_message ?: 'Hi there 👋 How can we help?',
@@ -200,8 +217,8 @@ class ChatWidget extends Model
             // The product icon remains the default for every free widget.
             // A custom launcher mark is exposed for any active paid plan.
             'launcher_logo_url' => $launcherLogoUrl,
-            'ai_enabled' => app(WidgetAiAvailability::class)->available($this),
-            'ai_availability' => app(WidgetAiAvailability::class)->publicState($this),
+            'ai_enabled' => app(WidgetAiAvailability::class)->available($this, surface: $surface),
+            'ai_availability' => app(WidgetAiAvailability::class)->publicState($this, $surface),
             'available_team' => $this->availableTeam(),
             'require_prechat' => (bool) $this->require_prechat,
             'prechat_fields' => $this->prechat_fields ?: ['name', 'email'],

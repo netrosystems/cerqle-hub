@@ -2,18 +2,23 @@
 
 namespace Tests\Feature\Inbox;
 
+use App\Events\ConversationOwnershipChanged;
+use App\Events\MessageReceived;
 use App\Http\Controllers\Api\V1\MobileConversationController;
 use App\Http\Controllers\Api\V1\MobileEmailInboxController;
 use App\Models\User;
 use App\Modules\Inbox\Models\ChatWidget;
 use App\Modules\Inbox\Services\ConversationActivityService;
+use App\Modules\Inbox\Services\ConversationOwnershipException;
 use App\Modules\Inbox\Services\EmailBulkResolveService;
+use App\Modules\Inbox\Services\WebchatDriver;
 use App\Modules\Inbox\Services\WidgetPayloadBuilder;
 use App\Modules\Shared\Models\ChannelAccount;
 use App\Modules\Shared\Models\Contact;
 use App\Modules\Shared\Models\Conversation;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Event;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 use Tests\TestCase;
 
@@ -44,6 +49,8 @@ class ConversationActivityTest extends TestCase
         $this->assertSame(2, $conversation->fresh()->unread_count);
         $this->assertEquals($inbound->sent_at, $conversation->fresh()->last_message_at);
         $this->assertSame($inbound->id, $conversation->fresh()->lastMessage->id);
+        $this->assertNull($conversation->fresh()->assigned_user_id);
+        $this->assertNull($conversation->fresh()->joined_user_id);
 
         $public = app(WidgetPayloadBuilder::class)->messages($conversation->id, $widget, 0);
         $this->assertSame(['visitor', 'agent', 'agent'], array_column($public, 'role'));
@@ -87,12 +94,83 @@ class ConversationActivityTest extends TestCase
         try {
             app(ConversationActivityService::class)->join($conversation, $actor);
             $this->fail('Expected a conflict for a resolved conversation.');
-        } catch (HttpException $exception) {
-            $this->assertSame(409, $exception->getStatusCode());
+        } catch (ConversationOwnershipException $exception) {
+            $this->assertSame(409, $exception->status);
         }
 
         $this->assertSame(0, $conversation->messages()->count());
         $this->assertNull($conversation->fresh()->joined_user_id);
+    }
+
+    public function test_reply_requires_joined_owner_and_conflict_returns_current_owner(): void
+    {
+        [$conversation, , $actor, $workspace] = $this->chat();
+        $other = User::factory()->create([
+            'role' => User::ROLE_CLIENT,
+            'client_id' => $actor->client_id,
+            'client_role' => User::CLIENT_ROLE_STAFF,
+        ]);
+        $other->workspaces()->syncWithoutDetaching([$workspace->id => ['role' => 'agent']]);
+        $service = app(ConversationActivityService::class);
+
+        try {
+            $service->assertCanReply($conversation, $actor);
+            $this->fail('Expected reply ownership conflict.');
+        } catch (ConversationOwnershipException $exception) {
+            $this->assertSame(409, $exception->status);
+            $this->assertNull($exception->context['joined_user']);
+        }
+
+        $service->join($conversation, $actor);
+        $service->assertCanReply($conversation->fresh(), $actor);
+
+        try {
+            $service->join($conversation->fresh(), $other);
+            $this->fail('Expected joined owner conflict.');
+        } catch (ConversationOwnershipException $exception) {
+            $this->assertSame($actor->id, $exception->context['joined_user']['id']);
+        }
+
+        try {
+            $service->takeover($conversation->fresh(), $other);
+            $this->fail('Expected staff takeover denial.');
+        } catch (ConversationOwnershipException $exception) {
+            $this->assertSame(403, $exception->status);
+            $this->assertSame($actor->id, $exception->context['joined_user']['id']);
+        }
+    }
+
+    public function test_customer_message_reopens_resolved_chat_without_restoring_stale_ownership(): void
+    {
+        [$conversation, , $actor] = $this->chat();
+        $service = app(ConversationActivityService::class);
+        $service->join($conversation, $actor);
+        $service->status($conversation->fresh(), 'resolved', $actor);
+
+        Event::fake([MessageReceived::class]);
+        app(WebchatDriver::class)->recordInboundMessage($conversation->fresh(), 'visitor-1', 'I need help again');
+
+        $conversation->refresh();
+        $this->assertSame('open', $conversation->status);
+        $this->assertNull($conversation->assigned_user_id);
+        $this->assertNull($conversation->joined_user_id);
+        $this->assertNull($conversation->joined_at);
+        $this->assertSame(1, $conversation->unread_count);
+        $this->assertSame(['conversation.joined', 'conversation.resolved'],
+            $conversation->messages()->where('direction', 'system')->orderBy('id')->get()
+                ->pluck('payload.activity.type')->all());
+    }
+
+    public function test_ownership_realtime_payload_is_state_only(): void
+    {
+        [$conversation, , $actor] = $this->chat();
+        $updated = app(ConversationActivityService::class)->join($conversation, $actor);
+        $payload = (new ConversationOwnershipChanged($updated))->broadcastWith();
+
+        $this->assertSame($conversation->id, $payload['conversation_id']);
+        $this->assertSame($actor->id, $payload['joined_user']['id']);
+        $this->assertArrayNotHasKey('body', $payload);
+        $this->assertArrayNotHasKey('type', $payload);
     }
 
     public function test_takeover_is_staff_transfer_but_public_join_and_foreign_actor_is_rejected(): void
