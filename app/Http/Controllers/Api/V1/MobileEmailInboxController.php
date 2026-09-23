@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Events\MessageSent;
 use App\Modules\Inbox\Jobs\SyncEmailAccountJob;
+use App\Modules\Inbox\Services\ConversationActivityService;
 use App\Modules\Inbox\Services\EmailBulkResolveService;
 use App\Modules\Inbox\Services\EmailInboxSyncDispatcher;
 use App\Modules\Shared\Models\ChannelAccount;
@@ -26,7 +27,7 @@ class MobileEmailInboxController extends WorkspaceScopedController
     {
         $validated = $request->validate(['account_id' => ['nullable', 'integer', 'min:1']]);
         $accountId = isset($validated['account_id']) ? (int) $validated['account_id'] : null;
-        $count = app(EmailBulkResolveService::class)->resolve($this->workspaceId($request), $accountId);
+        $count = app(EmailBulkResolveService::class)->resolve($this->workspaceId($request), $accountId, $request->user());
 
         return response()->json(['resolved_count' => $count, 'account_id' => $accountId]);
     }
@@ -139,8 +140,9 @@ class MobileEmailInboxController extends WorkspaceScopedController
             'latestInboundMessage',
         ]);
         $messages = $conversation->messages()
+            ->whereIn('direction', ['in', 'out'])
             ->with('user:id,name,avatar')
-            ->orderByDesc('sent_at')
+            ->orderByDesc('id')
             ->paginate(min(max($request->integer('per_page', 50), 1), 100));
 
         if ($conversation->unread_count > 0) {
@@ -170,6 +172,7 @@ class MobileEmailInboxController extends WorkspaceScopedController
         $this->syncDispatcher->dispatchForWorkspace($conversation->workspace_id, $conversation->channel_account_id);
 
         $messages = $conversation->messages()
+            ->whereIn('direction', ['in', 'out'])
             ->with('user:id,name,avatar')
             ->when($request->integer('after_id'), fn ($query, $afterId) => $query->where('id', '>', $afterId))
             ->orderBy('id')
@@ -389,10 +392,8 @@ class MobileEmailInboxController extends WorkspaceScopedController
     {
         $validated = $request->validate(['status' => ['required', 'in:open,resolved']]);
         $conversation = $this->emailConversation($request, $uuid);
-        $conversation->update([
-            'status' => $validated['status'],
-            'resolved_at' => $validated['status'] === 'resolved' ? ($conversation->resolved_at ?? now()) : null,
-        ]);
+        $conversation = app(ConversationActivityService::class)
+            ->status($conversation, $validated['status'], $request->user());
 
         return response()->json([
             'ok' => true,

@@ -688,6 +688,15 @@ function SoundPrefsMenu() {
 function MessageBubble({ msg, conversationId }) {
     const { t } = useTranslation();
     const { props: pageProps } = usePage();
+    if (msg.direction === 'system' && msg.type === 'event') {
+        return (
+            <div className="my-2.5 flex w-full justify-center px-6" role="status">
+                <div className="w-fit max-w-[90%] rounded-lg bg-white px-3 py-1.5 text-center text-[11px] font-medium leading-4 text-neutral-500 shadow-sm ring-1 ring-black/5 dark:bg-neutral-800 dark:text-neutral-300 dark:ring-white/10">
+                    <span className="break-words">{msg.body}</span>
+                </div>
+            </div>
+        );
+    }
     const bubbleTz = pageProps.timezone || 'Asia/Dhaka';
     const isOut = msg.direction === 'out';
     const p     = msg.payload ?? {};
@@ -1397,7 +1406,7 @@ function ProductPicker({ conversationId, onSent, onClose }) {
 }
 
 /* ─── agent assign dropdown ──────────────────────────── */
-function AgentDropdown({ teamMembers, currentUserId, conversationId, onAssigned, onClose }) {
+function AgentDropdown({ teamMembers, currentUserId, selectedUserId, conversationId, onAssigned, onClose }) {
     const { t } = useTranslation();
     const ref = useRef(null);
     const [query, setQuery] = useState('');
@@ -1433,23 +1442,25 @@ function AgentDropdown({ teamMembers, currentUserId, conversationId, onAssigned,
                 />
             </div>
             <div className="max-h-52 overflow-y-auto">
-                <button type="button" onClick={() => assign(null)}
-                    className="w-full text-left px-3 py-2 text-xs text-neutral-500 hover:bg-neutral-50 dark:hover:bg-neutral-800 transition border-b border-neutral-100 dark:border-neutral-800">
+                <button type="button" onClick={() => assign(null)} disabled={loading} aria-pressed={selectedUserId == null}
+                    className={`flex w-full items-center justify-between border-b border-neutral-100 px-3 py-2 text-left text-xs transition dark:border-neutral-800 ${selectedUserId == null ? 'bg-brand-50 text-brand-700 dark:bg-brand-900/20 dark:text-brand-300' : 'text-neutral-500 hover:bg-neutral-50 dark:hover:bg-neutral-800'}`}>
                     {t('inbox.unassign')}
+                    {selectedUserId == null && <CheckCircle className="h-3.5 w-3.5" />}
                 </button>
                 {filtered.map(m => (
-                    <button key={m.id} type="button" onClick={() => assign(m.id)}
-                        className={`w-full text-left px-3 py-2 hover:bg-brand-50 dark:hover:bg-brand-900/20 transition ${loading ? 'opacity-50 pointer-events-none' : ''}`}>
+                    <button key={m.id} type="button" onClick={() => assign(m.id)} disabled={loading} aria-pressed={Number(m.id) === Number(selectedUserId)}
+                        className={`w-full px-3 py-2 text-left transition ${Number(m.id) === Number(selectedUserId) ? 'bg-brand-50 dark:bg-brand-900/20' : 'hover:bg-neutral-50 dark:hover:bg-neutral-800'} ${loading ? 'opacity-50' : ''}`}>
                         <div className="flex items-center gap-2">
                             <div className="h-6 w-6 rounded-full bg-brand-100 dark:bg-brand-900/30 flex items-center justify-center text-xs font-semibold text-brand-700 dark:text-brand-300 shrink-0">
                                 {m.name[0]?.toUpperCase()}
                             </div>
                             <div className="min-w-0">
-                                <p className={`text-xs font-medium truncate ${m.id === currentUserId ? 'text-brand-600 dark:text-brand-400' : 'text-neutral-800 dark:text-neutral-200'}`}>
+                                <p className={`truncate text-xs font-medium ${Number(m.id) === Number(selectedUserId) ? 'text-brand-700 dark:text-brand-300' : 'text-neutral-800 dark:text-neutral-200'}`}>
                                     {m.name} {m.id === currentUserId && t('inbox.you_paren')}
                                 </p>
                                 <p className="text-[10px] text-neutral-400 truncate">{m.email}</p>
                             </div>
+                            {Number(m.id) === Number(selectedUserId) && <CheckCircle className="ml-auto h-3.5 w-3.5 shrink-0 text-brand-600 dark:text-brand-300" />}
                         </div>
                     </button>
                 ))}
@@ -1498,6 +1509,7 @@ export default function InboxShow({
     const [convLabels, setConvLabels]       = useState(conversation.labels ?? []);
     const [assignedTo, setAssignedTo]       = useState(conversation.assigned_to ?? 'bot');
     const [assignedUserId, setAssignedUserId] = useState(conversation.assigned_user_id ?? null);
+    const [joinedUserId, setJoinedUserId] = useState(conversation.joined_user_id ?? null);
     const [conversations, setConversations] = useState(initialConversations);
     const [listSearch, setListSearch]       = useState('');
     const [listLoading, setListLoading]     = useState(false);
@@ -1515,11 +1527,20 @@ export default function InboxShow({
         setConvLabels(conversation.labels ?? []);
         setAssignedTo(conversation.assigned_to ?? 'bot');
         setAssignedUserId(conversation.assigned_user_id ?? null);
+        setJoinedUserId(conversation.joined_user_id ?? null);
         setSendError(null);
         stopAudioTracks();
         setRecordingAudio(false);
         setAttachPreview(null);
     }, [conversation.id]);
+
+    useEffect(() => {
+        setJoinedUserId(conversation.joined_user_id ?? null);
+    }, [conversation.joined_user_id]);
+
+    useEffect(() => {
+        setAssignedUserId(conversation.assigned_user_id ?? null);
+    }, [conversation.assigned_user_id]);
 
     useEffect(() => {
         setConversations(initialConversations);
@@ -1593,6 +1614,10 @@ export default function InboxShow({
                     }
                     return [...prev, e];
                 });
+            })
+            .listen('.ConversationActivityCreated', (e) => {
+                const activity = e.message;
+                if (activity) setMessages(prev => prev.some(m => m.id === activity.id) ? prev : [...prev, activity]);
             })
             .listen('.MessageStatusUpdated', (e) => {
                 setMessages(prev => prev.map(m =>
@@ -1918,6 +1943,15 @@ export default function InboxShow({
     };
 
     const handleStatus = (status) => router.post(route('client.inbox.status', conversation.uuid), { status }, { preserveScroll: true });
+    const changeJoin = (action) => {
+        axios.post(route(`client.inbox.${action}`, conversation.uuid))
+            .then(({ data }) => {
+                setJoinedUserId(data.conversation?.joined_user_id ?? null);
+                setAssignedUserId(data.conversation?.assigned_user_id ?? null);
+                router.reload({ only: ['conversation'] });
+            })
+            .catch((error) => setSendError(error.response?.data?.message || 'Could not update chat ownership.'));
+    };
     const deleteChat = () => {
         if (!window.confirm(t('inbox.delete_chat_confirm', 'Permanently delete this chat, its messages and notes from Cerqle? This cannot be undone. The contact and messages on the original provider are kept. New incoming messages may create a new chat.'))) return;
         router.delete(route('client.inbox.destroy', conversation.uuid), {
@@ -2112,6 +2146,15 @@ export default function InboxShow({
                         )}
 
                         {/* Agent assign */}
+                        {conversation.status !== 'resolved' && (
+                            !joinedUserId
+                                ? <button type="button" onClick={() => changeJoin('join')} className="rounded-lg border border-neutral-200 px-2.5 py-1.5 text-xs text-neutral-700 hover:bg-neutral-50 dark:border-neutral-700 dark:text-neutral-200">Join chat</button>
+                                : Number(joinedUserId) === Number(authUser?.id)
+                                    ? <button type="button" onClick={() => changeJoin('leave')} className="rounded-lg border border-neutral-200 px-2.5 py-1.5 text-xs text-neutral-700 hover:bg-neutral-50 dark:border-neutral-700 dark:text-neutral-200">Leave chat</button>
+                                    : authUser?.client_role === 'administrator'
+                                        ? <button type="button" onClick={() => changeJoin('takeover')} className="rounded-lg border border-neutral-200 px-2.5 py-1.5 text-xs text-neutral-700 hover:bg-neutral-50 dark:border-neutral-700 dark:text-neutral-200">Take over</button>
+                                        : null
+                        )}
                         <div className="relative">
                             <button
                                 type="button"
@@ -2126,6 +2169,7 @@ export default function InboxShow({
                                 <AgentDropdown
                                     teamMembers={teamMembers}
                                     currentUserId={authUser?.id}
+                                    selectedUserId={assignedUserId}
                                     conversationId={conversation.uuid}
                                     onAssigned={(uid) => setAssignedUserId(uid)}
                                     onClose={() => setShowAgentDrop(false)}
@@ -2190,7 +2234,7 @@ export default function InboxShow({
                     {/* Messages tab */}
                     {activeTab === 'messages' && (
                         <div ref={messagesContainerRef} className="flex-1 overflow-y-auto p-4 space-y-1">
-                            {groupMessagesForRender(messages).map(item => (
+                            {groupMessagesForRender([...messages].sort((a, b) => Number(a.id) - Number(b.id))).map(item => (
                                 item.kind === 'album'
                                     ? <ImageGallery key={item.key} messages={item.messages} conversationId={conversation.uuid} />
                                     : <MessageBubble key={item.key} msg={item.msg} conversationId={conversation.uuid} />

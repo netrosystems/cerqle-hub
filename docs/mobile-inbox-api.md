@@ -4,6 +4,10 @@ Deployed and route registration verified on 2026-09-13 in release `v1.0.90` (pro
 
 These endpoints require a Sanctum bearer token and `Accept: application/json`. JSON requests also send `Content-Type: application/json`. Scope is the user's mobile-selected workspace, persisted via `POST /api/v1/mobile/workspaces/{workspace}/select`. Subscription and demo write restrictions still apply.
 
+## Conversation activity compatibility (local change, 2026-09-22; not deployed)
+
+The backend adds `POST /api/v1/mobile/conversations/{uuid}/{join|leave|takeover}` for future staff clients. Join/leave are idempotent; an active join by another agent returns 409, and takeover of an active join requires a client administrator. Existing assignment and status routes retain their request/response shapes and now record staff activity. The native Cerqle Agent repository is read-only for this change: current mobile conversation/email message APIs still return only `in/out` messages, so existing app rendering and inbox previews are unaffected. Mobile UI adoption of activity rows and join controls is a separate release; do not claim it has shipped.
+
 ## Login hardening contract (2026-09-15, not yet deployed)
 
 Mobile login tokens retain full-agent `*` access. Restricted developer API tokens cannot use `/api/v1/mobile/*`, `/api/v1/auth/{me,profile,logout}`, broadcasting authorization, notification availability, or token management; those return 403 for insufficient scope. Existing full-access mobile tokens continue to work. Inactive users/clients are rejected even with an existing token.

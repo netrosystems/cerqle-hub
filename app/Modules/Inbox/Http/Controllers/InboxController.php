@@ -9,6 +9,7 @@ use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Modules\Inbox\Models\InboxLabel;
 use App\Modules\Inbox\Services\ConversationDeletionService;
+use App\Modules\Inbox\Services\ConversationActivityService;
 use App\Modules\Inbox\Services\ConversationHandoverService;
 use App\Modules\Inbox\Services\EmailBulkResolveService;
 use App\Modules\Inbox\Services\EmailInboxSyncDispatcher;
@@ -121,7 +122,7 @@ class InboxController extends Controller
                 ->firstOrFail();
             $messages = $selected->messages()
                 ->with('user:id,name,avatar')
-                ->latest('sent_at')
+                ->orderByDesc('id')
                 ->limit(200)
                 ->get()
                 ->reverse()
@@ -177,7 +178,7 @@ class InboxController extends Controller
         $this->authorise($request, $conversation);
 
         $conversation->load(['contact', 'channelAccount', 'labels']);
-        $messages = $conversation->messages()->with(['conversation', 'user:id,name,avatar'])->orderBy('sent_at')->get();
+        $messages = $conversation->messages()->with(['conversation', 'user:id,name,avatar'])->orderBy('id')->get();
         $messages->each(function (Message $message) use ($request): void {
             $message->setAttribute('payload', $this->mediaResolver->augmentPayload($message, $request, 'client.inbox.message-media'));
         });
@@ -221,7 +222,7 @@ class InboxController extends Controller
                 ->whereHas('channelAccount', fn ($account) => $account->where('channel', 'webchat'))
                 ->where('webchat_last_seen_at', '>=', $liveSince))
             ->when(! $isLiveFolder, fn ($q) => $q->where(function ($sub) use ($conversation) {
-                $sub->whereHas('messages')->orWhere('id', $conversation->id);
+                $sub->whereHas('messages', fn ($query) => $query->whereIn('direction', ['in', 'out']))->orWhere('id', $conversation->id);
             }))
             ->when(($filters['folder'] ?? null) === 'mine', fn ($q) => $q->where('assigned_user_id', $userId))
             ->when(($filters['folder'] ?? null) === 'unassigned', fn ($q) => $q->whereNull('assigned_user_id'))
@@ -273,7 +274,7 @@ class InboxController extends Controller
         $messages = $conversation->messages()
             ->with(['conversation', 'user:id,name,avatar'])
             ->where('id', '>', $after)
-            ->orderBy('sent_at')
+            ->orderBy('id')
             ->get();
 
         $messages->each(function (Message $message) use ($request): void {
@@ -611,10 +612,37 @@ class InboxController extends Controller
             abort_unless($assignedTo, 422);
         }
 
-        $conversation->update(['assigned_user_id' => $request->user_id]);
-        ConversationAssigned::dispatch($conversation, $assignedTo);
+        $updated = app(ConversationActivityService::class)->assign($conversation, $assignedTo, $request->user());
+        ConversationAssigned::dispatch($updated, $assignedTo);
 
         return back()->with('success', 'Conversation assigned.');
+    }
+
+    public function join(Request $request, Conversation $conversation): JsonResponse
+    {
+        $this->authorise($request, $conversation);
+        $updated = app(ConversationActivityService::class)->join($conversation, $request->user());
+        ConversationAssigned::dispatch($updated, $request->user());
+
+        return response()->json(['ok' => true, 'conversation' => $updated]);
+    }
+
+    public function leave(Request $request, Conversation $conversation): JsonResponse
+    {
+        $this->authorise($request, $conversation);
+        $updated = app(ConversationActivityService::class)->leave($conversation, $request->user());
+        ConversationAssigned::dispatch($updated, $updated->assignedUser);
+
+        return response()->json(['ok' => true, 'conversation' => $updated]);
+    }
+
+    public function takeover(Request $request, Conversation $conversation): JsonResponse
+    {
+        $this->authorise($request, $conversation);
+        $updated = app(ConversationActivityService::class)->takeover($conversation, $request->user());
+        ConversationAssigned::dispatch($updated, $request->user());
+
+        return response()->json(['ok' => true, 'conversation' => $updated]);
     }
 
     public function typing(Request $request, Conversation $conversation): JsonResponse
@@ -634,6 +662,7 @@ class InboxController extends Controller
         $count = app(EmailBulkResolveService::class)->resolve(
             (int) $workspaceId,
             isset($validated['account_id']) ? (int) $validated['account_id'] : null,
+            $request->user(),
         );
 
         return back()->with('success', "Resolved {$count} open email threads.");
@@ -655,11 +684,7 @@ class InboxController extends Controller
         $this->authorise($request, $conversation);
         $request->validate(['status' => ['required', 'in:open,pending,resolved,snoozed']]);
 
-        $updates = ['status' => $request->status];
-        if ($request->status === 'resolved' && ! $conversation->resolved_at) {
-            $updates['resolved_at'] = now();
-        }
-        $conversation->update($updates);
+        app(ConversationActivityService::class)->status($conversation, $request->status, $request->user());
 
         return back()->with('success', 'Status updated.');
     }
@@ -672,7 +697,8 @@ class InboxController extends Controller
         if ($mode === 'human') {
             $this->handoverService->request($conversation, 'manual');
         } else {
-            $conversation->forceFill(['assigned_to' => 'bot', 'assigned_user_id' => null, 'handover_at' => null, 'ai_handback_after_message_id' => $conversation->messages()->max('id') ?? 0])->save();
+            app(ConversationActivityService::class)->leave($conversation, $request->user());
+            $conversation->forceFill(['assigned_to' => 'bot', 'assigned_user_id' => null, 'joined_user_id' => null, 'joined_at' => null, 'handover_at' => null, 'ai_handback_after_message_id' => $conversation->messages()->whereIn('direction', ['in', 'out'])->max('id') ?? 0])->save();
         }
 
         return response()->json(['ok' => true, 'assigned_to' => $mode]);
@@ -1012,7 +1038,7 @@ class InboxController extends Controller
             ->when($isLiveFolder, fn ($q) => $q
                 ->whereHas('channelAccount', fn ($account) => $account->where('channel', 'webchat'))
                 ->where('webchat_last_seen_at', '>=', $liveSince))
-            ->when(! $isLiveFolder, fn ($q) => $q->whereHas('messages'))
+            ->when(! $isLiveFolder, fn ($q) => $q->whereHas('messages', fn ($message) => $message->whereIn('direction', ['in', 'out'])))
             ->when($request->folder === 'mine', fn ($q) => $q->where('assigned_user_id', $userId))
             ->when($request->folder === 'unassigned', fn ($q) => $q->whereNull('assigned_user_id'))
             ->when($request->channel, fn ($q) => $q->whereHas('channelAccount', fn ($q) => $q->where('channel', $request->channel)))

@@ -8,6 +8,7 @@ use App\Events\MessageStatusUpdated;
 use App\Events\TypingChanged;
 use App\Models\User;
 use App\Modules\Inbox\Models\InboxLabel;
+use App\Modules\Inbox\Services\ConversationActivityService;
 use App\Modules\Inbox\Services\ConversationDeletionService;
 use App\Modules\Inbox\Services\MessageMediaResolver;
 use App\Modules\Inbox\Services\WebchatPresence;
@@ -107,8 +108,9 @@ class MobileConversationController extends WorkspaceScopedController
             ->firstOrFail();
 
         $messages = $conversation->messages()
+            ->whereIn('direction', ['in', 'out'])
             ->with('conversation')
-            ->orderBy('sent_at')
+            ->orderBy('id')
             ->get();
 
         $conversation->update(['unread_count' => 0]);
@@ -139,7 +141,8 @@ class MobileConversationController extends WorkspaceScopedController
             ->firstOrFail();
 
         $messages = $conversation->messages()
-            ->orderBy('sent_at')
+            ->whereIn('direction', ['in', 'out'])
+            ->orderBy('id')
             ->get();
 
         return response()->json([
@@ -331,10 +334,37 @@ class MobileConversationController extends WorkspaceScopedController
             abort_unless($assignedTo, 422, 'User not found in workspace.');
         }
 
-        $conversation->update(['assigned_user_id' => $request->user_id]);
-        ConversationAssigned::dispatch($conversation, $assignedTo);
+        $updated = app(ConversationActivityService::class)->assign($conversation, $assignedTo, $request->user());
+        ConversationAssigned::dispatch($updated, $assignedTo);
 
         return response()->json(['ok' => true, 'assigned_user_id' => $request->user_id]);
+    }
+
+    public function join(Request $request, string $uuid): JsonResponse
+    {
+        $conversation = Conversation::where('workspace_id', $this->workspaceId($request))->where('uuid', $uuid)->firstOrFail();
+        $updated = app(ConversationActivityService::class)->join($conversation, $request->user());
+        ConversationAssigned::dispatch($updated, $request->user());
+
+        return response()->json(['ok' => true, 'conversation' => $this->formatConversation($updated, detail: true)]);
+    }
+
+    public function leave(Request $request, string $uuid): JsonResponse
+    {
+        $conversation = Conversation::where('workspace_id', $this->workspaceId($request))->where('uuid', $uuid)->firstOrFail();
+        $updated = app(ConversationActivityService::class)->leave($conversation, $request->user());
+        ConversationAssigned::dispatch($updated, $updated->assignedUser);
+
+        return response()->json(['ok' => true, 'conversation' => $this->formatConversation($updated, detail: true)]);
+    }
+
+    public function takeover(Request $request, string $uuid): JsonResponse
+    {
+        $conversation = Conversation::where('workspace_id', $this->workspaceId($request))->where('uuid', $uuid)->firstOrFail();
+        $updated = app(ConversationActivityService::class)->takeover($conversation, $request->user());
+        ConversationAssigned::dispatch($updated, $request->user());
+
+        return response()->json(['ok' => true, 'conversation' => $this->formatConversation($updated, detail: true)]);
     }
 
     /**
@@ -348,11 +378,7 @@ class MobileConversationController extends WorkspaceScopedController
 
         $request->validate(['status' => ['required', 'in:open,pending,resolved,snoozed']]);
 
-        $updates = ['status' => $request->status];
-        if ($request->status === 'resolved' && ! $conversation->resolved_at) {
-            $updates['resolved_at'] = now();
-        }
-        $conversation->update($updates);
+        app(ConversationActivityService::class)->status($conversation, $request->status, $request->user());
 
         return response()->json(['ok' => true, 'status' => $request->status]);
     }
@@ -385,6 +411,10 @@ class MobileConversationController extends WorkspaceScopedController
         $updates = ['assigned_to' => $mode];
         if ($mode === 'human' && ! $conversation->handover_at) {
             $updates['handover_at'] = now();
+        }
+        if ($mode === 'bot') {
+            app(ConversationActivityService::class)->leave($conversation, $request->user());
+            $updates += ['assigned_user_id' => null, 'joined_user_id' => null, 'joined_at' => null, 'handover_at' => null];
         }
         $conversation->update($updates);
 

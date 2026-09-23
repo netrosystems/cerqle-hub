@@ -227,7 +227,7 @@ class AutoReplyListener
             ->get();
 
         $body = $message->body ?? '';
-        $isFirstMessage = $conversation->messages()->count() === 1;
+        $isFirstMessage = $conversation->messages()->whereIn('direction', ['in', 'out'])->count() === 1;
 
         foreach ($rules as $rule) {
             $matched = match ($rule->trigger_type) {

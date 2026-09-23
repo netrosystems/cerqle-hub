@@ -50,6 +50,21 @@
       "key": "email_account_id",
       "value": "1",
       "type": "string"
+    },
+    {
+      "key": "message_id",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "media_expires",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "media_signature",
+      "value": "",
+      "type": "string"
     }
   ],
   "item": [
@@ -2988,6 +3003,126 @@
                   ]
                 },
                 "description": "Agent response times and conversation resolution rates."
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "07. Availability, Media & Bulk Actions",
+      "description": "Notification availability, private message media delivery, conversation lifecycle, and bulk email actions.",
+      "item": [
+        {
+          "name": "Personal Notification Availability",
+          "item": [
+            {
+              "name": "Get Notification Availability",
+              "request": {
+                "method": "GET",
+                "header": [{ "key": "Accept", "value": "application/json", "type": "text" }],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/notification-availability",
+                  "host": ["{{base_url}}"],
+                  "path": ["api", "v1", "notification-availability"]
+                },
+                "description": "Returns the current user's workspace notification availability mode, timezone, weekly hours, revision, and edit permission."
+              }
+            },
+            {
+              "name": "Update Notification Availability",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  { "key": "Accept", "value": "application/json", "type": "text" },
+                  { "key": "Content-Type", "value": "application/json", "type": "text" }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/notification-availability",
+                  "host": ["{{base_url}}"],
+                  "path": ["api", "v1", "notification-availability"]
+                },
+                "description": "Updates personal notification availability. Send the latest revision returned by the GET request.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"mode\": \"paused\",\n  \"revision\": 0\n}",
+                  "options": { "raw": { "language": "json" } }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "Mobile Conversation Media & Lifecycle",
+          "item": [
+            {
+              "name": "Download Message Media",
+              "request": {
+                "method": "GET",
+                "header": [{ "key": "Accept", "value": "*/*", "type": "text" }],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/mobile/conversations/{{conversation_uuid}}/messages/{{message_id}}/media",
+                  "host": ["{{base_url}}"],
+                  "path": ["api", "v1", "mobile", "conversations", "{{conversation_uuid}}", "messages", "{{message_id}}", "media"]
+                },
+                "description": "Streams workspace-scoped message media using the inherited Sanctum bearer token."
+              }
+            },
+            {
+              "name": "Download Message Media With Signed URL",
+              "request": {
+                "method": "GET",
+                "header": [{ "key": "Accept", "value": "*/*", "type": "text" }],
+                "auth": { "type": "noauth" },
+                "url": {
+                  "raw": "{{base_url}}/api/v1/mobile/conversations/{{conversation_uuid}}/messages/{{message_id}}/media/signed?expires={{media_expires}}&signature={{media_signature}}",
+                  "host": ["{{base_url}}"],
+                  "path": ["api", "v1", "mobile", "conversations", "{{conversation_uuid}}", "messages", "{{message_id}}", "media", "signed"],
+                  "query": [
+                    { "key": "expires", "value": "{{media_expires}}", "description": "Expiry timestamp from a backend-generated signed media URL" },
+                    { "key": "signature", "value": "{{media_signature}}", "description": "Signature from a backend-generated signed media URL" }
+                  ]
+                },
+                "description": "Streams message media through a valid short-lived signed URL without bearer authentication."
+              }
+            },
+            {
+              "name": "Delete Conversation",
+              "request": {
+                "method": "DELETE",
+                "header": [{ "key": "Accept", "value": "application/json", "type": "text" }],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/mobile/conversations/{{conversation_uuid}}",
+                  "host": ["{{base_url}}"],
+                  "path": ["api", "v1", "mobile", "conversations", "{{conversation_uuid}}"]
+                },
+                "description": "Permanently deletes the workspace-scoped conversation and returns HTTP 204."
+              }
+            }
+          ]
+        },
+        {
+          "name": "Mobile Email Bulk Actions",
+          "item": [
+            {
+              "name": "Resolve Open Email Threads",
+              "request": {
+                "method": "POST",
+                "header": [
+                  { "key": "Accept", "value": "application/json", "type": "text" },
+                  { "key": "Content-Type", "value": "application/json", "type": "text" }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/mobile/email/resolve-open",
+                  "host": ["{{base_url}}"],
+                  "path": ["api", "v1", "mobile", "email", "resolve-open"]
+                },
+                "description": "Resolves all open email threads, optionally limited to one connected email account.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"account_id\": {{email_account_id}}\n}",
+                  "options": { "raw": { "language": "json" } }
+                }
               }
             }
           ]
