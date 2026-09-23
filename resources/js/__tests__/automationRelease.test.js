@@ -29,3 +29,23 @@ describe('automation release palette', () => {
         expect(JSON.stringify(nodes)).toBe(before);
     });
 });
+
+describe('template picker', () => {
+    const body = (text) => ({ type: 'BODY', text });
+    it('offers body-only templates and static buttons', async () => {
+        const { templateIsSupported } = await import('../Utils/automationRelease');
+        expect(templateIsSupported([body('Hi {{1}}'), { type: 'BUTTONS', buttons: [{ type: 'QUICK_REPLY', text: 'Confirm' }] }])).toBe(true);
+        expect(templateIsSupported([{ type: 'HEADER', format: 'TEXT', text: 'Booked' }, body('Thanks {{1}}')])).toBe(true);
+    });
+    // The validator refuses these on activation, so the builder must not offer them.
+    it.each([
+        ['an image header', [{ type: 'HEADER', format: 'IMAGE' }, body('Hi')]],
+        ['a variable header', [{ type: 'HEADER', format: 'TEXT', text: 'Hi {{1}}' }, body('Hi')]],
+        ['a variable URL button', [body('Hi'), { type: 'BUTTONS', buttons: [{ type: 'URL', url: 'https://x.test/{{1}}' }] }]],
+        ['a copy-code button', [body('Hi'), { type: 'BUTTONS', buttons: [{ type: 'COPY_CODE' }] }]],
+        ['named parameters', [body('Hi {{first_name}}')]],
+    ])('hides a template with %s', async (_, components) => {
+        const { templateIsSupported } = await import('../Utils/automationRelease');
+        expect(templateIsSupported(components)).toBe(false);
+    });
+});

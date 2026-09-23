@@ -17,6 +17,7 @@ use App\Modules\Broadcasting\Models\Campaign;
 use App\Modules\Ecommerce\Models\EcommerceStore;
 use App\Modules\Integrations\Models\IntegrationConfig;
 use App\Modules\Shared\Models\ChannelAccount;
+use App\Modules\Shared\Models\ContactTag;
 use App\Modules\Whatsapp\Models\WhatsappTemplate;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -75,6 +76,29 @@ class AutomationController extends Controller
     }
 
     /**
+     * Validation keeps only keys that have a rule. Without the handle and
+     * position rules, every Yes/No branch lost its handle — conditions then
+     * failed Preview and Activate — and saved steps lost their places.
+     */
+    private const GRAPH_RULES = [
+        'nodes' => ['nullable', 'array'],
+        'edges' => ['nullable', 'array'],
+        'nodes.*' => ['array'],
+        'nodes.*.id' => ['required', 'string', 'max:64'],
+        'nodes.*.type' => ['required', 'string'],
+        'nodes.*.data' => ['nullable', 'array'],
+        'nodes.*.position' => ['nullable', 'array'],
+        'nodes.*.position.x' => ['nullable', 'numeric'],
+        'nodes.*.position.y' => ['nullable', 'numeric'],
+        'edges.*' => ['array'],
+        'edges.*.id' => ['nullable', 'string', 'max:128'],
+        'edges.*.source' => ['required', 'string'],
+        'edges.*.target' => ['required', 'string'],
+        'edges.*.sourceHandle' => ['nullable', 'string', 'max:32'],
+        'edges.*.targetHandle' => ['nullable', 'string', 'max:32'],
+    ];
+
+    /**
      * Reference data the builder needs to populate node config dropdowns
      * (templates, campaigns, chatbots, sub-flows, agents, stores) plus a map of
      * which optional integrations are connected.
@@ -106,6 +130,8 @@ class AutomationController extends Controller
             'subflows' => Automation::where('workspace_id', $workspaceId)
                 ->where('id', '!=', $currentAutomationId)
                 ->orderBy('name')->get(['uuid', 'name', 'status'])->values(),
+            // Suggested in Add/Remove Tag so a typo does not silently miss the tag.
+            'tags' => ContactTag::where('workspace_id', $workspaceId)->orderBy('name')->limit(500)->pluck('name')->values(),
             'agents' => User::inWorkspace($workspaceId)
                 ->orderBy('name')->get(['id', 'name'])->values(),
             'stores' => EcommerceStore::where('workspace_id', $workspaceId)
@@ -124,15 +150,7 @@ class AutomationController extends Controller
             'status' => ['sometimes', 'in:active,paused,draft'],
             'trigger_type' => ['nullable', 'string', 'max:64'],
             'trigger_config' => ['nullable', 'array'],
-            'nodes' => ['nullable', 'array'],
-            'edges' => ['nullable', 'array'],
-            'nodes.*' => ['array'],
-            'nodes.*.id' => ['required', 'string', 'max:64'],
-            'nodes.*.type' => ['required', 'string'],
-            'nodes.*.data' => ['nullable', 'array'],
-            'edges.*' => ['array'],
-            'edges.*.source' => ['required', 'string'],
-            'edges.*.target' => ['required', 'string'],
+            ...self::GRAPH_RULES,
             'trigger_config.channel_account_id' => ['nullable', 'integer', 'min:1'],
             'trigger_config.keywords' => ['nullable', 'array'],
             'trigger_config.keywords.*' => ['string', 'min:1', 'max:100'],
@@ -194,15 +212,7 @@ class AutomationController extends Controller
     {
         $this->authorise($request, $automation);
         $validated = $request->validate([
-            'nodes' => ['nullable', 'array'],
-            'edges' => ['nullable', 'array'],
-            'nodes.*' => ['array'],
-            'nodes.*.id' => ['required', 'string', 'max:64'],
-            'nodes.*.type' => ['required', 'string'],
-            'nodes.*.data' => ['nullable', 'array'],
-            'edges.*' => ['array'],
-            'edges.*.source' => ['required', 'string'],
-            'edges.*.target' => ['required', 'string'],
+            ...self::GRAPH_RULES,
             'trigger_type' => ['nullable', 'string', 'max:64'],
             'trigger_config' => ['nullable', 'array'],
             'sample_message' => ['nullable', 'string', 'max:1000'],

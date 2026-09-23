@@ -77,3 +77,32 @@ The Runs page shows which case applies before anyone clicks.
   chosen is kept — Wisperbot's `graph.trigger_config ?? current` kept the
   AI's empty object and silently unset the sender. Replacing steps already on
   the canvas asks first, before any credit is spent.
+
+## Node audit (2026-09-24)
+
+Each of the ten nodes was configured and run through Preview in the browser.
+What changed, and why:
+
+- **Save and Preview kept only keys with a validation rule.** An edge's
+  Yes/No handle and a node's position had none, so every Condition failed
+  Preview and Activate and saved steps lost their places. Present on `main`
+  since 2026-09-13; exposure was limited because the menu was hidden and
+  Condition was not in the palette. Save and Preview now share one rule set.
+- **Customer text is compared as a person reads it.** Condition equals and
+  contains ignore case and surrounding spaces ("Price?" contains "price"); tag
+  checks likewise. A typed reply to a button menu counts when it names a
+  button or its number, instead of leaving the run waiting 24 hours.
+- **Remove Tag no longer creates the tag** it was asked to remove.
+- **The template picker lists only templates activation accepts** (no media
+  headers, variable headers or buttons, call or copy-code buttons, named
+  parameters), and says how many it hid.
+- **Removed as unnecessary:** the one-option Channel picker on four nodes, and
+  the token hint on nodes that do not render text. The hint now names the
+  variables the workflow actually collects.
+- **Added guidance where a step was easy to misuse:** tag conditions offer only
+  has / does not have; menu and tag values are suggested; waits of 24 hours or
+  more warn that only templates deliver afterwards; Assign Agent says it ends
+  the automation.
+- Builder: steps show their summary without a manual edit (AI drafts said
+  "Click to configure"), a clicked palette item lands in view, the settings
+  panel no longer covers Save, and the WhatsApp icon renders.

@@ -278,6 +278,51 @@ class AutomationNodeBehaviourTest extends TestCase
         $this->assertFalse($this->contact->fresh()->tags()->where('name', 'unmatched')->exists());
     }
 
+    private function branch(array $condition, array $context = []): string
+    {
+        $run = $this->runNodes(
+            [
+                ['id' => 'c1', 'type' => 'condition', 'data' => $condition],
+                ['id' => 'yes', 'type' => 'add_tag', 'data' => ['tag' => 'went_yes']],
+                ['id' => 'no', 'type' => 'add_tag', 'data' => ['tag' => 'went_no']],
+            ],
+            [
+                ['id' => 'e1', 'source' => 'trigger-1', 'target' => 'c1'],
+                ['id' => 'e2', 'source' => 'c1', 'target' => 'yes', 'sourceHandle' => 'true'],
+                ['id' => 'e3', 'source' => 'c1', 'target' => 'no', 'sourceHandle' => 'false'],
+            ],
+            $context,
+        );
+        $this->assertEquals('completed', $run->status);
+
+        return $this->contact->fresh()->tags()->where('name', 'went_yes')->exists() ? 'yes' : 'no';
+    }
+
+    public function test_condition_reads_customer_text_regardless_of_case_or_spaces(): void
+    {
+        // Customers write "Price?" or " YES "; a builder value of "price" / "yes" must still match.
+        $this->assertSame('yes', $this->branch(['field' => 'message.body', 'operator' => 'contains', 'value' => 'price'], ['message_body' => 'What is the Price?']));
+        $this->contact->tags()->detach();
+        $this->assertSame('yes', $this->branch(['field' => 'context.answer', 'operator' => 'equals', 'value' => 'yes'], ['answer' => ' YES ']));
+        $this->contact->tags()->detach();
+        $this->assertSame('no', $this->branch(['field' => 'message.body', 'operator' => 'contains', 'value' => 'refund'], ['message_body' => 'What is the Price?']));
+    }
+
+    public function test_tag_condition_ignores_case(): void
+    {
+        $this->runSingleNode('add_tag', ['tag' => 'VIP']);
+
+        $this->assertSame('yes', $this->branch(['field' => 'contact.tag', 'operator' => 'equals', 'value' => 'vip']));
+    }
+
+    public function test_removing_a_tag_the_contact_never_had_does_not_create_it(): void
+    {
+        $run = $this->runSingleNode('remove_tag', ['tag' => 'never-used']);
+
+        $this->assertEquals('completed', $run->status);
+        $this->assertDatabaseMissing('contact_tags', ['workspace_id' => $this->workspace->id, 'name' => 'never-used']);
+    }
+
     public function test_run_subflow_triggers_target_automation(): void
     {
         $sub = Automation::create([

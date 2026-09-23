@@ -22,3 +22,17 @@ export const automationAiExamples = [
     ['automation.ai_example_triage', 'Ask new customers what they need help with. If they say "order", ask for their order number; otherwise assign an agent'],
     ['automation.ai_example_after_hours', 'Thank people for their message, tag them as "follow-up", and wait 1 hour before asking if they still need help'],
 ];
+
+// Body {{1}}-style variables are filled in the builder; anything else (media
+// headers, variable headers or buttons, call/copy-code buttons, named
+// parameters) cannot be, so activation would refuse the template.
+export function templateIsSupported(components) {
+    return (Array.isArray(components) ? components : []).every(c => {
+        const type = (c.type || '').toUpperCase();
+        const json = JSON.stringify(c);
+        if (type === 'BODY') return !/\{\{\s*[^\d\s}][^}]*\}\}/.test(c.text || '');
+        return !json.includes('{{')
+            && !['IMAGE', 'VIDEO', 'DOCUMENT'].includes((c.format || '').toUpperCase())
+            && !json.includes('VOICE_CALL') && !json.includes('COPY_CODE');
+    });
+}
