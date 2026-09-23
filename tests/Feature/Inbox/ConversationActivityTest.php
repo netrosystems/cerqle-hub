@@ -8,6 +8,7 @@ use App\Http\Controllers\Api\V1\MobileConversationController;
 use App\Http\Controllers\Api\V1\MobileEmailInboxController;
 use App\Models\User;
 use App\Modules\Inbox\Models\ChatWidget;
+use App\Modules\Inbox\Models\WorkspaceMemberAvailability;
 use App\Modules\Inbox\Services\ConversationActivityService;
 use App\Modules\Inbox\Services\ConversationOwnershipException;
 use App\Modules\Inbox\Services\EmailBulkResolveService;
@@ -138,6 +139,34 @@ class ConversationActivityTest extends TestCase
             $this->assertSame(403, $exception->status);
             $this->assertSame($actor->id, $exception->context['joined_user']['id']);
         }
+    }
+
+    public function test_available_staff_can_take_over_an_unavailable_owner_and_join_opens_the_chat(): void
+    {
+        [$conversation, , $owner, $workspace] = $this->chat();
+        $staff = User::factory()->create([
+            'role' => User::ROLE_CLIENT,
+            'client_id' => $owner->client_id,
+            'client_role' => User::CLIENT_ROLE_STAFF,
+        ]);
+        $staff->workspaces()->syncWithoutDetaching([$workspace->id => ['role' => 'agent']]);
+        $conversation->update(['status' => 'pending']);
+        $service = app(ConversationActivityService::class);
+        $service->join($conversation, $owner);
+
+        $this->assertSame('open', $conversation->fresh()->status);
+        WorkspaceMemberAvailability::create([
+            'workspace_id' => $workspace->id,
+            'user_id' => $owner->id,
+            'enabled' => true,
+            'timezone' => 'UTC',
+            'schedule_json' => [],
+        ]);
+
+        $this->assertTrue($service->canTakeover($conversation->fresh(), $staff));
+        $service->takeover($conversation->fresh(), $staff);
+        $this->assertSame($staff->id, $conversation->fresh()->joined_user_id);
+        $this->assertSame('conversation.transferred', $conversation->messages()->latest('id')->first()->payload['activity']['type']);
     }
 
     public function test_customer_message_reopens_resolved_chat_without_restoring_stale_ownership(): void
