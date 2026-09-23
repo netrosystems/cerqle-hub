@@ -104,12 +104,11 @@ class MobileConversationController extends WorkspaceScopedController
     {
         $conversation = Conversation::where('workspace_id', $this->workspaceId($request))
             ->where('uuid', $uuid)
-            ->with(['contact', 'channelAccount', 'labels', 'assignedUser'])
+            ->with(['contact', 'channelAccount', 'labels', 'assignedUser', 'joinedUser'])
             ->firstOrFail();
 
         $messages = $conversation->messages()
-            ->whereIn('direction', ['in', 'out'])
-            ->with('conversation')
+            ->with(['conversation', 'sender'])
             ->orderBy('id')
             ->get();
 
@@ -141,7 +140,7 @@ class MobileConversationController extends WorkspaceScopedController
             ->firstOrFail();
 
         $messages = $conversation->messages()
-            ->whereIn('direction', ['in', 'out'])
+            ->with('sender')
             ->orderBy('id')
             ->get();
 
@@ -717,6 +716,13 @@ class MobileConversationController extends WorkspaceScopedController
                 'name' => $c->assignedUser->name,
                 'avatar' => $c->assignedUser->avatar ?? null,
             ] : null,
+            'joined_at' => $c->joined_at?->toIso8601String(),
+            'joined_user' => $c->joinedUser ? [
+                'id' => $c->joinedUser->id,
+                'name' => $c->joinedUser->name,
+                'avatar' => $c->joinedUser->avatar ?? null,
+                'avatar_url' => $c->joinedUser->avatarUrl(),
+            ] : null,
             'contact' => $c->contact ? [
                 'id' => $c->contact->id,
                 'name' => Demo::name($c->contact->name),
@@ -764,7 +770,7 @@ class MobileConversationController extends WorkspaceScopedController
 
     private function formatMessage(Message $m): array
     {
-        $m->loadMissing('conversation');
+        $m->loadMissing(['conversation', 'sender']);
         $payload = $this->mediaResolver->augmentPayload($m, request(), 'api.v1.mobile.conversations.messages.media.signed');
 
         return [
@@ -778,6 +784,12 @@ class MobileConversationController extends WorkspaceScopedController
             'payload' => $payload,
             'status' => $m->status,
             'sent_by' => $m->sent_by,
+            'sender' => $m->sender ? [
+                'id' => $m->sender->id,
+                'name' => $m->sender->name,
+                'avatar' => $m->sender->avatar ?? null,
+                'avatar_url' => $m->sender->avatarUrl(),
+            ] : null,
             'sent_at' => $m->sent_at?->toIso8601String(),
             'created_at' => $m->created_at->toIso8601String(),
         ];
