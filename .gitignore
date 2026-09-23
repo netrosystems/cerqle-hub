@@ -34,3 +34,6 @@ database/.DS_Store
 /.claude
 /.puku
 /puku.md
+
+# Local scratch output from AI sessions — never part of the app.
+/Claude outputs/
