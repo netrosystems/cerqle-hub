@@ -82,6 +82,7 @@ Primary Plum:    #3E2A49   Brand Lilac:    #8F5FA7   Cool Accent:  #45B6D6   Cor
 
 ### 4.2 Viewport-Pinned Layout (`InboxLayout`)
 - Website widget AI Answering uses compact Off/Permanent/Scheduled radios, conditional chatbot selection and expandable scrollable hours. Each day supports enable/all-day, up to five removable intervals and weekday copying. Keep errors inline, setup help expandable and grid children shrinkable on narrow screens. Display configured mode and effective active/inactive availability without conflating AI with human presence.
+- Website widget edit shows independent `Widget enabled` and `SDK enabled` rows in Visitor experience, with short descriptions. They remain draft form state until the shared `Save changes` action, matching the other Visitor experience controls. Setup keeps the website snippet key and customer mobile SDK key visibly separate. In Omni Inbox, SDK-origin webchat conversations use the mobile-device icon and `App SDK` source label; website and historical/unclassified webchat conversations retain the existing webchat icon. The details panel shows `Started from` only when a source was recorded.
 - **Used For**: Omni-Channel Inbox and Master Email Inbox.
 - **Structure**: `h-screen` pinned column flexbox layout.
   - Left: 3-column navigation / conversation list.

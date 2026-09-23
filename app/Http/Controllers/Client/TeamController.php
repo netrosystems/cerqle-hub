@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Invitation;
 use App\Models\User;
 use App\Models\Workspace;
+use App\Modules\Inbox\Models\WorkspaceMemberAvailability;
 use App\Services\NotificationAvailability;
 use App\Services\WorkspaceMembershipService;
 use Illuminate\Auth\Events\Registered;
@@ -32,6 +33,11 @@ class TeamController extends Controller
             abort(404);
         }
 
+        $teamAvailability = WorkspaceMemberAvailability::query()
+            ->whereIn('workspace_id', $client->workspaces()->pluck('id'))
+            ->get()
+            ->keyBy(fn (WorkspaceMemberAvailability $availability) => $availability->workspace_id.':'.$availability->user_id);
+
         $users = $client->users()
             ->with(['workspaces' => fn ($query) => $query->where('client_id', $client->id)->orderBy('name')])
             ->orderBy('name')
@@ -46,6 +52,11 @@ class TeamController extends Controller
                     'workspace_id' => $workspace->id,
                     'name' => $workspace->name,
                     'availability' => app(NotificationAvailability::class)->state($u, $workspace->id),
+                    'chat_availability' => ($record = $teamAvailability->get($workspace->id.':'.$u->id)) ? [
+                        'enabled' => $record->enabled,
+                        'timezone' => $record->timezone,
+                        'schedule' => $record->schedule_json ?? [],
+                    ] : ['enabled' => false, 'timezone' => 'UTC', 'schedule' => []],
                     'is_owner' => (int) $workspace->owner_id === (int) $u->id,
                     'role' => (int) $workspace->owner_id === (int) $u->id || $workspace->pivot->role === 'owner'
                         ? 'administrator'

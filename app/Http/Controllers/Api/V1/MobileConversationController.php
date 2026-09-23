@@ -109,6 +109,7 @@ class MobileConversationController extends WorkspaceScopedController
 
         $messages = $conversation->messages()
             ->with(['conversation', 'sender'])
+            ->orderBy('sent_at')
             ->orderBy('id')
             ->get();
 
@@ -120,7 +121,7 @@ class MobileConversationController extends WorkspaceScopedController
         );
 
         return response()->json([
-            'conversation' => $this->formatConversation($conversation, detail: true),
+            'conversation' => $this->formatConversation($conversation, detail: true, actor: $request->user()),
             'messages' => $messages->map(fn ($m) => $this->formatMessage($m)),
             'messages_meta' => [
                 'current_page' => 1,
@@ -141,6 +142,7 @@ class MobileConversationController extends WorkspaceScopedController
 
         $messages = $conversation->messages()
             ->with('sender')
+            ->orderBy('sent_at')
             ->orderBy('id')
             ->get();
 
@@ -181,6 +183,7 @@ class MobileConversationController extends WorkspaceScopedController
             ->where('uuid', $uuid)
             ->with('channelAccount')
             ->firstOrFail();
+        app(ConversationActivityService::class)->assertCanReply($conversation, $request->user());
 
         $validated = $request->validate([
             'body' => ['nullable', 'string', 'max:4096'],
@@ -274,40 +277,45 @@ class MobileConversationController extends WorkspaceScopedController
             ], 422);
         }
 
-        $message = Message::create([
-            'conversation_id' => $conversation->id,
-            'direction' => 'out',
-            'channel' => $conversation->channelAccount?->channel ?? 'whatsapp',
-            'type' => $msgType,
-            'body' => $validated['body'],
-            'payload' => $msgPayload,
-            'status' => 'queued',
-            'sent_by' => 'human',
-            'user_id' => $request->user()->id,
-            'sent_at' => now(),
-        ]);
-
-        $sendError = null;
-        try {
-            $driver = $this->channelManager->driver($conversation->channelAccount?->channel ?? 'whatsapp');
-            $messageId = $driver->send($message);
-            $message->update(['status' => 'sent', 'provider_message_id' => $messageId]);
-        } catch (\Throwable $e) {
-            $sendError = $e->getMessage();
-            Log::error('Mobile reply send failed', [
+        $ownership = app(ConversationActivityService::class);
+        [$message, $sendError] = $ownership->synchronized($conversation, function () use ($channel, $conversation, $msgPayload, $msgType, $ownership, $request, $validated): array {
+            $conversation->refresh()->loadMissing('joinedUser');
+            $ownership->assertCanReply($conversation, $request->user());
+            $message = Message::create([
                 'conversation_id' => $conversation->id,
-                'error' => $sendError,
+                'direction' => 'out',
+                'channel' => $channel,
+                'type' => $msgType,
+                'body' => $validated['body'],
+                'payload' => $msgPayload,
+                'status' => 'queued',
+                'sent_by' => 'human',
+                'user_id' => $request->user()->id,
+                'sent_at' => now(),
             ]);
-            $message->update(['status' => 'failed', 'error_json' => ['message' => $sendError]]);
-        }
 
-        $conversation->update(['last_message_at' => now()]);
-        if ($conversation->last_inbound_at && ! $conversation->first_response_at) {
-            $conversation->update(['first_response_at' => now()]);
-        }
+            $sendError = null;
+            try {
+                $messageId = $this->channelManager->driver($channel)->send($message);
+                $message->update(['status' => 'sent', 'provider_message_id' => $messageId]);
+            } catch (\Throwable $e) {
+                $sendError = $e->getMessage();
+                Log::error('Mobile reply send failed', [
+                    'conversation_id' => $conversation->id,
+                    'error' => $sendError,
+                ]);
+                $message->update(['status' => 'failed', 'error_json' => ['message' => $sendError]]);
+            }
 
-        $message->load('conversation');
-        MessageSent::dispatch($message);
+            $conversation->update(['last_message_at' => now()]);
+            if ($conversation->last_inbound_at && ! $conversation->first_response_at) {
+                $conversation->update(['first_response_at' => now()]);
+            }
+            $message->load('conversation');
+            MessageSent::dispatch($message);
+
+            return [$message, $sendError];
+        });
 
         return response()->json([
             'data' => $this->formatMessage($message),
@@ -345,7 +353,7 @@ class MobileConversationController extends WorkspaceScopedController
         $updated = app(ConversationActivityService::class)->join($conversation, $request->user());
         ConversationAssigned::dispatch($updated, $request->user());
 
-        return response()->json(['ok' => true, 'conversation' => $this->formatConversation($updated, detail: true)]);
+        return response()->json(['ok' => true, 'conversation' => $this->formatConversation($updated, detail: true, actor: $request->user())]);
     }
 
     public function leave(Request $request, string $uuid): JsonResponse
@@ -354,7 +362,7 @@ class MobileConversationController extends WorkspaceScopedController
         $updated = app(ConversationActivityService::class)->leave($conversation, $request->user());
         ConversationAssigned::dispatch($updated, $updated->assignedUser);
 
-        return response()->json(['ok' => true, 'conversation' => $this->formatConversation($updated, detail: true)]);
+        return response()->json(['ok' => true, 'conversation' => $this->formatConversation($updated, detail: true, actor: $request->user())]);
     }
 
     public function takeover(Request $request, string $uuid): JsonResponse
@@ -363,7 +371,7 @@ class MobileConversationController extends WorkspaceScopedController
         $updated = app(ConversationActivityService::class)->takeover($conversation, $request->user());
         ConversationAssigned::dispatch($updated, $request->user());
 
-        return response()->json(['ok' => true, 'conversation' => $this->formatConversation($updated, detail: true)]);
+        return response()->json(['ok' => true, 'conversation' => $this->formatConversation($updated, detail: true, actor: $request->user())]);
     }
 
     /**
@@ -599,7 +607,7 @@ class MobileConversationController extends WorkspaceScopedController
         $conversation->load(['contact', 'channelAccount', 'labels']);
 
         return response()->json([
-            'conversation' => $this->formatConversation($conversation),
+            'conversation' => $this->formatConversation($conversation, actor: $request->user()),
         ], 201);
     }
 
@@ -686,7 +694,7 @@ class MobileConversationController extends WorkspaceScopedController
 
     // ─── Private formatters ───────────────────────────────────────────────────
 
-    private function formatConversation(Conversation $c, bool $detail = false): array
+    private function formatConversation(Conversation $c, bool $detail = false, ?User $actor = null): array
     {
         $isWebchat = $c->channelAccount?->channel === 'webchat';
         $lastSeen = $c->webchat_last_seen_at instanceof Carbon
@@ -704,6 +712,7 @@ class MobileConversationController extends WorkspaceScopedController
             'uuid' => $c->uuid,
             'status' => $c->status,
             'channel' => $c->channelAccount?->channel,
+            'started_from' => $c->started_from,
             'channel_account_id' => $c->channel_account_id,
             'unread_count' => (int) $c->unread_count,
             'last_message_at' => $c->last_message_at instanceof Carbon ? $c->last_message_at->toIso8601String() : ($c->last_message_at ? Carbon::parse($c->last_message_at)->toIso8601String() : null),
@@ -723,6 +732,9 @@ class MobileConversationController extends WorkspaceScopedController
                 'avatar' => $c->joinedUser->avatar ?? null,
                 'avatar_url' => $c->joinedUser->avatarUrl(),
             ] : null,
+            'can_takeover' => $detail && $actor
+                ? app(ConversationActivityService::class)->canTakeover($c, $actor)
+                : false,
             'contact' => $c->contact ? [
                 'id' => $c->contact->id,
                 'name' => Demo::name($c->contact->name),

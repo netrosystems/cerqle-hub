@@ -49,7 +49,7 @@ class InboxShareProductTest extends TestCase
         ], $attrs));
     }
 
-    private function conversation(int $workspaceId, string $channel = 'whatsapp', array $creds = []): Conversation
+    private function conversation(int $workspaceId, string $channel = 'whatsapp', array $creds = [], ?int $joinedUserId = null): Conversation
     {
         $account = ChannelAccount::create([
             'workspace_id' => $workspaceId,
@@ -68,6 +68,9 @@ class InboxShareProductTest extends TestCase
             'status' => 'open',
             'external_thread_id' => 'PSID-123',
             'last_message_at' => now(),
+            'assigned_user_id' => $joinedUserId,
+            'joined_user_id' => $joinedUserId,
+            'joined_at' => $joinedUserId ? now() : null,
         ]);
     }
 
@@ -120,7 +123,7 @@ class InboxShareProductTest extends TestCase
         ['user' => $user, 'workspace' => $ws] = $this->createSubscribedWorkspaceContext();
         $store = $this->store($ws->id);
         $product = $this->product($ws->id, $store->id);
-        $conversation = $this->conversation($ws->id, 'whatsapp');
+        $conversation = $this->conversation($ws->id, 'whatsapp', joinedUserId: $user->id);
         $this->openWindow($conversation);
         $this->fakeDriver();
 
@@ -148,7 +151,7 @@ class InboxShareProductTest extends TestCase
         ['user' => $user, 'workspace' => $ws] = $this->createSubscribedWorkspaceContext();
         $store = $this->store($ws->id);
         $product = $this->product($ws->id, $store->id);
-        $conversation = $this->conversation($ws->id, 'messenger');
+        $conversation = $this->conversation($ws->id, 'messenger', joinedUserId: $user->id);
         $this->fakeDriver();
 
         $res = $this->actingAs($user)->postJson(
@@ -170,7 +173,7 @@ class InboxShareProductTest extends TestCase
         ['user' => $user, 'workspace' => $ws] = $this->createSubscribedWorkspaceContext();
         $store = $this->store($ws->id);
         $product = $this->product($ws->id, $store->id, ['image_url' => null]);
-        $conversation = $this->conversation($ws->id, 'messenger');
+        $conversation = $this->conversation($ws->id, 'messenger', joinedUserId: $user->id);
         $this->fakeDriver();
 
         $res = $this->actingAs($user)->postJson(
@@ -182,6 +185,25 @@ class InboxShareProductTest extends TestCase
         $message = Message::where('conversation_id', $conversation->id)->where('direction', 'out')->first();
         $this->assertSame('text', $message->type);
         $this->assertStringContainsString('Blue Widget', $message->body);
+    }
+
+    public function test_share_product_requires_the_joined_owner(): void
+    {
+        ['user' => $user, 'workspace' => $ws] = $this->createSubscribedWorkspaceContext();
+        $store = $this->store($ws->id);
+        $product = $this->product($ws->id, $store->id);
+        $conversation = $this->conversation($ws->id, 'messenger');
+        $this->fakeDriver();
+
+        $this->actingAs($user)->postJson(
+            route('client.inbox.share-product', $conversation),
+            ['product_id' => $product->id],
+        )->assertConflict()->assertJsonPath('message', 'Join this chat before replying.');
+
+        $this->assertDatabaseMissing('messages', [
+            'conversation_id' => $conversation->id,
+            'direction' => 'out',
+        ]);
     }
 
     public function test_messenger_driver_sends_photo_attachment_then_caption(): void
@@ -218,7 +240,7 @@ class InboxShareProductTest extends TestCase
         ['user' => $user, 'workspace' => $ws] = $this->createSubscribedWorkspaceContext();
         $store = $this->store($ws->id);
         $product = $this->product($ws->id, $store->id);
-        $conversation = $this->conversation($ws->id, 'whatsapp'); // no inbound -> window closed
+        $conversation = $this->conversation($ws->id, 'whatsapp', joinedUserId: $user->id); // no inbound -> window closed
         $this->fakeDriver();
 
         $res = $this->actingAs($user)->postJson(
@@ -236,7 +258,7 @@ class InboxShareProductTest extends TestCase
     public function test_share_product_rejects_other_workspace_product(): void
     {
         ['user' => $user, 'workspace' => $ws] = $this->createSubscribedWorkspaceContext();
-        $conversation = $this->conversation($ws->id, 'messenger');
+        $conversation = $this->conversation($ws->id, 'messenger', joinedUserId: $user->id);
 
         ['workspace' => $other] = $this->createSubscribedWorkspaceContext();
         $otherStore = $this->store($other->id);

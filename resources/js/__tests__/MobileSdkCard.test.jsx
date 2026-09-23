@@ -12,13 +12,13 @@ beforeEach(() => {
 afterEach(cleanup)
 
 it('shows the widget key as the SDK key', () => {
-    render(<MobileSdkCard widgetKey={KEY} />)
+    render(<MobileSdkCard sdkWidgetKey={KEY} />)
 
     expect(screen.getByLabelText('SDK key').value).toBe(KEY)
 })
 
 it('copies the key, not the whole snippet', () => {
-    render(<MobileSdkCard widgetKey={KEY} />)
+    render(<MobileSdkCard sdkWidgetKey={KEY} />)
 
     fireEvent.click(screen.getByRole('button', { name: /copy/i }))
 
@@ -26,7 +26,7 @@ it('copies the key, not the whole snippet', () => {
 })
 
 it('offers Flutter and marks the rest as coming soon', () => {
-    render(<MobileSdkCard widgetKey={KEY} />)
+    render(<MobileSdkCard sdkWidgetKey={KEY} />)
 
     const flutter = screen.getByRole('link', { name: /get it/i })
     expect(flutter.getAttribute('href')).toBe('https://pub.dev/packages/cerqle_chat')
@@ -39,7 +39,7 @@ it('offers Flutter and marks the rest as coming soon', () => {
 })
 
 it('does not offer a download for a platform that is not ready', () => {
-    render(<MobileSdkCard widgetKey={KEY} />)
+    render(<MobileSdkCard sdkWidgetKey={KEY} />)
 
     // One link only: a "coming soon" platform must not be clickable, or it
     // reads as a broken download rather than an unreleased one.

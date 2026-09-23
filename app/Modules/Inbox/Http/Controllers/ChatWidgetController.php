@@ -147,6 +147,15 @@ class ChatWidgetController extends Controller
         return back()->with('success', $enabled ? 'Widget turned on.' : 'Widget turned off.');
     }
 
+    public function toggleSdkEnabled(Request $request, ChatWidget $chatWidget): RedirectResponse
+    {
+        $this->assertOwner($request, $chatWidget);
+        $enabled = $request->boolean('sdk_enabled');
+        $chatWidget->update(['sdk_enabled' => $enabled]);
+
+        return back()->with('success', $enabled ? 'SDK turned on.' : 'SDK turned off.');
+    }
+
     public function destroy(Request $request, ChatWidget $chatWidget): RedirectResponse
     {
         $this->assertOwner($request, $chatWidget);
@@ -193,6 +202,8 @@ class ChatWidgetController extends Controller
             'offline_message' => ['nullable', 'string', 'max:512'],
             'allowed_domains' => ['nullable', 'array'],
             'working_hours_json' => ['nullable', 'array'],
+            'enabled' => ['sometimes', 'boolean'],
+            'sdk_enabled' => ['sometimes', 'boolean'],
         ], [
             'primary_color.regex' => 'Enter a hex colour such as #8F5FA7.',
         ]);
@@ -218,12 +229,14 @@ class ChatWidgetController extends Controller
         }
         $data['require_prechat'] = $request->boolean('require_prechat');
         $data['identity_verification'] = $request->boolean('identity_verification');
-        // On/off lives in its own control, not in this form, so an absent value
-        // means "leave it as it is". Defaulting to true here would silently
-        // switch a disabled widget back on every time its settings were saved.
+        // Older clients may not send either field. Preserve their current state
+        // instead of silently re-enabling a disabled website or SDK surface.
         $data['enabled'] = $request->has('enabled')
             ? $request->boolean('enabled')
             : ($widget?->enabled ?? true);
+        $data['sdk_enabled'] = $request->has('sdk_enabled')
+            ? $request->boolean('sdk_enabled')
+            : ($widget?->sdk_enabled ?? true);
 
         unset(
             $data['avatar_image'],

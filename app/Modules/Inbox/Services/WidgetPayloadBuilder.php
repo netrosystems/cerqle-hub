@@ -107,10 +107,12 @@ class WidgetPayloadBuilder
     {
         $enabled = true;
         $connected = ($conversation->assigned_to ?? 'bot') === 'human';
+        $availability = app(WidgetAiAvailability::class);
+        $surface = $availability->surfaceForConversation($conversation);
 
         return [
             'enabled' => $enabled,
-            'eligible' => ! $connected && (! app(WidgetAiAvailability::class)->available($widget) || $this->hasTwoCustomerMessages($conversation)),
+            'eligible' => ! $connected && (! $availability->available($widget, surface: $surface) || $this->hasTwoCustomerMessages($conversation)),
             'status' => $connected ? 'connected' : 'bot',
         ];
     }
