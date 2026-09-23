@@ -10,7 +10,9 @@ use App\Modules\Inbox\Jobs\SyncMessengerAccountJob;
 use App\Modules\Shared\Models\ChannelAccount;
 use App\Modules\Social\Jobs\DispatchScheduledPostsJob;
 use App\Modules\Social\Jobs\PurgeTemporarySocialMediaJob;
+use App\Modules\Social\Jobs\RefreshSocialAvatarsJob;
 use App\Modules\Social\Jobs\RefreshSocialTokensJob;
+use App\Modules\Social\Services\SocialAvatarStore;
 use App\Modules\Whatsapp\Jobs\ProcessCoexistenceEchoJob;
 use App\Modules\Whatsapp\Jobs\TemplateSyncJob;
 use App\Modules\Whatsapp\Models\WhatsappBusinessAccount;
@@ -106,6 +108,21 @@ Schedule::job(new RefreshSocialTokensJob, 'social')
     ->name('refresh-social-tokens')
     ->withoutOverlapping()
     ->onOneServer();
+
+// Connected accounts keep a stored copy of their picture, because Meta and
+// TikTok picture links expire on their own. Weekly is enough to pick up a
+// Page that changed its logo; the copy itself never expires.
+Schedule::job(new RefreshSocialAvatarsJob, 'social')
+    ->weekly()
+    ->name('refresh-social-avatars')
+    ->withoutOverlapping()
+    ->onOneServer();
+
+Artisan::command('social:refresh-avatars {--account= : Only this social account id}', function () {
+    $result = (new RefreshSocialAvatarsJob($this->option('account') ? (int) $this->option('account') : null))
+        ->handle(app(SocialAvatarStore::class));
+    $this->info("Stored {$result['refreshed']} picture(s); {$result['unchanged_or_failed']} could not be refreshed.");
+})->purpose('Store fresh profile pictures for connected social accounts');
 
 Schedule::job(new PurgeTemporarySocialMediaJob, 'social')
     ->hourly()

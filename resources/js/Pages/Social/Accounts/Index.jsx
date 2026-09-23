@@ -5,13 +5,43 @@ import { Share2, Plus, Trash2, AlertCircle, RefreshCw, ExternalLink, X } from 'l
 import { useTranslation } from 'react-i18next';
 import { SocialBrandIcon } from '@/Components/BrandIcons';
 
+/**
+ * A connected account's picture, falling back to its initial.
+ *
+ * The fallback covers a picture that fails to load, not just a missing one.
+ * Provider links expire on their own, and until an account's stored copy
+ * exists the browser was left showing a broken-image icon.
+ */
+function AccountAvatar({ name, src }) {
+    // Remember which link failed rather than a bare flag, so a new link (the
+    // stored copy arriving) gets its own chance without resetting in an effect.
+    const [failedSrc, setFailedSrc] = useState(null);
+
+    if (src && failedSrc !== src) {
+        return (
+            <img
+                src={src}
+                alt={name}
+                onError={() => setFailedSrc(src)}
+                className="h-7 w-7 rounded-full object-cover shrink-0"
+            />
+        );
+    }
+
+    return (
+        <span aria-hidden="true" className="h-7 w-7 rounded-full bg-neutral-200 dark:bg-neutral-700 flex items-center justify-center shrink-0 text-xs font-bold text-neutral-500">
+            {name?.[0]?.toUpperCase() ?? '?'}
+        </span>
+    );
+}
+
 const NETWORKS = [
-    { id: 'twitter', label: 'X', descriptionKey: 'social.network_desc_twitter' },
     { id: 'facebook',  label: 'Facebook',  descriptionKey: 'social.network_desc_facebook' },
     { id: 'instagram', label: 'Instagram', descriptionKey: 'social.network_desc_instagram' },
     { id: 'linkedin',  label: 'LinkedIn',  descriptionKey: 'social.network_desc_linkedin' },
     { id: 'linkedin_page', label: 'LinkedIn Page', descriptionKey: 'social.network_desc_linkedin_page' },
     { id: 'youtube',   label: 'YouTube',   descriptionKey: 'social.network_desc_youtube' },
+    { id: 'twitter', label: 'X', descriptionKey: 'social.network_desc_twitter' },
     { id: 'tiktok',    label: 'TikTok',    descriptionKey: 'social.network_desc_tiktok' },
 ];
 
@@ -136,17 +166,7 @@ export default function SocialAccountsIndex({ accounts }) {
                                             const expired = acct.token_expires_at && new Date(acct.token_expires_at) < new Date();
                                             return (
                                                 <li key={acct.id} className="flex items-center gap-3 px-4 py-2.5">
-                                                    {acct.picture_url ? (
-                                                        <img
-                                                            src={acct.picture_url}
-                                                            alt={acct.name}
-                                                            className="h-7 w-7 rounded-full object-cover shrink-0"
-                                                        />
-                                                    ) : (
-                                                        <span className="h-7 w-7 rounded-full bg-neutral-200 dark:bg-neutral-700 flex items-center justify-center shrink-0 text-xs font-bold text-neutral-500">
-                                                            {acct.name?.[0]?.toUpperCase() ?? '?'}
-                                                        </span>
-                                                    )}
+                                                    <AccountAvatar name={acct.name} src={acct.picture_url} />
                                                     <div className="min-w-0 flex-1">
                                                         <p className="text-xs font-medium text-neutral-800 dark:text-neutral-200 truncate">
                                                             {acct.name}
