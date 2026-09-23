@@ -6,7 +6,7 @@ These endpoints require a Sanctum bearer token and `Accept: application/json`. J
 
 ## Conversation activity compatibility (local change, 2026-09-22; not deployed)
 
-The backend adds `POST /api/v1/mobile/conversations/{uuid}/{join|leave|takeover}` for future staff clients. Join/leave are idempotent; an active join by another agent returns 409, and takeover of an active join requires a client administrator. Existing assignment and status routes retain their request/response shapes and now record staff activity. The native Cerqle Agent repository is read-only for this change: current mobile conversation/email message APIs still return only `in/out` messages, so existing app rendering and inbox previews are unaffected. Mobile UI adoption of activity rows and join controls is a separate release; do not claim it has shipped.
+The backend adds `POST /api/v1/mobile/conversations/{uuid}/{join|leave|takeover}` for future staff clients. Join/leave are idempotent; an active join by another agent returns 409, and takeover of an active join requires a client administrator. Existing assignment and status routes retain their request/response shapes and now record staff activity. Mobile conversation and email-thread detail/history include `direction=system`, `type=event` activity records; conversation detail also exposes `joined_at` plus `joined_user`. Inbox preview/order/unread still use only content messages. The native Cerqle Agent repository remains unchanged, so mobile UI adoption of activity rows and join controls is a separate app release; do not claim it has shipped.
 
 ## Login hardening contract (2026-09-15, not yet deployed)
 
