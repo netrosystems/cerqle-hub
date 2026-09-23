@@ -3,6 +3,7 @@
 namespace Tests\Feature\Inbox;
 
 use App\Http\Controllers\Api\V1\MobileConversationController;
+use App\Http\Controllers\Api\V1\MobileEmailInboxController;
 use App\Models\User;
 use App\Modules\Inbox\Models\ChatWidget;
 use App\Modules\Inbox\Services\ConversationActivityService;
@@ -121,7 +122,7 @@ class ConversationActivityTest extends TestCase
         $this->assertSame('open', $conversation->fresh()->status);
     }
 
-    public function test_current_mobile_message_api_does_not_expose_system_activity(): void
+    public function test_mobile_conversation_api_exposes_system_activity_and_joined_agent(): void
     {
         [$conversation, , $actor] = $this->chat();
         $conversation->messages()->create([
@@ -134,8 +135,20 @@ class ConversationActivityTest extends TestCase
         $response = app(MobileConversationController::class)->show($request, $conversation->uuid);
 
         $this->assertSame(200, $response->getStatusCode());
-        $this->assertCount(1, $response->getData(true)['messages']);
-        $this->assertSame('Hello', $response->getData(true)['messages'][0]['body']);
+        $data = $response->getData(true);
+        $this->assertCount(2, $data['messages']);
+        $this->assertSame('Hello', $data['messages'][0]['body']);
+        $this->assertSame('system', $data['messages'][1]['direction']);
+        $this->assertSame('event', $data['messages'][1]['type']);
+        $this->assertSame('conversation.joined', $data['messages'][1]['payload']['activity']['type']);
+        $this->assertSame($actor->id, $data['messages'][1]['sender']['id']);
+        $this->assertSame($actor->id, $data['conversation']['joined_user']['id']);
+        $this->assertNotNull($data['conversation']['joined_at']);
+
+        $messagesRequest = Request::create("/api/v1/mobile/conversations/{$conversation->uuid}/messages");
+        $messagesRequest->setUserResolver(fn () => $actor);
+        $messagesResponse = app(MobileConversationController::class)->messages($messagesRequest, $conversation->uuid);
+        $this->assertSame(['in', 'system'], array_column($messagesResponse->getData(true)['data'], 'direction'));
     }
 
     public function test_bulk_email_resolve_records_one_activity_per_open_thread(): void
@@ -156,6 +169,16 @@ class ConversationActivityTest extends TestCase
         $this->assertSame(0, $service->resolve($workspace->id, $account->id, $actor));
         $this->assertSame(1, $conversation->messages()->where('direction', 'system')->count());
         $this->assertSame('conversation.resolved', $conversation->messages()->first()->payload['activity']['type']);
+
+        $request = Request::create("/api/v1/mobile/email/threads/{$conversation->uuid}");
+        $request->setUserResolver(fn () => $actor);
+        $response = app(MobileEmailInboxController::class)->show($request, $conversation->uuid);
+        $data = $response->getData(true);
+
+        $this->assertSame('system', $data['messages'][0]['direction']);
+        $this->assertSame('event', $data['messages'][0]['type']);
+        $this->assertSame('conversation.resolved', $data['messages'][0]['payload']['activity']['type']);
+        $this->assertSame($actor->id, $data['messages'][0]['user']['id']);
     }
 
     private function chat(): array

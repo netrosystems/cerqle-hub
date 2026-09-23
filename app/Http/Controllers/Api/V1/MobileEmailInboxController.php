@@ -140,7 +140,6 @@ class MobileEmailInboxController extends WorkspaceScopedController
             'latestInboundMessage',
         ]);
         $messages = $conversation->messages()
-            ->whereIn('direction', ['in', 'out'])
             ->with('user:id,name,avatar')
             ->orderByDesc('id')
             ->paginate(min(max($request->integer('per_page', 50), 1), 100));
@@ -172,7 +171,6 @@ class MobileEmailInboxController extends WorkspaceScopedController
         $this->syncDispatcher->dispatchForWorkspace($conversation->workspace_id, $conversation->channel_account_id);
 
         $messages = $conversation->messages()
-            ->whereIn('direction', ['in', 'out'])
             ->with('user:id,name,avatar')
             ->when($request->integer('after_id'), fn ($query, $afterId) => $query->where('id', '>', $afterId))
             ->orderBy('id')
