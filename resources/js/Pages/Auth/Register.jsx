@@ -2,7 +2,7 @@ import AuthLayout from '@/Layouts/AuthLayout';
 import GoogleOAuthButton from '@/Components/Auth/GoogleOAuthButton';
 import OAuthErrorAlert from '@/Components/Auth/OAuthErrorAlert';
 import { Button, Input, Checkbox } from '@/Components/ui';
-import { Head, Link, useForm } from '@inertiajs/react';
+import { Head, Link, useForm, usePage } from '@inertiajs/react';
 import { useTranslation } from 'react-i18next';
 import { UserPlus } from 'lucide-react';
 import { browserTz } from '@/Utils/datetime';
@@ -19,6 +19,13 @@ export default function Register({ plan_id = null, cycle = 'month', googleSignup
         cycle:                 cycle,
         timezone:              browserTz() || 'Asia/Dhaka',
     });
+    // The Google round trip ends in a full page load, and useForm() starts
+    // empty on every load — its errors only fill from this form's own
+    // submissions. The server's OAuth error arrives in the page props instead,
+    // so reading it from the form alone showed nothing at all and a failed
+    // Google signup looked like the button simply did not work.
+    const pageErrors = usePage().props.errors ?? {};
+    const oauthError = errors.oauth ?? pageErrors.oauth;
 
     const submit = (e) => {
         e.preventDefault();
@@ -51,7 +58,7 @@ export default function Register({ plan_id = null, cycle = 'month', googleSignup
         >
             <Head title={t('auth.register') || 'Register'} />
 
-            <OAuthErrorAlert message={errors.oauth}>
+            <OAuthErrorAlert message={oauthError}>
                 {!oauthRequiresRegistration && (
                     <Link
                         href={route('login')}

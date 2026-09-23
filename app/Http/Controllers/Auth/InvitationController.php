@@ -17,6 +17,7 @@ use Inertia\Response;
 class InvitationController extends Controller
 {
     public function __construct(private WorkspaceMembershipService $memberships) {}
+
     /**
      * Show the invitation acceptance page.
      */
@@ -77,8 +78,12 @@ class InvitationController extends Controller
                 'status' => 'active',
                 'client_id' => $invitation->client_id,
                 'client_role' => User::CLIENT_ROLE_STAFF,
-                'email_verified_at' => now(),
             ]);
+            // Accepting the emailed invitation proves the address. The value
+            // is not mass-assignable, so passing it to create() was discarded
+            // and invited staff were locked out as unverified — then sent a
+            // verification email on top.
+            $user->markEmailAsVerified();
 
             event(new Registered($user));
         }

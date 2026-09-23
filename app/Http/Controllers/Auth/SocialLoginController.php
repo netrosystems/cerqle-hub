@@ -162,19 +162,32 @@ class SocialLoginController extends Controller
                     'currency_position' => 'before',
                 ]);
 
-                return User::create([
+                $user = User::create([
                     'name' => $name,
                     'email' => $email,
                     'password' => bcrypt(Str::random(32)),
                     'role' => User::ROLE_CLIENT,
                     'status' => User::STATUS_ACTIVE,
-                    'email_verified_at' => $verified ? now() : null,
                     'client_id' => $client->id,
                     'client_role' => User::CLIENT_ROLE_ADMINISTRATOR,
                     'timezone' => $context['timezone'] ?? 'Asia/Dhaka',
                 ]);
+
+                // email_verified_at is deliberately not mass-assignable, so
+                // passing it to create() was silently discarded and every
+                // Google signup arrived unverified — then locked out of the app
+                // behind "verify your email" for an address Google had already
+                // confirmed. markEmailAsVerified() writes it directly, the same
+                // way the existing-account path already does.
+                if ($verified) {
+                    $user->markEmailAsVerified();
+                }
+
+                return $user;
             });
 
+            // After verification, so the listener sees a verified address and
+            // does not send a "please verify" email Google made unnecessary.
             event(new Registered($user));
         } else {
             $this->markProviderVerifiedEmail($user, $provider, $socialUser);

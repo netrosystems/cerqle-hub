@@ -82,16 +82,20 @@ class FirebaseLoginController extends Controller
                     'currency_position' => 'before',
                 ]);
 
-                return User::create([
+                $user = User::create([
                     'name' => $name,
                     'email' => $email,
                     'password' => bcrypt(Str::random(32)),
                     'role' => User::ROLE_CLIENT,
                     'status' => User::STATUS_ACTIVE,
-                    'email_verified_at' => now(),
                     'client_id' => $client->id,
                     'client_role' => User::CLIENT_ROLE_ADMINISTRATOR,
                 ]);
+                // Not mass-assignable, so it must be written directly or it is
+                // silently discarded and the user arrives unverified.
+                $user->markEmailAsVerified();
+
+                return $user;
             });
         }
 
