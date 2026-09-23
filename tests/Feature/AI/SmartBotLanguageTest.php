@@ -222,12 +222,17 @@ class SmartBotLanguageTest extends TestCase
     private function fakeEmbeddings(array $vectors): void
     {
         Http::fake([
+            // One embedding per input, like a real provider: the exemplars are
+            // requested as a single batch, so a fake that answers only the first
+            // input would leave every other exemplar without a vector.
             'api.openai.com/v1/embeddings' => function ($request) use ($vectors) {
-                $input = json_decode($request->body(), true)['input'][0] ?? '';
+                $inputs = json_decode($request->body(), true)['input'] ?? [];
+                $data = [];
+                foreach ((array) $inputs as $input) {
+                    $data[] = ['embedding' => $vectors[$input] ?? [0.0, 0.0, 1.0]];
+                }
 
-                return Http::response([
-                    'data' => [['embedding' => $vectors[$input] ?? [0.0, 0.0, 1.0]]],
-                ], 200);
+                return Http::response(['data' => $data], 200);
             },
         ]);
     }
@@ -269,11 +274,15 @@ class SmartBotLanguageTest extends TestCase
 
         Http::fake([
             'api.openai.com/v1/embeddings' => function ($request) {
-                $input = json_decode($request->body(), true)['input'][0] ?? '';
+                $inputs = json_decode($request->body(), true)['input'] ?? [];
+                $data = [];
+                foreach ((array) $inputs as $input) {
+                    $data[] = ['embedding' => in_array($input, ['thank you', 'zzz-customer'], true)
+                        ? [1.0, 0.0, 0.0]
+                        : [0.0, 0.0, 1.0]];
+                }
 
-                return Http::response(['data' => [[
-                    'embedding' => in_array($input, ['thank you', 'zzz-customer'], true) ? [1.0, 0.0, 0.0] : [0.0, 0.0, 1.0],
-                ]]], 200);
+                return Http::response(['data' => $data], 200);
             },
             'api.openai.com/v1/chat/completions' => Http::response([
                 'choices' => [['message' => ['content' => 'XX-ACK']]],

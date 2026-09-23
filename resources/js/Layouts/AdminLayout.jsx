@@ -2,6 +2,8 @@ import { Link, usePage } from '@inertiajs/react';
 import { useState, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Toaster } from 'sonner';
+import useFlashToasts from '@/hooks/useFlashToasts';
+import ConfirmProvider from '@/Components/ui/ConfirmProvider';
 import Sidebar from '@/Components/Sidebar';
 import Topbar from '@/Components/Topbar';
 import CommandPalette from '@/Components/CommandPalette';
@@ -121,6 +123,7 @@ function AdminLayoutFooter() {
 }
 
 export default function AdminLayout({ title = 'Admin', header, children }) {
+    useFlashToasts();
     const { t } = useTranslation();
     const [sidebarOpen, setSidebarOpen] = useState(false);
     const adminNav = useAdminNav();
@@ -160,7 +163,7 @@ export default function AdminLayout({ title = 'Admin', header, children }) {
                             {header}
                         </div>
                     )}
-                    {children}
+                    <ConfirmProvider>{children}</ConfirmProvider>
                 </main>
             </div>
 

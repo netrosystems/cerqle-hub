@@ -9,6 +9,8 @@ import UpgradeModal from '@/Components/UpgradeModal';
 import ReleaseBadge from '@/Components/ReleaseBadge';
 import ChannelPlanUsage from '@/Components/ChannelPlanUsage';
 import useClientNav from '@/Layouts/useClientNav';
+import useFlashToasts from '@/hooks/useFlashToasts';
+import ConfirmProvider from '@/Components/ui/ConfirmProvider';
 import { belongsToWorkspace } from '@/lib/workspaceNotifications';
 import useNotificationAvailability from '@/hooks/useNotificationAvailability';
 import { ChannelBrandIcon } from '@/Components/BrandIcons';
@@ -89,6 +91,7 @@ function ClientLayoutFooter() {
 }
 
 export default function ClientLayout({ header, children, title }) {
+    useFlashToasts();
     const { t } = useTranslation();
     const [sidebarOpen, setSidebarOpen] = useState(false);
     const { auth, clientAccess, impersonation, current_workspace_usage, unreadNotificationsCount, branding, onesignal } = usePage().props;
@@ -176,11 +179,13 @@ export default function ClientLayout({ header, children, title }) {
                 showCreateButton={false}
                 navGroups={clientNavGroups.map(group => ({
                     ...group,
-                    items: group.items.map(item => ({
+                    items: (group.items ?? []).map(item => ({
                         ...item,
                         key: item.activePattern || item.label,
-                        active: () => item.activePattern ? route().current(item.activePattern) : false,
-                    }))
+                        // An item may resolve its own active state when a route
+                        // name cannot express it, such as a query-string view.
+                        active: item.isActive ?? (() => (item.activePattern ? route().current(item.activePattern) : false)),
+                    })),
                 }))}
 footer={<ClientLayoutFooter />}
             />
@@ -220,7 +225,7 @@ footer={<ClientLayoutFooter />}
                             {header}
                         </div>
                     )}
-                    {children}
+                    <ConfirmProvider>{children}</ConfirmProvider>
                 </main>
             </div>
 

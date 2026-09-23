@@ -27,6 +27,9 @@ class CannedPhrases
     /** Whether the most recent lookup had to fall back to its English seed. */
     private bool $fellBack = false;
 
+    /** The language the model reported writing the most recent phrase in. */
+    private ?string $lastLanguage = null;
+
     public function __construct(private LlmGateway $llmGateway) {}
 
     /**
@@ -36,6 +39,12 @@ class CannedPhrases
      */
     public function get(string $key, string $language = 'und', ?int $workspaceId = null, ?string $sample = null): string
     {
+        // Both readings describe THIS call only. The service is resolved once
+        // per request, so a value left over from a previous phrase would be
+        // reported against this one and stored on the wrong conversation.
+        $this->lastLanguage = null;
+        $this->fellBack = false;
+
         $seed = (string) config("ai.smart_bot.phrases.seeds.{$key}", '');
         if ($seed === '') {
             return '';
@@ -46,10 +55,32 @@ class CannedPhrases
             return $seed;
         }
 
-        $cacheKey = $this->cacheKey($key, $language, $sample);
-        $cached = $this->cached($cacheKey);
-        if ($cached !== null) {
-            return $cached;
+        // A turn whose language is still unknown is never served from cache and
+        // never written to it. The only thing available to key on would be the
+        // message's script, and a script is not a language: Latin alone covers
+        // English, Spanish, French, Turkish and most of Europe, so one cached
+        // phrase would be handed to all of them. That costs one unmetered call
+        // on the opening turn, after which the model reports the language and
+        // every later turn is a genuine hit.
+        // Every conversation opens as 'und', so without this the first greeting
+        // of every single conversation pays for a round trip. Remembering which
+        // language a given opening line turned out to be makes the second
+        // visitor who types "Merhaba" free. This one holds customer text, so
+        // unlike the phrase cache it is scoped to the workspace.
+        if ($language === ConversationLanguage::UNKNOWN && $sample !== null) {
+            $known = $this->cached($this->sampleLanguageKey($workspaceId, $sample));
+            if ($known !== null) {
+                $language = $known;
+                $this->lastLanguage = $known;
+            }
+        }
+
+        $cacheKey = $this->cacheKey($key, $language);
+        if ($cacheKey !== null) {
+            $cached = $this->cached($cacheKey);
+            if ($cached !== null) {
+                return $cached;
+            }
         }
 
         $translated = $this->translate($seed, $language, $workspaceId, $sample);
@@ -59,7 +90,17 @@ class CannedPhrases
             return $seed;
         }
 
-        $this->store($cacheKey, $translated);
+        // Store under the language the model reported rather than the one we
+        // asked for. A turn that began with an unknown language still teaches
+        // the cache, so the next conversation already known to be Turkish gets
+        // the phrase for free instead of paying for the same round trip.
+        $storeKey = $cacheKey ?? $this->cacheKey($key, (string) $this->lastLanguage);
+        if ($storeKey !== null) {
+            $this->store($storeKey, $translated);
+        }
+        if ($this->lastLanguage !== null && $sample !== null) {
+            $this->store($this->sampleLanguageKey($workspaceId, $sample), $this->lastLanguage);
+        }
 
         return $translated;
     }
@@ -70,24 +111,44 @@ class CannedPhrases
         return $this->fellBack;
     }
 
+    /**
+     * The BCP-47 tag the model reported for the phrase it just wrote, or null.
+     *
+     * The caller stores this on the conversation, which is what turns the very
+     * next turn from a provider round trip into a cache hit.
+     */
+    public function lastLanguage(): ?string
+    {
+        return $this->lastLanguage;
+    }
+
     private function translate(string $seed, string $language, int $workspaceId, ?string $sample): ?string
     {
+        // Never use the word "translate": a model reads it as an instruction to
+        // change language, so an English phrase for an English customer came
+        // back in Spanish. Asking it to write the phrase in the customer's
+        // language, and to return it unchanged when that is already the
+        // language, was verified against every script we could try.
         $instruction = $language === 'und' && $sample !== null
-            ? 'Reply in the same language as the SAMPLE MESSAGE.'
-            : "Reply in the language identified by the BCP-47 tag {$language}.";
+            ? 'Read the SAMPLE MESSAGE to see which language the customer is writing in, then write the PHRASE in that same language. '
+                .'If the sample is already in the phrase language, return the phrase unchanged.'
+            : "Write the PHRASE in the language identified by the BCP-47 tag {$language}. "
+                .'If the phrase is already in that language, return it unchanged.';
 
         try {
             $response = $this->llmGateway->chatUnmetered(
                 $workspaceId,
                 array_filter([
-                    ['role' => 'system', 'content' => 'Translate the customer-support phrase the user sends. '
+                    ['role' => 'system', 'content' => 'You write a customer-support phrase in the language the customer is writing in. '
                         .$instruction
-                        .' Reply with the translation only: no quotes, no explanation, no extra sentence. '
-                        .'Keep it under '.self::MAX_LENGTH.' characters and keep the same tone.'],
+                        .' Answer with the BCP-47 language tag, then a vertical bar, then the phrase, and nothing else. '
+                        .'Example: fr|Bonjour ! Comment puis-je vous aider ? '
+                        .'No quotes, no explanation, no extra sentence. '
+                        .'Keep the phrase under '.self::MAX_LENGTH.' characters and keep the same tone.'],
                     $sample !== null && $language === 'und'
                         ? ['role' => 'user', 'content' => 'SAMPLE MESSAGE: '.mb_substr($sample, 0, 200)]
                         : null,
-                    ['role' => 'user', 'content' => $seed],
+                    ['role' => 'user', 'content' => 'PHRASE: '.$seed],
                 ]),
                 ['max_tokens' => 60, 'temperature' => 0.0],
                 'ui_phrase',
@@ -103,9 +164,11 @@ class CannedPhrases
             return null;
         }
 
-        $text = trim($response->content);
+        [$tag, $text] = $this->splitTaggedReply(trim($response->content));
 
         if ($this->acceptable($text)) {
+            $this->lastLanguage = $tag;
+
             return $text;
         }
 
@@ -113,6 +176,31 @@ class CannedPhrases
         Log::info('smart_bot.phrase_rejected', ['workspace_id' => $workspaceId, 'language' => $language]);
 
         return null;
+    }
+
+    /**
+     * Splits "tr|Merhaba!" into its tag and its phrase.
+     *
+     * A model that ignores the format and answers with the phrase alone is not
+     * an error: the phrase is still usable, the language is simply unknown and
+     * the next turn pays for another round trip rather than getting a wrong tag.
+     *
+     * @return array{0: ?string, 1: string}
+     */
+    private function splitTaggedReply(string $raw): array
+    {
+        $bar = mb_strpos($raw, '|');
+        if ($bar === false || $bar > 12) {
+            return [null, $raw];
+        }
+
+        $tag = trim(mb_substr($raw, 0, $bar));
+        $phrase = trim(mb_substr($raw, $bar + 1));
+        if ($phrase === '' || ! preg_match('/^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*$/', $tag)) {
+            return [null, $raw];
+        }
+
+        return [$tag, $phrase];
     }
 
     /**
@@ -137,14 +225,31 @@ class CannedPhrases
         return true;
     }
 
-    private function cacheKey(string $key, string $language, ?string $sample): string
+    /**
+     * Workspace-scoped, because the key is derived from what a customer wrote.
+     * Case and surrounding whitespace are ignored so "Merhaba" and "merhaba!"
+     * are one entry rather than two.
+     */
+    private function sampleLanguageKey(int $workspaceId, string $sample): string
     {
-        $version = config('ai.smart_bot.phrases.version', 1);
-        // With no tag yet, key on the message's script so the very first turn in
-        // a language still reuses what a previous first turn learned.
-        $tag = $language === 'und' ? 'und-'.ScriptHint::of($sample ?? '') : $language;
+        $normalised = preg_replace('/\s+/u', ' ', mb_strtolower($sample)) ?? '';
+        // Leading and trailing punctuation carries no language signal, so
+        // "Merhaba", "merhaba!" and "¡Hola!" collapse to one entry each.
+        $normalised = preg_replace('/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/u', '', $normalised) ?? '';
 
-        return 'ai:phrase:v'.$version.':'.$tag.':'.$key;
+        return 'ai:lang:w'.$workspaceId.':'.sha1(trim($normalised));
+    }
+
+    /** Null when the language is unknown, which means this turn is not cacheable. */
+    private function cacheKey(string $key, string $language): ?string
+    {
+        if ($language === '' || $language === ConversationLanguage::UNKNOWN) {
+            return null;
+        }
+
+        $version = config('ai.smart_bot.phrases.version', 1);
+
+        return 'ai:phrase:v'.$version.':'.$language.':'.$key;
     }
 
     private function cached(string $key): ?string

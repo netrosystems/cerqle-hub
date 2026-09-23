@@ -7,15 +7,17 @@ vi.mock('react-i18next', () => ({
 }));
 
 describe('client navigation organization', () => {
-    it('hides the workflow link while retaining Smart Bots and Knowledge Bases', () => {
+    it('puts Smart Bots in Setup under the website chatbot, with no knowledge base entry', () => {
         const { result } = renderHook(() => useClientNav());
-        const automationTools = result.current.find((group) => group.label === 'nav.group_automations');
+        const setup = result.current.find((group) => group.label === 'nav.group_setup');
+        const labels = setup.items.map((item) => item.label);
 
-        expect(automationTools.items.map((item) => item.label)).toEqual([
-            'nav.chatbots',
-            'nav.knowledge_bases',
-        ]);
-        expect(result.current.flatMap((group) => group.items).some((item) => item.activePattern === 'client.automations.*')).toBe(false);
+        // A bot owns its knowledge, so there is nothing to pair it with.
+        expect(labels.indexOf('nav.chatbots')).toBe(labels.indexOf('nav.website_widget') + 1);
+
+        const everyItem = result.current.flatMap((group) => group.items ?? []);
+        expect(everyItem.some((item) => item.label === 'nav.knowledge_bases')).toBe(false);
+        expect(everyItem.some((item) => item.activePattern === 'client.automations.*')).toBe(false);
     });
 
     it('uses the requested group order and keeps ecommerce out of the sidebar', () => {
@@ -29,7 +31,6 @@ describe('client navigation organization', () => {
             'nav.group_setup',
             'nav.group_campaigns',
             'nav.group_social_media',
-            'nav.group_automations',
             'nav.group_reports',
             'Assets',
             'nav.group_support',
@@ -51,6 +52,7 @@ describe('client navigation organization', () => {
         expect(landing.items.map((item) => item.label)).toEqual([
             'nav.dashboard',
             'nav.tutorials',
+            'inbox.folder_live_users',
         ]);
         expect(inbox.items.map((item) => item.label)).toEqual([
             'inBOX',
@@ -60,6 +62,7 @@ describe('client navigation organization', () => {
             'nav.channel_setup',
             'nav.email_setup',
             'nav.website_widget',
+            'nav.chatbots',
             'nav.chat_widget',
             'nav.social_accounts',
             'nav.sms_gateways',

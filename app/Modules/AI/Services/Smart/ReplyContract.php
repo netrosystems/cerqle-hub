@@ -25,7 +25,9 @@ class ReplyContract
                 'reply' => ['type' => 'string', 'description' => "The reply, in the customer's own language."],
                 'quick_replies' => [
                     'type' => 'array',
-                    'description' => 'Zero, two or three short tappable answers in the same language as the reply. Never one.',
+                    'description' => 'Usually empty. Only fill this when the evidence itself puts a choice to the '
+                        .'customer — for example when it says to ask which of several options applies. Then give '
+                        .'those options, two or three, in the reply language. Never invent follow-up suggestions.',
                     'items' => ['type' => 'string'],
                 ],
                 'response_type' => ['type' => 'string', 'enum' => ['answer', 'clarification', 'fallback']],
@@ -56,9 +58,10 @@ class ReplyContract
             .'{"reply": "...", "quick_replies": ["...", "..."], '
             .'"response_type": "answer" | "clarification" | "fallback", '
             .'"grounded": true | false, "language": "<BCP-47 tag>"}. '
-            .'Use exactly zero, two or three quick replies, each under 60 characters, '
-            .'in the same language as the reply. Set grounded to true only when every '
-            .'fact in the reply appears in the evidence above.';
+            .'Leave quick_replies empty unless the evidence itself asks the customer to choose '
+            .'between options; then list those options, two or three, each under 60 characters, in '
+            .'the same language as the reply. Never offer choices of your own invention. '
+            .'Set grounded to true only when every fact in the reply appears in the evidence above.';
     }
 
     /**

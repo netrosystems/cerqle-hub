@@ -23,6 +23,84 @@ class ChatWidgetCrudTest extends TestCase
         $this->attachPlanToClient($this->ctx['client'], Plan::factory()->create(['price_cents' => 0, 'white_label_enabled' => false, 'limits' => ['website_widgets' => 10]]));
     }
 
+    /** @return array{0: ChatWidget, 1: array<string, mixed>} */
+    private function widgetWithPayload(array $overrides = []): array
+    {
+        $workspace = $this->ctx['workspace'];
+        $channelAccount = ChannelAccount::create([
+            'workspace_id' => $workspace->id,
+            'channel' => 'webchat',
+            'display_name' => 'Website chat',
+            'status' => 'active',
+        ]);
+        $widget = ChatWidget::create([
+            'workspace_id' => $workspace->id,
+            'channel_account_id' => $channelAccount->id,
+            'name' => 'Website chat',
+            'position' => 'bottom_right',
+            'primary_color' => '#123456',
+        ]);
+
+        return [$widget, array_merge([
+            'name' => 'Website chat',
+            'position' => 'bottom_right',
+            'ai_mode' => 'off',
+        ], $overrides)];
+    }
+
+    public function test_the_on_off_switch_saves_on_its_own(): void
+    {
+        [$widget] = $this->widgetWithPayload();
+
+        $response = $this->actingAs($this->ctx['user'])
+            ->patch(route('client.inbox.chat-widgets.enabled', $widget->id), ['enabled' => false]);
+
+        $response->assertSessionHasNoErrors();
+        $this->assertFalse((bool) $widget->fresh()->enabled);
+    }
+
+    public function test_saving_settings_does_not_switch_a_disabled_widget_back_on(): void
+    {
+        // The switch lives outside the settings form, so an update carries no
+        // "enabled" value. Treating that absence as "on" would silently revive
+        // a widget the client had deliberately turned off.
+        [$widget, $payload] = $this->widgetWithPayload();
+        $widget->update(['enabled' => false]);
+
+        $response = $this->actingAs($this->ctx['user'])
+            ->put(route('client.inbox.chat-widgets.update', $widget->id), $payload);
+
+        $response->assertSessionHasNoErrors();
+        $this->assertFalse((bool) $widget->fresh()->enabled);
+    }
+
+    public function test_clearing_the_brand_colour_falls_back_to_the_platform_colour(): void
+    {
+        // The column is NOT NULL, and an emptied field reaches the controller as
+        // null, so saving one used to be a 500 rather than a saved widget.
+        [$widget, $payload] = $this->widgetWithPayload(['primary_color' => '']);
+
+        $response = $this->actingAs($this->ctx['user'])
+            ->put(route('client.inbox.chat-widgets.update', $widget->id), $payload);
+
+        $response->assertSessionHasNoErrors();
+        $this->assertSame(
+            config('saas.branding.primary_color'),
+            $widget->fresh()->primary_color,
+        );
+    }
+
+    public function test_a_colour_that_is_not_a_hex_is_rejected_with_a_readable_message(): void
+    {
+        [$widget, $payload] = $this->widgetWithPayload(['primary_color' => 'not-a-colour']);
+
+        $response = $this->actingAs($this->ctx['user'])
+            ->put(route('client.inbox.chat-widgets.update', $widget->id), $payload);
+
+        $response->assertSessionHasErrors(['primary_color' => 'Enter a hex colour such as #8F5FA7.']);
+        $this->assertSame('#123456', $widget->fresh()->primary_color);
+    }
+
     public function test_can_delete_owned_chat_widget(): void
     {
         $workspace = $this->ctx['workspace'];

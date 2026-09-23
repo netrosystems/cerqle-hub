@@ -401,9 +401,15 @@ class ChatbotRunner
         }
 
         $language = $this->language->resolve($conversationId);
+        $reply = $this->phrases->get($phraseKey, $language, $workspaceId, $message);
+
+        // A greeting never reaches the model that would otherwise name the
+        // language, so without this a conversation that opens with "Merhaba"
+        // stays 'und' forever and pays for a round trip on every single turn.
+        $this->language->remember($conversationId, $this->phrases->lastLanguage(), 'phrase');
 
         return new ChatbotAnswer(
-            $this->phrases->get($phraseKey, $language, $workspaceId, $message),
+            $reply,
             answerOrigin: 'conversation',
             responseMode: 'answer',
         );
@@ -506,17 +512,34 @@ PROMPT;
 
     private function fallback(AiChatbot $bot, bool $alreadyClarified, float $confidence, ?int $workspaceId = null, ?int $conversationId = null, ?string $message = null): ChatbotAnswer
     {
+        // The buttons here were already offered in the customer's language while
+        // the sentence above them stayed English, which reads worse than being
+        // consistently English. A reply the client wrote themselves is left
+        // exactly as they wrote it — their words, their language.
+        $phrase = function (string $key, string $english) use ($workspaceId, $conversationId, $message): string {
+            if (! config('ai.smart_bot.multilingual_handover') || $workspaceId === null) {
+                return $english;
+            }
+
+            return $this->phrases->get($key, $this->language->resolve($conversationId), $workspaceId, $message) ?: $english;
+        };
+
         if (($bot->fallback_mode ?: 'clarify_then_handoff') === 'clarify_then_handoff' && ! $alreadyClarified) {
             return new ChatbotAnswer(
-                'Could you clarify what you need help with so I can find the right business information?',
+                $phrase('clarify_prompt', 'Could you clarify what you need help with so I can find the right business information?'),
                 answerOrigin: 'fallback', responseMode: 'clarification',
                 quickReplies: $this->fallbackChoices(['qr_tell_me_more', 'qr_talk_to_person'], $workspaceId, $conversationId, $message),
                 handoffOffer: true, confidence: $confidence,
             );
         }
 
+        $handoff = $bot->fallback_reply ?: trim(
+            $phrase('no_verified_info', 'I do not have verified information for that.')
+            .' '.$phrase('handoff_offer', 'Would you like me to connect you with a team member?')
+        );
+
         return new ChatbotAnswer(
-            $bot->fallback_reply ?: 'I do not have verified information for that. Would you like me to connect you with a team member?',
+            $handoff,
             answerOrigin: 'fallback', responseMode: 'handoff',
             quickReplies: $this->fallbackChoices(['qr_talk_to_person'], $workspaceId, $conversationId, $message),
             handoffOffer: true, confidence: $confidence,

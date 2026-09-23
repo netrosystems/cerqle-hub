@@ -2,6 +2,8 @@ import { router, usePage } from '@inertiajs/react';
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Toaster, toast } from 'sonner';
+import useFlashToasts from '@/hooks/useFlashToasts';
+import ConfirmProvider from '@/Components/ui/ConfirmProvider';
 import Sidebar from '@/Components/Sidebar';
 import UpgradeModal from '@/Components/UpgradeModal';
 import ReleaseBadge from '@/Components/ReleaseBadge';
@@ -10,6 +12,7 @@ import { belongsToWorkspace } from '@/lib/workspaceNotifications';
 import useNotificationAvailability from '@/hooks/useNotificationAvailability';
 
 export default function InboxLayout({ children }) {
+    useFlashToasts();
     const { t } = useTranslation();
     const [sidebarOpen, setSidebarOpen] = useState(false);
     const { auth, impersonation, current_workspace_usage, unreadNotificationsCount, branding, demo_mode } = usePage().props;
@@ -75,14 +78,17 @@ export default function InboxLayout({ children }) {
                         items: group.items.map(item => ({
                             ...item,
                             key: item.activePattern || item.label,
-                            active: () => item.activePattern ? route().current(item.activePattern) : false,
+                            // An item may resolve its own active state when a
+                            // route name cannot express it, such as a
+                            // query-string view like the live visitors folder.
+                            active: item.isActive ?? (() => (item.activePattern ? route().current(item.activePattern) : false)),
                         }))
                     }))}
                     footer={<ReleaseBadge />}
                 />
 
                 <div className="lg:pl-64 rtl:lg:pl-0 rtl:lg:pr-64 flex-1 overflow-hidden flex flex-col">
-                    {children}
+                    <ConfirmProvider>{children}</ConfirmProvider>
                 </div>
             </div>
 

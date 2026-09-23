@@ -13,6 +13,7 @@ import {
     LayoutTemplate, Plus, Loader2, Bot, Calendar, BarChart2, PhoneMissed,
     Mic, Square, Trash2,
     Volume2, VolumeX, ShoppingBag, Download, Radio,
+    PanelLeft, PanelRight,
 } from 'lucide-react';
 import { ChannelBrandIcon, CHANNEL_LABELS } from '@/Components/BrandIcons';
 import { formatTimeTz, formatInTz, formatInboxTimestamp } from '@/Utils/datetime';
@@ -1502,6 +1503,7 @@ export default function InboxShow({
     const [notes, setNotes]                 = useState([]);
     const [noteBody, setNoteBody]           = useState('');
     const [notePosting, setNotePosting]     = useState(false);
+    const [noteError, setNoteError]         = useState('');
     const [cannedReplies, setCannedReplies] = useState([]);
     const [slashMenu, setSlashMenu]         = useState([]);
     const [convLabels, setConvLabels]       = useState(conversation.labels ?? []);
@@ -1743,8 +1745,23 @@ export default function InboxShow({
         e.preventDefault();
         if (!noteBody.trim() || notePosting) return;
         setNotePosting(true);
-        axios.post(route('client.inbox.notes.store', conversation.uuid), { body: noteBody })
+        setNoteError('');
+        axios.post(route('client.inbox.notes.store', conversation.uuid), { body: noteBody.trim() })
             .then(r => { setNotes(prev => [r.data, ...prev]); setNoteBody(''); })
+            // Without this the note simply vanished on any failure: the box
+            // stayed full, nothing appeared, and nothing said why.
+            .catch(error => {
+                const status = error?.response?.status;
+                setNoteError(
+                    status === 422
+                        ? (error.response?.data?.errors?.body?.[0] ?? t('inbox.note_too_long', 'That note is too long. Keep it under 4096 characters.'))
+                        : status === 419
+                            ? t('inbox.note_session_expired', 'Your session expired. Reload the page, then paste the note again.')
+                            : status === 403
+                                ? t('inbox.note_forbidden', 'You do not have access to this conversation.')
+                                : t('inbox.note_failed', 'The note could not be saved. Check your connection and try again.')
+                );
+            })
             .finally(() => setNotePosting(false));
     };
 
@@ -1974,6 +1991,29 @@ export default function InboxShow({
         conversation.contact?.email && { key: 'email', label: t('common.email'), value: conversation.contact?.opt_in_email },
     ].filter(Boolean);
 
+    // The conversation is what this page is for; on a 1488px screen it was
+    // getting 512px of it. Both side panels collapse, and the choice is
+    // remembered, so an agent working a queue keeps the room they chose.
+    const readPanel = (key, fallback) => {
+        try {
+            const stored = window.localStorage.getItem(key);
+
+            return stored === null ? fallback : stored === '1';
+        } catch {
+            return fallback;
+        }
+    };
+    const [showFilters, setShowFilters] = useState(() => readPanel('inbox.panel.filters', false));
+    const [showDetails, setShowDetails] = useState(() => readPanel('inbox.panel.details', false));
+    const togglePanel = (key, value, set) => {
+        set(value);
+        try {
+            window.localStorage.setItem(key, value ? '1' : '0');
+        } catch {
+            // A browser that refuses storage still gets the toggle, just not the memory.
+        }
+    };
+
     return (
         <InboxLayout>
             <Head title={t('inbox.show_title', { name: contactName })} />
@@ -1981,7 +2021,8 @@ export default function InboxShow({
             <div className="flex flex-1 overflow-hidden">
 
                 {/* ── Filter sidebar ── */}
-                <aside className="w-48 shrink-0 border-r border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 flex flex-col overflow-hidden">
+                {showFilters && (
+                <aside id="inbox-filters" className="w-48 shrink-0 border-r border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 flex flex-col overflow-hidden">
                     <div className="px-3 py-3 border-b border-neutral-100 dark:border-neutral-800 flex items-center justify-between gap-1">
                         <Link href={route('client.inbox.index')} className="text-sm font-bold text-neutral-800 dark:text-neutral-200 flex items-center gap-2 hover:text-brand-600 transition">
                             <Inbox className="h-4 w-4 text-brand-600" />{t('inbox.title')}
@@ -2006,10 +2047,30 @@ export default function InboxShow({
                     />
                 </aside>
 
+                )}
+
                 {/* ── Conversation list ── */}
                 <div className="w-72 shrink-0 border-r border-neutral-200 dark:border-neutral-700 flex flex-col bg-white dark:bg-neutral-900">
                     <div className="px-3 py-2.5 border-b border-neutral-100 dark:border-neutral-800 space-y-2">
                         <div className="flex items-center justify-between">
+                            {/* The rail is hidden by default, so this is how it is
+                                reached. The header already names the current view,
+                                which is why hiding it costs nothing. */}
+                            <button
+                                type="button"
+                                onClick={() => togglePanel('inbox.panel.filters', !showFilters, setShowFilters)}
+                                aria-expanded={showFilters}
+                                aria-controls="inbox-filters"
+                                aria-label={showFilters ? t('inbox.hide_filters', 'Hide filters') : t('inbox.show_filters', 'Show filters')}
+                                title={showFilters ? t('inbox.hide_filters', 'Hide filters') : t('inbox.show_filters', 'Show filters')}
+                                className={`mr-1.5 shrink-0 rounded-lg p-1.5 transition focus-visible:ring-2 focus-visible:ring-brand-500 ${
+                                    showFilters
+                                        ? 'bg-brand-50 text-brand-700 dark:bg-brand-900/30 dark:text-brand-300'
+                                        : 'text-neutral-500 hover:bg-neutral-100 dark:text-neutral-400 dark:hover:bg-neutral-800'
+                                }`}
+                            >
+                                <PanelLeft className="h-4 w-4" />
+                            </button>
                             <span className="text-sm font-semibold text-neutral-800 dark:text-neutral-200 flex items-center gap-1 flex-wrap">
                                 {t(FOLDERS.find(f => (f.key ?? null) === (filters.folder ?? null))?.labelKey ?? 'inbox.folder_all')}
                                 {filters.channel && <span className="text-xs font-normal text-neutral-400">· {CHANNEL_LABELS[filters.channel] ?? filters.channel}</span>}
@@ -2116,6 +2177,22 @@ export default function InboxShow({
                             )}
                         </div>
 
+                        <button
+                            type="button"
+                            onClick={() => togglePanel('inbox.panel.details', !showDetails, setShowDetails)}
+                            aria-expanded={showDetails}
+                            aria-controls="inbox-details"
+                            aria-label={showDetails ? t('inbox.hide_details', 'Hide customer details') : t('inbox.show_details', 'Show customer details')}
+                            title={showDetails ? t('inbox.hide_details', 'Hide customer details') : t('inbox.show_details', 'Show customer details')}
+                            className={`flex shrink-0 items-center gap-1 rounded-lg p-2 transition focus-visible:ring-2 focus-visible:ring-brand-500 ${
+                                showDetails
+                                    ? 'bg-brand-50 text-brand-700 dark:bg-brand-900/30 dark:text-brand-300'
+                                    : 'text-neutral-500 hover:bg-neutral-100 dark:text-neutral-400 dark:hover:bg-neutral-800'
+                            }`}
+                        >
+                            <PanelRight className="h-4 w-4" />
+                        </button>
+
                         {/* Status */}
                         <button type="button" onClick={deleteChat} disabled={deletingChat}
                             aria-label={t('inbox.delete_chat', 'Delete chat')}
@@ -2184,6 +2261,11 @@ export default function InboxShow({
                                     {t('inbox.add_note', { defaultValue: 'Add note' })}
                                 </button>
                             </form>
+                            {noteError && (
+                                <p role="alert" className="-mt-1 mb-2 rounded-lg border border-coral-200 bg-coral-50 px-3 py-2 text-xs text-coral-700 dark:border-coral-800 dark:bg-coral-950/30 dark:text-coral-300">
+                                    {noteError}
+                                </p>
+                            )}
                             {notes.length === 0 ? (
                                 <div className="py-6"><EmptyState icon={<StickyNote className="h-7 w-7" />} title={t('inbox.no_internal_notes')} description={t('inbox.no_internal_notes_desc')} /></div>
                             ) : notes.map(note => (
@@ -2404,7 +2486,8 @@ export default function InboxShow({
                 </div>
 
                 {/* ── Contact panel (right) ── */}
-                <div className="w-60 shrink-0 border-l border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 hidden lg:flex flex-col overflow-y-auto">
+                {showDetails && (
+                <div id="inbox-details" className="w-60 shrink-0 border-l border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 hidden lg:flex flex-col overflow-y-auto">
                     {/* Contact summary */}
                     <div className="p-4 border-b border-neutral-100 dark:border-neutral-800">
                         <div className="flex items-center gap-2.5 mb-3">
@@ -2498,6 +2581,7 @@ export default function InboxShow({
                         </div>
                     </div>
                 </div>
+                )}
 
             </div>
         </InboxLayout>

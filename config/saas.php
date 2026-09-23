@@ -23,6 +23,14 @@ return [
     |--------------------------------------------------------------------------
     */
     'marketing' => [
+        // Our own live-chat widget, embedded on the public pages. The key is
+        // per-environment on purpose: a local or staging copy must embed its
+        // own widget, or a test chat opens a real conversation in the
+        // production inbox. Leave the key blank and nothing is embedded.
+        'chat_widget_key' => env('PUBLIC_CHAT_WIDGET_KEY', ''),
+        // Defaults to this app's own origin, which keeps the script same-origin
+        // and so allowed by the 'self' in our Content-Security-Policy.
+        'chat_widget_base' => env('PUBLIC_CHAT_WIDGET_BASE', ''),
         'nav' => [
             ['label' => 'Features', 'href' => '#features'],
             ['label' => 'Pricing', 'href' => '/pricing'],

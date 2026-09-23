@@ -191,7 +191,7 @@ class ChatWidget extends Model
             'welcome_message' => $this->welcome_message ?: 'Hi there 👋 How can we help?',
             'agent_name' => $this->agent_name ?: 'Support',
             'avatar_url' => $avatarUrl,
-            'primary_color' => $this->primary_color ?: '#ff762e',
+            'primary_color' => $this->primary_color ?: (string) config('saas.branding.primary_color', '#8F5FA7'),
             'position' => $this->position ?: 'bottom_right',
             'launcher_text' => $this->launcher_text,
             // Every plan can use its own brand in the embedded widget. Existing

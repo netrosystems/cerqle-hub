@@ -66,6 +66,10 @@ describe('Sidebar scroll persistence', () => {
 });
 
 describe('Sidebar group prioritization', () => {
+    beforeEach(() => {
+        window.sessionStorage.clear();
+    });
+
     it('keeps secondary groups collapsed until requested', () => {
         render(
             <Sidebar
@@ -83,7 +87,7 @@ describe('Sidebar group prioritization', () => {
         expect(screen.getAllByRole('link', { name: 'Email Setup' })).toHaveLength(1);
     });
 
-    it('highlights a flyout group containing the active page and reveals it on demand', () => {
+    it('expands a collapsed group that contains the active page', () => {
         render(
             <Sidebar
                 navGroups={[{
@@ -95,10 +99,43 @@ describe('Sidebar group prioritization', () => {
             />,
         );
 
-        const setupTrigger = screen.getByRole('button', { name: 'Setup' });
-        expect(setupTrigger).toHaveClass('bg-white/10');
-        fireEvent.click(setupTrigger);
-        expect(screen.getByRole('link', { name: 'Email Setup' })).toBeInTheDocument();
+        // The current page has to be visible without a click, or the menu
+        // highlights a link the user cannot see.
+        expect(screen.getAllByRole('button', { name: 'Setup' })[0]).toHaveAttribute('aria-expanded', 'true');
+        expect(screen.getAllByRole('link', { name: 'Email Setup' })[0]).toBeInTheDocument();
+    });
+
+    it('remembers which groups are open across a remount', () => {
+        const groups = [{
+            label: 'Setup',
+            defaultOpen: false,
+            items: [{ label: 'Email Setup', href: '/email-setup', active: false }],
+        }];
+
+        const first = render(<Sidebar scrollKey="client" navGroups={groups} showCreateButton={false} />);
+        fireEvent.click(screen.getAllByRole('button', { name: 'Setup' })[0]);
+        expect(screen.getAllByRole('link', { name: 'Email Setup' })[0]).toBeInTheDocument();
+        first.unmount();
+
+        // Inertia recreates the sidebar on every visit, so an expanded group
+        // must survive navigating rather than snapping shut each time.
+        render(<Sidebar scrollKey="client" navGroups={groups} showCreateButton={false} />);
+        expect(screen.getAllByRole('link', { name: 'Email Setup' })[0]).toBeInTheDocument();
+    });
+
+    it('keeps a group the user collapsed shut after a remount', () => {
+        const groups = [{
+            label: 'Contacts',
+            items: [{ label: 'Contact Lists', href: '/contact-lists', active: false }],
+        }];
+
+        const first = render(<Sidebar scrollKey="client" navGroups={groups} showCreateButton={false} />);
+        fireEvent.click(screen.getAllByRole('button', { name: 'Contacts' })[0]);
+        expect(screen.queryByRole('link', { name: 'Contact Lists' })).not.toBeInTheDocument();
+        first.unmount();
+
+        render(<Sidebar scrollKey="client" navGroups={groups} showCreateButton={false} />);
+        expect(screen.queryByRole('link', { name: 'Contact Lists' })).not.toBeInTheDocument();
     });
 
     it('uses an inline accordion for the mobile drawer', () => {

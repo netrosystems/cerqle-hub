@@ -3334,7 +3334,7 @@
         "stat_total_bots": "Total Bots",
         "stat_with_kb": "With KB",
         "chatbots_empty_title": "No Smart Bots yet",
-        "chatbots_empty_description": "Create a Smart Bot and link it to a knowledge base to handle customer queries automatically.",
+        "chatbots_empty_description": "Create a Smart Bot and give it what it should know \u2014 both in one go.",
         "chatbot_name": "Smart Bot name",
         "chatbot_name_placeholder": "e.g. Support Bot",
         "chatbot_create_hint": "You can configure the knowledge base, tone, and system prompt after creating.",

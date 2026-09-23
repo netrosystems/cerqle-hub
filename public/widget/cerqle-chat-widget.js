@@ -16,7 +16,7 @@
   var KEY = boot.key;
   var CFG = boot.config;
   var API = (CFG.api_base || '').replace(/\/$/, '');
-  var COLOR = CFG.primary_color || '#3E2A49';
+  var COLOR = CFG.primary_color || '#8F5FA7';
   var LEFT = CFG.position === 'bottom_left';
   var storageScope = identityStorageScope();
   var LS_VISITOR = storageKey('visitor');
@@ -148,6 +148,7 @@
   var statusEl = root.querySelector('.wb-status');
   var invite = root.querySelector('.wb-launcher-invite');
   var handoffEl = root.querySelector('.wb-handoff');
+  var visitorTurns = 0;
   var agentTypingEl = root.querySelector('.wb-agent-typing');
 
   // Greeting bubble, then the cached history from this device.
@@ -498,6 +499,10 @@
     if (handoff.status !== 'connected' && (!CFG.ai_availability || CFG.ai_availability.active)) {
       renderAgentTyping({ is_typing: true, name: CFG.agent_name || 'Support' });
     }
+    // Counted here as well as from the server, because the two handoff payloads
+    // do not always arrive together: relying on one of them alone would leave
+    // the offer hidden for good on whichever path did not send a count.
+    visitorTurns += 1;
 
     function doSend(attempt) {
       return ensureSession().then(function () {
@@ -871,7 +876,11 @@
       if (data.config) applyConfigUpdates(data.config);
       if (data.handover) applyHandover(data.handover);
       if (data.handoff) applyHandoff(data.handoff);
-      if (data.typing) renderAgentTyping(data.typing);
+      // The server sends this as agent_typing. Reading data.typing meant the
+      // authoritative state was never applied, so the optimistic "is typing"
+      // set when the visitor pressed send had nothing to switch it off and the
+      // bot looked like it was still working after it had answered.
+      if (data.agent_typing) renderAgentTyping(data.agent_typing);
       if (data.command) applyCommand(data.command);
       if (Array.isArray(data.statuses)) {
         data.statuses.forEach(function (st) {
@@ -1280,12 +1289,25 @@
     }
   }
 
+  /**
+   * Offering a human is only useful once the bot has actually had a go and the
+   * visitor is still talking. Before that it reads as "we do not expect this to
+   * work". Two visitor messages is that point. It is also pointless when no AI
+   * is answering, because then a person is already the one replying.
+   */
+  function handoffOfferAllowed() {
+    var aiOn = !!(CFG.ai_availability && CFG.ai_availability.active);
+
+    return aiOn && visitorTurns >= 2;
+  }
+
   function applyHandover(state) {
     if (!state) return;
+    if (typeof state.visitor_message_count === 'number') visitorTurns = state.visitor_message_count;
     if (state.requested) {
       handoffEl.innerHTML = '<span class="wb-handoff-dot wb-handoff-pulse"></span><span>Connecting you with a team member…</span>';
       handoffEl.style.display = 'flex';
-    } else if (state.available && (state.visitor_message_count || 0) >= 2) {
+    } else if (state.available && handoffOfferAllowed()) {
       handoffEl.innerHTML = '<span>Need more help?</span><button class="wb-handoff-btn" type="button">Chat with human</button>';
       handoffEl.style.display = 'flex';
     } else {
@@ -1318,7 +1340,7 @@
       return;
     }
 
-    if (handoff.eligible) {
+    if (handoff.eligible && handoffOfferAllowed()) {
       handoffEl.innerHTML = '<span>Need more help?</span><button class="wb-handoff-btn" type="button">Chat with human</button>';
       handoffEl.style.display = 'flex';
       return;
@@ -1469,9 +1491,9 @@
           '<div class="wb-status"></div></div>' +
           '<button class="wb-close" aria-label="Close">&#x2715;</button>' +
         '</div>' +
+        '<div class="wb-handoff" aria-live="polite"></div>' +
         '<div class="wb-body"></div>' +
         '<div class="wb-agent-typing" role="status" aria-live="polite"></div>' +
-        '<div class="wb-handoff" aria-live="polite"></div>' +
         '<div class="wb-prechat">' +
           '<p class="wb-pc-intro">Tell us who you are and we\'ll get right back to you.</p>' +
           '<form class="wb-prechat-form">' + pcName + pcEmail +
@@ -1580,7 +1602,7 @@
       '.wb-ai-choices{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}.wb-ai-choice{border:1px solid ' + COLOR + ';border-radius:999px;background:#fff;color:' + COLOR + ';padding:5px 9px;font:inherit;font-size:12px;font-weight:650;cursor:pointer}.wb-ai-choice:hover{background:' + COLOR + ';color:#fff}.wb-ai-choice:disabled{opacity:.55;cursor:default}',
       '.wb-agent-typing{display:none;align-items:center;gap:7px;min-height:30px;padding:5px 16px;border-top:1px solid #f0f1f4;background:#f7f8fa;color:#737984;font-size:11px;font-weight:600}',
       '.wb-typing-dots{display:inline-flex;align-items:center;gap:3px}.wb-typing-dots i{display:block;width:5px;height:5px;border-radius:50%;background:' + COLOR + ';animation:wb-typing 1.05s ease-in-out infinite}.wb-typing-dots i:nth-child(2){animation-delay:.14s}.wb-typing-dots i:nth-child(3){animation-delay:.28s}',
-      '.wb-handoff{display:none;align-items:center;justify-content:center;gap:6px;min-height:38px;padding:8px 12px;border-top:1px solid #eceef2;background:#fff;color:#667085;font-size:12px}.wb-handoff strong{color:#1f2937}.wb-handoff-btn{border:1px solid ' + COLOR + ';border-radius:999px;background:#fff;color:' + COLOR + ';padding:5px 10px;font-size:12px;font-weight:700;cursor:pointer;transition:background .15s,color .15s}.wb-handoff-btn:hover{background:' + COLOR + ';color:#fff}.wb-handoff-dot{width:8px;height:8px;border-radius:50%;background:#22c55e;flex-shrink:0}.wb-handoff-pulse{background:#f59e0b;animation:wb-handoff-pulse 1s ease-in-out infinite}',
+      '.wb-handoff{display:none;align-items:center;justify-content:center;gap:5px;min-height:30px;padding:6px 12px;border-bottom:1px solid #f0f1f4;background:#fbfbfc;color:#98a2b3;font-size:11px}.wb-handoff strong{color:#1f2937}.wb-handoff-btn{border:0;background:none;color:#667085;padding:2px 2px;font-size:11px;font-weight:600;cursor:pointer;text-decoration:underline;text-underline-offset:2px;transition:color .15s}.wb-handoff-btn:hover{color:' + COLOR + '}.wb-handoff-dot{width:8px;height:8px;border-radius:50%;background:#22c55e;flex-shrink:0}.wb-handoff-pulse{background:#f59e0b;animation:wb-handoff-pulse 1s ease-in-out infinite}',
       '.wb-prechat{display:none;padding:18px;background:#fff}',
       '.wb-pc-intro{font-size:13px;color:#6b7280;margin-bottom:12px}',
       '.wb-prechat-form{display:flex;flex-direction:column;gap:10px}',

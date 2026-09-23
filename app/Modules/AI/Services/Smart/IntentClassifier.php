@@ -130,10 +130,22 @@ class IntentClassifier
             // Fall through and re-embed; a cache miss is only a cost, not a bug.
         }
 
+        // One request for every exemplar, not one request each. Seeding these
+        // serially cost about twenty seconds, and it was paid by whichever
+        // customer said hello first after a cache flush or a deploy.
+        $exemplars = (array) config('ai.smart_bot.intent.exemplars', []);
+        $phrases = [];
+        foreach ($exemplars as $intentPhrases) {
+            foreach ((array) $intentPhrases as $phrase) {
+                $phrases[] = (string) $phrase;
+            }
+        }
+        $embedded = $this->embedder->vectors($workspaceId, $phrases);
+
         $vectors = [];
-        foreach ((array) config('ai.smart_bot.intent.exemplars', []) as $intent => $phrases) {
-            foreach ((array) $phrases as $phrase) {
-                $vector = $this->embedder->vector($workspaceId, (string) $phrase);
+        foreach ($exemplars as $intent => $intentPhrases) {
+            foreach ((array) $intentPhrases as $phrase) {
+                $vector = $embedded[trim((string) $phrase)] ?? [];
                 if ($vector !== []) {
                     $vectors[$intent][] = $vector;
                 }

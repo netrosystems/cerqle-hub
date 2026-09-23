@@ -10,6 +10,7 @@ use App\Modules\AI\Services\ProviderErrorPresenter;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -34,20 +35,172 @@ class AiChatbotController extends Controller
         ]);
     }
 
+    /**
+     * The bot's own page: identity, what it knows, and the playground.
+     *
+     * Knowledge used to be a separate destination a client had to find and
+     * populate before the bot could answer. It is the bot's knowledge, so it
+     * lives with the bot.
+     */
+    public function show(Request $request, AiChatbot $chatbot): Response
+    {
+        $this->authorise($request, $chatbot);
+        $chatbot->load('knowledgeBase.documents');
+        $wid = $this->workspaceId($request);
+
+        // The knowledge step renders the same screen as the knowledge base page,
+        // so it needs the same upload limits rather than guessed defaults.
+        $kbController = app(AiKnowledgeBaseController::class);
+        $uploadMaxKb = $kbController->kbUploadMaxKb();
+
+        return Inertia::render('AI/Bots/Show', [
+            'bot' => $chatbot,
+            'knowledgeBase' => $chatbot->knowledgeBase,
+            'documents' => $chatbot->knowledgeBase?->documents()->latest('id')->get() ?? [],
+            'kbUploadMaxKb' => $uploadMaxKb,
+            'kbUploadMaxMb' => round($uploadMaxKb / 1024, 1),
+            'kbAppUploadMaxMb' => AiKnowledgeBaseController::UPLOAD_MAX_KB / 1024,
+            'readiness' => $this->readiness($chatbot, $wid),
+        ]);
+    }
+
+    public function create(Request $request): Response
+    {
+        return Inertia::render('AI/Bots/Create', [
+            'knowledgeBases' => AiKnowledgeBase::where('workspace_id', $this->workspaceId($request))
+                ->get(['id', 'name', 'business_name']),
+        ]);
+    }
+
+    /**
+     * Creates the bot and the knowledge it answers from in one go.
+     *
+     * Previously this made an empty bot and left the client to discover that a
+     * knowledge base was a separate thing they had to build first and attach
+     * afterwards. The two are one job, so they are one request.
+     */
     public function store(Request $request): RedirectResponse
     {
         $wid = $this->workspaceId($request);
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:128'],
+            'system_prompt' => ['nullable', 'string', 'max:4000'],
+            'tone' => ['nullable', 'string', 'max:40'],
+            'business_name' => ['nullable', 'string', 'max:160'],
+            'business_purpose' => ['nullable', 'string', 'max:2000'],
+            'target_audience' => ['nullable', 'string', 'max:2000'],
+            // Set when the client chose to reuse another bot's knowledge rather
+            // than start a new one.
+            'ai_kb_id' => ['nullable', 'integer'],
         ]);
 
-        AiChatbot::create(array_merge($validated, [
-            'workspace_id' => $wid,
-            'answer_scope' => 'business_only',
-            'fallback_mode' => 'clarify_then_handoff',
-        ]));
+        $bot = DB::transaction(function () use ($validated, $wid): AiChatbot {
+            $kbId = $validated['ai_kb_id'] ?? null;
+            if ($kbId !== null && ! AiKnowledgeBase::where('workspace_id', $wid)->whereKey($kbId)->exists()) {
+                $kbId = null;
+            }
 
-        return back()->with('success', 'Smart Bot created.');
+            if ($kbId === null) {
+                $kbId = AiKnowledgeBase::create([
+                    'workspace_id' => $wid,
+                    'name' => $validated['name'],
+                    'business_name' => $validated['business_name'] ?? null,
+                    'business_purpose' => $validated['business_purpose'] ?? null,
+                    'target_audience' => $validated['target_audience'] ?? null,
+                ])->id;
+            }
+
+            return AiChatbot::create([
+                'workspace_id' => $wid,
+                'name' => $validated['name'],
+                'system_prompt' => $validated['system_prompt'] ?? null,
+                // The column is NOT NULL with its own default; passing an
+                // explicit null would override that and fail the insert.
+                'tone' => ($validated['tone'] ?? null) ?: 'professional',
+                'ai_kb_id' => $kbId,
+                'answer_scope' => 'business_only',
+                'fallback_mode' => 'clarify_then_handoff',
+            ]);
+        });
+
+        return redirect()
+            ->route('client.ai.chatbots.show', $bot->uuid)
+            ->with('success', 'Smart Bot created. Add what it should know below.');
+    }
+
+    /**
+     * The bot's business details.
+     *
+     * Its own endpoint rather than the knowledge base's, because here the name
+     * and purpose are required — they are what lets the bot answer a general
+     * question at all — while renaming a knowledge base elsewhere must stay
+     * possible without them.
+     */
+    public function updateBusinessProfile(Request $request, AiChatbot $chatbot): RedirectResponse
+    {
+        $this->authorise($request, $chatbot);
+        $kb = $chatbot->knowledgeBase;
+        abort_unless($kb !== null, 404);
+
+        $validated = $request->validate([
+            'business_name' => ['required', 'string', 'max:160'],
+            'business_purpose' => ['required', 'string', 'max:2000'],
+            'target_audience' => ['nullable', 'string', 'max:2000'],
+        ], [
+            'business_name.required' => 'The bot needs to know what your business is called.',
+            'business_purpose.required' => 'Say what you do, so the bot can answer general questions about it.',
+        ]);
+
+        $kb->update($validated);
+
+        return back()->with('success', 'Business details saved.');
+    }
+
+    /**
+     * What still stands between this bot and answering a customer.
+     *
+     * Every one of these has presented identically in production — the bot
+     * replies with its fallback line — so naming the specific cause is the
+     * whole point.
+     *
+     * @return list<array{key:string,label:string,ok:bool,detail:string}>
+     */
+    private function readiness(AiChatbot $chatbot, int $workspaceId): array
+    {
+        $kb = $chatbot->knowledgeBase;
+        $indexed = $kb ? $kb->documents()->where('status', 'indexed')->count() : 0;
+        $failed = $kb ? $kb->documents()->where('status', 'error')->count() : 0;
+        // Name and purpose are what the bot actually needs; audience is a bonus.
+        $profileComplete = $kb && $kb->business_name && $kb->business_purpose;
+
+        return [
+            [
+                'key' => 'enabled',
+                'label' => 'Bot is on',
+                'ok' => (bool) $chatbot->enabled,
+                'detail' => $chatbot->enabled ? 'Ready to answer.' : 'Switch it on to start answering.',
+            ],
+            [
+                'key' => 'knowledge',
+                'label' => 'Knowledge indexed',
+                'ok' => $indexed > 0,
+                'detail' => match (true) {
+                    ! $kb => 'No knowledge attached yet.',
+                    $indexed > 0 && $failed > 0 => $indexed.' ready, '.$failed.' could not be read.',
+                    $indexed > 0 => $indexed.' '.($indexed === 1 ? 'document' : 'documents').' ready.',
+                    $failed > 0 => 'Every source failed to index.',
+                    default => 'Add a website, file or text for it to answer from.',
+                },
+            ],
+            [
+                'key' => 'profile',
+                'label' => 'Business details',
+                'ok' => (bool) $profileComplete,
+                'detail' => $profileComplete
+                    ? 'Used for general questions about your business.'
+                    : 'Without it the bot only answers from your documents.',
+            ],
+        ];
     }
 
     public function update(Request $request, AiChatbot $chatbot): RedirectResponse
@@ -67,7 +220,16 @@ class AiChatbotController extends Controller
             'clarification_threshold' => ['sometimes', 'numeric', 'min:0', 'max:0.99'],
             'channels' => ['nullable', 'array'],
             'enabled' => ['boolean'],
+            // Sent by the "How it answers" step so the tick reflects a real
+            // decision rather than the column defaults.
+            'behaviour_set' => ['sometimes', 'boolean'],
         ]);
+
+        if (! empty($validated['behaviour_set'])) {
+            $validated['behaviour_set_at'] = now();
+        }
+        unset($validated['behaviour_set']);
+
         // Verify the knowledge base belongs to this workspace
         if (! empty($validated['ai_kb_id'])) {
             $kbExists = AiKnowledgeBase::where('workspace_id', $wid)
