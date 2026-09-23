@@ -71,6 +71,7 @@ export function SocialBrandIcon({ network, className }) {
         facebook: 'facebook',
         instagram: 'instagram',
         linkedin: 'linkedin',
+        linkedin_page: 'linkedin',
         twitter: 'twitter',
         youtube: 'youtube',
         tiktok: 'tiktok',

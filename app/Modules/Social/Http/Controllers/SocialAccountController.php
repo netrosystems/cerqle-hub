@@ -10,6 +10,7 @@ use App\Modules\Social\Models\XPublishAttempt;
 use App\Modules\Social\Services\Drivers\FacebookDriver;
 use App\Modules\Social\Services\Drivers\InstagramSocialDriver;
 use App\Modules\Social\Services\Drivers\LinkedInDriver;
+use App\Modules\Social\Services\Drivers\LinkedInPageDriver;
 use App\Modules\Social\Services\Drivers\TikTokDriver;
 use App\Modules\Social\Services\Drivers\XDriver;
 use App\Modules\Social\Services\Drivers\YoutubeDriver;
@@ -39,6 +40,7 @@ class SocialAccountController extends Controller
             'facebook' => new FacebookDriver,
             'instagram' => new InstagramSocialDriver,
             'linkedin' => new LinkedInDriver,
+            'linkedin_page' => new LinkedInPageDriver,
             'youtube' => new YoutubeDriver,
             'tiktok' => new TikTokDriver,
             'twitter' => new XDriver,
@@ -97,7 +99,7 @@ class SocialAccountController extends Controller
 
     public function connect(Request $request, string $network): RedirectResponse
     {
-        $validNetworks = ['facebook', 'instagram', 'linkedin', 'youtube', 'tiktok', 'twitter'];
+        $validNetworks = ['facebook', 'instagram', 'linkedin', 'linkedin_page', 'youtube', 'tiktok', 'twitter'];
         abort_unless(in_array($network, $validNetworks, true), 404);
 
         Session::put('social_oauth_workspace', $this->workspaceId($request));
@@ -325,6 +327,68 @@ class SocialAccountController extends Controller
             return redirect()->route('client.social.accounts.index')->with('success', $message);
         }
 
+        // A LinkedIn authorisation can cover several company pages, the way a
+        // Meta login covers several Pages, so store one account per page
+        // rather than asking for a single identity.
+        if ($network === 'linkedin_page') {
+            try {
+                $pages = (new LinkedInPageDriver)->organizations($tokens['access_token']);
+            } catch (\Throwable $e) {
+                Log::warning('LinkedIn company page discovery failed', [
+                    'workspace_id' => $wid,
+                    'error' => $e->getMessage(),
+                ]);
+
+                return redirect()->route('client.social.accounts.index')
+                    ->with('error', 'LinkedIn connected, but the list of company pages could not be read. Confirm the LinkedIn app has the Community Management API product approved, then try again.');
+            }
+
+            if ($pages === []) {
+                // Overwhelmingly this is the person not being an admin of any
+                // page, so say that first rather than blaming the setup.
+                return redirect()->route('client.social.accounts.index')
+                    ->with('error', 'No LinkedIn company pages were found for this account. You must be a super admin or content admin of the page on LinkedIn before it can be connected.');
+            }
+
+            $grantedScopes = isset($tokens['scope'])
+                ? preg_split('/[ ,]+/', (string) $tokens['scope'], -1, PREG_SPLIT_NO_EMPTY)
+                : null;
+            $connectedPages = 0;
+            $pageCapacityError = null;
+
+            foreach ($pages as $page) {
+                try {
+                    $identity = ['workspace_id' => $wid, 'network' => 'linkedin_page', 'account_id' => $page['account_id']];
+                    $current = SocialAccount::withoutGlobalScope('connected')->where($identity)->first();
+
+                    SocialAccount::updateOrCreate($identity, [
+                        'name' => $page['name'],
+                        'picture_url' => $page['picture_url'],
+                        'access_token' => $tokens['access_token'],
+                        'refresh_token' => $tokens['refresh_token'] ?? $current?->refresh_token,
+                        'token_expires_at' => isset($tokens['expires_in']) ? now()->addSeconds((int) $tokens['expires_in']) : null,
+                        'scopes' => $grantedScopes ?? $current?->scopes,
+                        'active' => true,
+                        'disconnected_at' => null,
+                    ]);
+                    $connectedPages++;
+                } catch (ValidationException $e) {
+                    $pageCapacityError = $e->getMessage();
+                }
+            }
+
+            if ($connectedPages === 0) {
+                return redirect()->route('client.social.accounts.index')
+                    ->with('error', $pageCapacityError ?? 'No LinkedIn company pages could be connected.');
+            }
+
+            $pageMessage = $connectedPages.' LinkedIn company page(s) connected.';
+
+            return $pageCapacityError
+                ? redirect()->route('client.social.accounts.index')->with('success', $pageMessage)->with('error', $pageCapacityError.' Additional pages were not connected.')
+                : redirect()->route('client.social.accounts.index')->with('success', $pageMessage);
+        }
+
         if (empty($accountInfo['account_id'])) {
             return redirect()->route('client.social.accounts.index')
                 ->with('error', ucfirst($network).' connected, but the provider did not return an account identity. Nothing was saved.');
@@ -384,7 +448,7 @@ class SocialAccountController extends Controller
             $account->delete();
         }
 
-        $message = $network === 'linkedin'
+        $message = in_array($network, ['linkedin', 'linkedin_page'], true)
             ? 'LinkedIn account disconnected from Cerqle. Your LinkedIn browser session remains signed in; choose “Sign out to use another account” when reconnecting.'
             : 'Account disconnected.';
 
