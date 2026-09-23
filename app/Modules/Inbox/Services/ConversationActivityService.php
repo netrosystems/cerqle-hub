@@ -12,6 +12,8 @@ use Illuminate\Support\Facades\DB;
 
 class ConversationActivityService
 {
+    public function __construct(private readonly TeamAvailabilityService $availability) {}
+
     public function join(Conversation $conversation, User $actor): Conversation
     {
         return $this->change($conversation, $actor, function (Conversation $locked) use ($actor): ?array {
@@ -33,6 +35,8 @@ class ConversationActivityService
                 'joined_user_id' => $actor->id,
                 'joined_at' => now(),
                 'assigned_to' => 'human',
+                'status' => 'open',
+                'resolved_at' => null,
             ]);
 
             return ['conversation.joined', "{$actor->name} joined the chat"];
@@ -46,7 +50,7 @@ class ConversationActivityService
                 throw new ConversationOwnershipException('Reopen this chat before taking over.');
             }
             if (! $locked->joined_user_id) {
-                $locked->update(['assigned_user_id' => $actor->id, 'joined_user_id' => $actor->id, 'joined_at' => now(), 'assigned_to' => 'human']);
+                $locked->update(['assigned_user_id' => $actor->id, 'joined_user_id' => $actor->id, 'joined_at' => now(), 'assigned_to' => 'human', 'status' => 'open', 'resolved_at' => null]);
 
                 return ['conversation.joined', "{$actor->name} joined the chat"];
             }
@@ -54,12 +58,19 @@ class ConversationActivityService
                 return null;
             }
             if (! $actor->isClientAdministrator()) {
-                throw new ConversationOwnershipException('Only an administrator can take over an active chat.', 403, [
-                    'joined_user' => $this->publicUser($locked->joinedUser),
-                ]);
+                if (! $this->availability->isAvailable((int) $locked->workspace_id, $actor)) {
+                    throw new ConversationOwnershipException('You must be currently available to take over this chat.', 403, [
+                        'joined_user' => $this->publicUser($locked->joinedUser),
+                    ]);
+                }
+                if ($this->availability->isAvailable((int) $locked->workspace_id, (int) $locked->joined_user_id)) {
+                    throw new ConversationOwnershipException('The joined agent is still available. Ask them or an administrator to transfer the chat.', 403, [
+                        'joined_user' => $this->publicUser($locked->joinedUser),
+                    ]);
+                }
             }
             $previous = $locked->joinedUser;
-            $locked->update(['assigned_user_id' => $actor->id, 'joined_user_id' => $actor->id, 'joined_at' => now(), 'assigned_to' => 'human']);
+            $locked->update(['assigned_user_id' => $actor->id, 'joined_user_id' => $actor->id, 'joined_at' => now(), 'assigned_to' => 'human', 'status' => 'open', 'resolved_at' => null]);
 
             return ['conversation.transferred', "{$actor->name} took over the chat", ['previous_actor' => $previous ? $this->snapshot($previous) : null]];
         });
@@ -155,6 +166,19 @@ class ConversationActivityService
                 'joined_user' => $this->publicUser($conversation->joinedUser),
             ]);
         }
+    }
+
+    public function canTakeover(Conversation $conversation, User $actor): bool
+    {
+        if ($conversation->status === 'resolved' || ! $conversation->joined_user_id || (int) $conversation->joined_user_id === (int) $actor->id) {
+            return false;
+        }
+        if ($actor->isClientAdministrator()) {
+            return true;
+        }
+
+        return $this->availability->isAvailable((int) $conversation->workspace_id, $actor)
+            && ! $this->availability->isAvailable((int) $conversation->workspace_id, (int) $conversation->joined_user_id);
     }
 
     /** @param callable(Conversation): (array<int|string, mixed>|null) $transition */

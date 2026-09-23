@@ -2006,7 +2006,7 @@ export default function InboxShow({
 
     const assignedAgent = teamMembers.find(m => m.id === assignedUserId);
     const isJoinedByMe = Number(joinedUser?.id) === Number(authUser?.id);
-    const canTakeOver = Boolean(joinedUser) && authUser?.client_role === 'administrator';
+    const canTakeOver = Boolean(joinedUser) && Boolean(conversation.can_takeover);
     // Marketing permissions only have meaning when this contact has a usable
     // delivery address. Do not show an anonymous website visitor a misleading
     // Email: Yes row when there is no email address at all.

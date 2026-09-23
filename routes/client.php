@@ -18,6 +18,7 @@ use App\Http\Controllers\Client\Settings\DataExportController;
 use App\Http\Controllers\Client\SettingsController as ClientSettingsController;
 use App\Http\Controllers\Client\SubscriptionController as ClientSubscriptionController;
 use App\Http\Controllers\Client\SupportTicketController;
+use App\Http\Controllers\Client\TeamAvailabilityController;
 use App\Http\Controllers\Client\TeamController;
 use App\Http\Controllers\Client\WebhookEndpointController;
 use App\Http\Controllers\Client\WebPushController;
@@ -54,6 +55,7 @@ Route::middleware(['client.access'])->group(function () {
     Route::post('/team', [TeamController::class, 'store'])->name('team.store');
     Route::put('/team/{member}', [TeamController::class, 'update'])->name('team.update');
     Route::delete('/team/{member}', [TeamController::class, 'destroy'])->name('team.destroy');
+    Route::put('/team/{member}/workspaces/{workspace}/availability', [TeamAvailabilityController::class, 'update'])->name('team.availability.update');
     Route::get('/team/{member}/workspaces/{workspace}/notification-availability', [NotificationAvailabilityController::class, 'showMember'])->name('team.notification-availability.show');
     Route::patch('/team/{member}/workspaces/{workspace}/notification-availability', [NotificationAvailabilityController::class, 'updateMember'])->name('team.notification-availability.update');
 

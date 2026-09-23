@@ -121,7 +121,7 @@ class MobileConversationController extends WorkspaceScopedController
         );
 
         return response()->json([
-            'conversation' => $this->formatConversation($conversation, detail: true),
+            'conversation' => $this->formatConversation($conversation, detail: true, actor: $request->user()),
             'messages' => $messages->map(fn ($m) => $this->formatMessage($m)),
             'messages_meta' => [
                 'current_page' => 1,
@@ -353,7 +353,7 @@ class MobileConversationController extends WorkspaceScopedController
         $updated = app(ConversationActivityService::class)->join($conversation, $request->user());
         ConversationAssigned::dispatch($updated, $request->user());
 
-        return response()->json(['ok' => true, 'conversation' => $this->formatConversation($updated, detail: true)]);
+        return response()->json(['ok' => true, 'conversation' => $this->formatConversation($updated, detail: true, actor: $request->user())]);
     }
 
     public function leave(Request $request, string $uuid): JsonResponse
@@ -362,7 +362,7 @@ class MobileConversationController extends WorkspaceScopedController
         $updated = app(ConversationActivityService::class)->leave($conversation, $request->user());
         ConversationAssigned::dispatch($updated, $updated->assignedUser);
 
-        return response()->json(['ok' => true, 'conversation' => $this->formatConversation($updated, detail: true)]);
+        return response()->json(['ok' => true, 'conversation' => $this->formatConversation($updated, detail: true, actor: $request->user())]);
     }
 
     public function takeover(Request $request, string $uuid): JsonResponse
@@ -371,7 +371,7 @@ class MobileConversationController extends WorkspaceScopedController
         $updated = app(ConversationActivityService::class)->takeover($conversation, $request->user());
         ConversationAssigned::dispatch($updated, $request->user());
 
-        return response()->json(['ok' => true, 'conversation' => $this->formatConversation($updated, detail: true)]);
+        return response()->json(['ok' => true, 'conversation' => $this->formatConversation($updated, detail: true, actor: $request->user())]);
     }
 
     /**
@@ -607,7 +607,7 @@ class MobileConversationController extends WorkspaceScopedController
         $conversation->load(['contact', 'channelAccount', 'labels']);
 
         return response()->json([
-            'conversation' => $this->formatConversation($conversation),
+            'conversation' => $this->formatConversation($conversation, actor: $request->user()),
         ], 201);
     }
 
@@ -694,7 +694,7 @@ class MobileConversationController extends WorkspaceScopedController
 
     // ─── Private formatters ───────────────────────────────────────────────────
 
-    private function formatConversation(Conversation $c, bool $detail = false): array
+    private function formatConversation(Conversation $c, bool $detail = false, ?User $actor = null): array
     {
         $isWebchat = $c->channelAccount?->channel === 'webchat';
         $lastSeen = $c->webchat_last_seen_at instanceof Carbon
@@ -732,6 +732,9 @@ class MobileConversationController extends WorkspaceScopedController
                 'avatar' => $c->joinedUser->avatar ?? null,
                 'avatar_url' => $c->joinedUser->avatarUrl(),
             ] : null,
+            'can_takeover' => $detail && $actor
+                ? app(ConversationActivityService::class)->canTakeover($c, $actor)
+                : false,
             'contact' => $c->contact ? [
                 'id' => $c->contact->id,
                 'name' => Demo::name($c->contact->name),
