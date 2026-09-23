@@ -3,6 +3,7 @@
 namespace App\Listeners;
 
 use App\Events\ConversationAssigned;
+use App\Events\ConversationActivityCreated;
 use App\Events\MessageSent;
 use App\Events\TypingChanged;
 use App\Events\WidgetHandoffUpdated;
@@ -34,6 +35,19 @@ class BroadcastWidgetRealtimeUpdate
 
         broadcast(new WidgetMessageCreated((int) $conversation->id, $payload));
         $this->visitorPush->notifyReply($conversation, $widget, $message, $payload);
+    }
+
+    public function handleConversationActivityCreated(ConversationActivityCreated $event): void
+    {
+        $message = $event->message->loadMissing('conversation.channelAccount');
+        $conversation = $message->conversation;
+        $widget = $conversation ? $this->widgetFor($conversation) : null;
+        $type = $message->payload['activity']['type'] ?? null;
+        if (! $widget || ! in_array($type, ['conversation.joined', 'conversation.resolved', 'conversation.transferred'], true)) {
+            return;
+        }
+
+        broadcast(new WidgetMessageCreated((int) $conversation->id, $this->payloads->message($message, $widget)));
     }
 
     public function handleConversationAssigned(ConversationAssigned $event): void

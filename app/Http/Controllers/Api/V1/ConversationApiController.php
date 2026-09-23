@@ -48,6 +48,7 @@ class ConversationApiController extends WorkspaceScopedController
         }
 
         $messages = $conversation->messages()
+            ->whereIn('direction', ['in', 'out'])
             ->orderBy('sent_at')
             ->paginate(50);
 

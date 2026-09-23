@@ -33,7 +33,7 @@ class Conversation extends Model
 
     protected $fillable = [
         'workspace_id', 'channel_account_id', 'contact_id', 'external_thread_id',
-        'status', 'assigned_user_id', 'assigned_to', 'handover_at',
+        'status', 'assigned_user_id', 'joined_user_id', 'joined_at', 'assigned_to', 'handover_at',
         'last_message_at', 'unread_count',
         'first_response_at', 'resolved_at', 'last_inbound_at',
         'pending_reply_notified_at', 'webchat_last_seen_at',
@@ -47,6 +47,7 @@ class Conversation extends Model
             'resolved_at' => 'datetime',
             'last_inbound_at' => 'datetime',
             'handover_at' => 'datetime',
+            'joined_at' => 'datetime',
             'pending_reply_notified_at' => 'datetime',
             'webchat_last_seen_at' => 'datetime',
             'unread_count' => 'integer',
@@ -80,7 +81,8 @@ class Conversation extends Model
     /** @return HasOne<Message, $this> */
     public function lastMessage(): HasOne
     {
-        return $this->hasOne(Message::class)->latestOfMany('sent_at');
+        return $this->hasOne(Message::class)
+            ->ofMany(['sent_at' => 'max', 'id' => 'max'], fn ($query) => $query->whereIn('direction', ['in', 'out']));
     }
 
     /** @return HasOne<Message, $this> */
@@ -123,6 +125,12 @@ class Conversation extends Model
     public function assignedUser(): BelongsTo
     {
         return $this->belongsTo(User::class, 'assigned_user_id');
+    }
+
+    /** @return BelongsTo<User, $this> */
+    public function joinedUser(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'joined_user_id');
     }
 
     /**

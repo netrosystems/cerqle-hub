@@ -9,6 +9,8 @@ use App\Modules\Shared\Models\Message;
 
 class WidgetPayloadBuilder
 {
+    private const PUBLIC_ACTIVITIES = ['conversation.joined', 'conversation.resolved', 'conversation.transferred'];
+
     /**
      * @return array<int, array<string, mixed>>
      */
@@ -17,7 +19,14 @@ class WidgetPayloadBuilder
         return Message::where('conversation_id', $conversationId)
             ->with('sender')
             ->where('id', '>', $afterId)
-            ->whereIn('direction', ['in', 'out'])
+            ->where(function ($query): void {
+                $query->whereIn('direction', ['in', 'out'])
+                    ->orWhere(function ($activity): void {
+                        $activity->where('direction', 'system')
+                            ->where('type', 'event')
+                            ->whereIn('payload->activity->type', self::PUBLIC_ACTIVITIES);
+                    });
+            })
             ->where('status', '!=', 'failed')
             ->orderBy('id')
             ->limit(100)
@@ -31,6 +40,21 @@ class WidgetPayloadBuilder
      */
     public function message(Message $message, ChatWidget $widget): array
     {
+        if ($message->direction === 'system') {
+            $activity = $message->payload['activity'] ?? [];
+            $name = (string) ($activity['actor']['name'] ?? 'Support');
+            $joined = in_array($activity['type'] ?? null, ['conversation.joined', 'conversation.transferred'], true);
+
+            return [
+                'id' => $message->id,
+                'role' => 'agent',
+                'kind' => 'activity',
+                'body' => $joined ? "{$name} joined the chat" : "Resolved by {$name}",
+                'activity' => ['type' => $joined ? 'conversation.joined' : 'conversation.resolved', 'actor_name' => $name],
+                'created_at' => optional($message->sent_at ?? $message->created_at)->toIso8601String(),
+            ];
+        }
+
         $message->loadMissing('sender');
         $isAgent = $message->direction === 'out';
 
