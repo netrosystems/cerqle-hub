@@ -43,7 +43,9 @@ drafts from any of 31 types and 11 triggers, most of which Cerqle refuses to
 switch on. Drafts are created paused because the AI cannot know which
 templates are approved. A single connected WhatsApp number is chosen for the
 draft automatically; with several, the choice is left to the person. It costs
-the existing `automation_workflow_generate` rate, shown on the button.
+the `automation_workflow_generate` rate, shown on the button — 20 credits
+from 2026-09-24 (was 5), with `rates_version` bumped to `2026-09-24` so the
+ledger shows which price each charge used.
 
 **Retry respects the step claims.** The engine refuses to repeat a claimed
 step, because after a crash it cannot know whether a message went out.

@@ -1570,7 +1570,7 @@ function ConfirmDeleteModal({ target, onCancel, onConfirm }) {
 
 function AiGenerateModal({ prompt, setPrompt, loading, error, onClose, onGenerate }) {
     const { t } = useTranslation();
-    const cost = usePage().props.generateCost ?? 5;
+    const cost = usePage().props.generateCost ?? 20;
     return (
         <div onClick={loading ? undefined : onClose} style={overlayStyle}>
             <div role="dialog" aria-modal="true" aria-labelledby="builder-ai-title" onClick={e => e.stopPropagation()} style={{ ...modalStyle, width: 520 }}>

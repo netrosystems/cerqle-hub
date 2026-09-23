@@ -44,7 +44,7 @@ class AutomationController extends Controller
         return Inertia::render('Automation/Index', [
             'automations' => $automations,
             // Shown on the Generate button so the charge is never a surprise.
-            'generateCost' => (int) config('ai.credits.rates.automation_workflow_generate', 5),
+            'generateCost' => (int) config('ai.credits.rates.automation_workflow_generate', 20),
         ]);
     }
 
@@ -71,7 +71,7 @@ class AutomationController extends Controller
         return Inertia::render('Automation/Builder', [
             'automation' => $automation,
             'resources' => $this->builderResources($wid, $automation->id),
-            'generateCost' => (int) config('ai.credits.rates.automation_workflow_generate', 5),
+            'generateCost' => (int) config('ai.credits.rates.automation_workflow_generate', 20),
         ]);
     }
 

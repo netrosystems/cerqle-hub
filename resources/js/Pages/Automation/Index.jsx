@@ -47,7 +47,7 @@ const formatDate = (iso) => {
     return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
 };
 
-export default function AutomationIndex({ automations, generateCost = 5 }) {
+export default function AutomationIndex({ automations, generateCost = 20 }) {
     const { t } = useTranslation();
     const { props } = usePage();
     const flash = props.flash ?? {};

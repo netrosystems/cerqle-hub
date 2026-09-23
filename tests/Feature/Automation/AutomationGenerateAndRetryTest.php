@@ -259,7 +259,9 @@ class AutomationGenerateAndRetryTest extends TestCase
         $automation = Automation::create(['workspace_id' => $this->ctx['workspace']->id, 'name' => 'Existing', 'status' => 'draft', 'trigger_type' => 'message.received', 'nodes' => [], 'edges' => []]);
 
         $this->get(route('client.automations.edit', $automation->uuid))
-            ->assertInertia(fn ($page) => $page->component('Automation/Builder')->where('generateCost', (int) config('ai.credits.rates.automation_workflow_generate')));
+            ->assertInertia(fn ($page) => $page->component('Automation/Builder')->where('generateCost', 20));
+        $this->get(route('client.automations.index'))
+            ->assertInertia(fn ($page) => $page->component('Automation/Index')->where('generateCost', 20));
     }
 
     public function test_running_out_of_credits_is_reported_plainly(): void
