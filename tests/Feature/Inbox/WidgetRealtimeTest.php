@@ -308,6 +308,83 @@ class WidgetRealtimeTest extends TestCase
         Event::assertDispatched(MessageStatusUpdated::class, fn ($e) => $e->message->id === $message->id && $e->message->status === 'read');
     }
 
+    public function test_website_and_sdk_keys_have_independent_access_and_source_detection(): void
+    {
+        ['workspace' => $workspace] = $this->createSubscribedWorkspaceContext();
+        [$widget] = $this->createWebchatWidget($workspace->id, [
+            'allowed_domains' => ['allowed.example'],
+            'enabled' => false,
+            'sdk_enabled' => true,
+        ]);
+
+        $this->postJson(route('widget.session'), ['key' => $widget->widget_key])
+            ->assertNotFound();
+
+        $sdkSession = $this->postJson(route('widget.session'), ['key' => $widget->sdk_widget_key])
+            ->assertOk()
+            ->assertJsonPath('config.key', $widget->sdk_widget_key);
+
+        $this->assertDatabaseHas('conversations', [
+            'id' => $sdkSession->json('conversation_id'),
+            'started_from' => Conversation::STARTED_FROM_CUSTOMER_SDK,
+        ]);
+        $this->get(route('chat-widget.embed', ['key' => $widget->sdk_widget_key]))
+            ->assertNotFound();
+
+        $widget->update(['enabled' => true, 'sdk_enabled' => false]);
+
+        $this->postJson(route('widget.session'), ['key' => $widget->sdk_widget_key])
+            ->assertNotFound();
+
+        $webSession = $this->withHeader('Origin', 'https://allowed.example')
+            ->postJson(route('widget.session'), ['key' => $widget->widget_key])
+            ->assertOk()
+            ->assertJsonPath('config.key', $widget->widget_key);
+
+        $this->assertDatabaseHas('conversations', [
+            'id' => $webSession->json('conversation_id'),
+            'started_from' => Conversation::STARTED_FROM_WEB_WIDGET,
+        ]);
+    }
+
+    public function test_website_embed_loader_is_not_cached_across_availability_changes(): void
+    {
+        ['workspace' => $workspace] = $this->createSubscribedWorkspaceContext();
+        [$widget] = $this->createWebchatWidget($workspace->id);
+
+        $response = $this->get(route('chat-widget.embed', ['key' => $widget->widget_key]))
+            ->assertOk();
+
+        $this->assertStringContainsString('no-store', (string) $response->headers->get('Cache-Control'));
+        $this->assertSame('no-cache', $response->headers->get('Pragma'));
+        $this->assertSame('0', $response->headers->get('Expires'));
+    }
+
+    public function test_sdk_session_reuses_legacy_web_session_without_overwriting_its_source(): void
+    {
+        ['workspace' => $workspace] = $this->createSubscribedWorkspaceContext();
+        [$widget] = $this->createWebchatWidget($workspace->id);
+
+        $webSession = $this->postJson(route('widget.session'), [
+            'key' => $widget->widget_key,
+            'visitor_id' => 'legacy-sdk-visitor',
+        ])->assertOk();
+
+        $widget->update(['enabled' => false, 'sdk_enabled' => true]);
+
+        $sdkSession = $this->postJson(route('widget.session'), [
+            'key' => $widget->sdk_widget_key,
+            'visitor_id' => 'legacy-sdk-visitor',
+        ])->assertOk();
+
+        $this->assertSame($webSession->json('conversation_id'), $sdkSession->json('conversation_id'));
+        $this->assertNotNull(WebchatVisitorToken::verify($sdkSession->json('token'), $widget->sdk_widget_key));
+        $this->assertDatabaseHas('conversations', [
+            'id' => $sdkSession->json('conversation_id'),
+            'started_from' => Conversation::STARTED_FROM_WEB_WIDGET,
+        ]);
+    }
+
     /**
      * @return array{0:ChatWidget,1:ChannelAccount}
      */

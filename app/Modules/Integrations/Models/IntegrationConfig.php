@@ -10,6 +10,7 @@ class IntegrationConfig extends Model
     public const PROVIDERS = [
         'meta_app',
         'oauth_linkedin',
+        'oauth_linkedin_page',
         'oauth_twitter',
         'oauth_google_signin',
         'oauth_youtube',
@@ -44,7 +45,8 @@ class IntegrationConfig extends Model
     // Human-readable labels per provider
     public const LABELS = [
         'meta_app' => 'Meta App (WhatsApp / Instagram / Messenger / Facebook)',
-        'oauth_linkedin' => 'LinkedIn OAuth',
+        'oauth_linkedin' => 'LinkedIn OAuth (Member Profile)',
+        'oauth_linkedin_page' => 'LinkedIn OAuth (Company Page)',
         'oauth_twitter' => 'X OAuth',
         'oauth_google_signin' => 'Google Sign-In',
         'oauth_youtube' => 'YouTube OAuth',
@@ -69,6 +71,7 @@ class IntegrationConfig extends Model
     public const CATEGORIES = [
         'meta_app' => 'Meta',
         'oauth_linkedin' => 'Social OAuth',
+        'oauth_linkedin_page' => 'Social OAuth',
         'oauth_twitter' => 'Social OAuth',
         'oauth_google_signin' => 'Authentication',
         'oauth_youtube' => 'Social OAuth',
@@ -104,7 +107,11 @@ class IntegrationConfig extends Model
             ['key' => 'config_id_social',    'label' => 'Embedded Signup Config ID (Instagram / Messenger)', 'type' => 'text', 'required' => false, 'hint' => 'From Meta App Dashboard → Facebook Login for Business → Social Embedded Signup configuration'],
         ],
         'oauth_linkedin' => [
-            ['key' => 'client_id',     'label' => 'Client ID',     'type' => 'text',     'required' => true],
+            ['key' => 'client_id',     'label' => 'Client ID',     'type' => 'text',     'required' => true,  'hint' => 'LinkedIn app with the "Sign In with LinkedIn using OpenID Connect" and "Share on LinkedIn" products. This posts as a person.'],
+            ['key' => 'client_secret', 'label' => 'Client Secret', 'type' => 'password', 'required' => true],
+        ],
+        'oauth_linkedin_page' => [
+            ['key' => 'client_id',     'label' => 'Client ID',     'type' => 'text',     'required' => true,  'hint' => 'LinkedIn app with the "Community Management API" product approved. This posts as a company page. It may be the same app as above only if that app also has Community Management API.'],
             ['key' => 'client_secret', 'label' => 'Client Secret', 'type' => 'password', 'required' => true],
         ],
         'oauth_google_signin' => [

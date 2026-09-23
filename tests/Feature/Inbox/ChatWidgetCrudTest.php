@@ -48,7 +48,7 @@ class ChatWidgetCrudTest extends TestCase
         ], $overrides)];
     }
 
-    public function test_the_on_off_switch_saves_on_its_own(): void
+    public function test_legacy_widget_toggle_endpoint_remains_available(): void
     {
         [$widget] = $this->widgetWithPayload();
 
@@ -59,11 +59,32 @@ class ChatWidgetCrudTest extends TestCase
         $this->assertFalse((bool) $widget->fresh()->enabled);
     }
 
+    public function test_new_widget_has_a_separate_enabled_sdk_key(): void
+    {
+        [$widget] = $this->widgetWithPayload();
+
+        $this->assertNotEmpty($widget->sdk_widget_key);
+        $this->assertNotSame($widget->widget_key, $widget->sdk_widget_key);
+        $this->assertTrue((bool) $widget->sdk_enabled);
+    }
+
+    public function test_sdk_on_off_switch_saves_without_changing_website_availability(): void
+    {
+        [$widget] = $this->widgetWithPayload();
+
+        $response = $this->actingAs($this->ctx['user'])
+            ->patch(route('client.inbox.chat-widgets.sdk-enabled', $widget->id), ['sdk_enabled' => false]);
+
+        $response->assertSessionHasNoErrors();
+        $widget->refresh();
+        $this->assertFalse((bool) $widget->sdk_enabled);
+        $this->assertTrue((bool) $widget->enabled);
+    }
+
     public function test_saving_settings_does_not_switch_a_disabled_widget_back_on(): void
     {
-        // The switch lives outside the settings form, so an update carries no
-        // "enabled" value. Treating that absence as "on" would silently revive
-        // a widget the client had deliberately turned off.
+        // Older clients may omit "enabled". Treating that absence as "on"
+        // would silently revive a widget the client had deliberately turned off.
         [$widget, $payload] = $this->widgetWithPayload();
         $widget->update(['enabled' => false]);
 
@@ -72,6 +93,34 @@ class ChatWidgetCrudTest extends TestCase
 
         $response->assertSessionHasNoErrors();
         $this->assertFalse((bool) $widget->fresh()->enabled);
+    }
+
+    public function test_saving_settings_without_sdk_value_preserves_a_disabled_sdk(): void
+    {
+        [$widget, $payload] = $this->widgetWithPayload();
+        $widget->update(['sdk_enabled' => false]);
+
+        $response = $this->actingAs($this->ctx['user'])
+            ->put(route('client.inbox.chat-widgets.update', $widget->id), $payload);
+
+        $response->assertSessionHasNoErrors();
+        $this->assertFalse((bool) $widget->fresh()->sdk_enabled);
+    }
+
+    public function test_settings_form_updates_website_and_sdk_availability_together(): void
+    {
+        [$widget, $payload] = $this->widgetWithPayload([
+            'enabled' => false,
+            'sdk_enabled' => false,
+        ]);
+
+        $response = $this->actingAs($this->ctx['user'])
+            ->put(route('client.inbox.chat-widgets.update', $widget->id), $payload);
+
+        $response->assertSessionHasNoErrors();
+        $widget->refresh();
+        $this->assertFalse((bool) $widget->enabled);
+        $this->assertFalse((bool) $widget->sdk_enabled);
     }
 
     public function test_clearing_the_brand_colour_falls_back_to_the_platform_colour(): void

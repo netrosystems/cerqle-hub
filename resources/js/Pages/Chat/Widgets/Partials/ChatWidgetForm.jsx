@@ -50,7 +50,14 @@ const inputCls =
 
 function Toggle({ checked, onChange, label, description }) {
     return (
-        <button type="button" onClick={() => onChange(!checked)} className="flex w-full items-start gap-3 text-left">
+        <button
+            type="button"
+            role="switch"
+            aria-checked={checked}
+            aria-label={label}
+            onClick={() => onChange(!checked)}
+            className="flex w-full items-start gap-3 text-left"
+        >
             <span className={`mt-0.5 relative inline-flex h-5 w-9 flex-shrink-0 items-center rounded-full transition ${checked ? 'bg-brand-500' : 'bg-neutral-300 dark:bg-neutral-700'}`}>
                 <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition ${checked ? 'translate-x-4' : 'translate-x-0.5'}`} />
             </span>
@@ -99,7 +106,14 @@ function Card({ title, subtitle, icon, accent = false, children }) {
     );
 }
 
-export default function ChatWidgetForm({ widget = null, chatbots = [], aiTimezone = 'UTC', canUseCustomLauncherLogo = false, submitLabel, onSubmit }) {
+export default function ChatWidgetForm({
+    widget = null,
+    chatbots = [],
+    aiTimezone = 'UTC',
+    canUseCustomLauncherLogo = false,
+    submitLabel,
+    onSubmit,
+}) {
     const { t } = useTranslation();
     const pageErrors = usePage().props.errors ?? {};
     // Cerqle's own colour, supplied by the server so the brand lives in one
@@ -132,6 +146,8 @@ export default function ChatWidgetForm({ widget = null, chatbots = [], aiTimezon
         offline_message: widget?.offline_message ?? '',
         allowed_domains: widget?.allowed_domains ?? [],
         identity_verification: widget?.identity_verification ?? false,
+        enabled: widget?.enabled ?? true,
+        sdk_enabled: widget?.sdk_enabled ?? true,
     });
 
     const [domainsText, setDomainsText] = useState((widget?.allowed_domains ?? []).join('\n'));
@@ -336,6 +352,22 @@ export default function ChatWidgetForm({ widget = null, chatbots = [], aiTimezon
                         label="Verify passed identity (recommended)"
                         description="Only trust a logged-in customer's name/email if your server signs it with the widget secret. Prevents visitors impersonating others. Setup snippet is on this page after saving."
                     />
+                    {widget && (
+                        <Toggle
+                            checked={data.enabled}
+                            onChange={(v) => setData('enabled', v)}
+                            label="Widget enabled"
+                            description="Turn the website widget off without deleting it."
+                        />
+                    )}
+                    {widget && (
+                        <Toggle
+                            checked={data.sdk_enabled}
+                            onChange={(v) => setData('sdk_enabled', v)}
+                            label="SDK enabled"
+                            description="Turn the customer mobile SDK chat off without affecting the website widget."
+                        />
+                    )}
                 </Card>
             </div>
 

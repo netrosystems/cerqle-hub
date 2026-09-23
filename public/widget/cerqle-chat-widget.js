@@ -60,6 +60,7 @@
   var realtimeConnected = false;
   var realtimeDisabled = false;
   var sendingText = false;
+  var disabled = false;
 
   function safeGet(k) { try { return window.localStorage.getItem(k) || ''; } catch (e) { return ''; } }
   function safeSet(k, v) { try { window.localStorage.setItem(k, v); } catch (e) {} }
@@ -108,7 +109,9 @@
   // ── Shadow host ────────────────────────────────────────────────────────────
   var host = document.createElement('div');
   host.id = 'wb-chat-host';
-  host.style.cssText = 'all:initial';
+  // Do not reveal an unusable launcher from a stale embed response. The first
+  // successful session check makes it visible; a disabled key returns 404.
+  host.style.cssText = 'all:initial;display:none';
   (document.body || document.documentElement).appendChild(host);
   var root = host.attachShadow({ mode: 'open' });
 
@@ -295,6 +298,7 @@
 
   // ── Behaviour ──────────────────────────────────────────────────────────────
   function openPanel() {
+    if (disabled) return;
     open = true;
     if (inviteTimer) { clearTimeout(inviteTimer); inviteTimer = null; }
     if (inviteVisibleTimer) { clearTimeout(inviteVisibleTimer); inviteVisibleTimer = null; }
@@ -397,7 +401,7 @@
   }
 
   function resumePresence() {
-    if (!pageCanReportPresence()) return;
+    if (disabled || !pageCanReportPresence()) return;
     ensureSession().then(function () {
       startPolling();
       connectRealtime();
@@ -450,6 +454,7 @@
   }
 
   function ensureSession(prechatData, force) {
+    if (disabled) return Promise.reject(new Error('widget unavailable'));
     if (started && !force && !prechatData) return Promise.resolve();
     if (starting) return starting;
     var body = {
@@ -464,6 +469,7 @@
     starting = post('/widget/v1/session', body).then(function (data) {
       if (!data || !data.token || !data.visitor_id) throw new Error('session unavailable');
       started = true;
+      host.style.cssText = 'all:initial';
       visitorId = data.visitor_id; token = data.token; conversationId = data.conversation_id || '';
       safeSet(LS_VISITOR, visitorId); safeSet(LS_TOKEN, token);
       if (data.online !== undefined) { online = !!data.online; updateStatus(); }
@@ -476,6 +482,7 @@
       return registerPushSubscription();
     }).catch(function (err) {
       starting = false;
+      if (err && err.status === 404) disableWidget();
       throw err;
     }).then(function () {
       starting = false;
@@ -837,7 +844,7 @@
   }
 
   function startPolling() {
-    if (pollTimer || pollInFlight || !started || !pageCanReportPresence()) return;
+    if (disabled || pollTimer || pollInFlight || !started || !pageCanReportPresence()) return;
     var tick = function () {
       pollTimer = null;
       if (!pageCanReportPresence()) return;
@@ -845,8 +852,15 @@
       poll().then(function () {
         pollInFlight = false;
         pollTimer = pageCanReportPresence() ? setTimeout(tick, pollDelay()) : null;
-      }).catch(function () {
+      }).catch(function (err) {
         pollInFlight = false;
+        if (err && err.status === 404) {
+          started = false;
+          token = '';
+          safeSet(LS_TOKEN, '');
+          ensureSession(null, true).catch(function () {});
+          return;
+        }
         pollTimer = pageCanReportPresence() ? setTimeout(tick, realtimeConnected ? 30000 : 8000) : null;
       });
     };
@@ -859,7 +873,7 @@
   }
 
   function pageCanReportPresence() {
-    return document.visibilityState !== 'hidden';
+    return !disabled && document.visibilityState !== 'hidden';
   }
 
   function pausePolling() {
@@ -1017,6 +1031,20 @@
     }
     pusherClient = null;
     pusherChannel = null;
+  }
+
+  function disableWidget() {
+    if (disabled) return;
+    disabled = true;
+    started = false;
+    starting = false;
+    pausePolling();
+    disconnectRealtime();
+    if (inviteTimer) clearTimeout(inviteTimer);
+    if (inviteVisibleTimer) clearTimeout(inviteVisibleTimer);
+    if (visitorTypingIdleTimer) clearTimeout(visitorTypingIdleTimer);
+    if (handoffWatchdog) clearTimeout(handoffWatchdog);
+    if (host && host.parentNode) host.parentNode.removeChild(host);
   }
 
   function applyCommand(command) {
@@ -1462,7 +1490,14 @@
     if (token) h['X-Widget-Token'] = token;
     return h;
   }
-  function handle(r) { if (!r.ok) throw new Error('http ' + r.status); return r.json(); }
+  function handle(r) {
+    if (!r.ok) {
+      var error = new Error('http ' + r.status);
+      error.status = r.status;
+      throw error;
+    }
+    return r.json();
+  }
 
   function resolveLogoUrl(url) {
     if (!url || String(url).indexOf('cerqle-icon-white-bg') !== -1 || String(url).indexOf('wisperbot') !== -1) {

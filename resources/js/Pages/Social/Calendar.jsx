@@ -32,6 +32,7 @@ const NETWORK_ICONS = {
     facebook:  '📘',
     instagram: '📷',
     linkedin:  '💼',
+    linkedin_page: '💼',
     tiktok:    '🎵',
     youtube:   '▶️',
 };

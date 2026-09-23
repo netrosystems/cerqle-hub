@@ -3,6 +3,7 @@
  * https://github.com/simple-icons/simple-icons — follow each vendor’s brand guidelines in production.
  */
 import brandIconData from './brandIconData.json';
+import { Smartphone } from 'lucide-react';
 
 /** Human-readable labels for inbox / campaign channel keys */
 export const CHANNEL_LABELS = {
@@ -65,12 +66,22 @@ export function ChannelBrandIcon({ channel, className }) {
     return <SvgBrand name={key} className={className} />;
 }
 
+export function ConversationChannelIcon({ conversation, className }) {
+    const channel = conversation?.channel_account?.channel ?? conversation?.channel ?? 'webchat';
+    if (channel === 'webchat' && conversation?.started_from === 'customer_sdk') {
+        return <Smartphone className={className ?? 'h-4 w-4'} aria-hidden />;
+    }
+
+    return <ChannelBrandIcon channel={channel} className={className} />;
+}
+
 /** Facebook, Instagram, LinkedIn, X, YouTube, TikTok */
 export function SocialBrandIcon({ network, className }) {
     const map = {
         facebook: 'facebook',
         instagram: 'instagram',
         linkedin: 'linkedin',
+        linkedin_page: 'linkedin',
         twitter: 'twitter',
         youtube: 'youtube',
         tiktok: 'tiktok',

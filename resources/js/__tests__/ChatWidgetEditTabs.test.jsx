@@ -2,25 +2,36 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
 
 const patch = vi.fn()
+const post = vi.fn()
 vi.mock('@inertiajs/react', () => ({
     Head: () => null,
     Link: ({ children, ...p }) => <a {...p}>{children}</a>,
-    router: { post: vi.fn(), delete: vi.fn(), patch: (...a) => patch(...a) },
+    router: { post: (...a) => post(...a), delete: vi.fn(), patch: (...a) => patch(...a) },
 }))
 vi.mock('@/Layouts/ClientLayout', () => ({ default: ({ children }) => <div>{children}</div> }))
-vi.mock('@/Pages/Chat/Widgets/Partials/ChatWidgetForm', () => ({ default: () => <div>CONFIGURATION FORM</div> }))
+vi.mock('@/Pages/Chat/Widgets/Partials/ChatWidgetForm', () => ({
+    default: ({ widget, onSubmit }) => (
+        <div>
+            CONFIGURATION FORM
+            <button type="button" onClick={() => onSubmit({ enabled: !widget.enabled, sdk_enabled: !widget.sdk_enabled })}>MOCK SAVE</button>
+        </div>
+    ),
+}))
 // Renders children: identity setup now nests inside the install card.
 vi.mock('@/Pages/Chat/Widgets/Partials/InstallCard', () => ({ default: ({ children }) => <div>INSTALL CARD{children}</div> }))
 vi.mock('@/Pages/Chat/Widgets/Partials/IdentityCard', () => ({ default: () => <div>IDENTITY CARD</div> }))
-vi.mock('@/Pages/Chat/Widgets/Partials/MobileSdkCard', () => ({ default: ({ widgetKey }) => <div>MOBILE SDK {widgetKey}</div> }))
+vi.mock('@/Pages/Chat/Widgets/Partials/MobileSdkCard', () => ({ default: ({ sdkWidgetKey }) => <div>MOBILE SDK {sdkWidgetKey}</div> }))
 
 global.route = () => '/app/inbox/chat-widgets/1'
 
 const { default: ChatWidgetEdit } = await import('@/Pages/Chat/Widgets/Edit')
 
-const widget = { id: 1, name: 'Website chat', widget_key: 'abc', identity_verification: false }
+const widget = { id: 1, name: 'Website chat', widget_key: 'web-key', sdk_widget_key: 'sdk-key', sdk_enabled: true, identity_verification: false }
 
-afterEach(cleanup)
+afterEach(() => {
+    cleanup()
+    vi.clearAllMocks()
+})
 
 it('opens on Configuration', () => {
     render(<ChatWidgetEdit widget={widget} />)
@@ -51,24 +62,15 @@ it('keeps the configuration form mounted so switching tabs never discards edits'
     expect(screen.getByText('CONFIGURATION FORM')).toBeTruthy()
 })
 
-it('puts the widget on/off switch in the title row and saves it on its own', () => {
-    render(<ChatWidgetEdit widget={{ ...widget, enabled: true }} />)
+it('saves website and SDK availability through the shared settings form', () => {
+    render(<ChatWidgetEdit widget={{ ...widget, enabled: true, sdk_enabled: true }} />)
 
-    const toggle = screen.getByRole('switch', { name: 'Widget' })
-    expect(toggle.getAttribute('aria-checked')).toBe('true')
+    fireEvent.click(screen.getByRole('button', { name: 'MOCK SAVE' }))
 
-    fireEvent.click(toggle)
-
-    expect(patch).toHaveBeenCalledTimes(1)
-    expect(patch.mock.calls[0][1]).toEqual({ enabled: false })
-    // preserveState so an unsaved form and the open tab both survive the flip.
-    expect(patch.mock.calls[0][2]).toMatchObject({ preserveState: true })
-})
-
-it('reflects a widget that is currently off', () => {
-    render(<ChatWidgetEdit widget={{ ...widget, enabled: false }} />)
-
-    expect(screen.getByRole('switch', { name: 'Widget' }).getAttribute('aria-checked')).toBe('false')
+    expect(patch).not.toHaveBeenCalled()
+    expect(post).toHaveBeenCalledTimes(1)
+    expect(post.mock.calls[0][1]).toMatchObject({ enabled: false, sdk_enabled: false, _method: 'put' })
+    expect(post.mock.calls[0][2]).toMatchObject({ preserveState: true, forceFormData: true })
 })
 
 it('no longer offers delete from the detail page', () => {
@@ -88,10 +90,10 @@ it('groups Setup into a website path and a mobile path', () => {
     expect(panel.contains(screen.getByText(/MOBILE SDK/))).toBe(true)
 })
 
-it('hands the widget key to the mobile SDK card', () => {
+it('hands the separate SDK key to the mobile SDK card', () => {
     render(<ChatWidgetEdit widget={widget} />)
 
     fireEvent.click(screen.getByRole('tab', { name: 'Setup' }))
 
-    expect(screen.getByText(`MOBILE SDK ${widget.widget_key}`)).toBeTruthy()
+    expect(screen.getByText(`MOBILE SDK ${widget.sdk_widget_key}`)).toBeTruthy()
 })

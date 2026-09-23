@@ -89,6 +89,21 @@ class LinkedInDriver implements SocialNetworkInterface
             : throw new \RuntimeException('LinkedIn publish succeeded but returned no post ID.');
     }
 
+    /**
+     * Register and upload a media asset against any owner URN.
+     *
+     * Exposed so {@see LinkedInPageDriver} can reuse it: the registration,
+     * upload and processing-poll sequence is identical for a person and an
+     * organisation, only the owner URN differs. Duplicating it would mean two
+     * copies of the asset-status polling to keep in step.
+     *
+     * @return array{0:string,1:'IMAGE'|'VIDEO'}
+     */
+    public function uploadAssetFor(SocialAccount $account, string $ownerUrn, string $mediaUrl): array
+    {
+        return $this->uploadAsset($account, $ownerUrn, $mediaUrl);
+    }
+
     /** @return array{0:string,1:'IMAGE'|'VIDEO'} */
     private function uploadAsset(SocialAccount $account, string $ownerUrn, string $mediaUrl): array
     {

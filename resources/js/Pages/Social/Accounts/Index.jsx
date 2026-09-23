@@ -10,6 +10,7 @@ const NETWORKS = [
     { id: 'facebook',  label: 'Facebook',  descriptionKey: 'social.network_desc_facebook' },
     { id: 'instagram', label: 'Instagram', descriptionKey: 'social.network_desc_instagram' },
     { id: 'linkedin',  label: 'LinkedIn',  descriptionKey: 'social.network_desc_linkedin' },
+    { id: 'linkedin_page', label: 'LinkedIn Page', descriptionKey: 'social.network_desc_linkedin_page' },
     { id: 'youtube',   label: 'YouTube',   descriptionKey: 'social.network_desc_youtube' },
     { id: 'tiktok',    label: 'TikTok',    descriptionKey: 'social.network_desc_tiktok' },
 ];
@@ -40,7 +41,7 @@ export default function SocialAccountsIndex({ accounts }) {
     };
 
     const beginConnect = (event, network) => {
-        if (network !== 'linkedin') return;
+        if (network !== 'linkedin' && network !== 'linkedin_page') return;
 
         event.preventDefault();
         setLinkedinConnectUrl(event.currentTarget.href);

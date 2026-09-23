@@ -46,9 +46,13 @@ Grounded Smart Bot and atomic Knowledge Base implementation evidence: [`grounded
 
 Language-agnostic Smart Bot behaviour evidence: [`smart-bot-language-qa-2026-09-20.md`](smart-bot-language-qa-2026-09-20.md).
 
+Website widget and customer SDK key separation/source detection: [`decisions/2026-09-23-widget-sdk-access-and-source.md`](decisions/2026-09-23-widget-sdk-access-and-source.md).
+
 Smart Bot behaviour specification as received, partially adopted — read the 2026-09-20 decision record first: [`smart-bot-behaviour-spec-2026-09-20.md`](smart-bot-behaviour-spec-2026-09-20.md).
 
 Meta app review evidence and permission matrix, with the prerequisites left for the owner: [`meta-app-review-2026-09-09.md`](meta-app-review-2026-09-09.md).
+
+LinkedIn company page posting — operator setup guide for creating the developer app: [`linkedin-company-page-setup.md`](linkedin-company-page-setup.md).
 
 Decision records explain durable choices and their rationale. A newer record may supersede an older one; do not edit history to imply a decision was always different.
 
@@ -66,6 +70,8 @@ Decision records explain durable choices and their rationale. A newer record may
 - [`decisions/2026-09-16-grounded-smart-bot-answering.md`](decisions/2026-09-16-grounded-smart-bot-answering.md)
 - [`decisions/2026-09-20-language-agnostic-smart-bot.md`](decisions/2026-09-20-language-agnostic-smart-bot.md)
 - [`decisions/2026-09-22-smart-bot-owns-its-knowledge.md`](decisions/2026-09-22-smart-bot-owns-its-knowledge.md)
+- [`decisions/2026-09-23-linkedin-company-page-oauth.md`](decisions/2026-09-23-linkedin-company-page-oauth.md)
+- [`decisions/2026-09-23-email-triage-and-mailbox-scope.md`](decisions/2026-09-23-email-triage-and-mailbox-scope.md)
 
 ## Maintenance rule
 

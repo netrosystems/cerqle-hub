@@ -13,7 +13,7 @@ import { browserTz, tzLocalToUtcIso, formatInTz } from '@/Utils/datetime';
 
 import { xWeightedLength } from '@/Components/Social/xText';
 
-const CHAR_LIMITS = { twitter: 280, tiktok: 2200, linkedin: 3000, facebook: 63206, instagram: 2200, youtube: 5000 };
+const CHAR_LIMITS = { twitter: 280, tiktok: 2200, linkedin: 3000, linkedin_page: 3000, facebook: 63206, instagram: 2200, youtube: 5000 };
 
 /** Convert a UTC datetime string to a `datetime-local` value in the given timezone. */
 function toLocalDatetime(utcStr, tz) {

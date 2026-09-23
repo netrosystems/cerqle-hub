@@ -9,7 +9,7 @@ use Illuminate\Support\Facades\Cache;
 
 class SocialAccessTokenService
 {
-    private const REFRESHABLE_NETWORKS = ['youtube', 'tiktok', 'linkedin', 'twitter'];
+    private const REFRESHABLE_NETWORKS = ['youtube', 'tiktok', 'linkedin', 'linkedin_page', 'twitter'];
 
     private const REFRESH_BUFFER_MINUTES = 10;
 

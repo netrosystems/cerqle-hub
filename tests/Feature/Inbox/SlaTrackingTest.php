@@ -34,6 +34,9 @@ class SlaTrackingTest extends TestCase
             'channel_account_id' => $this->account->id,
             'contact_id' => $contact->id,
             'status' => 'open',
+            'assigned_user_id' => $this->ctx['user']->id,
+            'joined_user_id' => $this->ctx['user']->id,
+            'joined_at' => now(),
             'last_inbound_at' => now()->subMinutes(5),
             'last_message_at' => now()->subMinutes(5),
         ]);

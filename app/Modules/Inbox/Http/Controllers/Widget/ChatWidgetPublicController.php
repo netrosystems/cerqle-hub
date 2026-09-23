@@ -60,8 +60,9 @@ class ChatWidgetPublicController extends Controller
             'page_title' => ['nullable', 'string', 'max:255'],
         ]);
 
-        $widget = $this->resolveWidget($data['key']);
-        $this->assertDomainAllowed($widget, $request);
+        $access = $this->resolveWidgetAccess($data['key']);
+        $widget = $access['widget'];
+        $this->assertDomainAllowed($widget, $request, $access['surface']);
 
         $identity = $this->resolveIdentity($widget, $data);
         $identity['ip_address'] = $request->ip();
@@ -69,7 +70,14 @@ class ChatWidgetPublicController extends Controller
 
         $conversation = $this->driver->findConversation($widget, $visitorId, $identity);
         if (! $conversation) {
-            $conversation = $this->driver->resolveConversation($widget, $visitorId, $identity);
+            $conversation = $this->driver->resolveConversation(
+                $widget,
+                $visitorId,
+                $identity,
+                $access['surface'] === ChatWidget::SURFACE_SDK
+                    ? Conversation::STARTED_FROM_CUSTOMER_SDK
+                    : Conversation::STARTED_FROM_WEB_WIDGET,
+            );
         }
 
         if ((bool) ($data['active'] ?? false)) {
@@ -82,13 +90,13 @@ class ChatWidgetPublicController extends Controller
         }
 
         $this->visitorPush->register($widget, $conversation, $visitorId, $data['push']['token'] ?? null);
-        $token = WebchatVisitorToken::issue($conversation->id, $widget->widget_key, $visitorId);
+        $token = WebchatVisitorToken::issue($conversation->id, $access['key'], $visitorId);
 
         return response()->json([
             'visitor_id' => $visitorId,
             'conversation_id' => $conversation->id,
             'token' => $token,
-            'config' => $widget->publicConfig(),
+            'config' => $widget->publicConfig($access['surface']),
             'online' => $this->isOnline($widget),
             'messages' => $this->payloads->messages($conversation->id, $widget, 0),
             'handover' => $this->handoverState($conversation, $widget),
@@ -118,9 +126,10 @@ class ChatWidgetPublicController extends Controller
             'page_title' => ['nullable', 'string', 'max:255'],
         ]);
 
-        $widget = $this->resolveWidget($data['key']);
-        $this->assertDomainAllowed($widget, $request);
-        $payload = $this->authVisitor($request, $widget);
+        $access = $this->resolveWidgetAccess($data['key']);
+        $widget = $access['widget'];
+        $this->assertDomainAllowed($widget, $request, $access['surface']);
+        $payload = $this->authVisitor($request, $widget, $access['key'], $access['surface']);
 
         $conversationId = $payload['c'] ?? null;
         $conversation = $conversationId
@@ -131,8 +140,15 @@ class ChatWidgetPublicController extends Controller
 
         $issuedToken = null;
         if (! $conversation) {
-            $conversation = $this->driver->resolveConversation($widget, (string) $payload['v'], $this->resolveIdentity($widget, $data));
-            $issuedToken = WebchatVisitorToken::issue($conversation->id, $widget->widget_key, (string) $payload['v']);
+            $conversation = $this->driver->resolveConversation(
+                $widget,
+                (string) $payload['v'],
+                $this->resolveIdentity($widget, $data),
+                $access['surface'] === ChatWidget::SURFACE_SDK
+                    ? Conversation::STARTED_FROM_CUSTOMER_SDK
+                    : Conversation::STARTED_FROM_WEB_WIDGET,
+            );
+            $issuedToken = WebchatVisitorToken::issue($conversation->id, $access['key'], (string) $payload['v']);
         }
 
         $this->presence->touch(
@@ -186,7 +202,7 @@ class ChatWidgetPublicController extends Controller
 
         return response()->json(array_filter([
             'token' => $issuedToken,
-            'ai_availability' => app(WidgetAiAvailability::class)->publicState($widget),
+            'ai_availability' => app(WidgetAiAvailability::class)->publicState($widget, $access['surface']),
             'message' => $messagePayloadData,
             'handover' => $this->handoverState($conversation->fresh(), $widget),
             'handoff' => $this->payloads->handoff($widget, $conversation->refresh()),
@@ -200,11 +216,12 @@ class ChatWidgetPublicController extends Controller
             'key' => ['required', 'string'],
         ]);
 
-        $widget = $this->resolveWidget($data['key']);
-        $this->assertDomainAllowed($widget, $request);
+        $access = $this->resolveWidgetAccess($data['key']);
+        $widget = $access['widget'];
+        $this->assertDomainAllowed($widget, $request, $access['surface']);
         // Human support remains available even when AI is off or outside hours.
 
-        $payload = $this->authVisitor($request, $widget);
+        $payload = $this->authVisitor($request, $widget, $access['key'], $access['surface']);
         abort_if(empty($payload['c']), 409, 'Send a message before requesting a human agent.');
 
         $conversation = Conversation::query()
@@ -214,7 +231,7 @@ class ChatWidgetPublicController extends Controller
             ->firstOrFail();
 
         abort_if(
-            app(WidgetAiAvailability::class)->available($widget) && $conversation->messages()->where('direction', 'in')->count() < 2,
+            app(WidgetAiAvailability::class)->available($widget, surface: $access['surface']) && $conversation->messages()->where('direction', 'in')->count() < 2,
             422,
             'Human handover becomes available after two messages.'
         );
@@ -244,13 +261,14 @@ class ChatWidgetPublicController extends Controller
             'open' => ['nullable', 'boolean'],
         ]);
 
-        $widget = $this->resolveWidget($data['key']);
-        $this->assertDomainAllowed($widget, $request);
-        $payload = $this->authVisitor($request, $widget);
+        $access = $this->resolveWidgetAccess($data['key']);
+        $widget = $access['widget'];
+        $this->assertDomainAllowed($widget, $request, $access['surface']);
+        $payload = $this->authVisitor($request, $widget, $access['key'], $access['surface']);
         if (empty($payload['c'])) {
             return response()->json([
                 'messages' => [],
-                'ai_availability' => app(WidgetAiAvailability::class)->publicState($widget),
+                'ai_availability' => app(WidgetAiAvailability::class)->publicState($widget, $access['surface']),
                 'online' => $this->isOnline($widget),
                 'handover' => $this->handoverState(null, $widget),
                 'handoff' => ['enabled' => false, 'eligible' => false, 'status' => 'bot'],
@@ -274,7 +292,7 @@ class ChatWidgetPublicController extends Controller
 
         return response()->json([
             'messages' => $messages,
-            'ai_availability' => app(WidgetAiAvailability::class)->publicState($widget),
+            'ai_availability' => app(WidgetAiAvailability::class)->publicState($widget, $access['surface']),
             'online' => $this->isOnline($widget),
             'handover' => $this->handoverState($conversation, $widget),
             'handoff' => $this->payloads->handoff($widget, $conversation),
@@ -293,9 +311,10 @@ class ChatWidgetPublicController extends Controller
             'key' => ['required', 'string'],
         ]);
 
-        $widget = $this->resolveWidget($data['key']);
-        $this->assertDomainAllowed($widget, $request);
-        $payload = $this->authVisitor($request, $widget);
+        $access = $this->resolveWidgetAccess($data['key']);
+        $widget = $access['widget'];
+        $this->assertDomainAllowed($widget, $request, $access['surface']);
+        $payload = $this->authVisitor($request, $widget, $access['key'], $access['surface']);
 
         if (! empty($payload['c'])) {
             $conversation = Conversation::whereKey((int) $payload['c'])
@@ -343,9 +362,10 @@ class ChatWidgetPublicController extends Controller
             'is_typing' => ['required', 'boolean'],
         ]);
 
-        $widget = $this->resolveWidget($data['key']);
-        $this->assertDomainAllowed($widget, $request);
-        $payload = $this->authVisitor($request, $widget);
+        $access = $this->resolveWidgetAccess($data['key']);
+        $widget = $access['widget'];
+        $this->assertDomainAllowed($widget, $request, $access['surface']);
+        $payload = $this->authVisitor($request, $widget, $access['key'], $access['surface']);
 
         if (! empty($payload['c'])) {
             $conversation = Conversation::where('id', (int) $payload['c'])
@@ -369,9 +389,10 @@ class ChatWidgetPublicController extends Controller
             'channel_name' => ['required', 'string', 'max:255'],
         ]);
 
-        $widget = $this->resolveWidget($data['key']);
-        $this->assertDomainAllowed($widget, $request);
-        $payload = $this->authVisitor($request, $widget);
+        $access = $this->resolveWidgetAccess($data['key']);
+        $widget = $access['widget'];
+        $this->assertDomainAllowed($widget, $request, $access['surface']);
+        $payload = $this->authVisitor($request, $widget, $access['key'], $access['surface']);
 
         $conversationId = (int) ($payload['c'] ?? 0);
         $channelName = (string) $data['channel_name'];
@@ -403,9 +424,10 @@ class ChatWidgetPublicController extends Controller
             'token' => ['required', 'string', 'max:255'],
         ]);
 
-        $widget = $this->resolveWidget($data['key']);
-        $this->assertDomainAllowed($widget, $request);
-        $payload = $this->authVisitor($request, $widget);
+        $access = $this->resolveWidgetAccess($data['key']);
+        $widget = $access['widget'];
+        $this->assertDomainAllowed($widget, $request, $access['surface']);
+        $payload = $this->authVisitor($request, $widget, $access['key'], $access['surface']);
 
         if (! empty($payload['c'])) {
             $conversation = Conversation::where('id', (int) $payload['c'])
@@ -423,8 +445,9 @@ class ChatWidgetPublicController extends Controller
     public function pusherConfig(Request $request): JsonResponse
     {
         $widgetKey = (string) $request->query('key', '');
-        $widget = $this->resolveWidget($widgetKey);
-        $this->assertDomainAllowed($widget, $request);
+        $access = $this->resolveWidgetAccess($widgetKey);
+        $widget = $access['widget'];
+        $this->assertDomainAllowed($widget, $request, $access['surface']);
 
         $cfg = app(PusherPublicConfig::class)->widget();
 
@@ -443,9 +466,10 @@ class ChatWidgetPublicController extends Controller
             'message_id' => ['nullable', 'integer'],
         ]);
 
-        $widget = $this->resolveWidget($data['key']);
-        $this->assertDomainAllowed($widget, $request);
-        $payload = $this->authVisitor($request, $widget);
+        $access = $this->resolveWidgetAccess($data['key']);
+        $widget = $access['widget'];
+        $this->assertDomainAllowed($widget, $request, $access['surface']);
+        $payload = $this->authVisitor($request, $widget, $access['key'], $access['surface']);
 
         if (! empty($payload['c'])) {
             $conversation = Conversation::whereKey((int) $payload['c'])
@@ -463,9 +487,24 @@ class ChatWidgetPublicController extends Controller
 
     // ── helpers ──────────────────────────────────────────────────────────────
 
-    private function resolveWidget(string $key): ChatWidget
+    /** @return array{widget: ChatWidget, surface: 'web'|'sdk', key: string} */
+    private function resolveWidgetAccess(string $key): array
     {
-        return ChatWidget::where('widget_key', $key)->where('enabled', true)->firstOrFail();
+        $widget = ChatWidget::where('widget_key', $key)->first();
+        if ($widget) {
+            abort_unless($widget->enabled, 404);
+
+            return ['widget' => $widget, 'surface' => ChatWidget::SURFACE_WEB, 'key' => (string) $widget->widget_key];
+        }
+
+        $widget = ChatWidget::where('sdk_widget_key', $key)->first();
+        if ($widget) {
+            abort_unless($widget->sdk_enabled, 404);
+
+            return ['widget' => $widget, 'surface' => ChatWidget::SURFACE_SDK, 'key' => (string) $widget->sdk_widget_key];
+        }
+
+        abort(404);
     }
 
     /**
@@ -509,8 +548,12 @@ class ChatWidgetPublicController extends Controller
     }
 
     /** Reject requests whose Origin/Referer host isn't in the widget whitelist. */
-    private function assertDomainAllowed(ChatWidget $widget, Request $request): void
+    private function assertDomainAllowed(ChatWidget $widget, Request $request, string $surface): void
     {
+        if ($surface === ChatWidget::SURFACE_SDK) {
+            return;
+        }
+
         $allowed = $widget->allowed_domains ?? [];
         if (empty($allowed)) {
             return;
@@ -533,10 +576,14 @@ class ChatWidgetPublicController extends Controller
     /**
      * Verify the visitor session token.
      */
-    private function authVisitor(Request $request, ChatWidget $widget): array
+    private function authVisitor(Request $request, ChatWidget $widget, string $key, string $surface): array
     {
         $token = $request->headers->get('X-Widget-Token') ?: (string) $request->input('token');
-        $payload = $token ? WebchatVisitorToken::verify($token, $widget->widget_key) : null;
+        $payload = $token ? WebchatVisitorToken::verify($token, $key) : null;
+
+        if ($payload === null && $token && $surface === ChatWidget::SURFACE_SDK) {
+            $payload = WebchatVisitorToken::verify($token, (string) $widget->widget_key);
+        }
 
         abort_if($payload === null, 401, 'Invalid or expired session.');
 

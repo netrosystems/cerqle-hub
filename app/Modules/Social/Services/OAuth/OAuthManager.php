@@ -40,6 +40,7 @@ class OAuthManager
         return match ($network) {
             'facebook', 'instagram' => $this->facebookAuthUrl($creds, $callbackUrl, $network),
             'linkedin' => $this->linkedinAuthUrl($creds, $callbackUrl),
+            'linkedin_page' => $this->linkedinPageAuthUrl($creds, $callbackUrl),
             'youtube' => $this->googleAuthUrl($creds, $callbackUrl),
             'tiktok' => $this->tiktokAuthUrl($creds, $callbackUrl),
             'twitter' => $this->xAuthUrl($creds, $workspaceId, $callbackUrl),
@@ -61,7 +62,7 @@ class OAuthManager
 
         return match ($network) {
             'facebook', 'instagram' => $this->facebookExchange($creds, $code, $callbackUrl),
-            'linkedin' => $this->linkedinExchange($creds, $code, $callbackUrl),
+            'linkedin', 'linkedin_page' => $this->linkedinExchange($creds, $code, $callbackUrl),
             'youtube' => $this->googleExchange($creds, $code, $callbackUrl),
             'tiktok' => $this->tiktokExchange($creds, $code, $callbackUrl),
             'twitter' => $this->xExchange($creds, $code, $callbackUrl, $storedState),
@@ -132,7 +133,7 @@ class OAuthManager
         return match ($network) {
             'youtube' => $this->googleRefresh($creds, $refreshToken),
             'tiktok' => $this->tiktokRefresh($creds, $refreshToken),
-            'linkedin' => $this->linkedinRefresh($creds, $refreshToken),
+            'linkedin', 'linkedin_page' => $this->linkedinRefresh($creds, $refreshToken),
             'twitter' => $this->xTokenRequest($creds, ['grant_type' => 'refresh_token', 'refresh_token' => $refreshToken]),
             'facebook',
             'instagram' => throw new \RuntimeException('Facebook/Instagram tokens are long-lived; use token extension instead.'),
@@ -207,6 +208,31 @@ class OAuthManager
             'client_id' => $creds->clientId() ?? '',
             'redirect_uri' => $redirect,
             'scope' => 'openid profile email w_member_social',
+            'state' => $state,
+        ]);
+    }
+
+    /**
+     * Company-page authorisation.
+     *
+     * The organisation scopes belong to LinkedIn's Community Management API,
+     * which is a separate product from the member-profile scopes and is
+     * normally approved against its own app — hence its own credentials.
+     *
+     * r_organization_admin is what lets the callback list the pages this
+     * person actually administers; w_organization_social is what lets Cerqle
+     * post as one. openid/profile are kept so the consent screen still
+     * identifies who authorised the connection.
+     */
+    private function linkedinPageAuthUrl($creds, string $redirect): string
+    {
+        $state = $this->storeState(['network' => 'linkedin_page']);
+
+        return 'https://www.linkedin.com/oauth/v2/authorization?'.http_build_query([
+            'response_type' => 'code',
+            'client_id' => $creds->clientId() ?? '',
+            'redirect_uri' => $redirect,
+            'scope' => 'openid profile email r_organization_admin w_organization_social',
             'state' => $state,
         ]);
     }

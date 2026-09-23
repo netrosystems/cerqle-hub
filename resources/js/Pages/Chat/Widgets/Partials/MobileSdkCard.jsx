@@ -5,10 +5,8 @@ import useCopy from '@/hooks/useCopy';
  * Mobile install. The same conversations as the website widget, reached from a
  * native app instead of a page.
  *
- * The SDK key is deliberately the widget key — the same value that sits in the
- * website snippet URL between /chat/ and .js — so a client who has already
- * installed the web widget does not have to hunt for a second credential, and
- * the two surfaces land in one inbox.
+ * The SDK has its own key so its availability can be controlled independently
+ * from the website embed while both surfaces still land in one inbox.
  */
 const PLATFORMS = [
     {
@@ -22,7 +20,7 @@ const PLATFORMS = [
     { name: 'Swift', status: 'soon', detail: 'iOS, native' },
 ];
 
-export default function MobileSdkCard({ widgetKey }) {
+export default function MobileSdkCard({ sdkWidgetKey }) {
     const { copied, copy } = useCopy();
 
     return (
@@ -42,13 +40,13 @@ export default function MobileSdkCard({ widgetKey }) {
                     <input
                         id="sdk-key"
                         readOnly
-                        value={widgetKey}
+                        value={sdkWidgetKey ?? ''}
                         onFocus={(e) => e.target.select()}
                         className="w-full flex-1 rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2.5 font-mono text-[12px] text-green-400 focus:outline-none focus:ring-2 focus:ring-brand-500/40"
                     />
                     <button
                         type="button"
-                        onClick={() => copy(widgetKey)}
+                        onClick={() => copy(sdkWidgetKey)}
                         className="flex flex-shrink-0 items-center gap-1.5 rounded-lg bg-brand-600 px-3 text-xs font-semibold text-white transition hover:bg-brand-700"
                     >
                         {copied ? (
@@ -59,7 +57,7 @@ export default function MobileSdkCard({ widgetKey }) {
                     </button>
                 </div>
                 <p className="mt-1.5 text-xs text-neutral-400">
-                    The same key as in your website snippet — the part between <code className="rounded bg-neutral-100 dark:bg-neutral-800 px-1">/chat/</code> and <code className="rounded bg-neutral-100 dark:bg-neutral-800 px-1">.js</code>.
+                    Use this key only in the customer mobile SDK. The website snippet keeps its existing widget key.
                 </p>
             </div>
 

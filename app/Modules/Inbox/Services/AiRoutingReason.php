@@ -34,6 +34,10 @@ class AiRoutingReason
 
     public const GROUP_UNAVAILABLE = 'group_unavailable';
 
+    public const MAILBOX_NOT_SELECTED = 'mailbox_not_selected';
+
+    public const EMAIL_NOT_AN_INQUIRY = 'email_not_an_inquiry';
+
     public const MESSAGING_QUOTA_FULL = 'messaging_quota_full';
 
     public const QUEUED = 'queued';
@@ -71,6 +75,8 @@ class AiRoutingReason
             self::RULE_MATCHED => 'Answered by a keyword auto-reply rule.',
             self::NO_CHATBOT_ASSIGNED => 'No automatic reply — no Smart Bot is assigned to this channel.',
             self::GROUP_UNAVAILABLE => 'No automatic reply — AI is off or outside its hours for this channel group.',
+            self::MAILBOX_NOT_SELECTED => 'No automatic reply — automatic replies are not switched on for this mailbox.',
+            self::EMAIL_NOT_AN_INQUIRY => 'No automatic reply — this email does not look like a customer question.',
             self::MESSAGING_QUOTA_FULL => 'No automatic reply — the monthly message limit is reached.',
             self::WIDGET_DISABLED => 'No automatic reply — this widget is disabled.',
             self::AI_SWITCH_OFF => 'No automatic reply — "Let a Smart Bot answer first" is off for this widget.',

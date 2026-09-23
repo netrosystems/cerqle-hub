@@ -5,6 +5,7 @@ namespace App\Modules\Inbox\Http\Controllers;
 use App\Http\Controllers\Controller;
 use App\Modules\AI\Models\AiChatbot;
 use App\Modules\Inbox\Models\AiAutomationSetting;
+use App\Modules\Shared\Models\ChannelAccount;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -30,6 +31,10 @@ class AiAutomationController extends Controller
             'weekly_hours.*.start' => ['required', 'date_format:H:i'],
             'weekly_hours.*.end' => ['required', 'date_format:H:i'],
             'revision' => ['required', 'integer', 'min:0'],
+            // Absent means every mailbox, which is what this setting meant
+            // before it could be narrowed. Only the email group has mailboxes.
+            'mailbox_ids' => ['nullable', 'array'],
+            'mailbox_ids.*' => ['integer'],
         ]);
         if (! array_is_list($data['weekly_hours'])) {
             throw ValidationException::withMessages(['weekly_hours' => 'Provide Monday through Sunday in order.']);
@@ -44,6 +49,24 @@ class AiAutomationController extends Controller
         }
         if ($data['mode'] === 'scheduled' && ! in_array(true, array_column($data['weekly_hours'], 'enabled'))) {
             throw ValidationException::withMessages(['weekly_hours' => 'Enable at least one day.']);
+        }
+        if ($group !== 'email') {
+            // Only email has mailboxes to choose between; silently ignoring a
+            // stray value here would store a scope that nothing reads.
+            unset($data['mailbox_ids']);
+        } elseif (isset($data['mailbox_ids'])) {
+            $selected = array_values(array_unique(array_map('intval', $data['mailbox_ids'])));
+            // Re-check ownership rather than trusting the posted ids: these
+            // decide whose mail a bot may answer.
+            $owned = ChannelAccount::where('workspace_id', $workspaceId)->where('channel', 'email')
+                ->whereIn('id', $selected)->pluck('id')->map('intval')->all();
+            if (count($owned) !== count($selected)) {
+                throw ValidationException::withMessages(['mailbox_ids' => 'Choose mailboxes connected to this workspace.']);
+            }
+            if ($selected === [] && $data['mode'] !== 'off') {
+                throw ValidationException::withMessages(['mailbox_ids' => 'Choose at least one mailbox, or turn automatic replies off.']);
+            }
+            $data['mailbox_ids'] = $selected;
         }
         DB::transaction(function () use ($workspaceId, $group, $data) {
             // Lock workspace to serialize first saves as well as updates.

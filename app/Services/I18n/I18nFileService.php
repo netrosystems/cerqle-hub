@@ -96,11 +96,17 @@ class I18nFileService
     /** Read locale file and return flat key => value. */
     public function getFlatDictionary(string $code): array
     {
-        $version = $this->cacheVersion();
-        $cacheKey = 'i18n:file:'.$code.':'.$version;
+        $path = $this->path($code);
+        // The stored version only moves when a translation is edited through
+        // the app. A key added to the locale file in the codebase would then
+        // serve its own raw name for up to an hour, with nothing to explain
+        // why. Including the file's own timestamp makes editing the file
+        // invalidate its entry, which is what a developer expects. One stat
+        // is far cheaper than re-reading and flattening the dictionary.
+        $stamp = File::exists($path) ? (string) File::lastModified($path) : '0';
+        $cacheKey = 'i18n:file:'.$code.':'.$this->cacheVersion().':'.$stamp;
 
-        return Cache::remember($cacheKey, 3600, function () use ($code) {
-            $path = $this->path($code);
+        return Cache::remember($cacheKey, 3600, function () use ($path) {
             if (! File::exists($path)) {
                 return [];
             }

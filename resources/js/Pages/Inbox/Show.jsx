@@ -15,7 +15,7 @@ import {
     Volume2, VolumeX, ShoppingBag, Download, Radio,
     PanelLeft, PanelRight,
 } from 'lucide-react';
-import { ChannelBrandIcon, CHANNEL_LABELS } from '@/Components/BrandIcons';
+import { ChannelBrandIcon, ConversationChannelIcon, CHANNEL_LABELS } from '@/Components/BrandIcons';
 import { formatTimeTz, formatInTz, formatInboxTimestamp } from '@/Utils/datetime';
 import { playInboundSound, getSoundPrefs, setChannelSoundEnabled, SOUND_CHANNELS } from '@/Utils/notificationSound';
 import { getCountryFlagEmoji } from '@/Components/Inbox/LiveVisitorsMap';
@@ -891,7 +891,7 @@ function ConversationCard({ conv, isActive, userTz }) {
                         {name[0]?.toUpperCase() ?? '?'}
                     </div>
                     <span className="absolute -bottom-0.5 -right-0.5 h-4 w-4 rounded-full bg-white dark:bg-neutral-900 flex items-center justify-center">
-                        <ChannelBrandIcon channel={channel} className="h-3 w-3" />
+                        <ConversationChannelIcon conversation={conv} className="h-3 w-3" />
                     </span>
                 </button>
                 <div className="flex-1 min-w-0">
@@ -1509,7 +1509,7 @@ export default function InboxShow({
     const [convLabels, setConvLabels]       = useState(conversation.labels ?? []);
     const [assignedTo, setAssignedTo]       = useState(conversation.assigned_to ?? 'bot');
     const [assignedUserId, setAssignedUserId] = useState(conversation.assigned_user_id ?? null);
-    const [joinedUserId, setJoinedUserId] = useState(conversation.joined_user_id ?? null);
+    const [joinedUser, setJoinedUser] = useState(conversation.joined_user ?? null);
     const [conversations, setConversations] = useState(initialConversations);
     const [listSearch, setListSearch]       = useState('');
     const [listLoading, setListLoading]     = useState(false);
@@ -1527,7 +1527,7 @@ export default function InboxShow({
         setConvLabels(conversation.labels ?? []);
         setAssignedTo(conversation.assigned_to ?? 'bot');
         setAssignedUserId(conversation.assigned_user_id ?? null);
-        setJoinedUserId(conversation.joined_user_id ?? null);
+        setJoinedUser(conversation.joined_user ?? null);
         setSendError(null);
         stopAudioTracks();
         setRecordingAudio(false);
@@ -1535,8 +1535,8 @@ export default function InboxShow({
     }, [conversation.id]);
 
     useEffect(() => {
-        setJoinedUserId(conversation.joined_user_id ?? null);
-    }, [conversation.joined_user_id]);
+        setJoinedUser(conversation.joined_user ?? null);
+    }, [conversation.joined_user]);
 
     useEffect(() => {
         setAssignedUserId(conversation.assigned_user_id ?? null);
@@ -1626,6 +1626,11 @@ export default function InboxShow({
             })
             .listen('.ConversationAssigned', () => {
                 router.reload({ only: ['conversation'] });
+            })
+            .listen('.ConversationOwnershipChanged', (e) => {
+                setJoinedUser(e.joined_user ?? null);
+                setAssignedUserId(e.assigned_user_id ?? null);
+                setAssignedTo(e.assigned_to ?? 'human');
             })
             .listen('.TypingChanged', (e) => {
                 if (e.user_id === authUser?.id) return;
@@ -1943,14 +1948,24 @@ export default function InboxShow({
     };
 
     const handleStatus = (status) => router.post(route('client.inbox.status', conversation.uuid), { status }, { preserveScroll: true });
+    const [ownershipBusy, setOwnershipBusy] = useState(false);
     const changeJoin = (action) => {
+        if (action === 'takeover' && !window.confirm(`Take over this chat from ${joinedUser?.name || 'the current agent'}?`)) return;
+        setOwnershipBusy(true);
+        setSendError(null);
         axios.post(route(`client.inbox.${action}`, conversation.uuid))
             .then(({ data }) => {
-                setJoinedUserId(data.conversation?.joined_user_id ?? null);
+                setJoinedUser(data.conversation?.joined_user ?? null);
                 setAssignedUserId(data.conversation?.assigned_user_id ?? null);
                 router.reload({ only: ['conversation'] });
             })
-            .catch((error) => setSendError(error.response?.data?.message || 'Could not update chat ownership.'));
+            .catch((error) => {
+                setSendError(error.response?.data?.message || 'Could not update chat ownership.');
+                if (Object.prototype.hasOwnProperty.call(error.response?.data ?? {}, 'joined_user')) {
+                    setJoinedUser(error.response.data.joined_user);
+                }
+            })
+            .finally(() => setOwnershipBusy(false));
     };
     const deleteChat = () => {
         if (!window.confirm(t('inbox.delete_chat_confirm', 'Permanently delete this chat, its messages and notes from Cerqle? This cannot be undone. The contact and messages on the original provider are kept. New incoming messages may create a new chat.'))) return;
@@ -1980,8 +1995,18 @@ export default function InboxShow({
     const contactName = conversation.contact?.first_name || conversation.contact?.last_name
         ? `${conversation.contact.first_name ?? ''} ${conversation.contact.last_name ?? ''}`.trim()
         : conversation.contact?.phone_e164 ?? 'Unknown';
+    const startedFromLabel = conversation.started_from === 'customer_sdk'
+        ? t('inbox.started_from_customer_sdk', { defaultValue: 'App SDK' })
+        : conversation.started_from === 'web_widget'
+            ? t('inbox.started_from_web_widget', { defaultValue: 'Web Widget' })
+            : null;
+    const headerChannelLabel = conversation.started_from === 'customer_sdk'
+        ? t('inbox.started_from_customer_sdk', { defaultValue: 'App SDK' })
+        : (CHANNEL_LABELS[channel] ?? channel);
 
     const assignedAgent = teamMembers.find(m => m.id === assignedUserId);
+    const isJoinedByMe = Number(joinedUser?.id) === Number(authUser?.id);
+    const canTakeOver = Boolean(joinedUser) && authUser?.client_role === 'administrator';
     // Marketing permissions only have meaning when this contact has a usable
     // delivery address. Do not show an anonymous website visitor a misleading
     // Email: Yes row when there is no email address at all.
@@ -2116,14 +2141,14 @@ export default function InboxShow({
                                 {contactName[0]?.toUpperCase() ?? '?'}
                             </div>
                             <span className="absolute -bottom-0.5 -right-0.5 h-4 w-4 rounded-full bg-white dark:bg-neutral-900 flex items-center justify-center">
-                                <ChannelBrandIcon channel={channel} className="h-3 w-3" />
+                                <ConversationChannelIcon conversation={conversation} className="h-3 w-3" />
                             </span>
                         </div>
                         <div className="flex-1 min-w-0">
                             <p className="font-semibold text-sm text-neutral-900 dark:text-neutral-100 truncate">{contactName}</p>
                             <p className="text-xs text-neutral-400 flex items-center gap-1.5 flex-wrap">
                                 {channel !== 'webchat' && <ChannelBrandIcon channel={channel} className="h-3 w-3 shrink-0" />}
-                                <span>{CHANNEL_LABELS[channel] ?? channel}</span>
+                                <span>{headerChannelLabel}</span>
                                 {conversation.channel_account?.name && <><span className="text-neutral-300 dark:text-neutral-600">·</span><span>{conversation.channel_account.name}</span></>}
                                 {conversation.contact?.custom_fields?.webchat_country_code && (
                                     <>
@@ -2147,13 +2172,16 @@ export default function InboxShow({
 
                         {/* Agent assign */}
                         {conversation.status !== 'resolved' && (
-                            !joinedUserId
-                                ? <button type="button" onClick={() => changeJoin('join')} className="rounded-lg border border-neutral-200 px-2.5 py-1.5 text-xs text-neutral-700 hover:bg-neutral-50 dark:border-neutral-700 dark:text-neutral-200">Join chat</button>
-                                : Number(joinedUserId) === Number(authUser?.id)
-                                    ? <button type="button" onClick={() => changeJoin('leave')} className="rounded-lg border border-neutral-200 px-2.5 py-1.5 text-xs text-neutral-700 hover:bg-neutral-50 dark:border-neutral-700 dark:text-neutral-200">Leave chat</button>
-                                    : authUser?.client_role === 'administrator'
-                                        ? <button type="button" onClick={() => changeJoin('takeover')} className="rounded-lg border border-neutral-200 px-2.5 py-1.5 text-xs text-neutral-700 hover:bg-neutral-50 dark:border-neutral-700 dark:text-neutral-200">Take over</button>
-                                        : null
+                            !joinedUser
+                                ? <button type="button" disabled={ownershipBusy} onClick={() => changeJoin('join')} className="rounded-lg bg-brand-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-brand-700 disabled:opacity-50">Join Chat</button>
+                                : <div className="flex items-center gap-2">
+                                    <span className="max-w-[150px] truncate text-xs font-medium text-neutral-600 dark:text-neutral-300">{joinedUser.name} joined</span>
+                                    {isJoinedByMe
+                                        ? <button type="button" disabled={ownershipBusy} onClick={() => changeJoin('leave')} className="text-xs font-medium text-neutral-500 hover:text-red-600 disabled:opacity-50">Leave</button>
+                                        : canTakeOver
+                                            ? <button type="button" disabled={ownershipBusy} onClick={() => changeJoin('takeover')} className="rounded-lg border border-neutral-200 px-2.5 py-1.5 text-xs text-neutral-700 hover:bg-neutral-50 disabled:opacity-50 dark:border-neutral-700 dark:text-neutral-200">Take over</button>
+                                            : null}
+                                </div>
                         )}
                         <div className="relative">
                             <button
@@ -2336,9 +2364,7 @@ export default function InboxShow({
                                 </button>
                             </div>
                         )}
-
-
-
+                        {isJoinedByMe ? <>
                         {/* Attachment preview */}
                         {attachPreview && (
                             <div className="mb-2 flex items-center gap-2 bg-neutral-50 dark:bg-neutral-800 rounded-xl p-2 border border-neutral-200 dark:border-neutral-700">
@@ -2481,6 +2507,13 @@ export default function InboxShow({
                                 </div>
                             </form>
                         </div>
+                        </> : <div className="flex items-center justify-between gap-3 rounded-lg border border-neutral-200 bg-neutral-50 p-3 dark:border-neutral-700 dark:bg-neutral-800/60">
+                            <div className="min-w-0">
+                                <p className="truncate text-sm font-semibold text-neutral-800 dark:text-neutral-100">{joinedUser ? `${joinedUser.name} joined this chat` : 'Join before replying'}</p>
+                                <p className="text-xs text-neutral-500">{conversation.status === 'resolved' ? 'Reopen the conversation before joining.' : joinedUser ? 'Only the joined owner can send replies.' : 'The first teammate to join becomes the active owner.'}</p>
+                            </div>
+                            <button type="button" disabled={ownershipBusy || conversation.status === 'resolved' || (joinedUser && !canTakeOver)} onClick={() => changeJoin(joinedUser ? 'takeover' : 'join')} className="shrink-0 rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-40">{ownershipBusy ? 'Working...' : joinedUser ? 'Take over' : 'Join Chat'}</button>
+                        </div>}
                     </div>
                     )}
                 </div>
@@ -2526,6 +2559,12 @@ export default function InboxShow({
                                 <span className="text-neutral-500">{t('inbox.messages')}</span>
                                 <span className="font-medium text-neutral-800 dark:text-neutral-200">{messages.length}</span>
                             </div>
+                            {startedFromLabel && (
+                                <div className="flex items-center justify-between gap-3">
+                                    <span className="text-neutral-500">{t('inbox.started_from', { defaultValue: 'Started from' })}</span>
+                                    <span className="truncate font-medium text-neutral-800 dark:text-neutral-200">{startedFromLabel}</span>
+                                </div>
+                            )}
                         </div>
                     </div>
 

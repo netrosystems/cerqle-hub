@@ -8,8 +8,8 @@ import { useTranslation } from 'react-i18next';
 import { xWeightedLength } from '@/Components/Social/xText';
 import { Info } from 'lucide-react';
 
-const LABELS = { twitter: 'X', youtube: 'YouTube', tiktok: 'TikTok', instagram: 'Instagram', facebook: 'Facebook', linkedin: 'LinkedIn' };
-const LIMITS = { twitter: 280, youtube: 5000, tiktok: 2200, instagram: 2200, facebook: 63206, linkedin: 3000 };
+const LABELS = { twitter: 'X', youtube: 'YouTube', tiktok: 'TikTok', instagram: 'Instagram', facebook: 'Facebook', linkedin: 'LinkedIn', linkedin_page: 'LinkedIn Page' };
+const LIMITS = { twitter: 280, youtube: 5000, tiktok: 2200, instagram: 2200, facebook: 63206, linkedin: 3000, linkedin_page: 3000 };
 const PLATFORM_GUIDANCE = {
     youtube: 'YouTube requires one compatible video. You can set its title, description, visibility, category, tags, thumbnail, audience, and other video-specific options below.',
     tiktok: 'TikTok privacy and interaction choices come from the connected creator account. Complete the required publishing consent before publishing.',

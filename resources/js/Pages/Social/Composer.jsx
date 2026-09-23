@@ -14,11 +14,11 @@ import { toast } from 'sonner';
 
 import { xWeightedLength } from '@/Components/Social/xText';
 
-const CHAR_LIMITS = { twitter: 280, tiktok: 2200, linkedin: 3000, facebook: 63206, instagram: 2200, youtube: 5000 };
+const CHAR_LIMITS = { twitter: 280, tiktok: 2200, linkedin: 3000, linkedin_page: 3000, facebook: 63206, instagram: 2200, youtube: 5000 };
 
 const NETWORK_LABELS = {
     facebook: 'Facebook', instagram: 'Instagram',
-    twitter: 'X', linkedin: 'LinkedIn',   tiktok: 'TikTok',     youtube: 'YouTube',
+    twitter: 'X', linkedin: 'LinkedIn',   linkedin_page: 'LinkedIn Page', tiktok: 'TikTok',     youtube: 'YouTube',
 };
 
 /* ── per-network preview cards ─────────────────────────────── */
@@ -182,6 +182,7 @@ const PREVIEW_COMPONENTS = {
     instagram: InstagramPreview,
     twitter:   XPreview,
     linkedin:  LinkedInPreview,
+    linkedin_page: LinkedInPreview,
     tiktok:    TikTokPreview,
     youtube:   YouTubePreview,
 };

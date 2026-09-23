@@ -41,6 +41,9 @@ class WebchatAttachmentTest extends TestCase
             'status' => 'open',
             'external_thread_id' => 'visitor-1',
             'last_message_at' => now(),
+            'assigned_user_id' => $user->id,
+            'joined_user_id' => $user->id,
+            'joined_at' => now(),
         ]);
 
         $image = UploadedFile::fake()->image('reply.png', 200, 200);
@@ -89,6 +92,9 @@ class WebchatAttachmentTest extends TestCase
             'status' => 'open',
             'external_thread_id' => 'visitor-audio',
             'last_message_at' => now(),
+            'assigned_user_id' => $user->id,
+            'joined_user_id' => $user->id,
+            'joined_at' => now(),
         ]);
 
         $audio = UploadedFile::fake()->create('recording.wav', 32, 'audio/wav');
@@ -130,6 +136,9 @@ class WebchatAttachmentTest extends TestCase
             'status' => 'open',
             'external_thread_id' => 'visitor-doc-1',
             'last_message_at' => now(),
+            'assigned_user_id' => $user->id,
+            'joined_user_id' => $user->id,
+            'joined_at' => now(),
         ]);
 
         $pdf = UploadedFile::fake()->create('contract.pdf', 500, 'application/pdf');
@@ -179,6 +188,9 @@ class WebchatAttachmentTest extends TestCase
             'status' => 'open',
             'external_thread_id' => 'ig-thread-1',
             'last_message_at' => now(),
+            'assigned_user_id' => $user->id,
+            'joined_user_id' => $user->id,
+            'joined_at' => now(),
         ]);
 
         $pdf = UploadedFile::fake()->create('pricing.pdf', 200, 'application/pdf');
@@ -216,6 +228,9 @@ class WebchatAttachmentTest extends TestCase
             'status' => 'open',
             'external_thread_id' => 'visitor-large-1',
             'last_message_at' => now(),
+            'assigned_user_id' => $user->id,
+            'joined_user_id' => $user->id,
+            'joined_at' => now(),
         ]);
 
         // 11 MB file exceeds 10 MB limit (10240 KB)

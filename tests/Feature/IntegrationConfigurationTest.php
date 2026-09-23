@@ -28,6 +28,36 @@ class IntegrationConfigurationTest extends TestCase
         $this->assertTrue((new IntegrationConfig(['provider' => 'storage_local']))->isConfigured());
     }
 
+    /**
+     * The setup guide for every OAuth provider tells the operator to register
+     * "the exact Callback URL shown above this guide". A provider that reaches
+     * the edit screen without one silently drops that card, and the operator
+     * is told to copy something that is not on the page — which is exactly how
+     * oauth_linkedin_page shipped the first time.
+     */
+    public function test_every_oauth_provider_offers_a_callback_url_to_register(): void
+    {
+        $this->actingAs($this->createSuperAdmin(), 'admin');
+
+        $oauthProviders = array_filter(
+            IntegrationConfig::PROVIDERS,
+            fn (string $provider): bool => str_starts_with($provider, 'oauth_'),
+        );
+        $this->assertNotEmpty($oauthProviders);
+
+        foreach ($oauthProviders as $provider) {
+            $response = $this->get(route('admin.integrations.edit', $provider));
+            $response->assertOk();
+
+            $callbackUrl = $response->viewData('page')['props']['callbackUrl'] ?? null;
+            $this->assertIsString(
+                $callbackUrl,
+                "[{$provider}] reaches the edit screen with no callback URL, so its setup guide points at a card that is not rendered.",
+            );
+            $this->assertNotSame('', $callbackUrl, "[{$provider}] has an empty callback URL.");
+        }
+    }
+
     public function test_google_oauth_flows_are_three_explicit_providers(): void
     {
         $this->assertContains('oauth_google_signin', IntegrationConfig::PROVIDERS);

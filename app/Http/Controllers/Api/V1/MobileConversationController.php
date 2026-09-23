@@ -109,6 +109,7 @@ class MobileConversationController extends WorkspaceScopedController
 
         $messages = $conversation->messages()
             ->with(['conversation', 'sender'])
+            ->orderBy('sent_at')
             ->orderBy('id')
             ->get();
 
@@ -141,6 +142,7 @@ class MobileConversationController extends WorkspaceScopedController
 
         $messages = $conversation->messages()
             ->with('sender')
+            ->orderBy('sent_at')
             ->orderBy('id')
             ->get();
 
@@ -181,6 +183,7 @@ class MobileConversationController extends WorkspaceScopedController
             ->where('uuid', $uuid)
             ->with('channelAccount')
             ->firstOrFail();
+        app(ConversationActivityService::class)->assertCanReply($conversation, $request->user());
 
         $validated = $request->validate([
             'body' => ['nullable', 'string', 'max:4096'],
@@ -274,40 +277,45 @@ class MobileConversationController extends WorkspaceScopedController
             ], 422);
         }
 
-        $message = Message::create([
-            'conversation_id' => $conversation->id,
-            'direction' => 'out',
-            'channel' => $conversation->channelAccount?->channel ?? 'whatsapp',
-            'type' => $msgType,
-            'body' => $validated['body'],
-            'payload' => $msgPayload,
-            'status' => 'queued',
-            'sent_by' => 'human',
-            'user_id' => $request->user()->id,
-            'sent_at' => now(),
-        ]);
-
-        $sendError = null;
-        try {
-            $driver = $this->channelManager->driver($conversation->channelAccount?->channel ?? 'whatsapp');
-            $messageId = $driver->send($message);
-            $message->update(['status' => 'sent', 'provider_message_id' => $messageId]);
-        } catch (\Throwable $e) {
-            $sendError = $e->getMessage();
-            Log::error('Mobile reply send failed', [
+        $ownership = app(ConversationActivityService::class);
+        [$message, $sendError] = $ownership->synchronized($conversation, function () use ($channel, $conversation, $msgPayload, $msgType, $ownership, $request, $validated): array {
+            $conversation->refresh()->loadMissing('joinedUser');
+            $ownership->assertCanReply($conversation, $request->user());
+            $message = Message::create([
                 'conversation_id' => $conversation->id,
-                'error' => $sendError,
+                'direction' => 'out',
+                'channel' => $channel,
+                'type' => $msgType,
+                'body' => $validated['body'],
+                'payload' => $msgPayload,
+                'status' => 'queued',
+                'sent_by' => 'human',
+                'user_id' => $request->user()->id,
+                'sent_at' => now(),
             ]);
-            $message->update(['status' => 'failed', 'error_json' => ['message' => $sendError]]);
-        }
 
-        $conversation->update(['last_message_at' => now()]);
-        if ($conversation->last_inbound_at && ! $conversation->first_response_at) {
-            $conversation->update(['first_response_at' => now()]);
-        }
+            $sendError = null;
+            try {
+                $messageId = $this->channelManager->driver($channel)->send($message);
+                $message->update(['status' => 'sent', 'provider_message_id' => $messageId]);
+            } catch (\Throwable $e) {
+                $sendError = $e->getMessage();
+                Log::error('Mobile reply send failed', [
+                    'conversation_id' => $conversation->id,
+                    'error' => $sendError,
+                ]);
+                $message->update(['status' => 'failed', 'error_json' => ['message' => $sendError]]);
+            }
 
-        $message->load('conversation');
-        MessageSent::dispatch($message);
+            $conversation->update(['last_message_at' => now()]);
+            if ($conversation->last_inbound_at && ! $conversation->first_response_at) {
+                $conversation->update(['first_response_at' => now()]);
+            }
+            $message->load('conversation');
+            MessageSent::dispatch($message);
+
+            return [$message, $sendError];
+        });
 
         return response()->json([
             'data' => $this->formatMessage($message),
@@ -704,6 +712,7 @@ class MobileConversationController extends WorkspaceScopedController
             'uuid' => $c->uuid,
             'status' => $c->status,
             'channel' => $c->channelAccount?->channel,
+            'started_from' => $c->started_from,
             'channel_account_id' => $c->channel_account_id,
             'unread_count' => (int) $c->unread_count,
             'last_message_at' => $c->last_message_at instanceof Carbon ? $c->last_message_at->toIso8601String() : ($c->last_message_at ? Carbon::parse($c->last_message_at)->toIso8601String() : null),

@@ -238,6 +238,20 @@ const SETUP_GUIDES = {
         link: 'https://www.linkedin.com/developers/apps',
         linkLabel: 'Open LinkedIn Developers',
     },
+    oauth_linkedin_page: {
+        title: 'LinkedIn Company Page OAuth Setup',
+        steps: [
+            'Go to linkedin.com/developers and sign in.',
+            'Create a second app, or reuse the member-profile app only if it already has the Community Management API.',
+            'The app must be linked to a LinkedIn company page you are an admin of — LinkedIn requires this to verify the app.',
+            'Under the Products tab, request "Community Management API" and wait for LinkedIn to approve it. This is a review, not instant.',
+            'Under the Auth tab, add the exact Callback URL shown above this guide.',
+            'Confirm the approved scopes include r_organization_admin and w_organization_social.',
+            'Copy the Client ID and Client Secret into the fields below.',
+        ],
+        link: 'https://www.linkedin.com/developers/apps',
+        linkLabel: 'Open LinkedIn Developers',
+    },
     oauth_youtube: {
         title: 'YouTube OAuth Setup',
         steps: [
@@ -475,6 +489,7 @@ const BRAND = {
     storage_wasabi:  { bg: null, color: '#3CBA54', logo: 'wasabi' },
     meta_app:        { bg: null, color: '#0866FF', logo: 'meta' },
     oauth_linkedin:  { bg: null, color: '#0A66C2', logo: 'linkedin' },
+    oauth_linkedin_page: { bg: null, color: '#0A66C2', logo: 'linkedin' },
     oauth_google_signin: { bg: 'bg-blue-100 dark:bg-blue-900/30', color: '#4285F4', icon: <span className="text-sm font-bold">G</span> },
     oauth_youtube:   { bg: null, color: '#FF0000', logo: 'youtube' },
     oauth_tiktok:    { bg: null, color: '#000000', logo: 'tiktok' },
