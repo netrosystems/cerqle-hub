@@ -2,8 +2,8 @@
 
 namespace Tests\Feature;
 
-use App\Models\User;
 use App\Models\Invitation;
+use App\Models\User;
 use App\Models\Workspace;
 use App\Providers\BroadcastChannelsServiceProvider;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -159,6 +159,9 @@ class WorkspaceMembershipTest extends TestCase
         $this->assertFalse($member->canAccessWorkspace($second));
         $this->assertSame('administrator', $member->workspaceRole($first));
         $this->assertSame(User::CLIENT_ROLE_STAFF, $member->client_role);
+        // Accepting the emailed invitation proves the address. This was passed
+        // to create() and silently discarded, locking invitees out.
+        $this->assertTrue($member->hasVerifiedEmail(), 'An accepted invitation must leave the member verified.');
     }
 
     public function test_invitation_ignores_a_posted_organization_role(): void

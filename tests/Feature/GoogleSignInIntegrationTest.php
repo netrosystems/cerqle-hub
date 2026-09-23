@@ -146,6 +146,61 @@ class GoogleSignInIntegrationTest extends TestCase
         $this->assertGuest();
     }
 
+    public function test_a_new_google_account_signs_up_and_lands_in_the_app(): void
+    {
+        // The whole happy path, which had no test: a Google account Cerqle has
+        // never seen, arriving with the signup intent the Register page sets.
+        $this->googleSignInIntegration(enabled: true);
+        $this->mockGoogleCallbackUser('brand-new-google-id', 'first-time@example.test');
+
+        $this->withSession([
+            'social_auth_context' => [
+                'intent' => 'signup',
+                'provider' => 'google',
+                'timezone' => 'Asia/Dhaka',
+            ],
+        ])->get(route('auth.social.callback', 'google'))
+            ->assertRedirect(route('client.dashboard'));
+
+        $user = User::where('email', 'first-time@example.test')->first();
+        $this->assertNotNull($user, 'Signing up with Google must create the user.');
+        $this->assertAuthenticatedAs($user);
+        $this->assertNotNull($user->client_id, 'The new user needs the client account that owns their workspace.');
+        $this->assertNotNull($user->email_verified_at, 'Google confirmed the address, so it must not be asked for again.');
+        $this->assertDatabaseHas('social_accounts', [
+            'user_id' => $user->id,
+            'provider' => 'google',
+            'provider_id' => 'brand-new-google-id',
+        ]);
+    }
+
+    public function test_signing_up_with_an_already_registered_google_account_says_so(): void
+    {
+        // What production does for an address that already has an account.
+        // The server has always said this; the Register page never showed it.
+        $this->googleSignInIntegration(enabled: true);
+        $user = User::factory()->create(['email' => 'already-here@example.test']);
+        $this->mockGoogleCallbackUser('already-here-google-id', $user->email);
+
+        $this->withSession([
+            'social_auth_context' => [
+                'intent' => 'signup',
+                'provider' => 'google',
+            ],
+        ])->get(route('auth.social.callback', 'google'))
+            ->assertRedirect(route('register'))
+            ->assertSessionHasErrors('oauth');
+
+        $this->get(route('register'))
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Auth/Register')
+                ->where('errors.oauth', 'An account already exists. Sign in instead.')
+            );
+
+        $this->assertGuest();
+        $this->assertSame(1, User::where('email', $user->email)->count(), 'No duplicate account may be created.');
+    }
+
     public function test_google_login_links_a_verified_matching_email_and_signs_in(): void
     {
         $this->googleSignInIntegration(enabled: true);

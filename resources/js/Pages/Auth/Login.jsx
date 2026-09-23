@@ -306,7 +306,8 @@ export default function Login({ status, canResetPassword, socialProviders = [], 
         >
             <Head title={t('auth.log_in') || 'Log in'} />
 
-            <OAuthErrorAlert message={errors.oauth}>
+            {/* See Register: after the Google round trip the error is in the page props, not the new form's errors. */}
+            <OAuthErrorAlert message={errors.oauth ?? props.errors?.oauth}>
                 {retryProvider && (
                     <a
                         href={route('auth.social.redirect', { provider: retryProvider })}
