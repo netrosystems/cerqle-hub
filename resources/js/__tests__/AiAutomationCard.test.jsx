@@ -113,3 +113,26 @@ it('does not offer mailboxes to channel groups that have none', () => {
 
     expect(screen.queryByText('Which mailboxes')).not.toBeInTheDocument()
 })
+
+it('says what the scope actually is rather than claiming every mailbox', () => {
+    // The card's one summary line is where a client checks the scope at a
+    // glance, so it must not keep saying "every mailbox" after narrowing.
+    const { rerender } = render(<AiAutomationCard settings={emailSettings} group="email" />)
+    expect(screen.getByText('All 2 connected mailboxes')).toBeInTheDocument()
+
+    rerender(<AiAutomationCard settings={{ ...emailSettings, mailbox_ids: [7] }} group="email" />)
+    expect(screen.getByText('1 of 2 mailboxes')).toBeInTheDocument()
+})
+
+it('explains the empty case instead of hiding the control', () => {
+    // With no mailboxes there is nothing to pick, but rendering nothing left a
+    // client wondering where the feature went.
+    render(<AiAutomationCard settings={{ ...emailSettings, mailboxes: [] }} group="email" />)
+    expect(screen.getByText('No mailboxes connected yet')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Manage AI Automation' }))
+    fireEvent.click(screen.getByLabelText('On', { exact: true }))
+
+    expect(screen.getByText(/No mailboxes are connected yet/)).toBeInTheDocument()
+    expect(screen.queryByRole('radio', { name: /All mailboxes/ })).not.toBeInTheDocument()
+})
