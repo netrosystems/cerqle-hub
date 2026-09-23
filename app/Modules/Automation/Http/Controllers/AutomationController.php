@@ -4,10 +4,14 @@ namespace App\Modules\Automation\Http\Controllers;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Modules\AI\Exceptions\AiCreditsExhaustedException;
 use App\Modules\AI\Models\AiChatbot;
+use App\Modules\Automation\Jobs\ExecuteAutomationRunJob;
 use App\Modules\Automation\Models\Automation;
 use App\Modules\Automation\Models\AutomationRun;
 use App\Modules\Automation\Services\AutomationEngine;
+use App\Modules\Automation\Services\AutomationRetryPolicy;
+use App\Modules\Automation\Services\WorkflowGenerator;
 use App\Modules\Automation\Services\WorkflowValidator;
 use App\Modules\Broadcasting\Models\Campaign;
 use App\Modules\Ecommerce\Models\EcommerceStore;
@@ -17,6 +21,7 @@ use App\Modules\Whatsapp\Models\WhatsappTemplate;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -35,7 +40,11 @@ class AutomationController extends Controller
             ->withCount('runs')
             ->latest()->get();
 
-        return Inertia::render('Automation/Index', ['automations' => $automations]);
+        return Inertia::render('Automation/Index', [
+            'automations' => $automations,
+            // Shown on the Generate button so the charge is never a surprise.
+            'generateCost' => (int) config('ai.credits.rates.automation_workflow_generate', 5),
+        ]);
     }
 
     public function store(Request $request): RedirectResponse
@@ -157,6 +166,13 @@ class AutomationController extends Controller
             ->with('logs')
             ->latest()->paginate(50);
 
+        $policy = app(AutomationRetryPolicy::class);
+        $runs->getCollection()->each(function (AutomationRun $run) use ($automation, $policy): void {
+            $run->setRelation('automation', $automation);
+            $run->setAttribute('retry', $run->status === 'failed' ? $policy->assess($run) : null);
+            $run->unsetRelation('automation');
+        });
+
         return Inertia::render('Automation/Runs', ['automation' => $automation, 'runs' => $runs]);
     }
 
@@ -206,6 +222,91 @@ class AutomationController extends Controller
         }
 
         return response()->json(app(AutomationEngine::class)->testRun($automation, $nodes, $edges, $context));
+    }
+
+    /**
+     * Run a failed automation again from the step that failed.
+     *
+     * The engine refuses to repeat a claimed step, so a naive reset would
+     * fail straight back. When the policy says the step definitely did not
+     * deliver, its claim is released and the run resumes there. When it
+     * might have delivered, the operator must confirm they checked the chat.
+     */
+    public function retryRun(Request $request, Automation $automation, AutomationRun $run): RedirectResponse
+    {
+        $this->authorise($request, $automation);
+        abort_unless((int) $run->automation_id === (int) $automation->id, 404);
+        $confirmed = $request->boolean('confirmed');
+
+        $run->setRelation('automation', $automation);
+        $assessment = app(AutomationRetryPolicy::class)->assess($run);
+        if (! $assessment['retryable']) {
+            return back()->with('error', $assessment['reason']);
+        }
+        if ($assessment['needs_confirmation'] && ! $confirmed) {
+            return back()->with('error', $assessment['reason']);
+        }
+
+        DB::transaction(function () use ($run): void {
+            DB::table('automation_step_claims')->where('run_id', $run->id)->where('node_id', $run->current_node_id)->delete();
+            // 'pending' is how every new run starts, and the only waiting
+            // state the column allows; the job picks it up the same way.
+            $run->update([
+                'status' => 'pending',
+                'resume_node_id' => $run->current_node_id,
+                'error' => null,
+                'completed_at' => null,
+                'wake_at' => null,
+            ]);
+        });
+        ExecuteAutomationRunJob::dispatch($run->id)->afterCommit();
+
+        return back()->with('success', 'Run queued to retry from the step that failed.');
+    }
+
+    /**
+     * Build an automation from a plain-language description.
+     *
+     * The draft is created paused, never active: the AI cannot know which
+     * templates are approved or which number to listen on, so a person
+     * always reviews it in the builder before switching it on.
+     */
+    public function generate(Request $request): JsonResponse
+    {
+        $wid = $this->workspaceId($request);
+        $validated = $request->validate([
+            'prompt' => ['required', 'string', 'max:2000'],
+        ]);
+
+        try {
+            $graph = app(WorkflowGenerator::class)->generate($wid, $validated['prompt']);
+        } catch (AiCreditsExhaustedException $e) {
+            // Its own status, so the page can say "out of credits" plainly
+            // rather than implying the request itself was the problem.
+            return response()->json(['ok' => false, 'error' => $e->getMessage()], 402);
+        } catch (\Throwable $e) {
+            return response()->json(['ok' => false, 'error' => $e->getMessage()], 422);
+        }
+
+        // With a single WhatsApp number there is only one sensible choice, so
+        // make it; with several, leave it for the person reviewing the draft.
+        $accounts = ChannelAccount::where('workspace_id', $wid)->where('channel', 'whatsapp')->where('status', 'active')->pluck('id');
+        $triggerConfig = $graph['trigger_config'];
+        if ($accounts->count() === 1) {
+            $triggerConfig['channel_account_id'] = (int) $accounts->first();
+        }
+
+        $automation = Automation::create([
+            'workspace_id' => $wid,
+            'name' => $graph['name'],
+            'status' => 'draft',
+            'trigger_type' => $graph['trigger_type'],
+            'trigger_config' => $triggerConfig,
+            'nodes' => $graph['nodes'],
+            'edges' => $graph['edges'],
+        ]);
+
+        return response()->json(['ok' => true, 'redirect' => route('client.automations.edit', $automation->uuid)]);
     }
 
     private function authorise(Request $request, Automation $automation): void

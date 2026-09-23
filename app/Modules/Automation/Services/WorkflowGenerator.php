@@ -15,20 +15,17 @@ use App\Modules\AI\Services\LlmGateway;
  */
 class WorkflowGenerator
 {
-    /** Node types the engine can execute (mirrors AutomationEngine::executeNode + the builder palette). */
-    private const NODE_TYPES = [
-        'send_whatsapp', 'send_template', 'send_media', 'send_sequence', 'quick_replies', 'list_message',
-        'send_sms', 'send_email', 'ask_question', 'condition', 'wait', 'webhook', 'run_subflow', 'ai_reply',
-        'add_tag', 'remove_tag', 'update_contact', 'assign_agent', 'add_to_campaign', 'cta_button',
-        'send_location', 'send_poll', 'run_chatbot', 'book_appointment', 'google_meet', 'whatsapp_form',
-        'whatsapp_catalog', 'woocommerce_product', 'shopify_product', 'google_sheets', 'google_docs',
-    ];
+    /**
+     * Only what the release validator will activate.
+     *
+     * The generator used to offer every node type the engine has ever had and
+     * eleven triggers, so a client asking for help got a draft the server
+     * would then refuse to switch on. Mirroring the validator means "Generate
+     * with AI" can only produce workflows that are actually usable.
+     */
+    private const NODE_TYPES = WorkflowValidator::TYPES;
 
-    /** Trigger types the listener understands (mirrors the builder's TRIGGER_TYPES). */
-    private const TRIGGER_TYPES = [
-        'contact.created', 'contact.tag_added', 'message.received', 'campaign.sent', 'form.submitted',
-        'webhook.received', 'order.placed', 'order.fulfilled', 'order.cancelled', 'cart.abandoned', 'customer.created',
-    ];
+    private const TRIGGER_TYPES = ['message.received'];
 
     public function __construct(private readonly LlmGateway $llmGateway) {}
 
@@ -65,7 +62,7 @@ class WorkflowGenerator
         $triggerTypes = implode(', ', self::TRIGGER_TYPES);
 
         return <<<PROMPT
-You are an automation workflow architect for a WhatsApp / omnichannel messaging platform.
+You are an automation workflow architect for a WhatsApp customer-support platform.
 Convert the user's request into ONE automation expressed as strict JSON. Output ONLY the JSON
 object — no prose, no markdown, no code fences.
 
@@ -81,39 +78,27 @@ Shape:
 Rules:
 - The trigger is implicit: its node id is always "trigger-1". Do NOT list it in "nodes"; only
   reference it as an edge source. Every "nodes" entry needs a unique "id" and a valid "type".
+- The trigger is always a customer sending a WhatsApp message ("message.received"). Build the
+  flow as a reply to that message.
 - Connect nodes with "edges". The flow must start with an edge whose source is "trigger-1".
-- Allowed node types: {$nodeTypes}.
-- Prefer nodes that need no external setup: send_whatsapp, send_template, send_media, quick_replies,
-  list_message, ask_question, condition, wait, add_tag, remove_tag, update_contact, send_email, ai_reply,
-  cta_button, send_poll. Only use run_subflow, assign_agent, add_to_campaign, run_chatbot, book_appointment,
-  google_meet, whatsapp_form, whatsapp_catalog, woocommerce_product, shopify_product, google_sheets or
-  google_docs when the request clearly asks for it.
-- Personalise text with tokens: {{contact.name}}, {{contact.first_name}}, {{contact.email}}, {{contact.phone}},
-  {{message.body}}, {{context.<key>}}. Order/cart triggers also expose {{context.order_number}},
-  {{context.order_total}}, {{context.order_currency}}, {{context.tracking_url}}, {{context.cart_total}},
-  {{context.recovery_url}}.
+- Allowed node types, and no others: {$nodeTypes}.
+- Prefer send_whatsapp for replies. Use send_template ONLY when the request names a specific
+  approved template, because templates must already be approved by WhatsApp.
+- assign_agent hands the chat to a person and ends the automation, so it must be a last step.
+- Personalise text with tokens: {{contact.name}}, {{contact.first_name}}, {{contact.phone}},
+  {{message.body}}, {{context.<key>}} (answers saved by ask_question).
 
 Node "data" by type:
-- send_whatsapp / send_sms: { "body": "text" }
-- send_email: { "subject": "text", "body": "text" }
+- send_whatsapp: { "body": "text" }
 - send_template: { "template_name": "name", "language": "en", "variables": "one value per line" }
-- send_media: { "media_type": "image|video|document|audio", "link": "https://...", "caption": "text" }
-- send_sequence: { "steps": [ { "kind": "text", "body": "..." }, { "kind": "media", "media_type": "image", "link": "https://...", "caption": "..." } ] }
+- send_media: { "media_type": "image|video|document", "link": "https://...", "caption": "text" }
 - quick_replies: { "body": "text", "buttons": ["Yes","No","Maybe"] }  (max 3 buttons)
-- list_message: { "body": "text", "button_label": "Menu", "section_title": "Options", "rows": "Title|Description per line" }
 - ask_question: { "question": "text", "variable": "snake_case_key", "channel": "whatsapp" }
-- condition: { "field": "contact.name|contact.email|contact.phone|contact.tag|message.body|context.<key>", "operator": "equals|not_equals|contains|not_contains|exists|not_exists", "value": "text" }
+- condition: { "field": "contact.name|contact.phone|contact.tag|message.body|context.<key>", "operator": "equals|not_equals|contains|not_contains|exists|not_exists", "value": "text" }
   A condition has TWO outgoing edges: one with "sourceHandle": "true" and one with "sourceHandle": "false".
 - wait: { "amount": 1, "unit": "minutes|hours|days" }
-- webhook: { "url": "https://...", "method": "POST", "headers": "{\\"K\\":\\"V\\"}", "payload": "{\\"k\\":\\"v\\"}" }
-- ai_reply: { "prompt": "instructions for the AI", "channel": "whatsapp" }
 - add_tag / remove_tag: { "tag": "name" }
-- update_contact: { "field": "name|email|phone|notes", "value": "text" }
-- cta_button: { "body": "text", "display_text": "Open", "url": "https://..." }
-- send_poll: { "question": "text", "options": ["A","B","C"] }
-- send_location: { "latitude": "37.42", "longitude": "-122.08", "name": "Place", "address": "Street" }
-- book_appointment / google_meet: { "summary": "text", "start": "{{context.start}}", "duration_minutes": 30 }
-- whatsapp_form: { "flow_id": "123", "body": "text", "flow_cta": "Open form" }
+- assign_agent: { }
 
 Keep it focused: 2–6 nodes is ideal. Make every message specific and useful.
 PROMPT;
@@ -155,7 +140,7 @@ PROMPT;
     {
         $triggerType = is_string($spec['trigger_type'] ?? null) && in_array($spec['trigger_type'], self::TRIGGER_TYPES, true)
             ? $spec['trigger_type']
-            : 'contact.created';
+            : 'message.received';
 
         $triggerConfig = is_array($spec['trigger_config'] ?? null) ? $spec['trigger_config'] : [];
 

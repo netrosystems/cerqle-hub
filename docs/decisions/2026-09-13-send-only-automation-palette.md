@@ -1,7 +1,7 @@
 # SEND-only automation creation palette
 
 Date: 2026-09-13
-Status: Accepted
+Status: Superseded on 2026-09-23 by [automations return to Setup with the validated action set](2026-09-23-automation-release-palette-and-ai-drafting.md)
 Supersedes: the ten-action creation palette in [WhatsApp-first automations](2026-09-13-whatsapp-first-automations.md). Execution safeguards and provider release gates remain unchanged.
 
 ## Context

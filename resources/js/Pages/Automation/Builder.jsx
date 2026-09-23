@@ -52,7 +52,7 @@ const TRIGGER_TYPES = [
 ];
 
 // Categories rendered (in order) in the node palette — mirrors the product node list.
-const CATEGORY_ORDER = ['send'];
+const CATEGORY_ORDER = ['send', 'listen', 'logic', 'contact'];
 
 const NODE_DEFS = {
     // ── SEND ──────────────────────────────────────────────────────────────

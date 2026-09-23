@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { ChannelBrandIcon } from '@/Components/BrandIcons';
 import {
     LayoutDashboard, CreditCard, Package, FileText, Users, Settings,
-    Layers, Webhook, Key, BookOpen, Image, Radio, Inbox, Bot, Database,
+    Layers, Webhook, Key, BookOpen, Image, Radio, Inbox, Bot,
     Zap, Share2, Tag, LifeBuoy, MessageSquare,
     MessageCircle, Mail, Monitor, ShieldCheck,
 } from 'lucide-react';
@@ -34,7 +34,7 @@ export default function useClientNav() {
     // pattern alone cannot tell the two apart and both entries lit up at once.
     const onLiveVisitors = () => typeof window !== 'undefined'
         && window.location.pathname.startsWith('/app/inbox')
-        && new URLSearchParams(window.location.search).get('folder') === 'live';
+        && new window.URLSearchParams(window.location.search).get('folder') === 'live';
 
     const landingItems = [
         { label: t('nav.dashboard'), href: safeRoute('client.dashboard'), icon: <LayoutDashboard className={iconClass} />, activePattern: 'client.dashboard' },
@@ -133,6 +133,10 @@ export default function useClientNav() {
     const setupItems = [
         ...inboxSetupItems,
         ...chatbotSetupItems,
+        // Workflows that answer WhatsApp messages. Back in the menu now the
+        // builder offers the ten validated actions and can draft from a
+        // description; it was hidden while it was harder to use.
+        { label: t('nav.automations'), href: safeRoute('client.automations.index'), icon: <Zap className={iconClass} />, activePattern: 'client.automations.*' },
         { label: t('nav.social_accounts'), href: safeRoute('client.social.accounts.index'), icon: <Share2 className={iconClass} />, activePattern: 'client.social.accounts.*' },
         { label: t('nav.sms_gateways'), href: safeRoute('client.sms-gateways.index'), icon: <MessageSquare className={iconClass} />, activePattern: 'client.sms-gateways.*' },
         { label: t('nav.ai_providers'), href: safeRoute('client.ai.providers.index'), icon: <Bot className={iconClass} />, activePattern: 'client.ai.providers.*' },
