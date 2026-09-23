@@ -77,3 +77,62 @@ it('shows weekly hours only when needed and supports copying weekdays', () => {
     expect(screen.getByLabelText('Off', { exact: true })).toBeChecked()
     expect(patch).not.toHaveBeenCalled()
 })
+
+const emailSettings = {
+    ...settings,
+    legacy: false,
+    mailbox_ids: null,
+    mailboxes: [
+        { id: 7, name: 'Sales', email: 'sales@example.test', status: 'active' },
+        { id: 8, name: 'Billing', email: 'billing@example.test', status: 'active' },
+    ],
+}
+
+it('offers every mailbox by default and lets the client narrow it', () => {
+    render(<AiAutomationCard settings={emailSettings} group="email" />)
+    fireEvent.click(screen.getByRole('button', { name: 'Manage AI Automation' }))
+    fireEvent.click(screen.getByLabelText('On', { exact: true }))
+
+    // "All mailboxes" is the existing behaviour and has to stay the default,
+    // or turning AI on would quietly stop answering somewhere.
+    expect(screen.getByRole('radio', { name: /All mailboxes/ })).toBeChecked()
+    expect(screen.queryByRole('checkbox', { name: /Sales/ })).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('radio', { name: /Only the mailboxes I choose/ }))
+    expect(screen.getByRole('checkbox', { name: /Sales/ })).toBeChecked()
+
+    fireEvent.click(screen.getByRole('checkbox', { name: /Sales/ }))
+    expect(screen.getByRole('checkbox', { name: /Sales/ })).not.toBeChecked()
+    expect(screen.getByRole('checkbox', { name: /Billing/ })).toBeChecked()
+})
+
+it('does not offer mailboxes to channel groups that have none', () => {
+    render(<AiAutomationCard settings={settings} group="channels" />)
+    fireEvent.click(screen.getByRole('button', { name: 'Manage AI Automation' }))
+    fireEvent.click(screen.getByLabelText('On', { exact: true }))
+
+    expect(screen.queryByText('Which mailboxes')).not.toBeInTheDocument()
+})
+
+it('says what the scope actually is rather than claiming every mailbox', () => {
+    // The card's one summary line is where a client checks the scope at a
+    // glance, so it must not keep saying "every mailbox" after narrowing.
+    const { rerender } = render(<AiAutomationCard settings={emailSettings} group="email" />)
+    expect(screen.getByText('All 2 connected mailboxes')).toBeInTheDocument()
+
+    rerender(<AiAutomationCard settings={{ ...emailSettings, mailbox_ids: [7] }} group="email" />)
+    expect(screen.getByText('1 of 2 mailboxes')).toBeInTheDocument()
+})
+
+it('explains the empty case instead of hiding the control', () => {
+    // With no mailboxes there is nothing to pick, but rendering nothing left a
+    // client wondering where the feature went.
+    render(<AiAutomationCard settings={{ ...emailSettings, mailboxes: [] }} group="email" />)
+    expect(screen.getByText('No mailboxes connected yet')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Manage AI Automation' }))
+    fireEvent.click(screen.getByLabelText('On', { exact: true }))
+
+    expect(screen.getByText(/No mailboxes are connected yet/)).toBeInTheDocument()
+    expect(screen.queryByRole('radio', { name: /All mailboxes/ })).not.toBeInTheDocument()
+})

@@ -12,6 +12,6 @@ class AiAutomationSetting extends Model
 
     protected function casts(): array
     {
-        return ['weekly_hours' => 'array', 'activated_at' => 'immutable_datetime', 'revision' => 'integer'];
+        return ['weekly_hours' => 'array', 'mailbox_ids' => 'array', 'activated_at' => 'immutable_datetime', 'revision' => 'integer'];
     }
 }

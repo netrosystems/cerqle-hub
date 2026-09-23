@@ -18,6 +18,12 @@
         </include>
     </source>
     <php>
+        <!-- The suite runs in one process and each request that renders a page
+             flattens the full translation dictionary, so memory accumulates
+             across the run rather than per test. At PHP's 256M default the
+             suite now exhausts it partway through and the remaining tests die
+             with an unrelated-looking error inside the translation loader. -->
+        <ini name="memory_limit" value="1G"/>
         <env name="APP_ENV" value="testing" force="true"/>
         <env name="APP_INSTALLED" value="true"/>
         <env name="APP_MAINTENANCE_DRIVER" value="file"/>

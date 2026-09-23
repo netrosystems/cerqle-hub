@@ -17,6 +17,9 @@ export default function AiAutomationCard({ settings, group }) {
         timezone: settings.timezone,
         weekly_hours: settings.weekly_hours,
         revision: settings.revision,
+        // null means every mailbox, which is what this setting meant before it
+        // could be narrowed. Only email has mailboxes to choose between.
+        mailbox_ids: Array.isArray(settings.mailbox_ids) ? settings.mailbox_ids : null,
     })
     const begin = () => {
         form.setData({
@@ -25,6 +28,7 @@ export default function AiAutomationCard({ settings, group }) {
             timezone: settings.timezone,
             weekly_hours: settings.weekly_hours.map((day) => ({ ...day })),
             revision: settings.revision,
+            mailbox_ids: Array.isArray(settings.mailbox_ids) ? [...settings.mailbox_ids] : null,
         })
         form.clearErrors()
         setHoursOpen(false)
@@ -46,6 +50,15 @@ export default function AiAutomationCard({ settings, group }) {
         })
     }
     const summary = settings.legacy ? 'Existing setup' : { off: 'Off', on: 'On', scheduled: 'Scheduled' }[settings.mode]
+    const mailboxes = settings.mailboxes ?? []
+    // Saying "every connected mailbox" stops being true the moment a client
+    // narrows the scope, and that line is the only place the card reports it.
+    const mailboxSummary =
+        mailboxes.length === 0
+            ? 'No mailboxes connected yet'
+            : Array.isArray(settings.mailbox_ids)
+              ? `${settings.mailbox_ids.length} of ${mailboxes.length} mailboxes`
+              : `All ${mailboxes.length} connected mailbox${mailboxes.length === 1 ? '' : 'es'}`
     return (
         <>
             <section
@@ -65,7 +78,7 @@ export default function AiAutomationCard({ settings, group }) {
                         {settings.mode === 'scheduled'
                             ? `${settings.available ? 'Active now' : 'Outside hours'} · ${settings.timezone}`
                             : group === 'email'
-                              ? 'One setting for every connected mailbox'
+                              ? mailboxSummary
                               : 'One setting for WhatsApp, Instagram and Messenger'}
                     </p>
                 </div>
@@ -133,6 +146,76 @@ export default function AiAutomationCard({ settings, group }) {
                                     </p>
                                 )}
                             </div>
+                        )}
+                        {form.data.mode !== 'off' && group === 'email' && mailboxes.length > 0 && (
+                            <fieldset>
+                                <legend className="mb-1 block text-sm font-medium">Which mailboxes</legend>
+                                <p className="mb-2 text-xs text-neutral-500 dark:text-neutral-400">
+                                    Mail arriving at a mailbox you do not choose is left for your team.
+                                </p>
+                                <label className="flex cursor-pointer items-start gap-2 rounded-soft border border-neutral-200 p-2 text-sm dark:border-neutral-700">
+                                    <input
+                                        type="radio"
+                                        name="mailbox-scope"
+                                        className="mt-0.5"
+                                        checked={form.data.mailbox_ids === null}
+                                        onChange={() => form.setData('mailbox_ids', null)}
+                                    />
+                                    <span>
+                                        <span className="font-medium">All mailboxes</span>
+                                        <span className="block text-xs text-neutral-500 dark:text-neutral-400">
+                                            Includes any mailbox connected later.
+                                        </span>
+                                    </span>
+                                </label>
+                                <label className="mt-1.5 flex cursor-pointer items-start gap-2 rounded-soft border border-neutral-200 p-2 text-sm dark:border-neutral-700">
+                                    <input
+                                        type="radio"
+                                        name="mailbox-scope"
+                                        className="mt-0.5"
+                                        checked={form.data.mailbox_ids !== null}
+                                        onChange={() =>
+                                            form.setData('mailbox_ids', mailboxes.map((box) => box.id))
+                                        }
+                                    />
+                                    <span className="font-medium">Only the mailboxes I choose</span>
+                                </label>
+                                {form.data.mailbox_ids !== null && (
+                                    <div className="mt-1.5 space-y-1 rounded-soft border border-neutral-200 p-2 dark:border-neutral-700">
+                                        {mailboxes.map((box) => (
+                                            <label key={box.id} className="flex cursor-pointer items-center gap-2 text-sm">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={form.data.mailbox_ids.includes(box.id)}
+                                                    onChange={(e) =>
+                                                        form.setData(
+                                                            'mailbox_ids',
+                                                            e.target.checked
+                                                                ? [...form.data.mailbox_ids, box.id]
+                                                                : form.data.mailbox_ids.filter((id) => id !== box.id),
+                                                        )
+                                                    }
+                                                />
+                                                <span className="min-w-0 flex-1 truncate">
+                                                    {box.name}
+                                                    {box.email && (
+                                                        <span className="text-neutral-500 dark:text-neutral-400"> · {box.email}</span>
+                                                    )}
+                                                </span>
+                                            </label>
+                                        ))}
+                                    </div>
+                                )}
+                                {form.errors.mailbox_ids && (
+                                    <p className="mt-1 text-xs text-coral-600">{form.errors.mailbox_ids}</p>
+                                )}
+                            </fieldset>
+                        )}
+                        {form.data.mode !== 'off' && group === 'email' && mailboxes.length === 0 && (
+                            <p className="rounded-soft border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200">
+                                No mailboxes are connected yet, so there is nothing for the chatbot to answer.
+                                Connect one below, then choose which mailboxes it should cover.
+                            </p>
                         )}
                         {form.data.mode === 'scheduled' && (
                             <div>

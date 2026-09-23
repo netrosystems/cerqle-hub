@@ -55,17 +55,14 @@ class AiReplyEligibility
         if ($message->channel !== 'email') {
             return false;
         }
-        $payload = $message->payload ?? [];
-        $from = strtolower((string) ($payload['from_address'] ?? $message->conversation?->contact?->email));
-        $self = strtolower((string) ($message->conversation?->channelAccount?->meta_json['email'] ?? ''));
-        $headers = $payload['mail_headers'] ?? [];
+        // An imported history is not a live question no matter what it says.
+        if (! empty(($message->payload ?? [])['history_import'])) {
+            return true;
+        }
 
-        return ! empty($payload['history_import']) || $from === $self
-            || preg_match('/^(mailer-daemon|postmaster|no-?reply|do-?not-?reply)@/i', $from)
-            || (isset($headers['auto-submitted']) && strtolower(trim($headers['auto-submitted'])) !== 'no')
-            || isset($headers['list-id']) || isset($headers['list-unsubscribe'])
-            || strtolower($headers['x-auto-response-suppress'] ?? '') === 'all'
-            || in_array(strtolower($headers['precedence'] ?? ''), ['bulk', 'list', 'junk'], true)
-            || str_contains(strtolower($headers['content-type'] ?? ''), 'report-type=delivery-status');
+        // Everything else about an email — headers, sender shape, the look of
+        // the body — is one judgement, made in one place, so the inbox can show
+        // the operator the same reason that routing acted on.
+        return ! app(EmailTriage::class)->shouldReply($message);
     }
 }

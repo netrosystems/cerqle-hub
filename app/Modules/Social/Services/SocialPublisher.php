@@ -14,6 +14,7 @@ use App\Modules\Social\Services\Drivers\EditsPublishedPosts;
 use App\Modules\Social\Services\Drivers\FacebookDriver;
 use App\Modules\Social\Services\Drivers\InstagramSocialDriver;
 use App\Modules\Social\Services\Drivers\LinkedInDriver;
+use App\Modules\Social\Services\Drivers\LinkedInPageDriver;
 use App\Modules\Social\Services\Drivers\SocialNetworkInterface;
 use App\Modules\Social\Services\Drivers\TikTokDriver;
 use App\Modules\Social\Services\Drivers\XDriver;
@@ -33,6 +34,7 @@ class SocialPublisher
             'facebook' => new FacebookDriver,
             'instagram' => new InstagramSocialDriver,
             'linkedin' => new LinkedInDriver,
+            'linkedin_page' => new LinkedInPageDriver,
             'youtube' => new YoutubeDriver,
             'tiktok' => new TikTokDriver,
             'twitter' => new XDriver,
