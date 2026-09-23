@@ -86,6 +86,9 @@ class MobileEmailAttachmentTest extends TestCase
             'channel_account_id' => $account->id,
             'contact_id' => $contact->id,
             'status' => 'open',
+            'assigned_user_id' => $context['user']->id,
+            'joined_user_id' => $context['user']->id,
+            'joined_at' => now(),
         ]);
 
         $mockDriver = Mockery::mock(ChannelDriverInterface::class);

@@ -67,10 +67,37 @@ it('puts AI answering first, marked as an AI surface', () => {
     expect(aiCard.className).toMatch(/border-brand-200/)
 })
 
-it('leaves the on/off switch out of the settings form', () => {
-    // It lives in the page header now and saves on its own, so a form save must
-    // not carry an `enabled` value at all — sending one would fight the switch.
-    const { container } = render(<ChatWidgetForm chatbots={[]} aiTimezone="UTC" />)
+it('leaves availability switches out of the create form', () => {
+    render(<ChatWidgetForm chatbots={[]} aiTimezone="UTC" />)
 
-    expect(container.querySelectorAll('[role="switch"]').length).toBe(0)
+    expect(screen.queryByRole('switch', { name: 'Widget enabled' })).toBeNull()
+    expect(screen.queryByRole('switch', { name: 'SDK enabled' })).toBeNull()
+})
+
+it('keeps website and SDK switches as draft state until Save changes', () => {
+    const onSubmit = vi.fn()
+    render(
+        <ChatWidgetForm
+            widget={{ enabled: true, sdk_enabled: false }}
+            chatbots={[]}
+            aiTimezone="UTC"
+            submitLabel="Save changes"
+            onSubmit={onSubmit}
+        />,
+    )
+
+    const visitorCard = screen.getByText('Visitor experience').closest('div.rounded-2xl')
+    const widgetSwitch = within(visitorCard).getByRole('switch', { name: 'Widget enabled' })
+    const sdkSwitch = within(visitorCard).getByRole('switch', { name: 'SDK enabled' })
+
+    expect(widgetSwitch.getAttribute('aria-checked')).toBe('true')
+    expect(sdkSwitch.getAttribute('aria-checked')).toBe('false')
+    fireEvent.click(widgetSwitch)
+    fireEvent.click(sdkSwitch)
+    expect(onSubmit).not.toHaveBeenCalled()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+
+    expect(onSubmit).toHaveBeenCalledTimes(1)
+    expect(onSubmit.mock.calls[0][0]).toMatchObject({ enabled: false, sdk_enabled: true })
 })

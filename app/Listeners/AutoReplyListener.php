@@ -156,10 +156,11 @@ class AutoReplyListener
 
                 return;
             }
+            $surface = $availability->surfaceForConversation($conversation);
             // Checked for now and for when the message arrived, so a boundary
             // crossed mid-queue cannot produce a late reply.
-            $unavailable = $availability->reason($widget)
-                ?? $availability->reason($widget, CarbonImmutable::parse($message->created_at));
+            $unavailable = $availability->reason($widget, surface: $surface)
+                ?? $availability->reason($widget, CarbonImmutable::parse($message->created_at), $surface);
             if ($unavailable !== null) {
                 $this->ownership($message, 'ai', 'skipped', null, $unavailable);
 

@@ -46,6 +46,8 @@ Grounded Smart Bot and atomic Knowledge Base implementation evidence: [`grounded
 
 Language-agnostic Smart Bot behaviour evidence: [`smart-bot-language-qa-2026-09-20.md`](smart-bot-language-qa-2026-09-20.md).
 
+Website widget and customer SDK key separation/source detection: [`decisions/2026-09-23-widget-sdk-access-and-source.md`](decisions/2026-09-23-widget-sdk-access-and-source.md).
+
 Smart Bot behaviour specification as received, partially adopted — read the 2026-09-20 decision record first: [`smart-bot-behaviour-spec-2026-09-20.md`](smart-bot-behaviour-spec-2026-09-20.md).
 
 Meta app review evidence and permission matrix, with the prerequisites left for the owner: [`meta-app-review-2026-09-09.md`](meta-app-review-2026-09-09.md).

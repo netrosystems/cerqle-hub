@@ -13,9 +13,16 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Support\Str;
 
-/** @property int|null $ai_handback_after_message_id */
+/**
+ * @property int|null $ai_handback_after_message_id
+ * @property string|null $started_from
+ */
 class Conversation extends Model
 {
+    public const STARTED_FROM_WEB_WIDGET = 'web_widget';
+
+    public const STARTED_FROM_CUSTOMER_SDK = 'customer_sdk';
+
     protected static function boot(): void
     {
         parent::boot();
@@ -32,7 +39,7 @@ class Conversation extends Model
     }
 
     protected $fillable = [
-        'workspace_id', 'channel_account_id', 'contact_id', 'external_thread_id',
+        'workspace_id', 'channel_account_id', 'contact_id', 'external_thread_id', 'started_from',
         'status', 'assigned_user_id', 'joined_user_id', 'joined_at', 'assigned_to', 'handover_at',
         'last_message_at', 'unread_count',
         'first_response_at', 'resolved_at', 'last_inbound_at',

@@ -3,6 +3,7 @@
 namespace App\Modules\Inbox\Services;
 
 use App\Modules\Inbox\Models\ChatWidget;
+use App\Modules\Shared\Models\Conversation;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
@@ -16,9 +17,9 @@ class WidgetAiAvailability
         return array_map(fn ($day) => ['enabled' => $day < 6, 'all_day' => false, 'windows' => [['start' => '09:00', 'end' => '17:00']]], range(1, 7));
     }
 
-    public function available(ChatWidget $widget, ?CarbonImmutable $at = null): bool
+    public function available(ChatWidget $widget, ?CarbonImmutable $at = null, ?string $surface = null): bool
     {
-        return $this->reason($widget, $at) === null;
+        return $this->reason($widget, $at, $surface) === null;
     }
 
     /**
@@ -30,9 +31,9 @@ class WidgetAiAvailability
      * phantom AI bug without this, so the reason is the source of truth and
      * available() is derived from it.
      */
-    public function reason(ChatWidget $widget, ?CarbonImmutable $at = null): ?string
+    public function reason(ChatWidget $widget, ?CarbonImmutable $at = null, ?string $surface = null): ?string
     {
-        if (! $widget->enabled) {
+        if (! $this->surfaceEnabled($widget, $surface)) {
             return 'widget_disabled';
         }
         if (! $widget->ai_enabled) {
@@ -139,9 +140,23 @@ class WidgetAiAvailability
     }
 
     /** @return array{mode: string, active: bool} */
-    public function publicState(ChatWidget $widget): array
+    public function publicState(ChatWidget $widget, ?string $surface = null): array
     {
-        return ['mode' => $widget->ai_mode ?? ($widget->ai_enabled ? 'permanent' : 'off'), 'active' => $this->available($widget)];
+        return ['mode' => $widget->ai_mode ?? ($widget->ai_enabled ? 'permanent' : 'off'), 'active' => $this->available($widget, surface: $surface)];
+    }
+
+    public function surfaceForConversation(?Conversation $conversation): string
+    {
+        return $conversation?->started_from === Conversation::STARTED_FROM_CUSTOMER_SDK
+            ? ChatWidget::SURFACE_SDK
+            : ChatWidget::SURFACE_WEB;
+    }
+
+    private function surfaceEnabled(ChatWidget $widget, ?string $surface): bool
+    {
+        return $surface === ChatWidget::SURFACE_SDK
+            ? (bool) $widget->sdk_enabled
+            : (bool) $widget->enabled;
     }
 
     private function minutes(string $time): int

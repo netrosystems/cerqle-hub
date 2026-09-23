@@ -420,6 +420,7 @@ export default function EmailInbox({
     const { t } = useTranslation();
     const { props } = usePage();
     const timezone = props.timezone || 'Asia/Dhaka';
+    const authUser = props.auth?.user;
     const [conversations, setConversations] = useState(initialConversations);
     const [counts, setCounts] = useState(initialCounts);
     const [messages, setMessages] = useState(initialMessages);
@@ -429,6 +430,7 @@ export default function EmailInbox({
     const [reply, setReply] = useState('');
     const [sending, setSending] = useState(false);
     const [sendError, setSendError] = useState('');
+    const [ownershipBusy, setOwnershipBusy] = useState(false);
     const initialSearch = useRef(true);
     const bottomRef = useRef(null);
     const threadScrollRef = useRef(null);
@@ -578,6 +580,19 @@ export default function EmailInbox({
     };
 
     const setStatus = status => router.post(route('client.inbox.status', selectedConversation.uuid), { status }, { preserveScroll: true });
+    const changeOwnership = async action => {
+        if (action === 'takeover' && !window.confirm(`Take over this chat from ${selectedConversation?.joined_user?.name || 'the current agent'}?`)) return;
+        setOwnershipBusy(true);
+        setSendError('');
+        try {
+            await axios.post(route(`client.inbox.${action}`, selectedConversation.uuid));
+            router.reload({ only: ['selectedConversation'] });
+        } catch (error) {
+            setSendError(error.response?.data?.message || error.response?.data?.error || 'Could not update chat ownership.');
+        } finally {
+            setOwnershipBusy(false);
+        }
+    };
     const resolveAllOpen = () => {
         const mailbox = accounts.find(account => String(account.id) === String(filters.account_id));
         const scope = mailbox?.display_name || t('inbox.resolve_scope_all', 'all connected mailboxes in this workspace');
@@ -590,6 +605,9 @@ export default function EmailInbox({
     };
     const selectedSubject = safeText(messages.find(message => safeText(message.payload?.subject))?.payload?.subject) || subjectOf(selectedConversation);
     const selectedMailbox = selectedConversation?.channel_account;
+    const joinedUser = selectedConversation?.joined_user ?? null;
+    const isJoinedByMe = Number(joinedUser?.id) === Number(authUser?.id);
+    const canTakeOver = Boolean(joinedUser) && authUser?.client_role === 'administrator';
 
     return <InboxLayout>
         <Head title="Master Email Inbox" />
@@ -643,6 +661,13 @@ export default function EmailInbox({
                             <button type="button" onClick={() => navigate({ folder: filters.folder, account_id: filters.account_id || undefined, search: filters.search || undefined })} className="mt-0.5 rounded-lg p-2 text-neutral-500 hover:bg-neutral-100 lg:hidden"><ArrowLeft className="h-5 w-5" /></button>
                             <div className="min-w-0 flex-1"><h2 className="truncate text-lg font-bold text-neutral-900 dark:text-white">{selectedSubject}</h2><div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-neutral-400"><span>{contactName(selectedConversation)}</span><span>·</span><span>{selectedConversation.contact?.email}</span><span>·</span><span className="rounded-full bg-neutral-100 px-2 py-0.5 dark:bg-neutral-800">{selectedMailbox?.display_name}</span></div></div>
                             <div className="flex items-center gap-2">
+                                {selectedConversation.status !== 'resolved' && (!joinedUser
+                                    ? <button type="button" disabled={ownershipBusy} onClick={() => changeOwnership('join')} className="rounded-xl bg-brand-600 px-3 py-2 text-xs font-semibold text-white hover:bg-brand-700 disabled:opacity-50">Join Chat</button>
+                                    : isJoinedByMe
+                                        ? <div className="flex items-center gap-2"><span className="max-w-[130px] truncate text-xs font-medium text-neutral-600 dark:text-neutral-300">{joinedUser.name} joined</span><button type="button" disabled={ownershipBusy} onClick={() => changeOwnership('leave')} className="text-xs font-medium text-neutral-500 hover:text-red-600 disabled:opacity-50">Leave</button></div>
+                                        : canTakeOver
+                                            ? <button type="button" disabled={ownershipBusy} onClick={() => changeOwnership('takeover')} className="rounded-xl border border-neutral-200 px-3 py-2 text-xs font-semibold text-neutral-600 hover:bg-neutral-50 disabled:opacity-50 dark:border-neutral-700 dark:text-neutral-300">Take over</button>
+                                            : <span className="max-w-[130px] truncate text-xs font-medium text-neutral-500">{joinedUser.name} joined</span>)}
                                 <Link
                                     href={route('client.inbox.show', { conversation: selectedConversation.uuid, channel: 'email' })}
                                     title="Open in Omni-Channel Chat"
@@ -659,7 +684,7 @@ export default function EmailInbox({
                         {[...messages].sort((a, b) => Number(a.id) - Number(b.id)).map(message => <MessageBlock key={message.id} message={message} contact={selectedConversation.contact} mailbox={selectedMailbox} timezone={timezone} />)}
                         <div ref={bottomRef} />
                     </div>
-                    <form onSubmit={submitReply} className="border-t border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900 sm:p-5">
+                    {isJoinedByMe ? <form onSubmit={submitReply} className="border-t border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900 sm:p-5">
                         {/* Attachment preview if selected */}
                         {replyAttachment && (
                             <div className="mb-2 flex items-center gap-2 rounded-xl border border-neutral-200 bg-neutral-50 p-2 dark:border-neutral-700 dark:bg-neutral-800">
@@ -723,7 +748,10 @@ export default function EmailInbox({
                             </div>
                         </div>
                         {sendError && <p className="mt-2 text-xs text-red-600">{sendError}</p>}
-                    </form>
+                    </form> : <div className="flex items-center justify-between gap-3 border-t border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900 sm:p-5">
+                        <div className="min-w-0"><p className="truncate text-sm font-semibold text-neutral-800 dark:text-neutral-100">{joinedUser ? `${joinedUser.name} joined this chat` : 'Join before replying'}</p><p className="text-xs text-neutral-500">{selectedConversation.status === 'resolved' ? 'Reopen the conversation before joining.' : joinedUser ? 'Only the joined owner can send replies.' : 'The first teammate to join becomes the active owner.'}</p></div>
+                        <button type="button" disabled={ownershipBusy || selectedConversation.status === 'resolved' || (joinedUser && !canTakeOver)} onClick={() => changeOwnership(joinedUser ? 'takeover' : 'join')} className="shrink-0 rounded-xl bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-40">{ownershipBusy ? 'Working...' : joinedUser ? 'Take over' : 'Join Chat'}</button>
+                    </div>}
                 </>}
             </main>
         </div>

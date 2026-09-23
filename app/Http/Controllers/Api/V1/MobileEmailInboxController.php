@@ -141,6 +141,7 @@ class MobileEmailInboxController extends WorkspaceScopedController
         ]);
         $messages = $conversation->messages()
             ->with('user:id,name,avatar')
+            ->orderByDesc('sent_at')
             ->orderByDesc('id')
             ->paginate(min(max($request->integer('per_page', 50), 1), 100));
 
@@ -202,6 +203,7 @@ class MobileEmailInboxController extends WorkspaceScopedController
         }
 
         $conversation = $this->emailConversation($request, $uuid, ['channelAccount', 'contact']);
+        app(ConversationActivityService::class)->assertCanReply($conversation, $request->user());
 
         $payload = [];
         $msgType = 'text';
@@ -231,38 +233,45 @@ class MobileEmailInboxController extends WorkspaceScopedController
 
         $bodyText = $validated['body'] ?? ($request->hasFile('attachment') ? $upload['filename'] : '');
 
-        $message = Message::create([
-            'conversation_id' => $conversation->id,
-            'direction' => 'out',
-            'channel' => 'email',
-            'type' => $msgType,
-            'body' => $bodyText,
-            'payload' => $payload,
-            'status' => 'queued',
-            'sent_by' => 'human',
-            'user_id' => $request->user()->id,
-            'sent_at' => now(),
-        ]);
-
-        $sendError = null;
-        try {
-            $providerMessageId = $this->channelManager->driver('email')->send($message);
-            $message->update(['status' => 'sent', 'provider_message_id' => $providerMessageId]);
-        } catch (\Throwable $exception) {
-            $sendError = $exception->getMessage();
-            $message->update(['status' => 'failed', 'error_json' => ['message' => $sendError]]);
-            Log::error('Mobile email reply failed', [
+        $ownership = app(ConversationActivityService::class);
+        [$message, $sendError] = $ownership->synchronized($conversation, function () use ($bodyText, $conversation, $msgType, $ownership, $payload, $request): array {
+            $conversation->refresh()->loadMissing('joinedUser');
+            $ownership->assertCanReply($conversation, $request->user());
+            $message = Message::create([
                 'conversation_id' => $conversation->id,
-                'error' => $sendError,
+                'direction' => 'out',
+                'channel' => 'email',
+                'type' => $msgType,
+                'body' => $bodyText,
+                'payload' => $payload,
+                'status' => 'queued',
+                'sent_by' => 'human',
+                'user_id' => $request->user()->id,
+                'sent_at' => now(),
             ]);
-        }
 
-        $conversation->update(['last_message_at' => now()]);
-        if ($conversation->last_inbound_at && ! $conversation->first_response_at) {
-            $conversation->update(['first_response_at' => now()]);
-        }
-        $message->load(['conversation', 'user:id,name,avatar']);
-        MessageSent::dispatch($message);
+            $sendError = null;
+            try {
+                $providerMessageId = $this->channelManager->driver('email')->send($message);
+                $message->update(['status' => 'sent', 'provider_message_id' => $providerMessageId]);
+            } catch (\Throwable $exception) {
+                $sendError = $exception->getMessage();
+                $message->update(['status' => 'failed', 'error_json' => ['message' => $sendError]]);
+                Log::error('Mobile email reply failed', [
+                    'conversation_id' => $conversation->id,
+                    'error' => $sendError,
+                ]);
+            }
+
+            $conversation->update(['last_message_at' => now()]);
+            if ($conversation->last_inbound_at && ! $conversation->first_response_at) {
+                $conversation->update(['first_response_at' => now()]);
+            }
+            $message->load(['conversation', 'user:id,name,avatar']);
+            MessageSent::dispatch($message);
+
+            return [$message, $sendError];
+        });
 
         return response()->json([
             'message' => $this->formatMessage($message),

@@ -68,7 +68,11 @@ JS;
 
         return response($js, 200, [
             'Content-Type' => 'application/javascript; charset=utf-8',
-            'Cache-Control' => 'public, max-age=300',
+            // Availability is part of this response. Caching it would keep a
+            // disabled widget visible until the browser's cached loader expires.
+            'Cache-Control' => 'no-store, no-cache, must-revalidate, max-age=0',
+            'Pragma' => 'no-cache',
+            'Expires' => '0',
             'X-Content-Type-Options' => 'nosniff',
         ]);
     }

@@ -63,7 +63,7 @@ class WebchatDriver implements ChannelDriverInterface
      */
     public function ingestVisitorMessage(ChatWidget $widget, string $visitorId, string $body, array $identity = []): Message
     {
-        $conversation = $this->resolveConversation($widget, $visitorId, $identity);
+        $conversation = $this->resolveConversation($widget, $visitorId, $identity, Conversation::STARTED_FROM_WEB_WIDGET);
 
         return $this->recordInboundMessage($conversation, $visitorId, $body);
     }
@@ -109,9 +109,13 @@ class WebchatDriver implements ChannelDriverInterface
      *
      * @param  array<string, mixed>  $identity
      */
-    public function resolveConversation(ChatWidget $widget, string $visitorId, array $identity = []): Conversation
+    public function resolveConversation(ChatWidget $widget, string $visitorId, array $identity = [], ?string $startedFrom = null): Conversation
     {
         $contact = $this->resolveVisitorContact($widget->workspace_id, $visitorId, $identity);
+        $startedFrom = in_array($startedFrom, [
+            Conversation::STARTED_FROM_WEB_WIDGET,
+            Conversation::STARTED_FROM_CUSTOMER_SDK,
+        ], true) ? $startedFrom : null;
 
         return Conversation::firstOrCreate(
             [
@@ -123,6 +127,7 @@ class WebchatDriver implements ChannelDriverInterface
                 'status' => 'open',
                 'assigned_to' => 'bot',
                 'external_thread_id' => $visitorId,
+                'started_from' => $startedFrom,
             ],
         );
     }
