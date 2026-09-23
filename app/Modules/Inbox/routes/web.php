@@ -30,6 +30,9 @@ Route::middleware(['web', 'client-app'])->prefix('app/inbox')->name('client.inbo
     Route::post('/conversations/{conversation}/reply', [InboxController::class, 'reply'])->name('reply');
     Route::post('/conversations/{conversation}/share-product', [InboxController::class, 'shareProduct'])->name('share-product');
     Route::post('/conversations/{conversation}/assign', [InboxController::class, 'assign'])->name('assign');
+    Route::post('/conversations/{conversation}/join', [InboxController::class, 'join'])->name('join');
+    Route::post('/conversations/{conversation}/leave', [InboxController::class, 'leave'])->name('leave');
+    Route::post('/conversations/{conversation}/takeover', [InboxController::class, 'takeover'])->name('takeover');
     Route::post('/conversations/{conversation}/status', [InboxController::class, 'updateStatus'])->name('status');
     Route::post('/conversations/{conversation}/typing', [InboxController::class, 'typing'])->name('typing');
     Route::post('/conversations/{conversation}/open-widget', [InboxController::class, 'openWidget'])->name('open-widget');

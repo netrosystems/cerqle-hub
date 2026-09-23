@@ -55,7 +55,7 @@ class ChatbotRunner
         }
 
         $conversation = $inboundMessage->conversation;
-        $history = $conversation->messages()->whereIn('type', ['text', 'template'])
+        $history = $conversation->messages()->whereIn('direction', ['in', 'out'])->whereIn('type', ['text', 'template'])
             ->when($inboundMessage->id, fn ($query) => $query->where('id', '<', $inboundMessage->id))
             ->latest('id')->take(20)->get()->sortBy('id')->values();
 

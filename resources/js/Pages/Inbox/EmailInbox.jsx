@@ -330,6 +330,15 @@ function MailRow({ conversation, active, timezone, onOpen }) {
 }
 
 function MessageBlock({ message, contact, mailbox, timezone = 'Asia/Dhaka' }) {
+    if (message.direction === 'system' && message.type === 'event') {
+        return (
+            <div className="my-2.5 flex w-full justify-center px-6" role="status">
+                <div className="w-fit max-w-[90%] rounded-lg bg-white px-3 py-1.5 text-center text-[11px] font-medium leading-4 text-neutral-500 shadow-sm ring-1 ring-black/5 dark:bg-neutral-800 dark:text-neutral-300 dark:ring-white/10">
+                    <span className="break-words">{message.body}</span>
+                </div>
+            </div>
+        );
+    }
     const outbound = message.direction === 'out';
     const sender = safeText(outbound ? (message.user?.name || mailbox?.display_name) : contactName({ contact }), outbound ? 'Your team' : 'Customer');
     const senderEmail = safeText(outbound ? (mailbox?.meta_json?.email || mailbox?.display_name) : contact?.email, 'unknown');
@@ -730,7 +739,7 @@ export default function EmailInbox({
                     </header>
                     <div ref={threadScrollRef} className="min-h-0 flex-1 overflow-y-auto bg-neutral-100/70 p-4 dark:bg-neutral-950 sm:p-6">
                         <div className="mx-auto max-w-4xl space-y-4">
-                            {messages.map(message => <MessageBlock key={message.id} message={message} contact={selectedConversation.contact} mailbox={selectedMailbox} timezone={timezone} />)}
+                            {[...messages].sort((a, b) => Number(a.id) - Number(b.id)).map(message => <MessageBlock key={message.id} message={message} contact={selectedConversation.contact} mailbox={selectedMailbox} timezone={timezone} />)}
                             <div ref={bottomRef} />
                         </div>
                     </div>

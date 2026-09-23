@@ -59,6 +59,7 @@ journey
 
 #### Capabilities
 - **Unified Conversation Stream (`/app/inbox`)**: Real-time conversation list filtered by folders (`All`, `Mine`, `Unassigned`, `Resolved`, `Snoozed`) and channels (WhatsApp, Instagram, Messenger, Webchat).
+- **Conversation activity (2026-09-22)**: Assignment and actual joining are separate. A joined agent is recorded in `joined_user_id`; only explicit Join or administrator Take over creates a customer-visible "joined" entry. Resolve creates a customer-visible "resolved" entry. Staff timeline also records assignment, unassignment, transfer, leave, reopen, pending, and snooze. Automatic reopening on customer inbound creates no activity entry. Historic actions are not backfilled.
 - **Interactive Chat Interface**:
   - Rich message formatting with image, video, audio, and document attachment previews.
   - WhatsApp image previews retry broken saved URLs through the authenticated media endpoint; image files sent as documents also display inline. Cached inbound media is streamed privately from configured storage, and uncached media uses the chat's WhatsApp phone identity rather than the workspace default. Provider-side unavailable media still requires retry/resending.
