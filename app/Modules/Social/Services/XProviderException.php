@@ -21,6 +21,11 @@ class XProviderException extends \RuntimeException
         if ($status === 401) {
             return new self('Reconnect your X account.', 'reconnect');
         }
+        if ($status === 402) {
+            // X bills API use per request; 402 (CreditsDepleted) means the
+            // developer account behind Cerqle's X app has no credits left.
+            return new self('X API credits are unavailable. Contact your administrator.', 'credit');
+        }
         if ($status === 403) {
             // Never expose provider detail, echoed content, or credentials.
             $credit = preg_match('/credit|balance|payment/i', $response->body()) === 1;

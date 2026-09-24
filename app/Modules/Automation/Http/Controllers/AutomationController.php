@@ -4,19 +4,25 @@ namespace App\Modules\Automation\Http\Controllers;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Modules\AI\Exceptions\AiCreditsExhaustedException;
 use App\Modules\AI\Models\AiChatbot;
+use App\Modules\Automation\Jobs\ExecuteAutomationRunJob;
 use App\Modules\Automation\Models\Automation;
 use App\Modules\Automation\Models\AutomationRun;
 use App\Modules\Automation\Services\AutomationEngine;
+use App\Modules\Automation\Services\AutomationRetryPolicy;
+use App\Modules\Automation\Services\WorkflowGenerator;
 use App\Modules\Automation\Services\WorkflowValidator;
 use App\Modules\Broadcasting\Models\Campaign;
 use App\Modules\Ecommerce\Models\EcommerceStore;
 use App\Modules\Integrations\Models\IntegrationConfig;
 use App\Modules\Shared\Models\ChannelAccount;
+use App\Modules\Shared\Models\ContactTag;
 use App\Modules\Whatsapp\Models\WhatsappTemplate;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -35,7 +41,11 @@ class AutomationController extends Controller
             ->withCount('runs')
             ->latest()->get();
 
-        return Inertia::render('Automation/Index', ['automations' => $automations]);
+        return Inertia::render('Automation/Index', [
+            'automations' => $automations,
+            // Shown on the Generate button so the charge is never a surprise.
+            'generateCost' => (int) config('ai.credits.rates.automation_workflow_generate', 20),
+        ]);
     }
 
     public function store(Request $request): RedirectResponse
@@ -61,8 +71,32 @@ class AutomationController extends Controller
         return Inertia::render('Automation/Builder', [
             'automation' => $automation,
             'resources' => $this->builderResources($wid, $automation->id),
+            'generateCost' => (int) config('ai.credits.rates.automation_workflow_generate', 20),
         ]);
     }
+
+    /**
+     * Validation keeps only keys that have a rule. Without the handle and
+     * position rules, every Yes/No branch lost its handle — conditions then
+     * failed Preview and Activate — and saved steps lost their places.
+     */
+    private const GRAPH_RULES = [
+        'nodes' => ['nullable', 'array'],
+        'edges' => ['nullable', 'array'],
+        'nodes.*' => ['array'],
+        'nodes.*.id' => ['required', 'string', 'max:64'],
+        'nodes.*.type' => ['required', 'string'],
+        'nodes.*.data' => ['nullable', 'array'],
+        'nodes.*.position' => ['nullable', 'array'],
+        'nodes.*.position.x' => ['nullable', 'numeric'],
+        'nodes.*.position.y' => ['nullable', 'numeric'],
+        'edges.*' => ['array'],
+        'edges.*.id' => ['nullable', 'string', 'max:128'],
+        'edges.*.source' => ['required', 'string'],
+        'edges.*.target' => ['required', 'string'],
+        'edges.*.sourceHandle' => ['nullable', 'string', 'max:32'],
+        'edges.*.targetHandle' => ['nullable', 'string', 'max:32'],
+    ];
 
     /**
      * Reference data the builder needs to populate node config dropdowns
@@ -96,6 +130,8 @@ class AutomationController extends Controller
             'subflows' => Automation::where('workspace_id', $workspaceId)
                 ->where('id', '!=', $currentAutomationId)
                 ->orderBy('name')->get(['uuid', 'name', 'status'])->values(),
+            // Suggested in Add/Remove Tag so a typo does not silently miss the tag.
+            'tags' => ContactTag::where('workspace_id', $workspaceId)->orderBy('name')->limit(500)->pluck('name')->values(),
             'agents' => User::inWorkspace($workspaceId)
                 ->orderBy('name')->get(['id', 'name'])->values(),
             'stores' => EcommerceStore::where('workspace_id', $workspaceId)
@@ -114,15 +150,7 @@ class AutomationController extends Controller
             'status' => ['sometimes', 'in:active,paused,draft'],
             'trigger_type' => ['nullable', 'string', 'max:64'],
             'trigger_config' => ['nullable', 'array'],
-            'nodes' => ['nullable', 'array'],
-            'edges' => ['nullable', 'array'],
-            'nodes.*' => ['array'],
-            'nodes.*.id' => ['required', 'string', 'max:64'],
-            'nodes.*.type' => ['required', 'string'],
-            'nodes.*.data' => ['nullable', 'array'],
-            'edges.*' => ['array'],
-            'edges.*.source' => ['required', 'string'],
-            'edges.*.target' => ['required', 'string'],
+            ...self::GRAPH_RULES,
             'trigger_config.channel_account_id' => ['nullable', 'integer', 'min:1'],
             'trigger_config.keywords' => ['nullable', 'array'],
             'trigger_config.keywords.*' => ['string', 'min:1', 'max:100'],
@@ -157,6 +185,13 @@ class AutomationController extends Controller
             ->with('logs')
             ->latest()->paginate(50);
 
+        $policy = app(AutomationRetryPolicy::class);
+        $runs->getCollection()->each(function (AutomationRun $run) use ($automation, $policy): void {
+            $run->setRelation('automation', $automation);
+            $run->setAttribute('retry', $run->status === 'failed' ? $policy->assess($run) : null);
+            $run->unsetRelation('automation');
+        });
+
         return Inertia::render('Automation/Runs', ['automation' => $automation, 'runs' => $runs]);
     }
 
@@ -177,15 +212,7 @@ class AutomationController extends Controller
     {
         $this->authorise($request, $automation);
         $validated = $request->validate([
-            'nodes' => ['nullable', 'array'],
-            'edges' => ['nullable', 'array'],
-            'nodes.*' => ['array'],
-            'nodes.*.id' => ['required', 'string', 'max:64'],
-            'nodes.*.type' => ['required', 'string'],
-            'nodes.*.data' => ['nullable', 'array'],
-            'edges.*' => ['array'],
-            'edges.*.source' => ['required', 'string'],
-            'edges.*.target' => ['required', 'string'],
+            ...self::GRAPH_RULES,
             'trigger_type' => ['nullable', 'string', 'max:64'],
             'trigger_config' => ['nullable', 'array'],
             'sample_message' => ['nullable', 'string', 'max:1000'],
@@ -206,6 +233,98 @@ class AutomationController extends Controller
         }
 
         return response()->json(app(AutomationEngine::class)->testRun($automation, $nodes, $edges, $context));
+    }
+
+    /**
+     * Run a failed automation again from the step that failed.
+     *
+     * The engine refuses to repeat a claimed step, so a naive reset would
+     * fail straight back. When the policy says the step definitely did not
+     * deliver, its claim is released and the run resumes there. When it
+     * might have delivered, the operator must confirm they checked the chat.
+     */
+    public function retryRun(Request $request, Automation $automation, AutomationRun $run): RedirectResponse
+    {
+        $this->authorise($request, $automation);
+        abort_unless((int) $run->automation_id === (int) $automation->id, 404);
+        $confirmed = $request->boolean('confirmed');
+
+        $run->setRelation('automation', $automation);
+        $assessment = app(AutomationRetryPolicy::class)->assess($run);
+        if (! $assessment['retryable']) {
+            return back()->with('error', $assessment['reason']);
+        }
+        if ($assessment['needs_confirmation'] && ! $confirmed) {
+            return back()->with('error', $assessment['reason']);
+        }
+
+        DB::transaction(function () use ($run): void {
+            DB::table('automation_step_claims')->where('run_id', $run->id)->where('node_id', $run->current_node_id)->delete();
+            // 'pending' is how every new run starts, and the only waiting
+            // state the column allows; the job picks it up the same way.
+            $run->update([
+                'status' => 'pending',
+                'resume_node_id' => $run->current_node_id,
+                'error' => null,
+                'completed_at' => null,
+                'wake_at' => null,
+            ]);
+        });
+        ExecuteAutomationRunJob::dispatch($run->id)->afterCommit();
+
+        return back()->with('success', 'Run queued to retry from the step that failed.');
+    }
+
+    /**
+     * Build an automation from a plain-language description.
+     *
+     * From the Automations page this creates a paused draft, never an active
+     * one: the AI cannot know which templates are approved, so a person always
+     * reviews it in the builder first. From inside the builder (persist=false)
+     * nothing is saved — the graph is returned to be placed on the canvas and
+     * saved only if the person chooses to.
+     */
+    public function generate(Request $request): JsonResponse
+    {
+        $wid = $this->workspaceId($request);
+        $validated = $request->validate([
+            'prompt' => ['required', 'string', 'max:2000'],
+            'persist' => ['nullable', 'boolean'],
+        ]);
+
+        try {
+            $graph = app(WorkflowGenerator::class)->generate($wid, $validated['prompt']);
+        } catch (AiCreditsExhaustedException $e) {
+            // Its own status, so the page can say "out of credits" plainly
+            // rather than implying the request itself was the problem.
+            return response()->json(['ok' => false, 'error' => $e->getMessage()], 402);
+        } catch (\Throwable $e) {
+            return response()->json(['ok' => false, 'error' => $e->getMessage()], 422);
+        }
+
+        // With a single WhatsApp number there is only one sensible choice, so
+        // make it; with several, leave it for the person reviewing the draft.
+        $accounts = ChannelAccount::where('workspace_id', $wid)->where('channel', 'whatsapp')->where('status', 'active')->pluck('id');
+        $triggerConfig = $graph['trigger_config'];
+        if ($accounts->count() === 1) {
+            $triggerConfig['channel_account_id'] = (int) $accounts->first();
+        }
+
+        if (! $request->boolean('persist', true)) {
+            return response()->json(['ok' => true, 'graph' => array_merge($graph, ['trigger_config' => $triggerConfig])]);
+        }
+
+        $automation = Automation::create([
+            'workspace_id' => $wid,
+            'name' => $graph['name'],
+            'status' => 'draft',
+            'trigger_type' => $graph['trigger_type'],
+            'trigger_config' => $triggerConfig,
+            'nodes' => $graph['nodes'],
+            'edges' => $graph['edges'],
+        ]);
+
+        return response()->json(['ok' => true, 'redirect' => route('client.automations.edit', $automation->uuid)]);
     }
 
     private function authorise(Request $request, Automation $automation): void

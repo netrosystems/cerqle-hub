@@ -12,7 +12,7 @@ import { DatePicker, Tooltip } from '@/Components/ui';
 import { browserTz, tzLocalToUtcIso, formatInTz } from '@/Utils/datetime';
 import { toast } from 'sonner';
 
-import { xWeightedLength } from '@/Components/Social/xText';
+import { xSharedMediaProblem, xWeightedLength } from '@/Components/Social/xText';
 
 const CHAR_LIMITS = { twitter: 280, tiktok: 2200, linkedin: 3000, linkedin_page: 3000, facebook: 63206, instagram: 2200, youtube: 5000 };
 
@@ -438,6 +438,13 @@ export default function SocialComposer({ accounts, storageUsage }) {
                                 <p className="text-xs text-neutral-400">{t('social.no_media_hint')}</p>
                             )}
                             {errors.media_urls && <p className="text-xs text-red-500">{errors.media_urls}</p>}
+                            {/* X takes the shared media unless its own version is customised. */}
+                            {selectedNetworks.includes('twitter') && !data.platform_payloads?.twitter?.customize && xSharedMediaProblem(data.media_urls) && (
+                                <p role="alert" className="rounded-soft border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-200">
+                                    {t(`social.x_media_${xSharedMediaProblem(data.media_urls)}`)}
+                                </p>
+                            )}
+                            {errors.media_ids && <p className="text-xs text-red-500">{errors.media_ids}</p>}
                         </div>
 
                         <SocialPlatformOverrides

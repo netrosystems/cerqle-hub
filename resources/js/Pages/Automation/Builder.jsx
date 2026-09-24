@@ -1,7 +1,8 @@
 import { Head, router, usePage } from '@inertiajs/react';
 import ClientLayout from '@/Layouts/ClientLayout';
 import { useCallback, useContext, useState, useEffect, createContext } from 'react';
-import { automationReleaseNodes, legacyAutomation } from '@/Utils/automationRelease';
+import { automationAiExamples, automationReleaseNodes, legacyAutomation, templateIsSupported } from '@/Utils/automationRelease';
+import { useConfirm } from '@/Components/ui/ConfirmProvider';
 import {
     ArrowLeft, Save, Play, Pause, Copy, Check, RefreshCw,
     X, Zap, Mail, Phone, Clock, GitBranch,
@@ -28,6 +29,7 @@ import {
     useNodesState,
     useEdgesState,
     useReactFlow,
+    useNodes,
     Panel,
     Handle,
     Position,
@@ -52,7 +54,7 @@ const TRIGGER_TYPES = [
 ];
 
 // Categories rendered (in order) in the node palette — mirrors the product node list.
-const CATEGORY_ORDER = ['send'];
+const CATEGORY_ORDER = ['send', 'listen', 'logic', 'contact'];
 
 const NODE_DEFS = {
     // ── SEND ──────────────────────────────────────────────────────────────
@@ -138,7 +140,7 @@ function NodeIcon({ nodeType, size = 14 }) {
     const def = NODE_DEFS[nodeType];
     if (!def) return <Settings size={size} />;
     if (def.icon === 'whatsapp' || def.icon === 'sms' || def.icon === 'email') {
-        return <ChannelBrandIcon channel={def.icon} className={`h-[${size}px] w-[${size}px] shrink-0`} />;
+        return <span style={{ display: 'inline-flex', width: size, height: size, flexShrink: 0 }}><ChannelBrandIcon channel={def.icon} className="h-full w-full" /></span>;
     }
     const Icon = def.icon;
     return <Icon size={size} />;
@@ -151,14 +153,14 @@ const NodeActionsContext = createContext({ onConfigure: () => {}, onDelete: () =
 function BaseNode({ id, data, selected }) {
     const { t } = useTranslation();
     const { onConfigure, onDelete } = useContext(NodeActionsContext);
-    const { nodeType, label, configured } = data;
+    const { nodeType, label } = data;
     const def = NODE_DEFS[nodeType];
     const defLabel = def ? t(def.labelKey) : nodeType;
     const defColor = def?.color ?? '#6b7280';
     const isCondition = nodeType === 'condition';
 
     const hasLabel = label && label !== defLabel;
-    const summary = hasLabel ? label : (configured ? summarizeConfig(data, t) : '');
+    const summary = hasLabel ? label : summarizeConfig(data, t);
 
     const actionBtnStyle = {
         display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -380,11 +382,11 @@ function ConfigPanel({ node, onClose, onChange, error }) {
 
     return (
         <div style={{
-            position: 'absolute', top: 0, right: 0, bottom: 0, width: 320,
+            position: 'absolute', top: PANEL_TOP, right: 0, bottom: 0, width: 320,
             background: '#fff', borderLeft: '1px solid #e5e7eb',
             boxShadow: '-4px 0 24px rgba(0,0,0,0.08)',
             zIndex: 10, display: 'flex', flexDirection: 'column',
-            borderRadius: '0 0 12px 0',
+            borderRadius: '12px 0 12px 12px', overflow: 'hidden',
         }}>
             {/* Header */}
             <div style={{
@@ -411,19 +413,52 @@ function ConfigPanel({ node, onClose, onChange, error }) {
                 {/* Per-type fields */}
                 {Fields && <Fields d={d} set={set} />}
 
-                {/* Token hint */}
-                <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: '8px 10px', fontSize: 10, color: '#64748b' }}>
-                    <strong>{t('automation.available_tokens')}</strong> <code>{'{{contact.name}}'}</code>, <code>{'{{contact.email}}'}</code>, <code>{'{{contact.phone}}'}</code>, <code>{'{{message.body}}'}</code>, <code>{'{{context.key}}'}</code>
-                </div>
+                {TEXT_NODES.includes(nodeType) && <TokenHint />}
             </div>
         </div>
     );
 }
 
+// Settings panels open below the toolbar, so Save and Preview stay reachable while editing.
+const PANEL_TOP = 64;
+
 const inputCls = "w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition";
 const textareaCls = "w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition resize-none";
 const selectCls = "w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition";
 const labelCls = "block text-xs font-semibold text-gray-600 mb-1";
+
+// Nodes whose text is personalised with {{tokens}} before sending.
+const TEXT_NODES = ['send_whatsapp', 'send_template', 'send_media', 'quick_replies', 'ask_question'];
+
+// The answers this workflow collects, so the hint names real variables instead of a placeholder.
+function useWorkflowVariables() {
+    const nodes = useNodes();
+    const vars = [];
+    nodes.forEach(n => {
+        if (n.data?.nodeType === 'ask_question') vars.push(n.data.variable || 'answer');
+        if (n.data?.nodeType === 'quick_replies') vars.push('choice');
+    });
+    return [...new Set(vars)];
+}
+
+function TokenHint() {
+    const { t } = useTranslation();
+    const vars = useWorkflowVariables();
+    const tokens = ['{{contact.name}}', '{{contact.phone}}', '{{contact.email}}', '{{message.body}}', ...vars.map(v => `{{context.${v}}}`)];
+    return (
+        <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: '8px 10px', fontSize: 10, color: '#64748b' }}>
+            <strong>{t('automation.available_tokens')}</strong> {tokens.map((tok, i) => <span key={tok}>{i > 0 && ', '}<code>{tok}</code></span>)}
+        </div>
+    );
+}
+
+function Hint({ children, tone = 'slate' }) {
+    const tones = {
+        slate: { background: '#f8fafc', border: '1px solid #e2e8f0', color: '#475569' },
+        amber: { background: '#fffbeb', border: '1px solid #fde68a', color: '#92400e' },
+    };
+    return <div style={{ ...tones[tone], borderRadius: 8, padding: '8px 10px', fontSize: 10.5, lineHeight: 1.45 }}>{children}</div>;
+}
 
 function Field({ label, children }) {
     return <div><label className={labelCls}>{label}</label>{children}</div>;
@@ -442,11 +477,11 @@ function TriggerConfigPanel({ automation, onTypeChange, onConfigChange, webhookU
 
     return (
         <div style={{
-            position: 'absolute', top: 0, right: 0, bottom: 0, width: 320,
+            position: 'absolute', top: PANEL_TOP, right: 0, bottom: 0, width: 320,
             background: '#fff', borderLeft: '1px solid #e5e7eb',
             boxShadow: '-4px 0 24px rgba(0,0,0,0.08)',
             zIndex: 10, display: 'flex', flexDirection: 'column',
-            borderRadius: '0 0 12px 0',
+            borderRadius: '12px 0 12px 12px', overflow: 'hidden',
         }}>
             {/* Header */}
             <div style={{ background: '#1e293b', padding: '14px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -535,6 +570,7 @@ function CheckField({ label, checked, onChange }) {
 function ChannelSelect({ d, set, imageOnlyHint = false }) {
     const { t } = useTranslation();
     const ch = d.channel ?? 'whatsapp';
+    if (ch === 'whatsapp') return null;
     return (
         <>
             <Field label={t('automation.field_channel')}>
@@ -620,7 +656,9 @@ function TemplateFields({ d, set }) {
     const { t } = useTranslation();
     const resources = useResources();
     const account = resources.whatsapp_accounts?.find(a => Number(a.id) === Number(resources.selected_account_id));
-    const templates = (resources.templates ?? []).filter(tpl => tpl.status === 'APPROVED' && tpl.waba_id === account?.business_account_id);
+    const approved = (resources.templates ?? []).filter(tpl => tpl.status === 'APPROVED' && tpl.waba_id === account?.business_account_id);
+    const templates = approved.filter(tpl => templateIsSupported(tpl.components));
+    const hidden = approved.length - templates.length;
     const tpl = templates.find(x => x.name === d.template_name && x.language === d.language)
         || templates.find(x => x.name === d.template_name);
     const varCount = tpl ? templateBodyVarCount(tpl.components) : 0;
@@ -656,6 +694,11 @@ function TemplateFields({ d, set }) {
                     <p className="text-xs text-amber-700">{t('automation.sender_template_hint', 'Select a sender in the trigger. Only its approved templates are available.')}</p>
                 )}
             </Field>
+
+            {hidden > 0 && (
+                <p style={{ fontSize: 10, color: '#94a3b8' }}>{t('automation.templates_hidden', { count: hidden, defaultValue: '{{count}} approved template(s) hidden: they need an image, video or document header, or button values, which automations cannot fill yet.' })}</p>
+            )}
+            <Hint>{t('automation.template_hint', 'Templates can reach a customer at any time. Other messages only work within 24 hours of the customer\'s last message.')}</Hint>
 
             {!templates.length && (
                 <Field label={t('automation.field_language')}>
@@ -812,6 +855,7 @@ function QuickRepliesFields({ d, set }) {
                     <input className={inputCls} maxLength={20} value={buttons[i] ?? ''} onChange={e => setBtn(i, e.target.value)} placeholder={i === 0 ? t('automation.placeholder_button_required') : t('automation.placeholder_button_optional')} />
                 </Field>
             ))}
+            <Hint>{t('automation.quick_replies_hint', 'The automation waits up to 24 hours for a tap. A typed reply also counts if it matches a button or its number (1, 2, 3). To send each answer down a different path, add a Condition next with "Menu choice".')}</Hint>
         </>
     );
 }
@@ -857,7 +901,9 @@ function AskQuestionFields({ d, set }) {
 
 function WaitFields({ d, set }) {
     const { t } = useTranslation();
+    const minutes = (Number(d.amount) || 0) * ({ hours: 60, days: 1440 }[d.unit] ?? 1);
     return (
+        <>
         <div className="flex gap-2">
             <div className="flex-1">
                 <label className={labelCls}>{t('automation.field_amount_required')}</label>
@@ -872,29 +918,46 @@ function WaitFields({ d, set }) {
                 </select>
             </div>
         </div>
+        {minutes >= 1440 && (
+            <Hint tone="amber">{t('automation.wait_window_hint', 'After 24 hours without a customer message, WhatsApp only delivers approved templates. Use Send Template after this wait.')}</Hint>
+        )}
+        </>
     );
 }
 
 function ConditionFields({ d, set }) {
     const { t } = useTranslation();
-    const noValue = d.operator === 'exists' || d.operator === 'not_exists';
+    const nodes = useNodes();
+    const { tags = [] } = useResources();
+    const isTag = d.field === 'contact.tag';
+    const answerVars = [...new Set(nodes.filter(n => n.data?.nodeType === 'ask_question').map(n => n.data.variable || 'answer'))];
+    const noValue = !isTag && (d.operator === 'exists' || d.operator === 'not_exists');
+    const operators = isTag
+        ? [{ value: 'equals', label: t('automation.op_has_tag', 'has tag') }, { value: 'not_equals', label: t('automation.op_not_has_tag', 'does not have tag') }]
+        : CONDITION_OPERATORS.map(o => ({ value: o.value, label: t(o.labelKey) }));
+    const operator = operators.some(o => o.value === d.operator) ? d.operator : 'equals';
+    const suggestions = d.field === 'context.choice'
+        ? [...new Set(nodes.filter(n => n.data?.nodeType === 'quick_replies').flatMap(n => (n.data.buttons ?? []).filter(Boolean)))]
+        : isTag ? tags : [];
     return (
         <>
             <Field label={t('automation.field_check_field_required')}>
-                <select className={selectCls} value={CONDITION_FIELDS.some(f => f.value === d.field) ? d.field : (d.field?.startsWith('context.') ? 'context.key' : '')} onChange={e => set('field', e.target.value)}>
+                <select className={selectCls} value={CONDITION_FIELDS.some(f => f.value === d.field) ? d.field : (d.field?.startsWith('context.') ? 'context.key' : '')} onChange={e => { set('field', e.target.value === 'context.key' ? 'context.' : e.target.value); if (e.target.value === 'contact.tag' && !['equals', 'not_equals'].includes(d.operator)) set('operator', 'equals'); }}>
                     <option value="">{t('automation.select_field')}</option>
                     {CONDITION_FIELDS.map(f => <option key={f.value} value={f.value}>{t(f.labelKey)}</option>)}
                 </select>
             </Field>
-            {d.field?.startsWith('context.') && !['context.answer', 'context.choice', 'context.choice_id'].includes(d.field) && <Field label={t('automation.context_variable', 'Context variable')}><input className={inputCls} value={d.field.slice(8)} onChange={e => set('field', `context.${e.target.value}`)} /></Field>}
+            {d.field?.startsWith('context.') && !['context.answer', 'context.choice', 'context.choice_id'].includes(d.field) && <Field label={t('automation.context_variable', 'Context variable')}><input className={inputCls} list="automation-answer-vars" value={d.field.slice(8)} onChange={e => set('field', `context.${e.target.value.replace(/\W/g, '')}`)} placeholder="order_number" /><datalist id="automation-answer-vars">{answerVars.map(v => <option key={v} value={v} />)}</datalist></Field>}
             <Field label={t('automation.field_operator')}>
-                <select className={selectCls} value={d.operator ?? 'equals'} onChange={e => set('operator', e.target.value)}>
-                    {CONDITION_OPERATORS.map(o => <option key={o.value} value={o.value}>{t(o.labelKey)}</option>)}
+                <select className={selectCls} value={operator} onChange={e => set('operator', e.target.value)}>
+                    {operators.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                 </select>
             </Field>
             {!noValue && (
                 <Field label={t('automation.field_value_required')}>
-                    <input className={inputCls} value={d.value ?? ''} onChange={e => set('value', e.target.value)} placeholder={t('automation.placeholder_compare_value')} />
+                    <input className={inputCls} list={suggestions.length ? `cond-values-${d.field}` : undefined} value={d.value ?? ''} onChange={e => set('value', e.target.value)} placeholder={t('automation.placeholder_compare_value')} />
+                    {suggestions.length > 0 && <datalist id={`cond-values-${d.field}`}>{suggestions.map(v => <option key={v} value={v} />)}</datalist>}
+                    <p style={{ fontSize: 10, color: '#94a3b8', marginTop: 4 }}>{t('automation.condition_case_hint', 'Capital letters and extra spaces are ignored.')}</p>
                 </Field>
             )}
             <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, padding: '8px 10px', fontSize: 10, color: '#166534' }}>
@@ -907,10 +970,18 @@ function ConditionFields({ d, set }) {
 
 function TagFields({ d, set }) {
     const { t } = useTranslation();
+    const { tags = [] } = useResources();
+    const isRemove = d.nodeType === 'remove_tag';
     return (
-        <Field label={t('automation.field_tag_name_required')}>
-            <input className={inputCls} value={d.tag ?? ''} onChange={e => set('tag', e.target.value)} placeholder={t('automation.placeholder_tag_name')} />
-        </Field>
+        <>
+            <Field label={t('automation.field_tag_name_required')}>
+                <input className={inputCls} list="automation-tag-names" value={d.tag ?? ''} onChange={e => set('tag', e.target.value)} placeholder={t('automation.placeholder_tag_name')} />
+                <datalist id="automation-tag-names">{tags.map(tag => <option key={tag} value={tag} />)}</datalist>
+            </Field>
+            <Hint>{isRemove
+                ? t('automation.remove_tag_hint', 'Nothing happens if the contact does not have this tag.')
+                : t('automation.add_tag_hint', 'A new tag name is created the first time it is used.')}</Hint>
+        </>
     );
 }
 
@@ -1021,9 +1092,12 @@ function AssignAgentFields({ d, set }) {
     return (
         <Field label={t('automation.field_assign_to')}>
             <select className={selectCls} value={d.user_id ?? ''} onChange={e => pick(e.target.value)}>
-                <option value="">{t('automation.assign_unassigned')}</option>
+                <option value="">{t('automation.assign_any_agent', 'Any available agent (team queue)')}</option>
                 {agents.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
             </select>
+            <div style={{ marginTop: 12 }}>
+                <Hint>{t('automation.assign_agent_hint', 'The chat moves to a person and the automation stops here, so this must be the last step.')}</Hint>
+            </div>
         </Field>
     );
 }
@@ -1372,6 +1446,16 @@ const modalStyle = { background: '#fff', borderRadius: 16, boxShadow: '0 20px 60
 const modalHeaderStyle = { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px', borderBottom: '1px solid #f0f0f0' };
 const modalFooterStyle = { display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8, padding: '12px 16px', borderTop: '1px solid #f0f0f0', background: '#fafafa' };
 const iconBtnStyle = { background: 'none', border: 'none', cursor: 'pointer', color: '#9ca3af', display: 'flex' };
+const chipBtnStyle = { borderRadius: 10, padding: '6px 10px', fontSize: 10.5, fontWeight: 500, border: '1px solid #e5e7eb', background: '#fff', color: '#475569', cursor: 'pointer', textAlign: 'left' };
+
+// A "false" branch is drawn red so the two sides of a condition are easy to tell apart.
+const styleEdge = (e) => ({
+    ...e,
+    animated: true,
+    style: { stroke: e.sourceHandle === 'false' ? '#ef4444' : '#6366f1', strokeWidth: 2 },
+    markerEnd: { type: MarkerType.ArrowClosed, color: e.sourceHandle === 'false' ? '#ef4444' : '#6366f1' },
+});
+
 const ghostBtnStyle = { borderRadius: 8, padding: '7px 14px', fontSize: 12, fontWeight: 600, border: '1px solid #e5e7eb', background: '#fff', color: '#374151', cursor: 'pointer' };
 const primaryBtnStyle = { display: 'flex', alignItems: 'center', gap: 6, borderRadius: 8, padding: '7px 14px', fontSize: 12, fontWeight: 600, border: 'none', background: '#6366f1', color: '#fff', cursor: 'pointer' };
 
@@ -1484,20 +1568,63 @@ function ConfirmDeleteModal({ target, onCancel, onConfirm }) {
     );
 }
 
+function AiGenerateModal({ prompt, setPrompt, loading, error, onClose, onGenerate }) {
+    const { t } = useTranslation();
+    const cost = usePage().props.generateCost ?? 20;
+    return (
+        <div onClick={loading ? undefined : onClose} style={overlayStyle}>
+            <div role="dialog" aria-modal="true" aria-labelledby="builder-ai-title" onClick={e => e.stopPropagation()} style={{ ...modalStyle, width: 520 }}>
+                <div style={modalHeaderStyle}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span style={{ display: 'flex', width: 30, height: 30, borderRadius: 8, background: '#f5f0f8', color: '#8F5FA7', alignItems: 'center', justifyContent: 'center' }}><Sparkles size={16} /></span>
+                        <div>
+                            <div id="builder-ai-title" style={{ fontSize: 14, fontWeight: 700, color: '#111827' }}>{t('automation.ai_title')}</div>
+                            <div style={{ fontSize: 11, color: '#6b7280' }}>{t('automation.ai_subtitle')}</div>
+                        </div>
+                    </div>
+                    <button onClick={onClose} disabled={loading} aria-label={t('common.cancel')} style={iconBtnStyle}><X size={18} /></button>
+                </div>
+                <div style={{ padding: 16 }} className="space-y-3">
+                    <label htmlFor="builder-ai-prompt" className="sr-only">{t('automation.ai_title')}</label>
+                    <textarea
+                        id="builder-ai-prompt"
+                        autoFocus
+                        rows={5}
+                        maxLength={2000}
+                        className={textareaCls}
+                        value={prompt}
+                        onChange={e => setPrompt(e.target.value)}
+                        placeholder={t('automation.ai_placeholder_message', 'e.g. When a customer messages us, ask what they need help with. If they mention an order, ask for the order number; otherwise hand them to an agent.')}
+                        disabled={loading}
+                    />
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                        {automationAiExamples.map(([key, fallback]) => (
+                            <button key={key} type="button" disabled={loading} onClick={() => setPrompt(t(key, fallback))} style={chipBtnStyle}>{t(key, fallback)}</button>
+                        ))}
+                    </div>
+                    {error && <div role="alert" style={{ display: 'flex', gap: 8, background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: '8px 10px', fontSize: 11.5, color: '#b91c1c' }}><AlertTriangle size={14} style={{ flexShrink: 0, marginTop: 1 }} />{error}</div>}
+                    <div style={{ fontSize: 10.5, color: '#94a3b8', display: 'flex', gap: 6, alignItems: 'flex-start' }}><AlertCircle size={13} style={{ flexShrink: 0, marginTop: 1 }} />{t('automation.ai_disclaimer')}</div>
+                </div>
+                <div style={modalFooterStyle}>
+                    <button onClick={onClose} disabled={loading} style={ghostBtnStyle}>{t('common.cancel')}</button>
+                    <button onClick={onGenerate} disabled={loading || !prompt.trim()} style={{ ...primaryBtnStyle, opacity: (loading || !prompt.trim()) ? 0.6 : 1, display: 'flex', alignItems: 'center', gap: 6 }}>
+                        {loading
+                            ? <><Loader2 size={13} className="animate-spin" /> {t('automation.ai_generating')}</>
+                            : <><Sparkles size={13} /> {t('automation.ai_generate')} · {cost} {t('automation.credits', 'credits')}</>}
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+}
+
 function AutomationBuilderInner({ automation: initial }) {
     const { t } = useTranslation();
     const [automation, setAutomation] = useState(initial);
     const [nodes, setNodes, onNodesChange] = useNodesState(
         withTriggerNode(deserializeNodes(initial.nodes ?? []), initial.trigger_type ?? '')
     );
-    const [edges, setEdges, onEdgesChange] = useEdgesState(
-        (initial.edges ?? []).map(e => ({
-            ...e,
-            animated: true,
-            style: { stroke: e.sourceHandle === 'false' ? '#ef4444' : '#6366f1', strokeWidth: 2 },
-            markerEnd: { type: MarkerType.ArrowClosed, color: e.sourceHandle === 'false' ? '#ef4444' : '#6366f1' },
-        }))
-    );
+    const [edges, setEdges, onEdgesChange] = useEdgesState((initial.edges ?? []).map(styleEdge));
     const [saving, setSaving] = useState(false);
     const [selectedNode, setSelectedNode] = useState(null);
     const [copied, setCopied] = useState(false);
@@ -1509,6 +1636,11 @@ function AutomationBuilderInner({ automation: initial }) {
     const [sampleMessage, setSampleMessage] = useState('Hi');
     const [sampleAnswer, setSampleAnswer] = useState('sales');
     const [validationErrors, setValidationErrors] = useState({});
+    const confirm = useConfirm();
+    const [aiOpen, setAiOpen] = useState(false);
+    const [aiPrompt, setAiPrompt] = useState('');
+    const [aiLoading, setAiLoading] = useState(false);
+    const [aiError, setAiError] = useState(null);
     const canvasState = JSON.stringify({ nodes: serializeNodes(nodes), edges: edges.map(({ id, source, target, sourceHandle, targetHandle }) => ({ id, source, target, sourceHandle, targetHandle })), trigger_type: automation.trigger_type, trigger_config: automation.trigger_config, name: automation.name });
     const [savedState, setSavedState] = useState(canvasState);
     const dirty = canvasState !== savedState;
@@ -1552,7 +1684,7 @@ function AutomationBuilderInner({ automation: initial }) {
         }, eds));
     }, []);
 
-    const { screenToFlowPosition, deleteElements } = useReactFlow();
+    const { screenToFlowPosition, deleteElements, setCenter, getZoom } = useReactFlow();
 
     // Single confirmation gate for every delete path (node trash icon, panel button, Delete key).
     // deleteElements + the Delete key both run through onBeforeDelete, so we resolve its promise
@@ -1568,10 +1700,14 @@ function AutomationBuilderInner({ automation: initial }) {
         setConfirmDelete(null);
     };
 
+    // A clicked palette item lands under the lowest step and the canvas follows
+    // it; a fixed position used to drop it below the visible area.
     const addNode = (type, position) => {
         if (!automationReleaseNodes.includes(type)) return;
-        const n = makeNode(type, nodes.length, position);
-        setNodes(nds => [...nds, n]);
+        const lowest = nodes.reduce((a, n) => (!a || n.position.y > a.position.y ? n : a), null);
+        const at = position ?? (lowest ? { x: lowest.position.x, y: lowest.position.y + 150 } : { x: 250, y: 50 });
+        setNodes(nds => [...nds, makeNode(type, nds.length, at)]);
+        setCenter(at.x + 110, at.y + 40, { zoom: getZoom(), duration: 300 });
     };
 
     const onDragStart = (e, type) => {
@@ -1662,6 +1798,54 @@ function AutomationBuilderInner({ automation: initial }) {
             .finally(() => setTesting(false));
     };
 
+    // Put an AI-drafted graph on the canvas for review. Nothing is saved until
+    // the person presses Save, and two things they already chose are kept:
+    // the name, and the WhatsApp number. Wisperbot overwrote both — its
+    // `graph.trigger_config ?? current` kept the AI's empty object, because
+    // an empty object is not "missing", and silently unset the sender.
+    const applyGraph = (graph) => {
+        setNodes(withTriggerNode(deserializeNodes(graph.nodes ?? []), graph.trigger_type ?? automation.trigger_type ?? ''));
+        setEdges((graph.edges ?? []).map(styleEdge));
+        setAutomation(a => {
+            // Only a real choice wins; a blank one must not hide the number the server prefilled.
+            const chosen = Object.fromEntries(Object.entries(a.trigger_config ?? {}).filter(([, v]) => v !== null && v !== ''));
+            return {
+                ...a,
+                trigger_type: graph.trigger_type ?? a.trigger_type,
+                trigger_config: { ...(graph.trigger_config ?? {}), ...chosen },
+            };
+        });
+        setSelectedNode(null);
+        setValidationErrors({});
+    };
+
+    const generateAi = async () => {
+        // Replacing someone's work needs their say-so; an empty canvas does not.
+        const hasSteps = nodes.some(n => n.type !== 'triggerNode' && n.type !== 'trigger');
+        if (hasSteps && !(await confirm(
+            t('automation.ai_replace_confirm', 'Replace the steps on the canvas with the AI draft? Nothing is saved until you press Save.'),
+            { confirmLabel: t('automation.ai_replace', 'Replace'), destructive: false },
+        ))) {
+            return;
+        }
+        setAiLoading(true);
+        setAiError(null);
+        axios.post(route('client.automations.generate'), { prompt: aiPrompt, persist: false }, {
+            headers: { 'Idempotency-Key': `workflow-generate:${window.crypto.randomUUID()}` },
+        })
+            .then(res => {
+                if (res.data?.ok && res.data.graph) {
+                    applyGraph(res.data.graph);
+                    setAiOpen(false);
+                    setAiPrompt('');
+                } else {
+                    setAiError(res.data?.error || t('automation.ai_failed'));
+                }
+            })
+            .catch(err => setAiError(err.response?.data?.error || err.response?.data?.message || t('automation.ai_failed')))
+            .finally(() => setAiLoading(false));
+    };
+
     const q = search.trim().toLowerCase();
     const grouped = CATEGORY_ORDER.map(cat => ({
         cat,
@@ -1710,6 +1894,7 @@ function AutomationBuilderInner({ automation: initial }) {
                                         onDragStart={e => onDragStart(e, type)}
                                         onClick={() => addNode(type)}
                                         title={t('automation.drag_node_hint')}
+                                        aria-label={t(def.labelKey)}
                                         style={{
                                             display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px',
                                             borderRadius: 8, border: '1px solid transparent', background: 'white',
@@ -1762,6 +1947,13 @@ function AutomationBuilderInner({ automation: initial }) {
                                 <div style={{ width: 8, height: 8, borderRadius: '50%', background: automation.status === 'active' ? '#10b981' : '#f59e0b' }} />
                                 <span style={{ fontSize: 11, color: '#6b7280', fontWeight: 500 }}>{t(`automation.status_${automation.status}`)}</span>
                             </div>
+                            <button onClick={() => { setAiError(null); setAiOpen(true); }} title={t('automation.ai_title')} style={{
+                                display: 'flex', alignItems: 'center', gap: 6, borderRadius: 8,
+                                background: '#f5f0f8', padding: '6px 12px', fontSize: 12, fontWeight: 600,
+                                color: '#6b4383', border: '1px solid #e6dcec', cursor: 'pointer', transition: 'all 0.15s',
+                            }}>
+                                <Sparkles size={13} /> {t('automation.ai_generate_short', 'AI')}
+                            </button>
                             <button onClick={runTest} disabled={testing} title={t('automation.test_title')} style={{
                                 display: 'flex', alignItems: 'center', gap: 6, borderRadius: 8,
                                 background: '#eef2ff', padding: '6px 12px', fontSize: 12, fontWeight: 600,
@@ -1848,6 +2040,7 @@ function AutomationBuilderInner({ automation: initial }) {
                 )}
             </div>
 
+            {aiOpen && <AiGenerateModal prompt={aiPrompt} setPrompt={setAiPrompt} loading={aiLoading} error={aiError} onClose={() => setAiOpen(false)} onGenerate={generateAi} />}
             {showTest && <TestResultModal result={testResult} loading={testing} onClose={() => setShowTest(false)} onRerun={runTest} />}
             {confirmDelete && <ConfirmDeleteModal target={confirmDelete} onCancel={() => resolveDelete(false)} onConfirm={() => resolveDelete(true)} />}
         </div>

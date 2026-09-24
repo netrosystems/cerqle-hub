@@ -17,7 +17,18 @@ describe('client navigation organization', () => {
 
         const everyItem = result.current.flatMap((group) => group.items ?? []);
         expect(everyItem.some((item) => item.label === 'nav.knowledge_bases')).toBe(false);
-        expect(everyItem.some((item) => item.activePattern === 'client.automations.*')).toBe(false);
+    });
+
+    it('puts Automations in Setup, right after the chatbot items', () => {
+        const { result } = renderHook(() => useClientNav());
+        const setup = result.current.find((group) => group.label === 'nav.group_setup');
+        const automations = setup.items.find((item) => item.activePattern === 'client.automations.*');
+
+        // Hidden on 2026-09-13 while the builder was hard to use; restored with
+        // the validated action set and Generate with AI.
+        expect(automations).toBeDefined();
+        const labels = setup.items.map((item) => item.label);
+        expect(labels.indexOf('nav.automations')).toBe(labels.indexOf('nav.chat_widget') + 1);
     });
 
     it('uses the requested group order and keeps ecommerce out of the sidebar', () => {
@@ -64,6 +75,7 @@ describe('client navigation organization', () => {
             'nav.website_widget',
             'nav.chatbots',
             'nav.chat_widget',
+            'nav.automations',
             'nav.social_accounts',
             'nav.sms_gateways',
             'nav.ai_providers',

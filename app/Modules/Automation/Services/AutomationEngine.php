@@ -154,6 +154,19 @@ class AutomationEngine
                 $messageBody = $choiceMap[$choiceId];
                 $context['choice_id'] = substr($choiceId, strrpos($choiceId, ':') + 1);
             }
+            if ($allowed && ! $choiceId) {
+                // WhatsApp shows the buttons, but many people type instead of
+                // tapping. "yes", " YES " and "1" all mean the first button "Yes".
+                $typed = mb_strtolower(trim($messageBody));
+                $position = ctype_digit($typed) ? (int) $typed - 1 : -1;
+                $match = $allowed[$position] ?? collect($allowed)->first(fn ($title) => mb_strtolower(trim((string) $title)) === $typed);
+                if ($match === null) {
+                    continue;
+                }
+                $messageBody = (string) $match;
+                $index = array_search($match, $allowed, true);
+                $context['choice_id'] = 'btn_'.(((int) $index) + 1);
+            }
             if ($allowed && ! in_array($messageBody, $allowed, true)) {
                 continue;
             }
@@ -819,13 +832,15 @@ class AutomationEngine
         if (! $contact) {
             return ['status' => 'skipped', 'message' => 'Contact not found.'];
         }
-        $tag = ContactTag::firstOrCreate(
-            ['workspace_id' => $contact->workspace_id, 'name' => $tagName],
-        );
         if ($action === 'add') {
+            $tag = ContactTag::firstOrCreate(['workspace_id' => $contact->workspace_id, 'name' => $tagName]);
             $contact->tags()->syncWithoutDetaching([$tag->id]);
         } else {
-            $contact->tags()->detach($tag->id);
+            // Removing a tag the contact never had is a no-op, not a reason to create it.
+            $tag = ContactTag::where('workspace_id', $contact->workspace_id)->where('name', $tagName)->first();
+            if ($tag) {
+                $contact->tags()->detach($tag->id);
+            }
         }
 
         return ['status' => 'ok', 'message' => ucfirst($action)." tag '{$tagName}'."];
@@ -962,7 +977,9 @@ class AutomationEngine
 
         // Tag membership is a boolean check, not a value comparison.
         if ($field === 'contact.tag') {
-            $has = ($contact && $contact->exists) ? $contact->tags()->where('name', $value)->exists() : false;
+            $has = ($contact && $contact->exists && trim((string) $value) !== '')
+                ? $contact->tags()->whereRaw('LOWER(name) = ?', [mb_strtolower(trim((string) $value))])->exists()
+                : false;
 
             return in_array($operator, ['not_equals', 'not_contains', 'not_exists'], true) ? ! $has : $has;
         }
@@ -976,11 +993,16 @@ class AutomationEngine
             default => $context[$field] ?? null,
         };
 
+        // What a customer types is compared the way a person would read it:
+        // "Price?" contains "price", and " Yes" equals "yes".
+        $a = mb_strtolower(trim((string) $actual));
+        $v = mb_strtolower(trim((string) $value));
+
         return match ($operator) {
-            'equals' => (string) $actual === (string) $value,
-            'not_equals' => (string) $actual !== (string) $value,
-            'contains' => $value !== null && str_contains((string) $actual, (string) $value),
-            'not_contains' => $value === null || ! str_contains((string) $actual, (string) $value),
+            'equals' => $a === $v,
+            'not_equals' => $a !== $v,
+            'contains' => $v !== '' && str_contains($a, $v),
+            'not_contains' => $v === '' || ! str_contains($a, $v),
             'exists' => $actual !== null && $actual !== '' && $actual !== false,
             'not_exists' => $actual === null || $actual === '' || $actual === false,
             'gt' => (float) $actual > (float) $value,

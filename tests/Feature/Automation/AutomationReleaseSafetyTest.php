@@ -209,6 +209,30 @@ class AutomationReleaseSafetyTest extends TestCase
         $this->assertSame(1, $auto->runs()->count());
     }
 
+    /** @return array<string, array{string, string, string}> */
+    public static function typedMenuReplies(): array
+    {
+        return [
+            'title in another case' => ['  support ', 'Support', 'btn_2'],
+            'button number' => ['1', 'Sales', 'btn_1'],
+        ];
+    }
+
+    /** @dataProvider typedMenuReplies */
+    public function test_a_typed_reply_that_names_a_button_counts_as_tapping_it(string $typed, string $choice, string $choiceId): void
+    {
+        $auto = $this->workflow('quick_replies', ['body' => 'Choose', 'buttons' => ['Sales', 'Support']]);
+        $run = $this->trigger($auto, $this->message());
+        $this->execute($run);
+
+        $this->trigger($auto, $this->message($typed));
+        $this->execute($run->fresh());
+
+        $this->assertSame($choice, $run->fresh()->context['choice']);
+        $this->assertSame($choiceId, $run->fresh()->context['choice_id']);
+        $this->assertSame('completed', $run->fresh()->status);
+    }
+
     public function test_approved_template_followup_works_after_window_and_revalidates_approval(): void
     {
         $tpl = WhatsappTemplate::create(['workspace_id' => $this->chat->workspace_id, 'waba_id' => 'qa-waba', 'name' => 'qa', 'language' => 'en', 'status' => 'APPROVED', 'category' => 'UTILITY', 'components' => [['type' => 'BODY', 'text' => 'Hello {{1}}']]]);
@@ -313,6 +337,40 @@ class AutomationReleaseSafetyTest extends TestCase
         $this->postJson(route('client.automations.test', $auto), $payload + ['sample_message' => 'Hi', 'sample_answer' => 'Sales'])->assertOk()->assertJson(['ok' => true]);
         $this->assertSame(0, Message::count());
         $this->assertSame(0, $auto->runs()->count());
+    }
+
+    public function test_saving_and_previewing_keep_condition_branches_and_node_positions(): void
+    {
+        // Request validation only keeps keys that have a rule, so an edge's
+        // Yes/No handle and a node's canvas position used to be dropped:
+        // every condition then failed Preview and Activate, and saved steps
+        // piled up in one spot on reload.
+        $auto = $this->workflow();
+        $payload = [
+            'trigger_type' => 'message.received',
+            'trigger_config' => ['channel_account_id' => $this->account->id],
+            'nodes' => [
+                ['id' => 't', 'type' => 'trigger', 'position' => ['x' => 250, 'y' => 0], 'data' => []],
+                ['id' => 'c', 'type' => 'condition', 'position' => ['x' => 250, 'y' => 150], 'data' => ['field' => 'message.body', 'operator' => 'contains', 'value' => 'price']],
+                ['id' => 'yes', 'type' => 'send_whatsapp', 'position' => ['x' => 50, 'y' => 300], 'data' => ['body' => 'Our prices']],
+                ['id' => 'no', 'type' => 'assign_agent', 'position' => ['x' => 450, 'y' => 300], 'data' => []],
+            ],
+            'edges' => [
+                ['id' => 'e1', 'source' => 't', 'target' => 'c'],
+                ['id' => 'e2', 'source' => 'c', 'target' => 'yes', 'sourceHandle' => 'true'],
+                ['id' => 'e3', 'source' => 'c', 'target' => 'no', 'sourceHandle' => 'false'],
+            ],
+        ];
+
+        $this->actingAs($this->ctx['user'])->postJson(route('client.automations.test', $auto), $payload + ['sample_message' => 'What is the price?'])
+            ->assertOk()->assertJson(['ok' => true]);
+
+        $this->putJson(route('client.automations.update', $auto), $payload + ['status' => 'active'])->assertRedirect()->assertSessionHasNoErrors();
+        $saved = $auto->fresh();
+        $this->assertSame('active', $saved->status);
+        $this->assertSame(['true', 'false'], array_values(array_filter(array_column($saved->edges, 'sourceHandle'))));
+        $this->assertSame('e2', $saved->edges[1]['id']);
+        $this->assertSame(['x' => 50, 'y' => 300], $saved->nodes[2]['position']);
     }
 
     public function test_controller_blocks_invalid_activation_but_allows_incomplete_draft_and_pause(): void

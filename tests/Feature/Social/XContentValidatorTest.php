@@ -114,13 +114,15 @@ class XContentValidatorTest extends TestCase
             ['media_ids' => [999999]],
             ['media_ids' => [$this->image(User::factory()->create())->id]],
             ['media_ids' => [$this->image($user, ['size_bytes' => 5 * 1024 * 1024 + 1])->id]],
+            // A PNG labelled as a GIF: the real file type must match.
             ['media_ids' => [$this->image($user, ['mime_type' => 'image/gif'])->id]],
-            ['media_ids' => array_map(fn () => $this->image($user)->id, range(1, 5))],
+            // Cerqle caps X at three images, below X's own four.
+            ['media_ids' => array_map(fn () => $this->image($user)->id, range(1, 4))],
         ];
         foreach ($cases as $payload) {
             $this->assertRejected($validator, $payload, $workspace->id);
         }
-        $validator->assertPayload(['media_ids' => array_map(fn () => $this->image($user)->id, range(1, 4))], $workspace->id);
+        $validator->assertPayload(['media_ids' => array_map(fn () => $this->image($user)->id, range(1, XContentValidator::MAX_IMAGES))], $workspace->id);
         $validator->assertPayload(['body' => str_repeat('界', 141), 'status' => 'draft'], $workspace->id);
         $this->assertRejected($validator, ['media_ids' => [999999], 'status' => 'draft'], $workspace->id);
         $image->update(['size_bytes' => 5 * 1024 * 1024]);
@@ -238,9 +240,44 @@ class XContentValidatorTest extends TestCase
         Storage::disk('local')->assertExists($media->path);
     }
 
-    private function image(User $user, array $attributes = []): Media
+    public function test_one_gif_goes_alone_and_within_fifteen_megabytes(): void
     {
-        $file = UploadedFile::fake()->image('image.png');
+        ['user' => $user, 'workspace' => $workspace] = $this->createSubscribedWorkspaceContext();
+        Storage::fake('local');
+        $validator = new XContentValidator;
+        $gif = $this->image($user, ['mime_type' => 'image/gif'], 'loop.gif');
+
+        $validator->assertPayload(['media_ids' => [$gif->id]], $workspace->id);
+
+        $this->assertRejected($validator, ['media_ids' => [$gif->id, $this->image($user)->id]], $workspace->id);
+        $this->assertRejected($validator, ['media_ids' => [$gif->id, $this->image($user, ['mime_type' => 'image/gif'], 'second.gif')->id]], $workspace->id);
+        $this->assertRejected($validator, ['media_ids' => [$this->image($user, ['mime_type' => 'image/gif', 'size_bytes' => 15 * 1024 * 1024 + 1], 'big.gif')->id]], $workspace->id);
+        // A video is the same kind of single attachment as a GIF.
+        $this->assertRejected($validator, ['media_ids' => [$this->image($user, ['mime_type' => 'video/mp4'])->id, $this->image($user)->id]], $workspace->id);
+    }
+
+    public function test_the_cap_messages_say_what_to_change(): void
+    {
+        ['user' => $user, 'workspace' => $workspace] = $this->createSubscribedWorkspaceContext();
+        Storage::fake('local');
+        $validator = new XContentValidator;
+        try {
+            $validator->assertPayload(['media_ids' => array_map(fn () => $this->image($user)->id, range(1, 4))], $workspace->id);
+            $this->fail('Expected four images to be refused.');
+        } catch (ValidationException $e) {
+            $this->assertSame(['X posts can have up to 3 images.'], $e->errors()['media_ids']);
+        }
+        try {
+            $validator->assertPayload(['media_ids' => [$this->image($user, ['mime_type' => 'image/gif'], 'a.gif')->id, $this->image($user)->id]], $workspace->id);
+            $this->fail('Expected a GIF with an image to be refused.');
+        } catch (ValidationException $e) {
+            $this->assertSame(['X posts can have one video or GIF on its own. Remove the other attachments.'], $e->errors()['media_ids']);
+        }
+    }
+
+    private function image(User $user, array $attributes = [], string $name = 'image.png'): Media
+    {
+        $file = UploadedFile::fake()->image($name);
         $path = Storage::disk('local')->putFile('x-tests', $file);
 
         return Media::create(array_merge(['mediable_type' => User::class, 'mediable_id' => $user->id, 'disk' => 'local', 'path' => $path, 'filename' => 'image.png', 'mime_type' => 'image/png', 'size_bytes' => $file->getSize(), 'collection' => 'social', 'is_temporary' => true], $attributes));

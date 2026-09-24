@@ -1,6 +1,7 @@
 import axios from 'axios';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { X_ACCEPT, X_MAX_IMAGES, xFilesError } from './xText';
 
 export default function XMediaSelection({ payload, onChange, onStorageChange }) {
     const { t } = useTranslation();
@@ -11,8 +12,11 @@ export default function XMediaSelection({ payload, onChange, onStorageChange }) 
         const files = [...event.target.files];
         event.target.value = '';
         const video = type === 'video';
-        if (files.length > (video ? 1 : 4) || files.some(file => !(video ? ['video/mp4'] : ['image/jpeg', 'image/png']).includes(file.type) || file.size > (video ? 500 : 5) * 1024 * 1024)) {
-            setError(t('social.x_upload_limits'));
+        const problem = xFilesError(type, files);
+        if (problem) {
+            setError(problem === 'count'
+                ? (video ? t('social.x_one_motion') : t('social.x_too_many', { count: X_MAX_IMAGES }))
+                : t('social.x_upload_limits'));
             return;
         }
         setBusy(true);
@@ -22,7 +26,7 @@ export default function XMediaSelection({ payload, onChange, onStorageChange }) 
             for (const file of files) {
                 const form = new FormData();
                 form.append('file', file);
-                form.append('collection', video ? 'social-video' : 'social');
+                form.append('collection', file.type === 'video/mp4' ? 'social-video' : 'social');
                 const { data } = await axios.post(route('client.media.store'), form);
                 urls.push(data.url); ids.push(data.media_id);
                 onStorageChange?.(data.storage);
@@ -40,7 +44,7 @@ export default function XMediaSelection({ payload, onChange, onStorageChange }) 
                 {['text', 'images', 'video'].map(value => <option key={value} value={value}>{t(`social.x_media_${value}`)}</option>)}
             </select>
         </label>
-        {type !== 'text' && <label className="block text-xs">{t('social.x_upload_limits')}<input type="file" disabled={busy} multiple={type === 'images'} accept={type === 'video' ? 'video/mp4' : 'image/jpeg,image/png'} onChange={upload} className="mt-2 block w-full text-xs" /></label>}
+        {type !== 'text' && <label className="block text-xs">{t('social.x_upload_limits')}<input type="file" disabled={busy} multiple={type === 'images'} accept={X_ACCEPT[type].join(',')} onChange={upload} className="mt-2 block w-full text-xs" /></label>}
         {(payload.media_urls ?? []).filter(Boolean).map((url, index) => <div key={url} className="flex items-center justify-between gap-2 text-xs"><span className="truncate">{t('social.media')} {index + 1}</span><button type="button" disabled={busy} onClick={() => onChange({ media_urls: payload.media_urls.filter((_, i) => i !== index), media_ids: (payload.media_ids ?? []).filter((_, i) => i !== index) })}>{t('common.remove', { defaultValue: 'Remove' })}</button></div>)}
         {error && <p role="alert" className="text-xs text-coral-600">{error}</p>}
     </div>;

@@ -111,7 +111,7 @@ return [
         // reconciliation report has shown that every production path is metered.
         'enforced' => (bool) env('AI_CREDITS_ENFORCED', false),
         'reservation_ttl_minutes' => 10,
-        'rates_version' => '2026-09-01',
+        'rates_version' => '2026-09-24',
         'rates' => [
             'rag_reply' => 1,
             'email_subject' => 1,
@@ -119,7 +119,7 @@ return [
             'automation_ai_step' => 1,
             'email_compose' => 2,
             'social_single_generate' => 2,
-            'automation_workflow_generate' => 5,
+            'automation_workflow_generate' => 20,
             'social_plan_generate' => 5,
             // Infrastructure that supports an answer without being one. A client
             // must not pay more because their customers write in more languages.

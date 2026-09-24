@@ -103,7 +103,10 @@ class AutomationTestSimulationTest extends TestCase
         // trigger + 3 valid action nodes (bogus dropped)
         $this->assertCount(4, $graph['nodes']);
         $this->assertSame('trigger', $graph['nodes'][0]['type']);
-        $this->assertSame('contact.created', $graph['nodes'][0]['data']['triggerType']);
+        // Message Received is the only trigger the release validator will
+        // activate, so a requested contact.created is brought back to it
+        // rather than kept as a draft that could never be switched on.
+        $this->assertSame('message.received', $graph['nodes'][0]['data']['triggerType']);
         $this->assertCount(3, $graph['edges']); // ghost edge removed
 
         foreach (array_slice($graph['nodes'], 1) as $n) {
@@ -124,7 +127,7 @@ class AutomationTestSimulationTest extends TestCase
             'edges' => [],
         ]);
 
-        $this->assertSame('contact.created', $graph['trigger_type']); // invalid → safe default
+        $this->assertSame('message.received', $graph['trigger_type']); // invalid → the one activatable trigger
         $this->assertCount(2, $graph['edges']);                       // linear chain synthesised
         $this->assertSame('trigger-1', $graph['edges'][0]['source']);
         $this->assertSame('AI Automation', $graph['name']);            // missing name → default

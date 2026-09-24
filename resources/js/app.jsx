@@ -9,6 +9,7 @@ import i18n, { initI18n } from '@/i18n';
 import LocaleSync from '@/Components/LocaleSync';
 import BrandingFavicon from '@/Components/BrandingFavicon';
 import ErrorBoundary from '@/Components/ErrorBoundary';
+import ConfirmProvider from '@/Components/ui/ConfirmProvider';
 import { ThemeProvider } from '@/context/ThemeContext';
 import { toast } from 'sonner';
 
@@ -98,9 +99,16 @@ createInertiaApp({
         const root = createRoot(el);
         // Wrap the whole app so a render error in ANY page or layout shows a
         // recoverable fallback instead of a blank white screen (full SPA unmount).
+        // ConfirmProvider sits above every page, not only inside the layouts.
+        // Pages call useConfirm() in the same component that renders their
+        // layout, which is outside a layout-level provider, so they silently
+        // fell back to window.confirm — the dialog browsers can suppress, and
+        // the reason delete buttons appeared to do nothing.
         root.render(
             <ErrorBoundary>
-                <App {...props} />
+                <ConfirmProvider>
+                    <App {...props} />
+                </ConfirmProvider>
             </ErrorBoundary>
         );
     },

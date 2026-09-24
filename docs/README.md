@@ -72,6 +72,7 @@ Decision records explain durable choices and their rationale. A newer record may
 - [`decisions/2026-09-22-smart-bot-owns-its-knowledge.md`](decisions/2026-09-22-smart-bot-owns-its-knowledge.md)
 - [`decisions/2026-09-23-linkedin-company-page-oauth.md`](decisions/2026-09-23-linkedin-company-page-oauth.md)
 - [`decisions/2026-09-23-email-triage-and-mailbox-scope.md`](decisions/2026-09-23-email-triage-and-mailbox-scope.md)
+- [`decisions/2026-09-23-automation-release-palette-and-ai-drafting.md`](decisions/2026-09-23-automation-release-palette-and-ai-drafting.md)
 
 ## Maintenance rule
 

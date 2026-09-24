@@ -1,14 +1,17 @@
 import { Head, Link, router, usePage, useForm } from '@inertiajs/react';
 import ClientLayout from '@/Layouts/ClientLayout';
 import EmptyState from '@/Components/EmptyState';
+import { useConfirm } from '@/Components/ui/ConfirmProvider';
+import axios from 'axios';
 import {
     Plus, Zap, Play, Pause, Trash2, BarChart2, Pencil, Clock,
     UserRound, Tag, MessageCircle, Megaphone, FileText, Link2,
     ShoppingBag, PackageCheck, XCircle, ShoppingCart, UserPlus,
+    Sparkles, Loader2, AlertCircle, X,
 } from 'lucide-react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { legacyAutomation } from '@/Utils/automationRelease';
+import { automationAiExamples, legacyAutomation } from '@/Utils/automationRelease';
 
 const STATUS_COLORS = {
     active: 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300',
@@ -44,11 +47,42 @@ const formatDate = (iso) => {
     return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
 };
 
-export default function AutomationIndex({ automations }) {
+export default function AutomationIndex({ automations, generateCost = 20 }) {
     const { t } = useTranslation();
     const { props } = usePage();
     const flash = props.flash ?? {};
     const [showCreate, setShowCreate] = useState(false);
+    const confirm = useConfirm();
+
+    const [showAi, setShowAi] = useState(false);
+    const [aiPrompt, setAiPrompt] = useState('');
+    const [aiLoading, setAiLoading] = useState(false);
+    const [aiError, setAiError] = useState(null);
+
+    const openAi = () => { setAiError(null); setShowAi(true); };
+    const closeAi = () => { if (!aiLoading) setShowAi(false); };
+
+    // Build a paused draft from a description, then open it in the builder
+    // for review. The idempotency key means a double click spends credits once.
+    const handleGenerate = () => {
+        setAiLoading(true);
+        setAiError(null);
+        axios.post(route('client.automations.generate'), { prompt: aiPrompt }, {
+            headers: { 'Idempotency-Key': `workflow-generate:${window.crypto.randomUUID()}` },
+        })
+            .then(res => {
+                if (res.data?.ok && res.data.redirect) {
+                    router.visit(res.data.redirect);
+                    return;
+                }
+                setAiError(res.data?.error || t('automation.ai_failed'));
+                setAiLoading(false);
+            })
+            .catch(err => {
+                setAiError(err.response?.data?.error || err.response?.data?.message || t('automation.ai_failed'));
+                setAiLoading(false);
+            });
+    };
 
     const { data, setData, post, processing, reset } = useForm({ name: '' });
 
@@ -62,8 +96,8 @@ export default function AutomationIndex({ automations }) {
         router.put(route('client.automations.update', automation.uuid), { status: newStatus }, { preserveScroll: true });
     };
 
-    const handleDelete = (automation) => {
-        if (confirm(t('automation.delete_confirm', { name: automation.name }))) {
+    const handleDelete = async (automation) => {
+        if (await confirm(t('automation.delete_confirm', { name: automation.name }))) {
             router.delete(route('client.automations.destroy', automation.uuid));
         }
     };
@@ -77,9 +111,14 @@ export default function AutomationIndex({ automations }) {
                         <h2 className="text-xl font-semibold text-neutral-900 dark:text-neutral-100">{t('automation.title')}</h2>
                         <p className="text-sm text-neutral-500 dark:text-neutral-400 mt-0.5">{t('automation.subtitle')}</p>
                     </div>
-                    <button onClick={() => setShowCreate(true)} className="flex items-center gap-1.5 rounded-lg bg-brand-600 px-3 py-2 text-sm font-medium text-white hover:bg-brand-700 transition">
-                        <Plus className="h-4 w-4" /> {t('automation.new_automation')}
-                    </button>
+                    <div className="flex flex-wrap items-center gap-2">
+                        <button onClick={openAi} className="flex items-center gap-1.5 rounded-lg border border-brand-200 bg-brand-50 px-3 py-2 text-sm font-medium text-brand-700 hover:bg-brand-100 transition dark:border-brand-800 dark:bg-brand-950/40 dark:text-brand-300 dark:hover:bg-brand-900/40">
+                            <Sparkles className="h-4 w-4" /> {t('automation.ai_generate')}
+                        </button>
+                        <button onClick={() => setShowCreate(true)} className="flex items-center gap-1.5 rounded-lg bg-brand-600 px-3 py-2 text-sm font-medium text-white hover:bg-brand-700 transition">
+                            <Plus className="h-4 w-4" /> {t('automation.new_automation')}
+                        </button>
+                    </div>
                 </div>
 
                 {flash.success && <div className="rounded-lg bg-green-50 dark:bg-green-900/30 text-green-800 dark:text-green-200 px-4 py-2 text-sm">{flash.success}</div>}
@@ -199,6 +238,81 @@ export default function AutomationIndex({ automations }) {
                 </div>
             )}
 
+            {showAi && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={closeAi}>
+                    <div
+                        role="dialog"
+                        aria-modal="true"
+                        aria-labelledby="ai-generate-title"
+                        className="w-full max-w-lg space-y-4 rounded-xl bg-white p-6 shadow-xl dark:bg-neutral-900"
+                        onClick={e => e.stopPropagation()}
+                    >
+                        <div className="flex items-start justify-between gap-3">
+                            <div className="flex items-center gap-2.5">
+                                <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-brand-50 text-brand-600 dark:bg-brand-950/40 dark:text-brand-300">
+                                    <Sparkles className="h-4 w-4" />
+                                </span>
+                                <div>
+                                    <h3 id="ai-generate-title" className="text-lg font-semibold text-neutral-900 dark:text-neutral-100">{t('automation.ai_title')}</h3>
+                                    <p className="text-xs text-neutral-500 dark:text-neutral-400">{t('automation.ai_subtitle')}</p>
+                                </div>
+                            </div>
+                            <button onClick={closeAi} disabled={aiLoading} aria-label={t('common.cancel')} className="rounded-md p-1 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-600 disabled:opacity-40 dark:hover:bg-neutral-800">
+                                <X className="h-4 w-4" />
+                            </button>
+                        </div>
+
+                        <label htmlFor="ai-prompt" className="sr-only">{t('automation.ai_title')}</label>
+                        <textarea
+                            id="ai-prompt"
+                            autoFocus
+                            rows={5}
+                            value={aiPrompt}
+                            onChange={e => setAiPrompt(e.target.value)}
+                            disabled={aiLoading}
+                            maxLength={2000}
+                            placeholder={t('automation.ai_placeholder_message', 'e.g. When a customer messages us, ask what they need help with. If they mention an order, ask for the order number; otherwise hand them to an agent.')}
+                            className="w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm dark:border-neutral-600 dark:bg-neutral-800"
+                        />
+
+                        <div className="flex flex-wrap gap-1.5">
+                            {automationAiExamples.map(([key, fallback]) => (
+                                <button
+                                    key={key}
+                                    type="button"
+                                    disabled={aiLoading}
+                                    onClick={() => setAiPrompt(t(key, fallback))}
+                                    className="rounded-full border border-neutral-200 px-2.5 py-1 text-left text-xs text-neutral-600 hover:border-brand-300 hover:text-brand-700 disabled:opacity-50 dark:border-neutral-700 dark:text-neutral-300"
+                                >
+                                    {t(key, fallback)}
+                                </button>
+                            ))}
+                        </div>
+
+                        <p className="flex items-start gap-1.5 text-xs text-neutral-500 dark:text-neutral-400">
+                            <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                            {t('automation.ai_disclaimer_draft', 'AI builds a paused draft. Check each step and choose your WhatsApp number before switching it on.')}
+                        </p>
+
+                        {aiError && <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/30 dark:text-red-300">{aiError}</p>}
+
+                        <div className="flex gap-2 pt-1">
+                            <button
+                                onClick={handleGenerate}
+                                disabled={aiLoading || !aiPrompt.trim()}
+                                className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-brand-600 py-2 text-sm font-medium text-white transition hover:bg-brand-700 disabled:opacity-60"
+                            >
+                                {aiLoading
+                                    ? <><Loader2 className="h-4 w-4 animate-spin" /> {t('automation.ai_generating')}</>
+                                    : <><Sparkles className="h-4 w-4" /> {t('automation.ai_generate')} · {generateCost} {t('automation.credits', 'credits')}</>}
+                            </button>
+                            <button onClick={closeAi} disabled={aiLoading} className="rounded-lg border border-neutral-300 px-4 py-2 text-sm transition hover:bg-neutral-50 disabled:opacity-50 dark:border-neutral-600 dark:hover:bg-neutral-800">
+                                {t('common.cancel')}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </ClientLayout>
     );
 }

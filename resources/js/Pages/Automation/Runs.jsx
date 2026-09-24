@@ -1,6 +1,8 @@
-import { Head, Link, usePage } from '@inertiajs/react';
+import { Head, Link, router } from '@inertiajs/react';
 import ClientLayout from '@/Layouts/ClientLayout';
-import { ArrowLeft, CheckCircle, XCircle, Clock, SkipForward } from 'lucide-react';
+import { ArrowLeft, CheckCircle, XCircle, Clock, SkipForward, RotateCcw } from 'lucide-react';
+import { useConfirm } from '@/Components/ui/ConfirmProvider';
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 const STATUS_ICONS = {
@@ -20,6 +22,23 @@ const LOG_COLORS = {
 
 export default function AutomationRuns({ automation, runs }) {
     const { t } = useTranslation();
+    const confirm = useConfirm();
+    const [retrying, setRetrying] = useState(null);
+
+    // A step that may already have reached the customer is only retried once
+    // someone confirms they checked the chat — otherwise it could send twice.
+    const retry = async (run) => {
+        if (run.retry?.needs_confirmation) {
+            const ok = await confirm(run.retry.reason, { confirmLabel: t('automation.retry_anyway', 'Retry anyway'), destructive: false });
+            if (!ok) return;
+        }
+        setRetrying(run.id);
+        router.post(
+            route('client.automations.runs.retry', [automation.uuid, run.id]),
+            { confirmed: Boolean(run.retry?.needs_confirmation) },
+            { preserveScroll: true, onFinish: () => setRetrying(null) },
+        );
+    };
     return (
         <ClientLayout title={`${automation.name} · ${t('automation.runs')}`}>
             <Head title={`${t('automation.runs')} · ${automation.name}`} />
@@ -42,6 +61,25 @@ export default function AutomationRuns({ automation, runs }) {
                                 <span className="text-xs text-neutral-400">{run.started_at}</span>
                                 {run.error && <span className="ml-auto text-xs text-red-600 dark:text-red-400">{run.error}</span>}
                             </div>
+                            {run.retry && (
+                                <div className="flex flex-wrap items-center gap-2 border-t border-neutral-100 pt-3 dark:border-neutral-800">
+                                    {run.retry.retryable ? (
+                                        <button
+                                            type="button"
+                                            onClick={() => retry(run)}
+                                            disabled={retrying === run.id}
+                                            className="inline-flex items-center gap-1.5 rounded-lg border border-neutral-300 px-3 py-1.5 text-xs font-medium text-neutral-700 transition hover:border-brand-300 hover:text-brand-700 disabled:opacity-50 dark:border-neutral-600 dark:text-neutral-200"
+                                        >
+                                            <RotateCcw className={`h-3.5 w-3.5 ${retrying === run.id ? 'animate-spin' : ''}`} />
+                                            {t('automation.retry_from_step', 'Retry from failed step')}
+                                        </button>
+                                    ) : null}
+                                    {/* Say why before the click, not after: a refused retry or one that needs checking should never be a surprise. */}
+                                    {run.retry.reason && (
+                                        <span className={`text-xs ${run.retry.retryable ? 'text-amber-700 dark:text-amber-300' : 'text-neutral-500 dark:text-neutral-400'}`}>{run.retry.reason}</span>
+                                    )}
+                                </div>
+                            )}
                             {run.logs?.length > 0 && (
                                 <div className="space-y-1">
                                     {run.logs.map(log => (
