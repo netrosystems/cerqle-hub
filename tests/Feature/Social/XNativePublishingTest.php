@@ -33,7 +33,7 @@ class XNativePublishingTest extends TestCase
     public function test_create_error_outcomes_are_sanitized_and_not_retried(): void
     {
         $account = new SocialAccount(['access_token' => 'token']);
-        foreach ([[401, 'reconnect', 'definite'], [403, 'credit', 'definite'], [429, 'rate_limit', 'definite'], [503, 'unknown', 'unknown'], [201, 'unknown', 'unknown']] as [$status, $category, $outcome]) {
+        foreach ([[401, 'reconnect', 'definite'], [402, 'credit', 'definite'], [403, 'credit', 'definite'], [429, 'rate_limit', 'definite'], [503, 'unknown', 'unknown'], [201, 'unknown', 'unknown']] as [$status, $category, $outcome]) {
             Http::swap(new Factory);
             Http::fake(['*' => Http::response(['detail' => 'credit secret-token'], $status, ['x-rate-limit-reset' => time() + 99999])]);
             try {
@@ -140,6 +140,11 @@ class XNativePublishingTest extends TestCase
     {
         $error = XProviderException::fromResponse(new Response(Http::response(['detail' => 'secret'], 403)->wait()));
         $this->assertSame('permission', $error->category);
+        // X's real out-of-credits answer is 402 with a body that names no
+        // credit keyword the 403 check looks for; it must still read as credits.
+        $error = XProviderException::fromResponse(new Response(Http::response(['title' => 'CreditsDepleted', 'type' => 'https://api.twitter.com/2/problems/credits'], 402)->wait()));
+        $this->assertSame('credit', $error->category);
+        $this->assertSame('X API credits are unavailable. Contact your administrator.', $error->getMessage());
         $this->assertStringNotContainsString('secret', $error->getMessage());
         $error = XProviderException::fromResponse(new Response(Http::response([], 429, ['Retry-After' => '10', 'x-rate-limit-reset' => time() + 1800])->wait()));
         $this->assertGreaterThanOrEqual(1799, $error->retryAfter);
