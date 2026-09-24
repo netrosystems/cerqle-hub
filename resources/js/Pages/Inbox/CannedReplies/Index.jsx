@@ -52,13 +52,15 @@ export default function CannedRepliesIndex({ cannedReplies }) {
         router.delete(route('client.inbox.canned-replies.destroy', reply.id), { preserveScroll: true });
     };
 
+    const pageTitle = t('nav.quick_replies', { defaultValue: 'Quick Replies' });
+
     return (
-        <ClientLayout title={t('inbox.canned_replies')}>
-            <Head title={t('inbox.canned_replies')} />
+        <ClientLayout title={pageTitle}>
+            <Head title={pageTitle} />
             <div className="max-w-3xl mx-auto space-y-6">
                 <div className="flex items-center justify-between">
                     <div>
-                        <h1 className="text-2xl font-bold text-neutral-900 dark:text-neutral-100">{t('inbox.canned_replies')}</h1>
+                        <h1 className="text-2xl font-bold text-neutral-900 dark:text-neutral-100">{pageTitle}</h1>
                         <p className="text-sm text-neutral-500 mt-1">{t('inbox.canned_replies_hint_1')} <code className="font-mono bg-neutral-100 dark:bg-neutral-800 px-1 rounded">/shortcut</code> {t('inbox.canned_replies_hint_2')}</p>
                     </div>
                     <button onClick={openCreate} className="flex items-center gap-1.5 rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700 transition">

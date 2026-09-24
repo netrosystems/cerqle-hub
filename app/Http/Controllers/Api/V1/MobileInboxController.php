@@ -193,12 +193,12 @@ class MobileInboxController extends WorkspaceScopedController
                     ->orWhere('phone_e164', 'like', "%{$q}%")
                     ->orWhere('email', 'like', "%{$q}%");
             })
-            ->orderBy('first_name')
-            ->limit(30)
-            ->get(['id', 'uuid', 'first_name', 'last_name', 'phone_e164', 'email', 'avatar', 'custom_fields', 'source']);
+            ->latest()
+            ->orderByDesc('id')
+            ->paginate(30, ['id', 'uuid', 'first_name', 'last_name', 'phone_e164', 'email', 'avatar', 'custom_fields', 'source']);
 
         return response()->json([
-            'data' => $contacts->map(function ($c) {
+            'data' => $contacts->getCollection()->map(function ($c) {
                 $canWhatsapp = ! empty($c->phone_e164);
                 $canSms = ! empty($c->phone_e164);
                 $canEmail = ! empty($c->email);
@@ -259,7 +259,13 @@ class MobileInboxController extends WorkspaceScopedController
                         ],
                     ],
                 ];
-            }),
+            })->values(),
+            'meta' => [
+                'current_page' => $contacts->currentPage(),
+                'last_page' => $contacts->lastPage(),
+                'per_page' => $contacts->perPage(),
+                'total' => $contacts->total(),
+            ],
         ]);
     }
 

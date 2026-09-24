@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Inbox;
 
+use App\Models\User;
 use App\Modules\Inbox\Models\CannedReply;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -109,5 +110,42 @@ class CannedReplyCrudTest extends TestCase
         ]);
 
         $response->assertStatus(403);
+    }
+
+    public function test_staff_can_use_but_cannot_manage_canned_replies(): void
+    {
+        $workspace = $this->ctx['workspace'];
+        $staff = User::factory()->create([
+            'role' => User::ROLE_CLIENT,
+            'client_id' => $this->ctx['client']->id,
+            'workspace_id' => $workspace->id,
+            'client_role' => User::CLIENT_ROLE_STAFF,
+            'status' => User::STATUS_ACTIVE,
+            'email_verified_at' => now(),
+        ]);
+        $workspace->members()->syncWithoutDetaching([$staff->id => ['role' => 'agent']]);
+        CannedReply::create([
+            'workspace_id' => $workspace->id,
+            'shortcut' => 'hello',
+            'body' => 'Hello!',
+        ]);
+
+        $this->actingAs($staff)
+            ->getJson(route('client.inbox.canned-replies.list'))
+            ->assertOk()
+            ->assertJsonFragment(['shortcut' => 'hello']);
+
+        $this->actingAs($staff)
+            ->get(route('client.inbox.canned-replies.index'))
+            ->assertForbidden();
+
+        $this->actingAs($staff)
+            ->post(route('client.inbox.canned-replies.store'), [
+                'shortcut' => 'blocked',
+                'body' => 'This should not be created.',
+            ])
+            ->assertForbidden();
+
+        $this->assertDatabaseMissing('inbox_canned_replies', ['shortcut' => 'blocked']);
     }
 }

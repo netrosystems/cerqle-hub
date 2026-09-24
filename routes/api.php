@@ -14,6 +14,7 @@ use App\Http\Controllers\Api\V1\MobileAuthController;
 use App\Http\Controllers\Api\V1\MobileConversationController;
 use App\Http\Controllers\Api\V1\MobileEmailInboxController;
 use App\Http\Controllers\Api\V1\MobileInboxController;
+use App\Http\Controllers\Api\V1\MobileStatsController;
 use App\Http\Controllers\Api\V1\MobileTeamAvailabilityController;
 use App\Http\Controllers\Api\V1\NotificationApiController;
 use App\Http\Controllers\Api\V1\OutboundWebhookApiController;
@@ -104,6 +105,7 @@ Route::prefix('v1/mobile')->middleware(['auth:sanctum', 'throttle:api', 'demo', 
     // Inbox setup data
     Route::get('/inbox/setup', [MobileInboxController::class, 'setup']);
     Route::get('/inbox/counts', [MobileInboxController::class, 'counts']);
+    Route::get('/stats', MobileStatsController::class);
     Route::get('/inbox/templates', [MobileInboxController::class, 'templates']);
     Route::get('/inbox/labels', [MobileInboxController::class, 'labels']);
     Route::get('/inbox/canned-replies', [MobileInboxController::class, 'cannedReplies']);

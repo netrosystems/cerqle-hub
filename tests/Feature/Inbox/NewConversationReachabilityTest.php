@@ -48,6 +48,36 @@ class NewConversationReachabilityTest extends TestCase
         $this->assertFalse($data[0]['has_instagram_thread']);
     }
 
+    public function test_contact_search_returns_latest_contacts_with_pagination_headers(): void
+    {
+        ['user' => $user, 'workspace' => $workspace] = $this->createSubscribedWorkspaceContext();
+        $contacts = collect();
+
+        foreach (range(1, 31) as $index) {
+            $contact = Contact::create([
+                'workspace_id' => $workspace->id,
+                'first_name' => 'Contact '.$index,
+            ]);
+            $contact->forceFill(['created_at' => now()->subMinutes(31 - $index)])->saveQuietly();
+            $contacts->push($contact);
+        }
+
+        $firstPage = $this->actingAs($user)->getJson(route('client.inbox.contacts.search'));
+        $firstPage->assertOk()
+            ->assertJsonCount(30)
+            ->assertJsonPath('0.id', $contacts->last()->id)
+            ->assertHeader('X-Pagination-Current-Page', '1')
+            ->assertHeader('X-Pagination-Last-Page', '2')
+            ->assertHeader('X-Pagination-Per-Page', '30')
+            ->assertHeader('X-Pagination-Total', '31');
+
+        $this->actingAs($user)->getJson(route('client.inbox.contacts.search', ['page' => 2]))
+            ->assertOk()
+            ->assertJsonCount(1)
+            ->assertJsonPath('0.id', $contacts->first()->id)
+            ->assertHeader('X-Pagination-Current-Page', '2');
+    }
+
     public function test_start_conversation_validates_whatsapp_phone_requirement(): void
     {
         ['user' => $user, 'workspace' => $workspace] = $this->createSubscribedWorkspaceContext();

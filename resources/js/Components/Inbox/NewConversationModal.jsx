@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { router } from '@inertiajs/react';
 import axios from 'axios';
-import { X, Search, User, Phone, Mail, Globe, Send, Loader2, MessageSquarePlus, ChevronRight } from 'lucide-react';
+import { X, Search, User, Phone, Mail, Globe, Send, Loader2, MessageSquarePlus, ChevronRight, MessagesSquare } from 'lucide-react';
 import { ChannelBrandIcon, CHANNEL_LABELS } from '@/Components/BrandIcons';
 import { useTranslation } from 'react-i18next';
 
@@ -117,11 +117,18 @@ export default function NewConversationModal({ onClose }) {
     const [query, setQuery] = useState('');
     const [contacts, setContacts] = useState([]);
     const [loadingContacts, setLoadingContacts] = useState(false);
+    const [loadingMoreContacts, setLoadingMoreContacts] = useState(false);
+    const [contactPage, setContactPage] = useState(1);
+    const [hasMoreContacts, setHasMoreContacts] = useState(false);
     const [selectedContact, setSelectedContact] = useState(null);
     const [channelAccounts, setChannelAccounts] = useState([]);
     const [loadingChannels, setLoadingChannels] = useState(false);
     const [selectedAccount, setSelectedAccount] = useState(null);
     const [message, setMessage] = useState('');
+    const [quickReplies, setQuickReplies] = useState([]);
+    const [quickReplyQuery, setQuickReplyQuery] = useState('');
+    const [showQuickReplies, setShowQuickReplies] = useState(false);
+    const [loadingQuickReplies, setLoadingQuickReplies] = useState(false);
     const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState('');
 
@@ -133,6 +140,8 @@ export default function NewConversationModal({ onClose }) {
 
     const searchRef = useRef(null);
     const overlayRef = useRef(null);
+    const contactSearchVersionRef = useRef(0);
+    const loadingMoreContactsRef = useRef(false);
 
     // Close on overlay click
     const handleOverlay = (e) => {
@@ -154,15 +163,68 @@ export default function NewConversationModal({ onClose }) {
 
     // Search contacts with debounce
     useEffect(() => {
-        setLoadingContacts(true);
+        const searchVersion = ++contactSearchVersionRef.current;
         const timer = setTimeout(() => {
-            axios.get(route('client.inbox.contacts.search'), { params: { q: query } })
-                .then(r => setContacts(r.data ?? []))
+            setLoadingContacts(true);
+            axios.get(route('client.inbox.contacts.search'), { params: { q: query, page: 1 } })
+                .then(r => {
+                    if (searchVersion !== contactSearchVersionRef.current) return;
+                    const lastPage = Number(r.headers?.['x-pagination-last-page'] ?? 1);
+                    setContacts(Array.isArray(r.data) ? r.data : []);
+                    setHasMoreContacts(lastPage > 1);
+                })
                 .catch(() => {})
-                .finally(() => setLoadingContacts(false));
+                .finally(() => {
+                    if (searchVersion === contactSearchVersionRef.current) setLoadingContacts(false);
+                });
         }, 300);
         return () => clearTimeout(timer);
     }, [query]);
+
+    const handleContactQueryChange = (value) => {
+        contactSearchVersionRef.current += 1;
+        loadingMoreContactsRef.current = false;
+        setQuery(value);
+        setContacts([]);
+        setLoadingMoreContacts(false);
+        setContactPage(1);
+        setHasMoreContacts(false);
+    };
+
+    const loadMoreContacts = () => {
+        if (loadingContacts || loadingMoreContactsRef.current || !hasMoreContacts) return;
+
+        const searchVersion = contactSearchVersionRef.current;
+        const nextPage = contactPage + 1;
+        loadingMoreContactsRef.current = true;
+        setLoadingMoreContacts(true);
+
+        axios.get(route('client.inbox.contacts.search'), { params: { q: query, page: nextPage } })
+            .then(r => {
+                if (searchVersion !== contactSearchVersionRef.current) return;
+
+                const incoming = Array.isArray(r.data) ? r.data : [];
+                const currentPage = Number(r.headers?.['x-pagination-current-page'] ?? nextPage);
+                const lastPage = Number(r.headers?.['x-pagination-last-page'] ?? currentPage);
+                setContacts(previous => {
+                    const existingIds = new Set(previous.map(contact => contact.id));
+                    return [...previous, ...incoming.filter(contact => !existingIds.has(contact.id))];
+                });
+                setContactPage(currentPage);
+                setHasMoreContacts(currentPage < lastPage);
+            })
+            .catch(() => {})
+            .finally(() => {
+                if (searchVersion !== contactSearchVersionRef.current) return;
+                loadingMoreContactsRef.current = false;
+                setLoadingMoreContacts(false);
+            });
+    };
+
+    const handleContactsScroll = (event) => {
+        const list = event.currentTarget;
+        if (list.scrollHeight - list.scrollTop - list.clientHeight <= 80) loadMoreContacts();
+    };
 
     // Load channel accounts when contact selected
     const selectContact = (contact) => {
@@ -180,6 +242,24 @@ export default function NewConversationModal({ onClose }) {
     const selectAccount = (account) => {
         setSelectedAccount(account);
         setStep('compose');
+    };
+
+    const toggleQuickReplies = () => {
+        const nextOpen = !showQuickReplies;
+        setShowQuickReplies(nextOpen);
+        if (!nextOpen || quickReplies.length > 0 || loadingQuickReplies) return;
+
+        setLoadingQuickReplies(true);
+        axios.get(route('client.inbox.canned-replies.list'))
+            .then(response => setQuickReplies(Array.isArray(response.data) ? response.data : []))
+            .catch(() => setQuickReplies([]))
+            .finally(() => setLoadingQuickReplies(false));
+    };
+
+    const selectQuickReply = (reply) => {
+        setMessage(reply.body);
+        setShowQuickReplies(false);
+        setQuickReplyQuery('');
     };
 
     const startEditing = (type) => {
@@ -307,7 +387,7 @@ export default function NewConversationModal({ onClose }) {
                                     ref={searchRef}
                                     type="text"
                                     value={query}
-                                    onChange={e => setQuery(e.target.value)}
+                                    onChange={e => handleContactQueryChange(e.target.value)}
                                     placeholder={t('inbox.search_contact')}
                                     className="w-full pl-9 pr-4 py-2 text-sm rounded-xl bg-neutral-100 dark:bg-neutral-800 border-0 focus:outline-none focus:ring-2 focus:ring-brand-500 placeholder-neutral-400"
                                 />
@@ -316,7 +396,7 @@ export default function NewConversationModal({ onClose }) {
                                 )}
                             </div>
                         </div>
-                        <div className="flex-1 overflow-y-auto">
+                        <div className="flex-1 overflow-y-auto" onScroll={handleContactsScroll} data-testid="contact-results">
                             {!loadingContacts && contacts.length === 0 && (
                                 <div className="flex flex-col items-center justify-center py-12 text-neutral-400">
                                     <User className="h-8 w-8 mb-2 opacity-40" />
@@ -331,6 +411,11 @@ export default function NewConversationModal({ onClose }) {
                                     onSelect={selectContact}
                                 />
                             ))}
+                            {loadingMoreContacts && (
+                                <div className="flex items-center justify-center py-3" role="status" aria-label="Loading more contacts">
+                                    <Loader2 className="h-4 w-4 animate-spin text-brand-600 dark:text-brand-400" />
+                                </div>
+                            )}
                         </div>
                     </div>
                 )}
@@ -510,9 +595,51 @@ export default function NewConversationModal({ onClose }) {
 
                             {/* Message */}
                             <div>
-                                <label className="text-xs font-semibold text-neutral-600 dark:text-neutral-400 block mb-1.5">
-                                    {t('inbox.opening_message')} <span className="font-normal text-neutral-400">{t('inbox.optional_paren')}</span>
-                                </label>
+                                <div className="mb-1.5 flex items-center justify-between gap-3">
+                                    <label className="text-xs font-semibold text-neutral-600 dark:text-neutral-400">
+                                        {t('inbox.opening_message')} <span className="font-normal text-neutral-400">{t('inbox.optional_paren')}</span>
+                                    </label>
+                                    <button
+                                        type="button"
+                                        onClick={toggleQuickReplies}
+                                        className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs font-medium text-brand-700 hover:bg-brand-50 dark:text-brand-300 dark:hover:bg-brand-900/20"
+                                    >
+                                        <MessagesSquare className="h-3.5 w-3.5" />
+                                        {t('nav.quick_replies', { defaultValue: 'Quick Replies' })}
+                                    </button>
+                                </div>
+                                {showQuickReplies && (
+                                    <div className="mb-2 overflow-hidden rounded-lg border border-neutral-200 bg-white dark:border-neutral-700 dark:bg-neutral-900">
+                                        <div className="relative border-b border-neutral-100 dark:border-neutral-800">
+                                            <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-neutral-400" />
+                                            <input
+                                                value={quickReplyQuery}
+                                                onChange={event => setQuickReplyQuery(event.target.value)}
+                                                placeholder={t('common.search', { defaultValue: 'Search' })}
+                                                className="w-full border-0 bg-transparent py-2 pl-9 pr-3 text-sm focus:outline-none focus:ring-0"
+                                            />
+                                        </div>
+                                        <div className="max-h-44 overflow-y-auto">
+                                            {loadingQuickReplies ? (
+                                                <div className="flex justify-center py-4"><Loader2 className="h-4 w-4 animate-spin text-neutral-400" /></div>
+                                            ) : quickReplies.filter(reply => `${reply.shortcut} ${reply.body}`.toLowerCase().includes(quickReplyQuery.trim().toLowerCase())).length === 0 ? (
+                                                <p className="px-3 py-4 text-center text-xs text-neutral-500">{t('inbox.no_canned_replies')}</p>
+                                            ) : quickReplies
+                                                .filter(reply => `${reply.shortcut} ${reply.body}`.toLowerCase().includes(quickReplyQuery.trim().toLowerCase()))
+                                                .map(reply => (
+                                                    <button
+                                                        key={reply.id}
+                                                        type="button"
+                                                        onClick={() => selectQuickReply(reply)}
+                                                        className="block w-full border-b border-neutral-100 px-3 py-2 text-left last:border-0 hover:bg-neutral-50 dark:border-neutral-800 dark:hover:bg-neutral-800"
+                                                    >
+                                                        <span className="block text-xs font-semibold text-brand-700 dark:text-brand-300">/{reply.shortcut}</span>
+                                                        <span className="mt-0.5 block truncate text-xs text-neutral-600 dark:text-neutral-400">{reply.body}</span>
+                                                    </button>
+                                                ))}
+                                        </div>
+                                    </div>
+                                )}
                                 <textarea
                                     value={message}
                                     onChange={e => setMessage(e.target.value)}

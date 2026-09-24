@@ -3,6 +3,7 @@
 namespace App\Modules\Inbox\Http\Controllers;
 
 use App\Http\Controllers\Controller;
+use App\Models\Workspace;
 use App\Modules\Inbox\Models\CannedReply;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -20,6 +21,8 @@ class CannedReplyController extends Controller
 
     public function index(Request $request): Response
     {
+        $this->authoriseManagement($request);
+
         $replies = CannedReply::where('workspace_id', $this->workspaceId($request))
             ->orderBy('shortcut')
             ->get();
@@ -29,6 +32,8 @@ class CannedReplyController extends Controller
 
     public function store(Request $request): RedirectResponse
     {
+        $this->authoriseManagement($request);
+
         $wid = $this->workspaceId($request);
         $validated = $request->validate([
             'shortcut' => ['required', 'string', 'max:64',
@@ -43,6 +48,7 @@ class CannedReplyController extends Controller
 
     public function update(Request $request, CannedReply $cannedReply): RedirectResponse
     {
+        $this->authoriseManagement($request);
         $this->authorise($request, $cannedReply);
         $wid = $this->workspaceId($request);
         $validated = $request->validate([
@@ -58,6 +64,7 @@ class CannedReplyController extends Controller
 
     public function destroy(Request $request, CannedReply $cannedReply): RedirectResponse
     {
+        $this->authoriseManagement($request);
         $this->authorise($request, $cannedReply);
         $cannedReply->delete();
 
@@ -77,5 +84,20 @@ class CannedReplyController extends Controller
     private function authorise(Request $request, CannedReply $cannedReply): void
     {
         abort_unless((int) $cannedReply->workspace_id === $this->workspaceId($request), 403);
+    }
+
+    private function authoriseManagement(Request $request): void
+    {
+        $user = $request->user();
+        $workspace = Workspace::find($this->workspaceId($request));
+        $isWorkspaceManager = $workspace && (
+            (int) $workspace->owner_id === (int) $user->id
+            || $workspace->members()
+                ->where('user_id', $user->id)
+                ->wherePivotIn('role', ['owner', 'admin', 'administrator'])
+                ->exists()
+        );
+
+        abort_unless($user->isClientAdministrator() || $isWorkspaceManager, 403);
     }
 }

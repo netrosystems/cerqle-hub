@@ -63,7 +63,7 @@ journey
 - **Interactive Chat Interface**:
   - Rich message formatting with image, video, audio, and document attachment previews.
   - WhatsApp image previews retry broken saved URLs through the authenticated media endpoint; image files sent as documents also display inline. Cached inbound media is streamed privately from configured storage, and uncached media uses the chat's WhatsApp phone identity rather than the workspace default. Provider-side unavailable media still requires retry/resending.
-  - Canned replies (`/quick-reply`) for fast repetitive response delivery.
+  - Workspace-scoped Quick Replies for fast repetitive response delivery. Admins/owners manage them from Contacts; staff can search and use them in existing or new conversations without changing WhatsApp approved templates.
   - Plain-text internal agent private notes and conversation tagging. Notes do not parse teammate mentions or send mention alerts; `@` remains ordinary text. Existing notes remain intact.
   - Real-time agent typing indicators and live presence detection.
   - Opened chats offer confirmed permanent deletion from Cerqle (messages, notes, assignments, labels and widget push registrations). Contacts and original-provider messages remain; new inbound activity may create a new chat. Shared media assets and AI billing history are retained.

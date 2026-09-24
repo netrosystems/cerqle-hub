@@ -23,6 +23,39 @@ class MobileConversationTest extends TestCase
 {
     use RefreshDatabase;
 
+    public function test_mobile_contact_search_returns_latest_contacts_with_pagination_meta(): void
+    {
+        $workspace = Workspace::factory()->create();
+        $user = User::factory()->create(['workspace_id' => $workspace->id]);
+        $contacts = collect();
+
+        foreach (range(1, 31) as $index) {
+            $contact = Contact::create([
+                'workspace_id' => $workspace->id,
+                'first_name' => 'Contact '.$index,
+            ]);
+            $contact->forceFill(['created_at' => now()->subMinutes(31 - $index)])->saveQuietly();
+            $contacts->push($contact);
+        }
+
+        Sanctum::actingAs($user);
+
+        $this->getJson('/api/v1/mobile/contacts/search?page=1')
+            ->assertOk()
+            ->assertJsonCount(30, 'data')
+            ->assertJsonPath('data.0.id', $contacts->last()->id)
+            ->assertJsonPath('meta.current_page', 1)
+            ->assertJsonPath('meta.last_page', 2)
+            ->assertJsonPath('meta.per_page', 30)
+            ->assertJsonPath('meta.total', 31);
+
+        $this->getJson('/api/v1/mobile/contacts/search?page=2')
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.id', $contacts->first()->id)
+            ->assertJsonPath('meta.current_page', 2);
+    }
+
     public function test_mobile_conversations_index_includes_assigned_fields(): void
     {
         $workspace = Workspace::factory()->create();
