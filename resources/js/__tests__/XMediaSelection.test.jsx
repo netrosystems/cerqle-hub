@@ -17,6 +17,7 @@ function Harness({ initial, onChange, onStorageChange }) {
 
 const image = (name = 'photo.png') => new globalThis.File(['image'], name, { type: 'image/png' });
 const video = () => new globalThis.File(['video'], 'clip.mp4', { type: 'video/mp4' });
+const gif = () => new globalThis.File(['gif'], 'loop.gif', { type: 'image/gif' });
 function oversized(file, megabytes) {
     Object.defineProperty(file, 'size', { value: megabytes * 1024 * 1024 + 1 });
     return file;
@@ -41,16 +42,20 @@ describe('XMediaSelection', () => {
     });
 
     it.each([
-        ['images', () => [oversized(image(), 5)]],
-        ['video', () => [oversized(video(), 500)]],
-        ['images', () => [image(), video()]],
-        ['video', () => [video(), image()]],
-        ['images', () => Array.from({ length: 5 }, (_, index) => image(`${index}.png`))],
-        ['video', () => [video(), video()]],
-    ])('rejects invalid files in %s mode before uploading', (type, files) => {
+        ['images', () => [oversized(image(), 5)], 'social.x_upload_limits'],
+        ['video', () => [oversized(video(), 500)], 'social.x_upload_limits'],
+        ['video', () => [oversized(gif(), 15)], 'social.x_upload_limits'],
+        ['images', () => [gif()], 'social.x_upload_limits'],
+        ['images', () => [image(), video()], 'social.x_upload_limits'],
+        ['video', () => [video(), image()], 'social.x_one_motion'],
+        // Cerqle caps X at three images (X itself allows four).
+        ['images', () => Array.from({ length: 4 }, (_, index) => image(`${index}.png`)), 'social.x_too_many'],
+        ['video', () => [video(), video()], 'social.x_one_motion'],
+        ['video', () => [gif(), gif()], 'social.x_one_motion'],
+    ])('rejects invalid files in %s mode before uploading', (type, files, message) => {
         const { onChange } = mount(type);
         selectFiles(files());
-        expect(screen.getByRole('alert')).toHaveTextContent('social.x_upload_limits');
+        expect(screen.getByRole('alert')).toHaveTextContent(message);
         expect(axios.post).not.toHaveBeenCalled();
         expect(onChange).not.toHaveBeenCalled();
     });
@@ -70,6 +75,22 @@ describe('XMediaSelection', () => {
             expect(onStorageChange).toHaveBeenNthCalledWith(index + 1, { remaining_bytes: 100 - index });
         });
         expect(screen.getAllByRole('button', { name: 'common.remove' })).toHaveLength(files.length);
+    });
+
+    it('uploads one GIF as the single motion attachment', async () => {
+        const { onChange } = mount('video');
+        axios.post.mockResolvedValueOnce({ data: { url: '/uploads/loop', media_id: 77, storage: null } });
+        selectFiles([gif()]);
+        await waitFor(() => expect(onChange).toHaveBeenCalledWith({ media_urls: ['/uploads/loop'], media_ids: [77] }));
+        // GIFs are stored with images; only MP4 uses the video collection.
+        expect(axios.post.mock.calls[0][1].get('collection')).toBe('social');
+    });
+
+    it('accepts exactly three images', async () => {
+        const { onChange } = mount('images');
+        [0, 1, 2].forEach(i => axios.post.mockResolvedValueOnce({ data: { url: `/u/${i}`, media_id: i, storage: null } }));
+        selectFiles([image('a.png'), image('b.png'), image('c.png')]);
+        await waitFor(() => expect(onChange).toHaveBeenCalledWith({ media_urls: ['/u/0', '/u/1', '/u/2'], media_ids: [0, 1, 2] }));
     });
 
     it('removes a media URL and its matching ID while preserving other uploads', () => {

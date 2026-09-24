@@ -25,3 +25,16 @@ The shared app owner must fund X credits and set a provider spending cap. API
 exhaustion may stop all connected clients; existing Cerqle limits are not a dollar
 budget. Video requires ffprobe on workers. Unit/mocked success does not establish
 provider access or actual posting. Production deployment/submission is separate.
+
+## Amendment (2026-09-24): media caps
+
+X bills API use per request and each attachment is its own upload, so Cerqle
+caps X posts below what X allows: text, up to **three** JPEG/PNG images, or
+**one** video or animated GIF on its own. GIFs were previously refused; they
+now upload as `tweet_gif` (15 MB). The caps are constants on
+`XContentValidator` (`MAX_IMAGES`, `MAX_MOTION`) with a mirror in
+`resources/js/Components/Social/xText.js`. The composer warns when shared media
+would break them, before the post is saved. Posts already scheduled with four
+images fail at publish time with a message saying what to change. X's 402
+(no API credits) is now reported as a credits problem rather than a bare status.
+

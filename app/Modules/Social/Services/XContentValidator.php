@@ -12,6 +12,21 @@ use Symfony\Component\Process\Process;
 class XContentValidator
 {
     /**
+     * Cerqle's own caps, tighter than X allows (four images), because X bills
+     * API use per request and each attachment is uploaded separately.
+     */
+    public const MAX_IMAGES = 3;
+
+    public const MAX_MOTION = 1;
+
+    public const IMAGE_TYPES = ['image/jpeg', 'image/png'];
+
+    /** A video or an animated GIF; either one goes alone. */
+    public const MOTION_TYPES = ['video/mp4', 'image/gif'];
+
+    private const LIMIT_BYTES = ['image/jpeg' => 5, 'image/png' => 5, 'image/gif' => 15, 'video/mp4' => 500];
+
+    /**
      * Resolve fields exactly as SocialPublisher::payloadFor does; media IDs follow media URLs.
      *
      * @param  array<string, mixed>  $payload
@@ -71,14 +86,16 @@ class XContentValidator
             if (trim((string) ($payload['body'] ?? '')) === '' && $ids === []) {
                 $errors['body'] = ['X requires text or compatible uploaded media.'];
             }
-            $videos = $media->filter(fn (Media $item) => $item->mime_type === 'video/mp4');
-            if ($media->count() > 4 || ($videos->isNotEmpty() && $media->count() !== 1)) {
-                $errors['media_ids'] = ['X supports up to four images or one video, without mixing.'];
+            $motion = $media->filter(fn (Media $item) => in_array($item->mime_type, self::MOTION_TYPES, true));
+            if ($motion->isNotEmpty() && $media->count() > self::MAX_MOTION) {
+                $errors['media_ids'] = ['X posts can have one video or GIF on its own. Remove the other attachments.'];
+            } elseif ($media->count() > self::MAX_IMAGES) {
+                $errors['media_ids'] = ['X posts can have up to '.self::MAX_IMAGES.' images.'];
             }
             if (! isset($errors['media_ids'])) {
                 foreach ($media as $item) {
                     if (! $this->validMedia($item)) {
-                        $errors['media_ids'] = ['X requires JPEG/PNG up to 5 MB or MP4 up to 500 MB and 140 seconds with H.264 video and optional AAC audio. Media must be readable and verifiable.'];
+                        $errors['media_ids'] = ['X accepts JPEG/PNG images up to 5 MB, one GIF up to 15 MB, or one MP4 up to 500 MB and 140 seconds (H.264 video, optional AAC audio). Media must be readable and verifiable.'];
                         break;
                     }
                 }
@@ -131,8 +148,8 @@ class XContentValidator
     private function validMedia(Media $media): bool
     {
         $video = $media->mime_type === 'video/mp4';
-        if (! in_array($media->mime_type, ['image/jpeg', 'image/png', 'video/mp4'], true)
-            || $media->size_bytes <= 0 || $media->size_bytes > ($video ? 500 : 5) * 1024 * 1024) {
+        $limit = (self::LIMIT_BYTES[$media->mime_type] ?? 0) * 1024 * 1024;
+        if ($limit === 0 || $media->size_bytes <= 0 || $media->size_bytes > $limit) {
             return false;
         }
         $temporary = tempnam(sys_get_temp_dir(), 'x-media-');
@@ -147,7 +164,6 @@ class XContentValidator
             if (! is_resource($source) || ! is_resource($destination)) {
                 return false;
             }
-            $limit = ($video ? 500 : 5) * 1024 * 1024;
             $bytes = stream_copy_to_stream($source, $destination, $limit + 1);
             fclose($destination);
             $destination = null;
